@@ -190,12 +190,18 @@ def fuzz_all(
 
 
 def format_summary(results: list[ApiResult]) -> str:
+    from . import comparison_metadata
+
     lines = []
     lines.append(
-        f"{'API':50s}  {'pass/total':>12s}  {'worst_abs':>12s}  {'worst_rel':>12s}  flag"
+        f"{'API':50s}  {'mode':14s}  {'pass/total':>12s}  "
+        f"{'worst_abs':>12s}  {'worst_rel':>12s}  flag"
     )
-    lines.append("-" * 110)
+    lines.append("-" * 126)
     for r in results:
+        mode = comparison_metadata.for_api(r.api_id).get(
+            "comparison_mode_short", "unknown"
+        )
         passed = sum(1 for s in r.seeds if s.passed)
         total = len(r.seeds)
         worst_abs = max(
@@ -212,7 +218,7 @@ def format_summary(results: list[ApiResult]) -> str:
         if not r.passed:
             flag = "FAIL " + flag
         lines.append(
-            f"{r.api_id:50s}  {f'{passed}/{total}':>12s}  "
+            f"{r.api_id:50s}  {mode:14s}  {f'{passed}/{total}':>12s}  "
             f"{worst_abs:>12.3e}  {worst_rel:>12.3e}  {flag}"
         )
     return "\n".join(lines)

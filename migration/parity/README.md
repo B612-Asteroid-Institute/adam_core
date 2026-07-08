@@ -24,17 +24,46 @@ fixed trusted vectors or the Rust-only latency gate described in
 
 ## Legacy oracle
 
-The legacy implementation lives in a sibling repo
-`/Users/aleck/Code/adam-core` pinned to upstream `main`. Because both
-repos export the package name `adam_core`, they cannot coexist in one
-Python venv. We invoke the legacy implementation through a
-**subprocess** running inside `.legacy-venv` (gitignored, set up
-once):
+The legacy implementation lives in a **dedicated, main-pinned** sibling
+checkout `/Users/aleck/Code/adam-core-legacy-main`. Keep this checkout
+separate from any working checkout you develop in: the speed baseline is
+fingerprinted on the legacy checkout's git commit (plus its venv
+`pip freeze` and the harness source), so a checkout that drifts onto a
+feature branch silently invalidates `parity_legacy_speed_baseline.json`.
+The dedicated checkout should stay on the commit the baseline was captured
+against (currently upstream `main`); bump it deliberately and recapture.
+
+Because both repos export the package name `adam_core`, they cannot coexist
+in one Python venv. We invoke the legacy implementation through a
+**subprocess** running inside `.legacy-venv` (gitignored, set up once):
 
 ```bash
+# Dedicated legacy checkout pinned to upstream main.
+git clone git@github.com:B612-Asteroid-Institute/adam_core.git \
+    /Users/aleck/Code/adam-core-legacy-main
+git -C /Users/aleck/Code/adam-core-legacy-main checkout main
+
 python3.13 -m venv .legacy-venv
-.legacy-venv/bin/pip install -e /Users/aleck/Code/adam-core
+.legacy-venv/bin/pip install -e /Users/aleck/Code/adam-core-legacy-main
 ```
+
+To bump the legacy baseline to a newer upstream `main`:
+
+```bash
+git -C /Users/aleck/Code/adam-core-legacy-main fetch origin
+git -C /Users/aleck/Code/adam-core-legacy-main reset --hard origin/main
+pdm run rust-parity-legacy-cache-refresh   # recapture the baseline
+```
+
+Both the legacy checkout path and the legacy venv Python are overridable via
+`ADAM_CORE_LEGACY_REPO_ROOT` and `ADAM_CORE_LEGACY_VENV_PYTHON` (defaults:
+`/Users/aleck/Code/adam-core-legacy-main` and `.legacy-venv/bin/python`).
+
+Each parity/speed row is labeled with a **comparison mode** (`raw kernel`,
+`thin wrapper`, `public facade`, `rust native`, or `impl candidate`) so the
+tables make explicit whether the current side is measured as a raw Rust/PyO3
+kernel, a thin NumPy wrapper, or a composed public Python facade -- all
+against the same legacy public Python.
 
 Verify it's reachable:
 

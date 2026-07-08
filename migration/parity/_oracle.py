@@ -29,7 +29,12 @@ import numpy as np
 from . import _threading
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-LEGACY_VENV_PYTHON = REPO_ROOT / ".legacy-venv" / "bin" / "python"
+LEGACY_VENV_PYTHON = Path(
+    os.environ.get(
+        "ADAM_CORE_LEGACY_VENV_PYTHON",
+        str(REPO_ROOT / ".legacy-venv" / "bin" / "python"),
+    )
+)
 
 
 class LegacyOracleError(RuntimeError):

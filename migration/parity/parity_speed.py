@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import socket
 import subprocess
@@ -75,7 +76,15 @@ CANONICAL_SPEED_TRIALS = 3
 SPEED_TIMING_AGGREGATION = "median-of-trial-percentiles"
 LEGACY_TIMING_CACHE_SCHEMA_VERSION = 1
 LEGACY_TIMING_CACHE_PROCESS_VERSION = "rm-p1-020-built-in-speed-trials-v1"
-LEGACY_REPO_ROOT = Path("/Users/aleck/Code/adam-core")
+# Dedicated, main-pinned legacy checkout, kept separate from any working
+# checkout so the speed baseline is reproducible and does not silently drift
+# when a working tree changes branches. Override with ADAM_CORE_LEGACY_REPO_ROOT
+# (see migration/parity/README.md).
+LEGACY_REPO_ROOT = Path(
+    os.environ.get(
+        "ADAM_CORE_LEGACY_REPO_ROOT", "/Users/aleck/Code/adam-core-legacy-main"
+    )
+)
 LEGACY_RELEVANT_UNTRACKED_PREFIXES = (
     "src/",
     "adam_core/",
@@ -1463,6 +1472,14 @@ def _flag(r: SpeedResult) -> str:
     return flag
 
 
+def _mode_short(api_id: str) -> str:
+    """Short comparison-mode label (raw kernel / thin wrapper / public facade /
+    rust native / impl candidate) for the current entrypoint of ``api_id``."""
+    from . import comparison_metadata
+
+    return comparison_metadata.for_api(api_id).get("comparison_mode_short", "unknown")
+
+
 def format_summary(results: list[SpeedResult]) -> str:
     has_cold = any(r.rust_cold is not None for r in results)
     warm_mode = _result_mode(results, "thread_mode", "multi-thread")
@@ -1484,18 +1501,20 @@ def format_summary(results: list[SpeedResult]) -> str:
         lines.append(
             f"{'Lane':11s}  {'API':50s}  {'n':>8s}  {'rust warm':>10s}  "
             f"{'leg warm':>10s}  {'×p50':>6s}  {'×p95':>6s}  "
-            f"{'rust cold':>11s}  {'leg cold':>10s}  {'×cold':>6s}  flag"
+            f"{'rust cold':>11s}  {'leg cold':>10s}  {'×cold':>6s}  "
+            f"{'mode':14s}  flag"
         )
-        lines.append("-" * 152)
+        lines.append("-" * 168)
     else:
         lines.append(
             f"{'Lane':11s}  {'API':50s}  {'n':>8s}  {'rust p50':>10s}  "
-            f"{'leg p50':>10s}  {'×p50':>6s}  {'×p95':>6s}  flag"
+            f"{'leg p50':>10s}  {'×p50':>6s}  {'×p95':>6s}  {'mode':14s}  flag"
         )
-        lines.append("-" * 124)
+        lines.append("-" * 140)
 
     for r in results:
         flag = _flag(r)
+        mode = _mode_short(r.api_id)
         if has_cold:
             cold_str = (
                 f"{r.rust_cold*1000:>10.1f}ms  {r.legacy_cold*1000:>9.1f}ms  "
@@ -1507,13 +1526,13 @@ def format_summary(results: list[SpeedResult]) -> str:
                 f"{r.lane:11s}  {r.api_id:50s}  {r.n:>8d}  "
                 f"{r.rust_p50*1e6:>9.1f}μs  {r.legacy_p50*1e6:>9.1f}μs  "
                 f"{r.speedup_p50:>5.2f}x  {r.speedup_p95:>5.2f}x  "
-                f"{cold_str}  {flag}"
+                f"{cold_str}  {mode:14s}  {flag}"
             )
         else:
             lines.append(
                 f"{r.lane:11s}  {r.api_id:50s}  {r.n:>8d}  "
                 f"{r.rust_p50*1e6:>9.1f}μs  {r.legacy_p50*1e6:>9.1f}μs  "
-                f"{r.speedup_p50:>5.2f}x  {r.speedup_p95:>5.2f}x  {flag}"
+                f"{r.speedup_p50:>5.2f}x  {r.speedup_p95:>5.2f}x  {mode:14s}  {flag}"
             )
     return "\n".join(lines)
 
