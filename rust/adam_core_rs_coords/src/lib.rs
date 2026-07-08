@@ -80,9 +80,9 @@ pub use weighted::{weighted_covariance_flat, weighted_mean_flat};
 
 pub mod variant_sampling;
 pub use variant_sampling::{
-    collapse_propagated_variants_to_orbits, create_monte_carlo_orbit_variants,
-    create_sampled_orbit_variants, create_sigma_point_orbit_variants, OrbitVariantSamples,
-    OrbitVariantSamplingMethod,
+    collapse_propagated_variants_to_orbits, collapse_variant_ephemeris,
+    create_monte_carlo_orbit_variants, create_sampled_orbit_variants,
+    create_sigma_point_orbit_variants, OrbitVariantSamples, OrbitVariantSamplingMethod,
 };
 
 pub mod translation;

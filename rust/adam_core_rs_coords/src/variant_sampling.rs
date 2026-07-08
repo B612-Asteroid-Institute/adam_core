@@ -4,11 +4,14 @@
 //! semantics at the typed batch layer so propagator adapters can keep covariance
 //! expansion, propagation, and collapse inside one Rust boundary.
 
-use crate::propagation::{PropagationError, PropagationResult, PropagationResultValue};
+use crate::propagation::{
+    EphemerisResult, PropagationError, PropagationResult, PropagationResultValue,
+};
 use crate::types::SchemaResult;
 use crate::{
     CoordinateBatch, CoordinateRepresentation, CoordinateValues, CovarianceBatch, CovarianceUnits,
-    OrbitBatch, OrbitVariantBatch, OriginArray, SchemaError, TimeArray, Validity, VariantId,
+    EphemerisBatch, OrbitBatch, OrbitVariantBatch, OriginArray, SchemaError, TimeArray, Validity,
+    VariantId,
 };
 use std::collections::HashMap;
 
@@ -343,6 +346,178 @@ fn sigma_points_reconstruct_input(
 ///
 /// The nominal propagated state remains the mean, matching Python
 /// `VariantOrbits.collapse(propagated_nominal)` semantics.
+/// Collapse a variant ephemeris into per-(orbit, observer-epoch) covariance on
+/// the nominal ephemeris. Mirrors the public Python `VariantEphemeris.collapse`:
+/// a weighted covariance over the variant topocentric-spherical coordinates
+/// (and the aberrated Cartesian coordinates when present), with the mean taken
+/// from the nominal ephemeris.
+///
+/// Ephemeris output is orbit-major, observer-minor (`output_row =
+/// orbit * observer_rows + observer`), so a variant row
+/// `v * observer_rows + obs` contributes to nominal row
+/// `source_orbit_indices[v] * observer_rows + obs`, and
+/// `variant_weights_cov[v]` is variant `v`'s covariance weight. The nominal
+/// ephemeris otherwise passes through unchanged (states, magnitudes,
+/// light-time, validity, diagnostics), so the boundary/contract is identical to
+/// the no-covariance path.
+pub fn collapse_variant_ephemeris(
+    nominal: &EphemerisResult,
+    variant: &EphemerisResult,
+    source_orbit_indices: &[usize],
+    variant_weights_cov: &[f64],
+    observer_rows: usize,
+) -> PropagationResultValue<EphemerisResult> {
+    let nominal_batch = &nominal.ephemeris;
+    let variant_batch = &variant.ephemeris;
+
+    let output_rows = nominal_batch.coordinates.len();
+    let n_variants = source_orbit_indices.len();
+    if observer_rows == 0 {
+        return Err(PropagationError::InvalidRequest(
+            "variant ephemeris collapse requires observer_rows > 0".to_string(),
+        ));
+    }
+    if variant_weights_cov.len() != n_variants {
+        return Err(PropagationError::InvalidRequest(
+            "variant_weights_cov length must match source_orbit_indices".to_string(),
+        ));
+    }
+    if variant_batch.coordinates.len() != n_variants * observer_rows {
+        return Err(PropagationError::InvalidRequest(
+            "variant ephemeris rows must equal n_variants * observer_rows".to_string(),
+        ));
+    }
+    if !output_rows.is_multiple_of(observer_rows) {
+        return Err(PropagationError::InvalidRequest(
+            "nominal ephemeris rows must be a multiple of observer_rows".to_string(),
+        ));
+    }
+
+    // Weighted covariance of one coordinate set (topocentric spherical or
+    // aberrated Cartesian) using the nominal value as the mean, gathering the
+    // variant samples by orbit-major/observer-minor index arithmetic.
+    let collapse_values = |nominal_values: &[[f64; 6]], variant_values: &[[f64; 6]]| -> Vec<f64> {
+        let mut samples_by_row = vec![Vec::<f64>::new(); output_rows];
+        let mut weights_by_row = vec![Vec::<f64>::new(); output_rows];
+        for (variant_index, &source) in source_orbit_indices.iter().enumerate() {
+            let weight = variant_weights_cov[variant_index];
+            for observer in 0..observer_rows {
+                let nominal_row = source * observer_rows + observer;
+                let variant_row = variant_index * observer_rows + observer;
+                if nominal_row < output_rows && variant_row < variant_values.len() {
+                    samples_by_row[nominal_row].extend_from_slice(&variant_values[variant_row]);
+                    weights_by_row[nominal_row].push(weight);
+                }
+            }
+        }
+        let mut covariance = Vec::with_capacity(output_rows * DIM * DIM);
+        for row in 0..output_rows {
+            let count = weights_by_row[row].len();
+            let valid = count > 0
+                && samples_by_row[row].len() == count * DIM
+                && nominal_batch.validity.is_valid(row);
+            if valid {
+                let cov = crate::weighted_covariance_flat(
+                    &nominal_values[row],
+                    &samples_by_row[row],
+                    &weights_by_row[row],
+                    count,
+                    DIM,
+                );
+                if cov.iter().all(|value| value.is_finite()) {
+                    covariance.extend_from_slice(&cov);
+                    continue;
+                }
+            }
+            covariance.extend(std::iter::repeat_n(f64::NAN, DIM * DIM));
+        }
+        covariance
+    };
+
+    // Topocentric spherical covariance.
+    let nominal_spherical = nominal_batch
+        .coordinates
+        .values
+        .spherical()
+        .ok_or_else(|| {
+            PropagationError::InvalidRequest(
+                "variant ephemeris collapse requires spherical nominal coordinates".to_string(),
+            )
+        })?;
+    let variant_spherical = variant_batch
+        .coordinates
+        .values
+        .spherical()
+        .ok_or_else(|| {
+            PropagationError::InvalidRequest(
+                "variant ephemeris collapse requires spherical variant coordinates".to_string(),
+            )
+        })?;
+    let spherical_covariance = CovarianceBatch::new(
+        output_rows,
+        DIM,
+        collapse_values(nominal_spherical, variant_spherical),
+        CovarianceUnits::Coordinate(CoordinateRepresentation::Spherical),
+    )?;
+    let collapsed_coordinates = CoordinateBatch::spherical(
+        nominal_spherical.to_vec(),
+        nominal_batch.coordinates.frame,
+        nominal_batch.coordinates.origins.clone(),
+        nominal_batch.coordinates.times.clone(),
+        Some(spherical_covariance),
+    )?;
+
+    // Aberrated Cartesian covariance, when both sides carry aberrated states.
+    let collapsed_aberrated = match (
+        nominal_batch.aberrated_coordinates.as_ref(),
+        variant_batch.aberrated_coordinates.as_ref(),
+    ) {
+        (Some(nominal_aberrated), Some(variant_aberrated)) => {
+            let nominal_values = nominal_aberrated.values.cartesian().ok_or_else(|| {
+                PropagationError::InvalidRequest(
+                    "variant ephemeris collapse requires Cartesian aberrated nominal coordinates"
+                        .to_string(),
+                )
+            })?;
+            let variant_values = variant_aberrated.values.cartesian().ok_or_else(|| {
+                PropagationError::InvalidRequest(
+                    "variant ephemeris collapse requires Cartesian aberrated variant coordinates"
+                        .to_string(),
+                )
+            })?;
+            let aberrated_covariance = CovarianceBatch::new(
+                output_rows,
+                DIM,
+                collapse_values(nominal_values, variant_values),
+                CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+            )?;
+            Some(CoordinateBatch::cartesian(
+                nominal_values.to_vec(),
+                nominal_aberrated.frame,
+                nominal_aberrated.origins.clone(),
+                nominal_aberrated.times.clone(),
+                Some(aberrated_covariance),
+            )?)
+        }
+        _ => nominal_batch.aberrated_coordinates.clone(),
+    };
+
+    let ephemeris = EphemerisBatch::new(
+        nominal_batch.orbit_id.clone(),
+        nominal_batch.object_id.clone(),
+        collapsed_coordinates,
+        nominal_batch.predicted_magnitude_v.clone(),
+        nominal_batch.alpha_deg.clone(),
+        nominal_batch.light_time_days.clone(),
+        collapsed_aberrated,
+        nominal_batch.validity.clone(),
+    )?;
+    Ok(EphemerisResult {
+        ephemeris,
+        diagnostics: nominal.diagnostics.clone(),
+    })
+}
+
 pub fn collapse_propagated_variants_to_orbits(
     nominal: &PropagationResult,
     propagated_variants: &PropagationResult,
