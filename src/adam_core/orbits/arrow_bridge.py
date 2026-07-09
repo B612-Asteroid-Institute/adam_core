@@ -23,6 +23,8 @@ from __future__ import annotations
 import pyarrow as pa
 
 from adam_core import _rust_native as _rn
+from adam_core._rust.arrow import stamp_adam_core_metadata as _stamp_adam_core_metadata
+from adam_core._rust.arrow import to_quivr_metadata as _to_quivr_metadata
 from adam_core.observers import Observers
 from adam_core.orbits import Orbits
 from adam_core.orbits.variants import VariantOrbits
@@ -30,23 +32,6 @@ from adam_core.orbits.variants import VariantOrbits
 _NESTED_SCHEMA = "OrbitBatch.cartesian.nested.quivr.v1"
 _VARIANT_NESTED_SCHEMA = "OrbitVariantBatch.cartesian.nested.quivr.v1"
 _OBSERVER_SCHEMA = "ObserverBatch.cartesian.nested.quivr.v1"
-
-
-def _stamp_adam_core_metadata(
-    table: pa.Table, representation: str, frame: str, scale: str, schema_name: str
-) -> pa.Table:
-    """Stamp the canonical ``adam_core_*`` schema metadata the Rust codec reads."""
-    metadata = dict(table.schema.metadata or {})
-    metadata.update(
-        {
-            b"adam_core_schema": schema_name.encode(),
-            b"adam_core_schema_version": b"1",
-            b"adam_core_representation": representation.encode(),
-            b"adam_core_frame": frame.encode(),
-            b"adam_core_time_scale": scale.encode(),
-        }
-    )
-    return table.replace_schema_metadata(metadata)
 
 
 def _with_adam_core_metadata(orbits: Orbits) -> pa.Table:
@@ -58,19 +43,6 @@ def _with_adam_core_metadata(orbits: Orbits) -> pa.Table:
         coordinates.frame,
         coordinates.time.scale,
         _NESTED_SCHEMA,
-    )
-
-
-def _to_quivr_metadata(table: pa.Table) -> pa.Table:
-    """Translate Rust ``adam_core_*`` metadata back into quivr attribute keys."""
-    metadata = dict(table.schema.metadata or {})
-    frame = metadata.get(b"adam_core_frame", b"unspecified").decode()
-    scale = metadata.get(b"adam_core_time_scale", b"utc").decode()
-    return table.replace_schema_metadata(
-        {
-            b"coordinates.frame": frame.encode(),
-            b"coordinates.time.scale": scale.encode(),
-        }
     )
 
 
