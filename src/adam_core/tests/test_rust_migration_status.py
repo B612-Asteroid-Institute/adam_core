@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from adam_core._rust.status import (
     API_MIGRATIONS,
@@ -625,6 +626,30 @@ def test_native_rust_timer_is_internal_and_missing_surfaces_are_blank(
     assert missing.sample_trials_s == []
     assert missing.todo == "personal-cmy.36.3"
     assert "PyO3 call is not accepted" in missing.reason
+
+
+@pytest.mark.integration
+def test_observer_native_rust_adapter_live() -> None:
+    """A registered native adapter must not silently degrade to a blank column."""
+    rng = np.random.default_rng(20260709)
+    observer_sample = _inputs.make("observers.Observers.from_codes", rng, 10)
+    native = _native_rust_runner.measure(
+        "observers.Observers.from_codes",
+        observer_sample.rust_kwargs,
+        reps=2,
+        warmup=1,
+        trials=2,
+    )
+
+    assert native.status == "measured", native.reason
+    assert len(native.sample_trials_s) == 2
+    assert all(len(trial) == 2 for trial in native.sample_trials_s)
+    assert all(value > 0.0 for trial in native.sample_trials_s for value in trial)
+    assert native.entrypoint == (
+        "adam_core_py::spice::observer_states_from_codes_record_batch"
+    )
+    assert "std::time::Instant" in native.timing_boundary
+    assert "PyArrow conversion excluded" in native.timing_boundary
 
 
 def test_every_parity_api_has_an_intentional_native_rust_todo_bucket() -> None:

@@ -461,6 +461,14 @@ def _format_speed(value: float | None) -> str:
     return f"{value:.2f}x"
 
 
+def _legacy_current_speedup(speedup: dict[str, Any], percentile: str) -> float | None:
+    """Prefer explicit three-column vocabulary, retaining old-artifact fallback."""
+    return speedup.get(
+        f"{percentile}_legacy_over_current_python",
+        speedup.get(f"{percentile}_python_over_rust"),
+    )
+
+
 def _format_seconds(value: float | None) -> str:
     if value is None:
         return "—"
@@ -951,7 +959,7 @@ def _format_assist_propagation(data: dict[str, Any]) -> list[str]:
             f"| {_format_seconds(python.get('p50'))} "
             f"| {_format_seconds(current.get('p50'))} "
             f"| {_format_native_timing(native)} "
-            f"| {_format_speed(speedup.get('p50_python_over_rust'))} / {_format_speed(speedup.get('p95_python_over_rust'))} "
+            f"| {_format_speed(_legacy_current_speedup(speedup, 'p50'))} / {_format_speed(_legacy_current_speedup(speedup, 'p95'))} "
             f"| {residuals.get('position_abs_m', float('nan')):.3e} |"
         )
     return lines
@@ -986,7 +994,7 @@ def _format_assist_covariance(data: dict[str, Any]) -> list[str]:
             f"| {'yes' if covariance.get('parity_expected') else 'statistical'} "
             f"| {_format_seconds(current.get('p50'))} "
             f"| {_format_native_timing(native)} "
-            f"| {_format_speed(speedup.get('p50_python_over_rust'))} / {_format_speed(speedup.get('p95_python_over_rust'))} "
+            f"| {_format_speed(_legacy_current_speedup(speedup, 'p50'))} / {_format_speed(_legacy_current_speedup(speedup, 'p95'))} "
             f"| {sigma_cell} "
             f"| {state_res.get('position_abs_m', float('nan')):.3e} |"
         )

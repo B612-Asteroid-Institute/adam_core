@@ -125,6 +125,9 @@ profile = "black"
 
 [tool.pytest.ini_options]
 norecursedirs = ["__pypackages__"]
+markers = [
+    "integration: exercises installed data/runtime integrations rather than a hermetic unit seam",
+]
 
 [tool.ruff]
 line-length = 110

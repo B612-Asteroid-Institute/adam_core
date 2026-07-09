@@ -119,6 +119,7 @@ pdm.lock
 
 # working scratch files
 .scratch*
+.pi/
 
 # Rust build output
 target/

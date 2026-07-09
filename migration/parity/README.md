@@ -90,6 +90,16 @@ Arrow-native observer reference implements this contract; each
 `personal-cmy.36.3`–`.36.9` conversion must add its Rust-internal timer as the
 surface moves from NumPy to native Arrow.
 
+To preserve historical artifact readers without duplicating raw sample
+matrices, old keys remain the sample owners. In adam_core speed artifacts,
+current-through-Python samples live under `rust_sample_trials_s`; the explicit
+`current_python_*` fields are scalar summaries. In nested ASSIST timing
+payloads, `python.values` and `rust.values` own legacy and current samples,
+while `legacy_adam_core.samples_alias` and `current_python.samples_alias` are
+dotted JSON paths to those arrays. The flat impacts artifact uses sibling-key
+aliases (`python_samples_s` / `rust_samples_s`) instead. Consumers should
+resolve `samples_alias` when they need raw samples.
+
 Verify it's reachable:
 
 ```bash
