@@ -40,8 +40,9 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from migration.parity._assist_bench import (  # noqa: E402
+    PERFORMANCE_COLUMNS,
     TWO_RUNTIME_COMPARISON_MODE,
-    percentiles,
+    performance_timing_payload,
     time_rust,
 )
 from migration.parity._assist_oracle import (  # noqa: E402
@@ -509,8 +510,6 @@ def _benchmark_workload(
         workload.orbits, workload.times, **kwargs
     )
     rust_timings, rust_output = time_rust(run_rust, repeats=repeats, warmups=warmups)
-    python_p50, python_p95 = percentiles(python_timings)
-    rust_p50, rust_p95 = percentiles(rust_timings)
     input_rows = len(workload.orbits)
     target_rows = len(workload.times)
     target_mjd = workload.times.mjd().to_numpy(zero_copy_only=False)
@@ -544,18 +543,7 @@ def _benchmark_workload(
                 "Rayon thread pool" if max_processes > 1 else "single Rayon thread"
             ),
         },
-        "timing_seconds": {
-            "python": {
-                "values": python_timings,
-                "p50": python_p50,
-                "p95": python_p95,
-            },
-            "rust": {"values": rust_timings, "p50": rust_p50, "p95": rust_p95},
-            "speedup": {
-                "p50_python_over_rust": python_p50 / rust_p50,
-                "p95_python_over_rust": python_p95 / rust_p95,
-            },
-        },
+        "timing_seconds": performance_timing_payload(python_timings, rust_timings),
         "residuals": _state_residuals(rust_output, python_output),
     }
 
@@ -635,9 +623,10 @@ def main(argv: list[str] | None = None) -> int:
         for workload in workloads
     ]
     artifact = {
-        "schema_version": 6,
+        "schema_version": 7,
         "benchmark_id": "assist_public_semantics_benchmark_2026-05-26",
         "comparison_mode": TWO_RUNTIME_COMPARISON_MODE,
+        "performance_columns": PERFORMANCE_COLUMNS,
         "generated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat(),
         "packages": {name: _package_version(name) for name in PACKAGE_NAMES},
         "kernels": [

@@ -16,12 +16,61 @@ from typing import Any, Callable
 import numpy as np
 
 TWO_RUNTIME_COMPARISON_MODE = "gpl_rust_assist_backend_vs_legacy_python_adam_assist"
+PERFORMANCE_COLUMNS = {
+    "legacy_adam_core": "legacy adam_assist over pinned legacy adam_core",
+    "current_python": "current adam_assist_rust public Python method",
+    "native_rust": (
+        "direct Rust call timed inside Rust with std::time::Instant; null until "
+        "a Rust-internal adapter exists"
+    ),
+    "gate": "legacy/current_python; native_rust is diagnostic",
+}
+NATIVE_RUST_TODO = "personal-98v.1"
 
 
 def percentiles(samples: list[float]) -> tuple[float, float]:
     """Return (p50, p95) seconds for a list of per-rep timings."""
     arr = np.asarray(samples, dtype=np.float64)
     return float(np.percentile(arr, 50)), float(np.percentile(arr, 95))
+
+
+def performance_timing_payload(
+    legacy_samples: list[float], current_python_samples: list[float]
+) -> dict[str, Any]:
+    """Canonical three-column payload; native stays blank without a Rust timer."""
+    legacy_p50, legacy_p95 = percentiles(legacy_samples)
+    current_p50, current_p95 = percentiles(current_python_samples)
+    current = {
+        "values": current_python_samples,
+        "p50": current_p50,
+        "p95": current_p95,
+    }
+    return {
+        "python": {
+            "values": legacy_samples,
+            "p50": legacy_p50,
+            "p95": legacy_p95,
+        },
+        "rust": current,
+        "current_python": current,
+        "native_rust": {
+            "status": "unavailable",
+            "values": [],
+            "p50": None,
+            "p95": None,
+            "reason": (
+                "no Rust-internal Instant adapter; a Python->PyO3 call is not "
+                "accepted as native-Rust timing"
+            ),
+            "todo": NATIVE_RUST_TODO,
+        },
+        "speedup": {
+            "p50_python_over_rust": legacy_p50 / current_p50,
+            "p95_python_over_rust": legacy_p95 / current_p95,
+            "p50_legacy_over_current_python": legacy_p50 / current_p50,
+            "p95_legacy_over_current_python": legacy_p95 / current_p95,
+        },
+    }
 
 
 def time_rust(

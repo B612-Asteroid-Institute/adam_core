@@ -51,6 +51,14 @@ reps/warmup distribution; pass/fail uses median-of-trial p50/p95 aggregates and
 the JSON artifacts retain the raw sample matrix plus per-trial percentiles. The
 trial count is intentionally not exposed as a CLI flag for canonical scripts.
 
+Artifacts distinguish **legacy adam_core**, **current through Python**, and
+**native Rust**. Gate thresholds apply to legacy/current-through-Python because
+that is the compatible user path. Native Rust is measured only by a Rust-owned
+`std::time::Instant` loop around direct Rust calls; Python/PyO3 may launch the
+loop but must be outside every sample. PyO3 crossing latency is not native-Rust
+latency. Missing Rust-internal adapters remain null with a reason/TODO—never
+replace them with crossing or Python timings.
+
 Baseline-main legacy timings are serialized in
 `migration/artifacts/parity_legacy_speed_baseline.json` and reused by the
 canonical speed gates. The cache is keyed by API, lane, structured workload

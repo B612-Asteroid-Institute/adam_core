@@ -1,7 +1,14 @@
 {
-  "schema_version": 1,
-  "generated_at_utc": "2026-07-03T12:55:21Z",
-  "description": "Python adam_assist vs Rust adam_assist_rust _detect_collisions on identical same-epoch impactor/safe workloads; parity of impact and survivor sets asserted per lane before timing.",
+  "schema_version": 3,
+  "comparison_mode": "gpl_rust_assist_backend_vs_legacy_python_adam_assist",
+  "performance_columns": {
+    "legacy_adam_core": "legacy adam_assist over pinned legacy adam_core",
+    "current_python": "current adam_assist_rust public Python method",
+    "native_rust": "direct Rust call timed inside Rust with std::time::Instant; null until a Rust-internal adapter exists",
+    "gate": "legacy/current_python; native_rust is diagnostic"
+  },
+  "generated_at_utc": "2026-07-09T19:10:03Z",
+  "description": "Two-runtime: legacy adam_assist.detect_collisions timed inside the isolated .legacy-assist-venv vs Rust adam_assist_rust.detect_collisions timed locally, on identical same-epoch impactor/safe workloads; parity of impact and survivor sets asserted per lane before timing.",
   "machine": {
     "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
     "machine": "arm64",
@@ -21,43 +28,69 @@
       "num_days": 30,
       "n_impacts": 2,
       "python_samples_s": [
-        0.0860155401751399,
-        0.08755241706967354,
-        0.0899145407602191
+        0.08749016560614109,
+        0.11040920857340097,
+        0.10537129268050194
       ],
       "rust_samples_s": [
-        0.01340729184448719,
-        0.01294954214245081,
-        0.01266179047524929
+        0.013925749808549881,
+        0.013129250146448612,
+        0.013585667125880718
       ],
-      "python_p50_s": 0.08755241706967354,
-      "python_p95_s": 0.08967832839116455,
-      "rust_p50_s": 0.01294954214245081,
-      "rust_p95_s": 0.013361516874283552,
-      "speedup_p50": 6.761043448992823,
-      "speedup_p95": 6.711687694962636,
-      "max_impact_time_diff_days": 0.00011763302609324455
+      "python_p50_s": 0.10537129268050194,
+      "python_p95_s": 0.10990541698411108,
+      "rust_p50_s": 0.013585667125880718,
+      "rust_p95_s": 0.013891741540282965,
+      "current_python_samples_s": [
+        0.013925749808549881,
+        0.013129250146448612,
+        0.013585667125880718
+      ],
+      "current_python_p50_s": 0.013585667125880718,
+      "current_python_p95_s": 0.013891741540282965,
+      "native_rust_status": "unavailable",
+      "native_rust_samples_s": [],
+      "native_rust_p50_s": null,
+      "native_rust_p95_s": null,
+      "native_rust_unavailable_reason": "no Rust-internal Instant adapter; a Python->PyO3 call is not accepted as native-Rust timing",
+      "native_rust_todo": "personal-98v.1",
+      "speedup_p50": 7.756063188076311,
+      "speedup_p95": 7.911565059385087,
+      "max_impact_time_diff_days": 0.00017516035586595535
     },
     {
       "n_orbits": 50,
       "num_days": 30,
       "n_impacts": 10,
       "python_samples_s": [
-        0.2569116670638323,
-        0.2568147089332342,
-        0.3235312085598707
+        0.2766619576141238,
+        0.2621799586340785,
+        0.29562158323824406
       ],
       "rust_samples_s": [
-        0.06420895922929049,
-        0.06548333261162043,
-        0.06551833357661963
+        0.06324062496423721,
+        0.06257066689431667,
+        0.06333416700363159
       ],
-      "python_p50_s": 0.2569116670638323,
-      "python_p95_s": 0.31686925441026687,
-      "rust_p50_s": 0.06548333261162043,
-      "rust_p95_s": 0.0655148334801197,
-      "speedup_p50": 3.923313869615758,
-      "speedup_p95": 4.836603217596821,
+      "python_p50_s": 0.2766619576141238,
+      "python_p95_s": 0.293725620675832,
+      "rust_p50_s": 0.06324062496423721,
+      "rust_p95_s": 0.06332481279969215,
+      "current_python_samples_s": [
+        0.06324062496423721,
+        0.06257066689431667,
+        0.06333416700363159
+      ],
+      "current_python_p50_s": 0.06324062496423721,
+      "current_python_p95_s": 0.06332481279969215,
+      "native_rust_status": "unavailable",
+      "native_rust_samples_s": [],
+      "native_rust_p50_s": null,
+      "native_rust_p95_s": null,
+      "native_rust_unavailable_reason": "no Rust-internal Instant adapter; a Python->PyO3 call is not accepted as native-Rust timing",
+      "native_rust_todo": "personal-98v.1",
+      "speedup_p50": 4.374750530542308,
+      "speedup_p95": 4.638396983579554,
       "max_impact_time_diff_days": 0.0004306165501475334
     },
     {
@@ -65,21 +98,34 @@
       "num_days": 30,
       "n_impacts": 40,
       "python_samples_s": [
-        1.0983455004170537,
-        1.0877172080799937,
-        1.1105871675536036
+        1.0927171669900417,
+        1.1005696253851056,
+        1.0744986655190587
       ],
       "rust_samples_s": [
-        0.5238749170675874,
-        0.5211820835247636,
-        0.5144875003024936
+        0.5804852498695254,
+        0.509466084651649,
+        0.5524530000984669
       ],
-      "python_p50_s": 1.0983455004170537,
-      "python_p95_s": 1.1093630008399487,
-      "rust_p50_s": 0.5211820835247636,
-      "rust_p95_s": 0.523605633713305,
-      "speedup_p50": 2.107412236792416,
-      "speedup_p95": 2.1186995124032015,
+      "python_p50_s": 1.0927171669900417,
+      "python_p95_s": 1.0997843795455993,
+      "rust_p50_s": 0.5524530000984669,
+      "rust_p95_s": 0.5776820248924196,
+      "current_python_samples_s": [
+        0.5804852498695254,
+        0.509466084651649,
+        0.5524530000984669
+      ],
+      "current_python_p50_s": 0.5524530000984669,
+      "current_python_p95_s": 0.5776820248924196,
+      "native_rust_status": "unavailable",
+      "native_rust_samples_s": [],
+      "native_rust_p50_s": null,
+      "native_rust_p95_s": null,
+      "native_rust_unavailable_reason": "no Rust-internal Instant adapter; a Python->PyO3 call is not accepted as native-Rust timing",
+      "native_rust_todo": "personal-98v.1",
+      "speedup_p50": 1.9779368865682339,
+      "speedup_p95": 1.9037884721277412,
       "max_impact_time_diff_days": 0.0005431598983705044
     }
   ]

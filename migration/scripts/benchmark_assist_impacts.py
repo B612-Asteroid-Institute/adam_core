@@ -42,6 +42,8 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from migration.parity._assist_bench import (  # noqa: E402
+    NATIVE_RUST_TODO,
+    PERFORMANCE_COLUMNS,
     TWO_RUNTIME_COMPARISON_MODE,
     percentiles,
     time_rust,
@@ -214,6 +216,18 @@ def main(argv: list[str] | None = None) -> int:
             "python_p95_s": py_p95,
             "rust_p50_s": rust_p50,
             "rust_p95_s": rust_p95,
+            "current_python_samples_s": rust_samples,
+            "current_python_p50_s": rust_p50,
+            "current_python_p95_s": rust_p95,
+            "native_rust_status": "unavailable",
+            "native_rust_samples_s": [],
+            "native_rust_p50_s": None,
+            "native_rust_p95_s": None,
+            "native_rust_unavailable_reason": (
+                "no Rust-internal Instant adapter; a Python->PyO3 call is not "
+                "accepted as native-Rust timing"
+            ),
+            "native_rust_todo": NATIVE_RUST_TODO,
             "speedup_p50": py_p50 / rust_p50,
             "speedup_p95": py_p95 / rust_p95,
             "max_impact_time_diff_days": max_impact_time_diff,
@@ -227,8 +241,9 @@ def main(argv: list[str] | None = None) -> int:
         )
 
     artifact = {
-        "schema_version": 2,
+        "schema_version": 3,
         "comparison_mode": TWO_RUNTIME_COMPARISON_MODE,
+        "performance_columns": PERFORMANCE_COLUMNS,
         "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "description": (
             "Two-runtime: legacy adam_assist.detect_collisions timed inside the "

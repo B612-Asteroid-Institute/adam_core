@@ -1,7 +1,8 @@
 {
   "benchmark_id": "assist_public_semantics_covariance_benchmark_2026-06-20",
+  "comparison_mode": "gpl_rust_assist_backend_vs_legacy_python_adam_assist",
   "environment": {
-    "covariance_methods": "Public sampled covariance: VariantOrbits.create -> variant propagation -> collapse-to-nominal covariance, mirrored by the Rust adam_core_rs_coords::variant_sampling path.",
+    "covariance_methods": "Public sampled covariance: VariantOrbits.create -> variant propagation -> collapse-to-nominal covariance. Legacy parity outputs are cached separately from timing samples; legacy timing loops run inside .legacy-assist-venv and Rust timing runs locally.",
     "cpu_count": 10,
     "machine": "arm64",
     "max_processes": 10,
@@ -9,9 +10,9 @@
     "processor": "arm",
     "python": "3.13.3",
     "stochastic_policy": "sigma-point and auto are deterministic and compared element-wise (parity_expected=true); monte-carlo uses different RNGs in Python (NumPy) and Rust (SplitMix64) so it is compared statistically (parity_expected=false). The nominal mean state is a strict parity check for every method.",
-    "thread_mode": "parallel public calls: Python adam-assist uses Ray worker processes and adam_assist_rust uses the same value as its Rust Rayon thread_limit"
+    "thread_mode": "two-runtime public calls: legacy Python adam-assist is timed inside .legacy-assist-venv (Ray worker processes) and local adam_assist_rust uses the same public max_processes value as its Rust Rayon thread_limit"
   },
-  "generated_at_utc": "2026-06-21T02:02:28+00:00",
+  "generated_at_utc": "2026-07-09T19:16:23+00:00",
   "kernels": [
     {
       "file_name": "de440.bsp",
@@ -33,7 +34,13 @@
     "assist": "1.2.3",
     "rebound": "4.6.0"
   },
-  "schema_version": 1,
+  "performance_columns": {
+    "current_python": "current adam_assist_rust public Python method",
+    "gate": "legacy/current_python; native_rust is diagnostic",
+    "legacy_adam_core": "legacy adam_assist over pinned legacy adam_core",
+    "native_rust": "direct Rust call timed inside Rust with std::time::Instant; null until a Rust-internal adapter exists"
+  },
+  "schema_version": 3,
   "workloads": [
     {
       "covariance": {
@@ -46,8 +53,8 @@
         "max_abs": 1.0037563779569175e-24,
         "max_rel_frobenius": 9.314381251192953e-09,
         "max_sigma_rel": 1.2068233379902587e-08,
-        "mean_rel_frobenius": 2.4693226771025193e-09,
-        "mean_sigma_rel": 1.0607244723729573e-09,
+        "mean_rel_frobenius": 2.469184674334547e-09,
+        "mean_sigma_rel": 1.0584649826798585e-09,
         "python_finite": true,
         "rows": 12,
         "rust_finite": true
@@ -88,31 +95,52 @@
         "unique_rows": 3
       },
       "timing_seconds": {
-        "python": {
-          "p50": 0.2215612092986703,
-          "p95": 0.27741688322275876,
+        "current_python": {
+          "p50": 0.006540708243846893,
+          "p95": 0.0072440488263964655,
           "values": [
-            0.28771941643208265,
-            0.23620675038546324,
-            0.19709054194390774,
-            0.2215612092986703,
-            0.2008407087996602
+            0.006332832388579845,
+            0.0073105404153466225,
+            0.006978082470595837,
+            0.0064428746700286865,
+            0.006540708243846893
+          ]
+        },
+        "native_rust": {
+          "p50": null,
+          "p95": null,
+          "reason": "no Rust-internal Instant adapter; a Python->PyO3 call is not accepted as native-Rust timing",
+          "status": "unavailable",
+          "todo": "personal-98v.1",
+          "values": []
+        },
+        "python": {
+          "p50": 0.10573962517082691,
+          "p95": 0.12601187508553266,
+          "values": [
+            0.08489174954593182,
+            0.08905908279120922,
+            0.10573962517082691,
+            0.1157152084633708,
+            0.12858604174107313
           ]
         },
         "rust": {
-          "p50": 0.012093416415154934,
-          "p95": 0.018951950222253797,
+          "p50": 0.006540708243846893,
+          "p95": 0.0072440488263964655,
           "values": [
-            0.012093416415154934,
-            0.009854082949459553,
-            0.016782250255346298,
-            0.019494375213980675,
-            0.00984487496316433
+            0.006332832388579845,
+            0.0073105404153466225,
+            0.006978082470595837,
+            0.0064428746700286865,
+            0.006540708243846893
           ]
         },
         "speedup": {
-          "p50_python_over_rust": 18.3208120594458,
-          "p95_python_over_rust": 14.63790691561704
+          "p50_legacy_over_current_python": 16.166387679851095,
+          "p50_python_over_rust": 16.166387679851095,
+          "p95_legacy_over_current_python": 17.395227186536918,
+          "p95_python_over_rust": 17.395227186536918
         }
       },
       "workload_shape": {
@@ -130,10 +158,10 @@
       },
       "covariance_residuals": {
         "max_abs": 2.069381977586986e-24,
-        "max_rel_frobenius": 1.7956502690369654e-08,
+        "max_rel_frobenius": 1.7956500056080304e-08,
         "max_sigma_rel": 1.9625503391775294e-08,
-        "mean_rel_frobenius": 4.488267877409526e-09,
-        "mean_sigma_rel": 1.461379802969071e-09,
+        "mean_rel_frobenius": 4.486661056621667e-09,
+        "mean_sigma_rel": 1.4537714631889398e-09,
         "python_finite": true,
         "rows": 500,
         "rust_finite": true
@@ -174,31 +202,52 @@
         "unique_rows": 20
       },
       "timing_seconds": {
-        "python": {
-          "p50": 1.3692119996994734,
-          "p95": 2.072569766640663,
+        "current_python": {
+          "p50": 0.0616244999691844,
+          "p95": 0.07995682545006275,
           "values": [
-            1.299170583486557,
-            1.3692119996994734,
-            2.216500791721046,
-            1.4968456663191319,
-            1.3116812091320753
+            0.06106537487357855,
+            0.06031966768205166,
+            0.08323091734200716,
+            0.0616244999691844,
+            0.06686045788228512
+          ]
+        },
+        "native_rust": {
+          "p50": null,
+          "p95": null,
+          "reason": "no Rust-internal Instant adapter; a Python->PyO3 call is not accepted as native-Rust timing",
+          "status": "unavailable",
+          "todo": "personal-98v.1",
+          "values": []
+        },
+        "python": {
+          "p50": 0.6677667088806629,
+          "p95": 0.718629533983767,
+          "values": [
+            0.7304265424609184,
+            0.6677667088806629,
+            0.6258175410330296,
+            0.642423958517611,
+            0.6714415000751615
           ]
         },
         "rust": {
-          "p50": 0.06231150031089783,
-          "p95": 0.07076434139162302,
+          "p50": 0.0616244999691844,
+          "p95": 0.07995682545006275,
           "values": [
-            0.06231150031089783,
-            0.05970008298754692,
-            0.05367233417928219,
-            0.0686705419793725,
-            0.07128779124468565
+            0.06106537487357855,
+            0.06031966768205166,
+            0.08323091734200716,
+            0.0616244999691844,
+            0.06686045788228512
           ]
         },
         "speedup": {
-          "p50_python_over_rust": 21.97366445789154,
-          "p95_python_over_rust": 29.288335422648487
+          "p50_legacy_over_current_python": 10.836058859943408,
+          "p50_python_over_rust": 10.836058859943408,
+          "p95_legacy_over_current_python": 8.987719684201183,
+          "p95_python_over_rust": 8.987719684201183
         }
       },
       "workload_shape": {
@@ -216,10 +265,10 @@
       },
       "covariance_residuals": {
         "max_abs": 2.069381977586986e-24,
-        "max_rel_frobenius": 1.7956502690369654e-08,
+        "max_rel_frobenius": 1.7956500056080304e-08,
         "max_sigma_rel": 1.9625503391775294e-08,
-        "mean_rel_frobenius": 4.488267877409526e-09,
-        "mean_sigma_rel": 1.461379802969071e-09,
+        "mean_rel_frobenius": 4.486661056621667e-09,
+        "mean_sigma_rel": 1.4537714631889398e-09,
         "python_finite": true,
         "rows": 500,
         "rust_finite": true
@@ -260,31 +309,52 @@
         "unique_rows": 20
       },
       "timing_seconds": {
-        "python": {
-          "p50": 1.2335210833698511,
-          "p95": 1.302720533311367,
+        "current_python": {
+          "p50": 0.06597366742789745,
+          "p95": 0.07035180926322937,
           "values": [
-            1.314862041734159,
-            1.205882958136499,
-            1.2335210833698511,
-            1.2541544996201992,
-            1.1802378743886948
+            0.06722037494182587,
+            0.0641697496175766,
+            0.06597366742789745,
+            0.07113466784358025,
+            0.0642928322777152
+          ]
+        },
+        "native_rust": {
+          "p50": null,
+          "p95": null,
+          "reason": "no Rust-internal Instant adapter; a Python->PyO3 call is not accepted as native-Rust timing",
+          "status": "unavailable",
+          "todo": "personal-98v.1",
+          "values": []
+        },
+        "python": {
+          "p50": 0.6884190840646625,
+          "p95": 0.736979841068387,
+          "values": [
+            0.6783362915739417,
+            0.7408804576843977,
+            0.6884190840646625,
+            0.6847289577126503,
+            0.7213773746043444
           ]
         },
         "rust": {
-          "p50": 0.05287704057991505,
-          "p95": 0.06498028356581927,
+          "p50": 0.06597366742789745,
+          "p95": 0.07035180926322937,
           "values": [
-            0.04820412490516901,
-            0.05314274970442057,
-            0.047105749137699604,
-            0.06793966703116894,
-            0.05287704057991505
+            0.06722037494182587,
+            0.0641697496175766,
+            0.06597366742789745,
+            0.07113466784358025,
+            0.0642928322777152
           ]
         },
         "speedup": {
-          "p50_python_over_rust": 23.328103650308957,
-          "p95_python_over_rust": 20.047935494030686
+          "p50_legacy_over_current_python": 10.434755424458325,
+          "p50_python_over_rust": 10.434755424458325,
+          "p95_legacy_over_current_python": 10.475634511557368,
+          "p95_python_over_rust": 10.475634511557368
         }
       },
       "workload_shape": {
@@ -304,8 +374,8 @@
         "max_abs": 1.3812122543779136e-17,
         "max_rel_frobenius": 0.12129274134335925,
         "max_sigma_rel": 0.06460757984036969,
-        "mean_rel_frobenius": 0.12060298109435472,
-        "mean_sigma_rel": 0.026746280738663718,
+        "mean_rel_frobenius": 0.12060298109358987,
+        "mean_sigma_rel": 0.026746280738505927,
         "python_finite": true,
         "rows": 100,
         "rust_finite": true
@@ -346,31 +416,52 @@
         "unique_rows": 10
       },
       "timing_seconds": {
-        "python": {
-          "p50": 21.05513108242303,
-          "p95": 21.866446716710925,
+        "current_python": {
+          "p50": 0.8096311669796705,
+          "p95": 1.0391386583447457,
           "values": [
-            21.949242416769266,
-            21.53526391647756,
-            20.457697874866426,
-            19.341901917010546,
-            21.05513108242303
+            0.7882172083482146,
+            0.8091293750330806,
+            0.8096311669796705,
+            0.9754336252808571,
+            1.0550649166107178
+          ]
+        },
+        "native_rust": {
+          "p50": null,
+          "p95": null,
+          "reason": "no Rust-internal Instant adapter; a Python->PyO3 call is not accepted as native-Rust timing",
+          "status": "unavailable",
+          "todo": "personal-98v.1",
+          "values": []
+        },
+        "python": {
+          "p50": 8.57260425016284,
+          "p95": 9.595950616896152,
+          "values": [
+            8.766113750636578,
+            9.803409833461046,
+            8.57260425016284,
+            8.234808917157352,
+            7.732728959061205
           ]
         },
         "rust": {
-          "p50": 1.3650323748588562,
-          "p95": 1.4992015497758984,
+          "p50": 0.8096311669796705,
+          "p95": 1.0391386583447457,
           "values": [
-            1.3650323748588562,
-            1.2915987921878695,
-            1.4439212502911687,
-            1.513021624647081,
-            1.2477867910638452
+            0.7882172083482146,
+            0.8091293750330806,
+            0.8096311669796705,
+            0.9754336252808571,
+            1.0550649166107178
           ]
         },
         "speedup": {
-          "p50_python_over_rust": 15.424638616794802,
-          "p95_python_over_rust": 14.58539495238618
+          "p50_legacy_over_current_python": 10.58828340581668,
+          "p50_python_over_rust": 10.58828340581668,
+          "p95_legacy_over_current_python": 9.23452374698641,
+          "p95_python_over_rust": 9.23452374698641
         }
       },
       "workload_shape": {
@@ -387,11 +478,11 @@
         "seed": null
       },
       "covariance_residuals": {
-        "max_abs": 4.9426938297287375e-22,
-        "max_rel_frobenius": 1.7381692466640202e-08,
+        "max_abs": 4.853029374886421e-22,
+        "max_rel_frobenius": 1.7381692466640053e-08,
         "max_sigma_rel": 2.18144921200604e-08,
-        "mean_rel_frobenius": 2.2640064865563733e-09,
-        "mean_sigma_rel": 1.2391030446148172e-09,
+        "mean_rel_frobenius": 2.2643501184635216e-09,
+        "mean_sigma_rel": 1.2400435334770363e-09,
         "python_finite": true,
         "rows": 5000,
         "rust_finite": true
@@ -432,31 +523,52 @@
         "unique_rows": 50
       },
       "timing_seconds": {
-        "python": {
-          "p50": 5.342445624992251,
-          "p95": 5.644582174345851,
+        "current_python": {
+          "p50": 0.3706022910773754,
+          "p95": 0.38409873340278866,
           "values": [
-            5.711173707619309,
-            5.378216041252017,
-            5.342445624992251,
-            5.274705708958209,
-            5.298677417449653
+            0.38172266725450754,
+            0.3706022910773754,
+            0.36888100020587444,
+            0.3846927499398589,
+            0.3692304166033864
+          ]
+        },
+        "native_rust": {
+          "p50": null,
+          "p95": null,
+          "reason": "no Rust-internal Instant adapter; a Python->PyO3 call is not accepted as native-Rust timing",
+          "status": "unavailable",
+          "todo": "personal-98v.1",
+          "values": []
+        },
+        "python": {
+          "p50": 4.1443273751065135,
+          "p95": 4.324734066426754,
+          "values": [
+            4.12971574999392,
+            4.1214699158445,
+            4.204493999481201,
+            4.354794083163142,
+            4.1443273751065135
           ]
         },
         "rust": {
-          "p50": 0.6107891667634249,
-          "p95": 0.7211267668753862,
+          "p50": 0.3706022910773754,
+          "p95": 0.38409873340278866,
           "values": [
-            0.5554607911035419,
-            0.7292539170011878,
-            0.68861816637218,
-            0.6107891667634249,
-            0.5632900418713689
+            0.38172266725450754,
+            0.3706022910773754,
+            0.36888100020587444,
+            0.3846927499398589,
+            0.3692304166033864
           ]
         },
         "speedup": {
-          "p50_python_over_rust": 8.746791717511789,
-          "p95_python_over_rust": 7.82744786856769
+          "p50_legacy_over_current_python": 11.182681475223932,
+          "p50_python_over_rust": 11.182681475223932,
+          "p95_legacy_over_current_python": 11.259433292355022,
+          "p95_python_over_rust": 11.259433292355022
         }
       },
       "workload_shape": {
@@ -474,10 +586,10 @@
       },
       "covariance_residuals": {
         "max_abs": 1.7013445682995797e-20,
-        "max_rel_frobenius": 6.812048072658789e-07,
+        "max_rel_frobenius": 6.812048072658791e-07,
         "max_sigma_rel": 1.3471552818641882e-06,
-        "mean_rel_frobenius": 1.066050196608812e-08,
-        "mean_sigma_rel": 4.9358058706367175e-09,
+        "mean_rel_frobenius": 1.0660261343512349e-08,
+        "mean_sigma_rel": 4.934304236709323e-09,
         "python_finite": true,
         "rows": 1250,
         "rust_finite": true
@@ -518,31 +630,52 @@
         "unique_rows": 25
       },
       "timing_seconds": {
-        "python": {
-          "p50": 2.0018362076953053,
-          "p95": 2.1772233076393603,
+        "current_python": {
+          "p50": 0.14201237447559834,
+          "p95": 0.14985736589878798,
           "values": [
-            2.0018362076953053,
-            2.1913612075150013,
-            2.120671708136797,
-            1.8956142086535692,
-            1.9353867499157786
+            0.13858245871961117,
+            0.14201237447559834,
+            0.15091233234852552,
+            0.13361224997788668,
+            0.14563750009983778
+          ]
+        },
+        "native_rust": {
+          "p50": null,
+          "p95": null,
+          "reason": "no Rust-internal Instant adapter; a Python->PyO3 call is not accepted as native-Rust timing",
+          "status": "unavailable",
+          "todo": "personal-98v.1",
+          "values": []
+        },
+        "python": {
+          "p50": 1.274038708768785,
+          "p95": 1.3298111084848643,
+          "values": [
+            1.279588708654046,
+            1.274038708768785,
+            1.3423667084425688,
+            1.26665158290416,
+            1.2690637083724141
           ]
         },
         "rust": {
-          "p50": 0.1880253329873085,
-          "p95": 0.1999355923384428,
+          "p50": 0.14201237447559834,
+          "p95": 0.14985736589878798,
           "values": [
-            0.20020366739481688,
-            0.1820859992876649,
-            0.1880253329873085,
-            0.18711045756936073,
-            0.1988632921129465
+            0.13858245871961117,
+            0.14201237447559834,
+            0.15091233234852552,
+            0.13361224997788668,
+            0.14563750009983778
           ]
         },
         "speedup": {
-          "p50_python_over_rust": 10.646630301835057,
-          "p95_python_over_rust": 10.889623414093503
+          "p50_legacy_over_current_python": 8.971321784269582,
+          "p50_python_over_rust": 8.971321784269582,
+          "p95_legacy_over_current_python": 8.873845476391224,
+          "p95_python_over_rust": 8.873845476391224
         }
       },
       "workload_shape": {

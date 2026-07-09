@@ -983,6 +983,22 @@ class SpeedResult:
     speedup_p95: float
     raw_passed: bool
     passed: bool
+    # Three-way current performance decomposition. Historical ``rust_*``
+    # fields are the current compatible Python call and remain the enforced
+    # legacy comparator. ``native_rust_*`` is timed by Rust ``Instant`` around
+    # direct Rust calls; Python/PyO3 is outside every native sample.
+    native_rust_status: str = "unavailable"
+    native_rust_p50: Optional[float] = None
+    native_rust_p95: Optional[float] = None
+    current_python_over_native_rust_p50: Optional[float] = None
+    current_python_over_native_rust_p95: Optional[float] = None
+    native_rust_entrypoint: str = ""
+    native_rust_timing_boundary: str = ""
+    native_rust_unavailable_reason: str = ""
+    native_rust_todo: str = ""
+    native_rust_sample_trials_s: list[list[float]] = field(default_factory=list)
+    native_rust_p50_trials_s: list[float] = field(default_factory=list)
+    native_rust_p95_trials_s: list[float] = field(default_factory=list)
     min_speedup_p50: float = DEFAULT_SMALL_SPEEDUP
     min_speedup_p95: float = DEFAULT_SMALL_SPEEDUP
     waived: bool = False
@@ -1187,12 +1203,39 @@ def measure(
             cold_thread_env=cold_thread_env,
         )
 
+    # Native-Rust timing is additive and diagnostic. The adapter launches one
+    # Rust-owned timing loop; every returned sample is measured inside Rust
+    # around a direct Rust call. A PyO3-call duration is explicitly not used as
+    # a substitute. Missing adapters remain null with a TODO.
+    from . import _native_rust_runner
+
+    native_timing = _native_rust_runner.measure(
+        api_id,
+        sample.rust_kwargs,
+        reps=reps,
+        warmup=warmup,
+        trials=CANONICAL_SPEED_TRIALS,
+    )
+    native_summary = (
+        _timing_summary(native_timing.sample_trials_s)
+        if native_timing.sample_trials_s
+        else None
+    )
+
     rust_summary = _timing_summary(rust_trials)
     legacy_summary = _timing_summary(legacy_trials)
     rust_p50 = float(rust_summary["p50_s"])
     rust_p95 = float(rust_summary["p95_s"])
     legacy_p50 = float(legacy_summary["p50_s"])
     legacy_p95 = float(legacy_summary["p95_s"])
+    native_p50 = float(native_summary["p50_s"]) if native_summary else None
+    native_p95 = float(native_summary["p95_s"]) if native_summary else None
+    python_over_native_p50 = (
+        rust_p50 / native_p50 if native_p50 is not None and native_p50 > 0 else None
+    )
+    python_over_native_p95 = (
+        rust_p95 / native_p95 if native_p95 is not None and native_p95 > 0 else None
+    )
     raw_passed, s50, s95 = _passes(
         legacy_p50,
         legacy_p95,
@@ -1258,6 +1301,24 @@ def measure(
         speedup_p95=s95,
         raw_passed=raw_passed,
         passed=passed,
+        native_rust_status=native_timing.status,
+        native_rust_p50=native_p50,
+        native_rust_p95=native_p95,
+        current_python_over_native_rust_p50=python_over_native_p50,
+        current_python_over_native_rust_p95=python_over_native_p95,
+        native_rust_entrypoint=native_timing.entrypoint,
+        native_rust_timing_boundary=native_timing.timing_boundary,
+        native_rust_unavailable_reason=native_timing.reason,
+        native_rust_todo=native_timing.todo,
+        native_rust_sample_trials_s=(
+            native_summary["sample_trials_s"] if native_summary else []
+        ),
+        native_rust_p50_trials_s=(
+            native_summary["p50_trials_s"] if native_summary else []
+        ),
+        native_rust_p95_trials_s=(
+            native_summary["p95_trials_s"] if native_summary else []
+        ),
         min_speedup_p50=min_speedup_p50,
         min_speedup_p95=min_speedup_p95,
         waived=waived,
@@ -1498,6 +1559,18 @@ def _mode_short(api_id: str) -> str:
     return comparison_metadata.for_api(api_id).get("comparison_mode_short", "unknown")
 
 
+def _native_rust_summary_cells(result: SpeedResult) -> tuple[str, str]:
+    if result.native_rust_p50 is None:
+        return "—", "—"
+    native = f"{result.native_rust_p50 * 1e6:.1f}μs"
+    ratio = (
+        f"{result.current_python_over_native_rust_p50:.2f}x"
+        if result.current_python_over_native_rust_p50 is not None
+        else "—"
+    )
+    return native, ratio
+
+
 def format_summary(results: list[SpeedResult]) -> str:
     has_cold = any(r.rust_cold is not None for r in results)
     warm_mode = _result_mode(results, "thread_mode", "multi-thread")
@@ -1517,22 +1590,24 @@ def format_summary(results: list[SpeedResult]) -> str:
     ]
     if has_cold:
         lines.append(
-            f"{'Lane':11s}  {'API':50s}  {'n':>8s}  {'rust warm':>10s}  "
-            f"{'leg warm':>10s}  {'×p50':>6s}  {'×p95':>6s}  "
-            f"{'rust cold':>11s}  {'leg cold':>10s}  {'×cold':>6s}  "
-            f"{'mode':14s}  flag"
+            f"{'Lane':11s}  {'API':50s}  {'n':>8s}  {'current py':>10s}  "
+            f"{'native rust':>11s}  {'py/rust':>8s}  {'legacy':>10s}  "
+            f"{'leg/py50':>8s}  {'leg/py95':>8s}  {'py cold':>11s}  "
+            f"{'leg cold':>10s}  {'×cold':>6s}  {'mode':14s}  flag"
         )
-        lines.append("-" * 168)
+        lines.append("-" * 198)
     else:
         lines.append(
-            f"{'Lane':11s}  {'API':50s}  {'n':>8s}  {'rust p50':>10s}  "
-            f"{'leg p50':>10s}  {'×p50':>6s}  {'×p95':>6s}  {'mode':14s}  flag"
+            f"{'Lane':11s}  {'API':50s}  {'n':>8s}  {'current py':>10s}  "
+            f"{'native rust':>11s}  {'py/rust':>8s}  {'legacy':>10s}  "
+            f"{'leg/py50':>8s}  {'leg/py95':>8s}  {'mode':14s}  flag"
         )
-        lines.append("-" * 140)
+        lines.append("-" * 171)
 
     for r in results:
         flag = _flag(r)
         mode = _mode_short(r.api_id)
+        native_s, python_native_s = _native_rust_summary_cells(r)
         if has_cold:
             cold_str = (
                 f"{r.rust_cold*1000:>10.1f}ms  {r.legacy_cold*1000:>9.1f}ms  "
@@ -1542,15 +1617,18 @@ def format_summary(results: list[SpeedResult]) -> str:
             )
             lines.append(
                 f"{r.lane:11s}  {r.api_id:50s}  {r.n:>8d}  "
-                f"{r.rust_p50*1e6:>9.1f}μs  {r.legacy_p50*1e6:>9.1f}μs  "
-                f"{r.speedup_p50:>5.2f}x  {r.speedup_p95:>5.2f}x  "
+                f"{r.rust_p50*1e6:>9.1f}μs  {native_s:>11s}  "
+                f"{python_native_s:>8s}  {r.legacy_p50*1e6:>9.1f}μs  "
+                f"{r.speedup_p50:>7.2f}x  {r.speedup_p95:>7.2f}x  "
                 f"{cold_str}  {mode:14s}  {flag}"
             )
         else:
             lines.append(
                 f"{r.lane:11s}  {r.api_id:50s}  {r.n:>8d}  "
-                f"{r.rust_p50*1e6:>9.1f}μs  {r.legacy_p50*1e6:>9.1f}μs  "
-                f"{r.speedup_p50:>5.2f}x  {r.speedup_p95:>5.2f}x  {mode:14s}  {flag}"
+                f"{r.rust_p50*1e6:>9.1f}μs  {native_s:>11s}  "
+                f"{python_native_s:>8s}  {r.legacy_p50*1e6:>9.1f}μs  "
+                f"{r.speedup_p50:>7.2f}x  {r.speedup_p95:>7.2f}x  "
+                f"{mode:14s}  {flag}"
             )
     return "\n".join(lines)
 
@@ -1632,9 +1710,18 @@ def _speed_result_to_json(result: SpeedResult) -> dict[str, object]:
         "warmup": result.warmup,
         "timing_trials": result.timing_trials,
         "timing_aggregation": result.timing_aggregation,
+        # Historical ``rust_*`` keys mean current implementation called
+        # through its compatible Python interface. Keep them for readers and
+        # provide explicit aliases beside independently timed native Rust.
         "rust_sample_trials_s": result.rust_sample_trials_s,
         "rust_p50_trials_s": result.rust_p50_trials_s,
         "rust_p95_trials_s": result.rust_p95_trials_s,
+        "current_python_sample_trials_s": result.rust_sample_trials_s,
+        "current_python_p50_trials_s": result.rust_p50_trials_s,
+        "current_python_p95_trials_s": result.rust_p95_trials_s,
+        "native_rust_sample_trials_s": result.native_rust_sample_trials_s,
+        "native_rust_p50_trials_s": result.native_rust_p50_trials_s,
+        "native_rust_p95_trials_s": result.native_rust_p95_trials_s,
         "legacy_sample_trials_s": result.legacy_sample_trials_s,
         "legacy_p50_trials_s": result.legacy_p50_trials_s,
         "legacy_p95_trials_s": result.legacy_p95_trials_s,
@@ -1642,6 +1729,21 @@ def _speed_result_to_json(result: SpeedResult) -> dict[str, object]:
         "speedup_p95_trials": result.speedup_p95_trials,
         "rust_p50_s": result.rust_p50,
         "rust_p95_s": result.rust_p95,
+        "current_python_p50_s": result.rust_p50,
+        "current_python_p95_s": result.rust_p95,
+        "native_rust_status": result.native_rust_status,
+        "native_rust_p50_s": result.native_rust_p50,
+        "native_rust_p95_s": result.native_rust_p95,
+        "current_python_over_native_rust_p50": (
+            result.current_python_over_native_rust_p50
+        ),
+        "current_python_over_native_rust_p95": (
+            result.current_python_over_native_rust_p95
+        ),
+        "native_rust_entrypoint": result.native_rust_entrypoint,
+        "native_rust_timing_boundary": result.native_rust_timing_boundary,
+        "native_rust_unavailable_reason": result.native_rust_unavailable_reason,
+        "native_rust_todo": result.native_rust_todo,
         "legacy_p50_s": result.legacy_p50,
         "legacy_p95_s": result.legacy_p95,
         "legacy_source": result.legacy_source,
@@ -1671,6 +1773,17 @@ def to_json(
     legacy_cache: Mapping[str, object] | None = None,
 ) -> dict:
     artifact = {
+        "performance_columns_schema_version": 1,
+        "performance_columns": {
+            "legacy_adam_core": "pinned legacy checkout in isolated Python runtime",
+            "current_python": "current implementation called through compatible Python interface",
+            "native_rust": (
+                "underlying function called directly in Rust and timed by Rust "
+                "std::time::Instant; no Python/PyO3 boundary inside samples; null "
+                "when a Rust-internal adapter is not implemented"
+            ),
+            "gate": "legacy_adam_core / current_python; native_rust is diagnostic",
+        },
         "default_small_speedup": DEFAULT_SMALL_SPEEDUP,
         "default_large_speedup": DEFAULT_LARGE_SPEEDUP,
         "default_tiny_speedup": DEFAULT_TINY_SPEEDUP,
@@ -1683,8 +1796,13 @@ def to_json(
         "timing_policy": (
             f"Canonical parity speed timings run {CANONICAL_SPEED_TRIALS} "
             "serial trials per API/lane and gate on the median of per-trial "
-            "p50/p95 estimates. Raw sample trials and per-trial percentiles "
-            "are preserved in each row. Trial count is source-governed rather "
+            "p50/p95 estimates. The current side is called through its compatible "
+            "Python interface for gate enforcement. Native-Rust samples, when "
+            "available, are measured independently inside Rust with Instant around "
+            "direct Rust calls; Python/PyO3 is outside every sample and native "
+            "timing is diagnostic. Missing native adapters remain null with a "
+            "reason/TODO. Raw sample trials and per-trial percentiles are preserved "
+            "in each row. Trial count is source-governed rather "
             "than a CLI flag so standard commands cannot silently downgrade to "
             "single-trial evidence."
         ),

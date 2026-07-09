@@ -9,7 +9,9 @@ from adam_core._rust.status import (
     validate_api_migrations,
 )
 from migration.parity import (
+    _assist_bench,
     _inputs,
+    _native_rust_runner,
     _oracle,
     _threading,
     comparison_metadata,
@@ -529,6 +531,16 @@ def test_speed_artifact_records_thread_metadata() -> None:
         legacy_p95_trials_s=[2.0, 2.0, 2.0],
         speedup_p50_trials=[2.0, 2.0, 2.0],
         speedup_p95_trials=[2.0, 2.0, 2.0],
+        native_rust_status="measured",
+        native_rust_p50=0.5,
+        native_rust_p95=0.5,
+        current_python_over_native_rust_p50=2.0,
+        current_python_over_native_rust_p95=2.0,
+        native_rust_entrypoint="example::direct_rust",
+        native_rust_timing_boundary="Rust Instant; no Python/PyO3 in samples",
+        native_rust_sample_trials_s=[[0.5], [0.5], [0.5]],
+        native_rust_p50_trials_s=[0.5, 0.5, 0.5],
+        native_rust_p95_trials_s=[0.5, 0.5, 0.5],
         thread_mode="single",
         thread_env=_threading.SINGLE_THREAD_ENV.copy(),
         cold_thread_mode="native",
@@ -547,9 +559,62 @@ def test_speed_artifact_records_thread_metadata() -> None:
     assert artifact["lanes"][0]["timing_trials"] == [3]
     assert "single-trial" in artifact["timing_policy"]
     assert artifact["apis"][0]["rust_sample_trials_s"] == [[1.0], [1.0], [1.0]]
-    assert artifact["apis"][0]["legacy_p95_trials_s"] == [2.0, 2.0, 2.0]
+    row = artifact["apis"][0]
+    assert row["legacy_p95_trials_s"] == [2.0, 2.0, 2.0]
+    assert row["current_python_p50_s"] == row["rust_p50_s"] == 1.0
+    assert row["native_rust_p50_s"] == 0.5
+    assert row["current_python_over_native_rust_p50"] == 2.0
+    assert "no Python/PyO3" in row["native_rust_timing_boundary"]
+    assert artifact["performance_columns_schema_version"] == 1
+    assert "directly in Rust" in artifact["performance_columns"]["native_rust"]
     assert "large-n" in artifact["lane_policy"]
     assert "multi-thread" in artifact["thread_policy"]
+    lane_cell = parity_table._format_lane_cell(row)
+    assert "current Python 1.000s/1.000s" in lane_cell
+    assert "native Rust 500.00ms/500.00ms" in lane_cell
+    assert "Python/native 2.00x/2.00x" in lane_cell
+
+
+def test_native_rust_timer_is_internal_and_missing_surfaces_are_blank() -> None:
+    rng = np.random.default_rng(20260709)
+    observer_sample = _inputs.make("observers.Observers.from_codes", rng, 10)
+    native = _native_rust_runner.measure(
+        "observers.Observers.from_codes",
+        observer_sample.rust_kwargs,
+        reps=3,
+        warmup=1,
+        trials=3,
+    )
+    assert native.status == "measured"
+    assert len(native.sample_trials_s) == 3
+    assert all(len(trial) == 3 for trial in native.sample_trials_s)
+    assert "Instant" in native.timing_boundary
+    assert "PyO3 launch" in native.timing_boundary
+    assert "record_batch" in native.entrypoint
+
+    transform_sample = _inputs.make("coordinates.transform_coordinates", rng, 12)
+    missing = _native_rust_runner.measure(
+        "coordinates.transform_coordinates",
+        transform_sample.rust_kwargs,
+        reps=3,
+        warmup=1,
+        trials=3,
+    )
+    assert missing.status == "unavailable"
+    assert missing.sample_trials_s == []
+    assert missing.todo == "personal-cmy.36.3"
+    assert "PyO3 call is not accepted" in missing.reason
+
+
+def test_assist_payload_does_not_treat_pyo3_as_native_rust() -> None:
+    payload = _assist_bench.performance_timing_payload([2.0, 2.0, 2.0], [1.0, 1.0, 1.0])
+
+    assert payload["current_python"] is payload["rust"]
+    assert payload["current_python"]["p50"] == 1.0
+    assert payload["native_rust"]["status"] == "unavailable"
+    assert payload["native_rust"]["p50"] is None
+    assert payload["native_rust"]["todo"] == "personal-98v.1"
+    assert "PyO3 call is not accepted" in payload["native_rust"]["reason"]
 
 
 def test_parity_main_exposes_additive_legacy_cache_refresh_controls() -> None:

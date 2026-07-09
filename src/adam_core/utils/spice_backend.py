@@ -179,6 +179,25 @@ class RustBackend:
         with self._lock:
             return self._inner.observer_states_from_codes_arrow(batch, time_scale)
 
+    def benchmark_observer_states_from_codes_arrow_rust(
+        self,
+        batch,
+        time_scale: str,
+        reps: int,
+        warmup: int,
+        trials: int,
+    ) -> list[list[float]]:
+        """Launch the Rust-internal observer benchmark.
+
+        Python/PyO3 and PyArrow conversion occur once outside all samples. The
+        returned durations are measured by Rust ``Instant`` around direct Rust
+        implementation calls.
+        """
+        with self._lock:
+            return self._inner.benchmark_observer_states_from_codes_arrow_rust(
+                batch, time_scale, reps, warmup, trials
+            )
+
     def bodn2c(self, name: str) -> int:
         with self._lock:
             try:

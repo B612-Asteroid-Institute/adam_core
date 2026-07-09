@@ -70,6 +70,26 @@ tables make explicit whether the current side is measured as a raw Rust/PyO3
 kernel, a thin NumPy wrapper, or a composed public Python facade -- all
 against the same legacy public Python.
 
+Performance rows report three distinct columns:
+
+1. **legacy adam_core**: the pinned legacy checkout in its isolated Python
+   runtime;
+2. **current through Python** (`current_python_*`; historical `rust_*` keys are
+   retained as aliases): the compatible current Python/public entrypoint users
+   call; and
+3. **native Rust** (`native_rust_*`): the underlying implementation called
+   directly in Rust and timed by Rust `std::time::Instant`. Python may launch
+   the benchmark and pass prepared inputs once, but no Python or PyO3 boundary
+   is inside any native-Rust sample.
+
+Legacy/current-Python remains the enforced speed gate. Native Rust is a
+performance decomposition diagnostic. A Python→PyO3 call duration is **not** a
+native-Rust measurement. When no Rust-internal timer exists, the native column
+is `null` and carries an explicit reason/TODO rather than a proxy value. The
+Arrow-native observer reference implements this contract; each
+`personal-cmy.36.3`–`.36.9` conversion must add its Rust-internal timer as the
+surface moves from NumPy to native Arrow.
+
 Verify it's reachable:
 
 ```bash
@@ -108,6 +128,12 @@ distinct input (tests with non-deterministic monte-carlo inputs re-run the
 legacy runtime live, like the adam_core fuzz gate). Set
 `ADAM_CORE_ASSIST_PARITY_REFRESH=1` to force re-running the legacy runtime;
 the venv Python is overridable via `ADAM_CORE_LEGACY_ASSIST_VENV_PYTHON`.
+
+ASSIST artifacts use the same column names. Until its package-level Rust
+implementations expose Rust-internal `Instant` benchmark adapters, the native
+Rust field is intentionally null and references `personal-98v.1`; timing the
+`NativeAssistPropagator` PyO3 method from Python would not satisfy the native
+column.
 
 The parity tests skip gracefully when `.legacy-assist-venv` is absent. The
 frozen public-semantics fixture

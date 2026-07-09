@@ -461,6 +461,24 @@ def _format_speed(value: float | None) -> str:
     return f"{value:.2f}x"
 
 
+def _format_seconds(value: float | None) -> str:
+    if value is None:
+        return "—"
+    if value < 1.0e-3:
+        return f"{value * 1.0e6:.1f}µs"
+    if value < 1.0:
+        return f"{value * 1.0e3:.2f}ms"
+    return f"{value:.3f}s"
+
+
+def _format_native_timing(data: dict[str, Any]) -> str:
+    value = data.get("p50")
+    if value is not None:
+        return _format_seconds(value)
+    todo = data.get("todo")
+    return f"— ({todo})" if todo else "—"
+
+
 def _load_speed_artifact(
     path: Path | None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
@@ -494,6 +512,15 @@ def _format_speed_metadata(metadata: dict[str, Any]) -> str:
     ]
     if timing_policy:
         lines.append(f"Timing policy: {timing_policy}")
+    columns = metadata.get("performance_columns")
+    if isinstance(columns, dict):
+        lines.append(
+            "Performance columns: "
+            f"legacy adam_core = {columns.get('legacy_adam_core', 'unknown')}; "
+            f"current through Python = {columns.get('current_python', 'unknown')}; "
+            f"native Rust = {columns.get('native_rust', 'unknown')}; "
+            f"gate = {columns.get('gate', 'unknown')}."
+        )
     if thread_policy:
         lines.append(f"Thread policy: {thread_policy}")
     if lane_policy:
@@ -603,9 +630,24 @@ def _format_lane_cell(row: dict[str, Any] | None) -> str:
     if row is None:
         return "—"
     waiver = row.get("waiver") or "—"
+    current_p50 = row.get("current_python_p50_s", row.get("rust_p50_s"))
+    current_p95 = row.get("current_python_p95_s", row.get("rust_p95_s"))
+    native_p50 = row.get("native_rust_p50_s")
+    native_p95 = row.get("native_rust_p95_s")
+    if native_p50 is None:
+        todo = row.get("native_rust_todo")
+        native = f"native Rust —{f' ({todo})' if todo else ''}"
+    else:
+        native = (
+            f"native Rust {_format_seconds(native_p50)}/{_format_seconds(native_p95)}; "
+            f"Python/native {_format_speed(row.get('current_python_over_native_rust_p50'))}/"
+            f"{_format_speed(row.get('current_python_over_native_rust_p95'))}"
+        )
     return (
         f"{_workload_label(row)}<br>"
-        f"p50 {_format_speed(row.get('speedup_p50'))}; "
+        f"current Python {_format_seconds(current_p50)}/{_format_seconds(current_p95)}; "
+        f"{native}<br>"
+        f"legacy/current p50 {_format_speed(row.get('speedup_p50'))}; "
         f"p95 {_format_speed(row.get('speedup_p95'))}; "
         f"cold {_format_speed(row.get('speedup_cold'))}<br>"
         f"{_speed_gate_label(row)}; waiver {waiver}"
@@ -614,20 +656,32 @@ def _format_lane_cell(row: dict[str, Any] | None) -> str:
 
 def _format_speed_long_markdown(rows: list[dict[str, Any]]) -> str:
     lines = [
-        "| Lane | API / implementation | Mode | Size/shape | Warm ×p50 | Warm ×p95 | Cold × | Gate | Waiver |",
-        "|---|---|---|---|---:|---:|---:|---|---|",
+        "| Lane | API / implementation | Mode | Size/shape | Current Python p50/p95 | Native Rust p50/p95 | Python/native p50/p95 | Legacy/current p50/p95 | Cold × | Gate | Waiver |",
+        "|---|---|---|---|---:|---:|---:|---:|---:|---|---|",
     ]
     for r in rows:
         gate = _speed_gate_label(r)
         waiver = r.get("waiver") or "—"
         lane = r.get("lane", "small-n")
+        current_p50 = r.get("current_python_p50_s", r.get("rust_p50_s"))
+        current_p95 = r.get("current_python_p95_s", r.get("rust_p95_s"))
+        native_p50 = r.get("native_rust_p50_s")
+        native_p95 = r.get("native_rust_p95_s")
+        native_todo = r.get("native_rust_todo")
+        native_cell = (
+            f"{_format_seconds(native_p50)} / {_format_seconds(native_p95)}"
+            if native_p50 is not None
+            else f"—{f' ({native_todo})' if native_todo else ''}"
+        )
         lines.append(
             f"| `{lane}` "
             f"| {_api_markdown_label(r['api_id'], r)} "
             f"| {_comparison_mode_label(r)} "
             f"| {_workload_label(r)} "
-            f"| {_format_speed(r.get('speedup_p50'))} "
-            f"| {_format_speed(r.get('speedup_p95'))} "
+            f"| {_format_seconds(current_p50)} / {_format_seconds(current_p95)} "
+            f"| {native_cell} "
+            f"| {_format_speed(r.get('current_python_over_native_rust_p50'))} / {_format_speed(r.get('current_python_over_native_rust_p95'))} "
+            f"| {_format_speed(r.get('speedup_p50'))} / {_format_speed(r.get('speedup_p95'))} "
             f"| {_format_speed(r.get('speedup_cold'))} "
             f"| {gate} | {waiver} |"
         )
@@ -874,15 +928,16 @@ def _format_assist_propagation(data: dict[str, Any]) -> list[str]:
         f"Benchmark `{data.get('benchmark_id', 'unknown')}`; "
         f"thread mode: {env.get('thread_mode', 'unknown')}.",
         "",
-        "| Lane | Workload | Shape (orbits\u00d7epochs\u2192rows) | Py p50 (s) | Rust p50 (s) "
-        "| \u00d7p50 | \u00d7p95 | max \\|\u0394pos\\| (m) |",
+        "| Lane | Workload | Shape (orbits\u00d7epochs\u2192rows) | Legacy p50 | Current Python p50 | Native Rust p50 | "
+        "Legacy/current p50/p95 | max \\|\u0394pos\\| (m) |",
         "|---|---|---|---:|---:|---:|---:|---:|",
     ]
     for workload in data.get("workloads", []):
         shape = workload.get("workload_shape", {})
         timing = workload.get("timing_seconds", {})
         python = timing.get("python", {})
-        rust = timing.get("rust", {})
+        current = timing.get("current_python", timing.get("rust", {}))
+        native = timing.get("native_rust", {})
         speedup = timing.get("speedup", {})
         residuals = workload.get("residuals", {})
         shape_label = (
@@ -893,10 +948,10 @@ def _format_assist_propagation(data: dict[str, Any]) -> list[str]:
             f"| `{workload.get('lane', _DASH)}` "
             f"| `{workload.get('name', 'unknown')}` "
             f"| {shape_label} "
-            f"| {python.get('p50', float('nan')):.4f} "
-            f"| {rust.get('p50', float('nan')):.4f} "
-            f"| {_format_speed(speedup.get('p50_python_over_rust'))} "
-            f"| {_format_speed(speedup.get('p95_python_over_rust'))} "
+            f"| {_format_seconds(python.get('p50'))} "
+            f"| {_format_seconds(current.get('p50'))} "
+            f"| {_format_native_timing(native)} "
+            f"| {_format_speed(speedup.get('p50_python_over_rust'))} / {_format_speed(speedup.get('p95_python_over_rust'))} "
             f"| {residuals.get('position_abs_m', float('nan')):.3e} |"
         )
     return lines
@@ -910,14 +965,16 @@ def _format_assist_covariance(data: dict[str, Any]) -> list[str]:
         "sigma-point/auto are deterministic (element-wise parity expected); "
         "monte-carlo uses different RNGs and is compared statistically.",
         "",
-        "| Lane | Workload | Method | Parity expected | ×p50 | ×p95 "
+        "| Lane | Workload | Method | Parity expected | Current Python p50 | Native Rust p50 | Legacy/current p50/p95 "
         "| max σ rel | max \\|Δpos\\| (m) |",
-        "|---|---|---|---|---:|---:|---:|---:|",
+        "|---|---|---|---|---:|---:|---:|---:|---:|",
     ]
     for workload in data.get("workloads", []):
         covariance = workload.get("covariance", {})
         timing = workload.get("timing_seconds", {})
         speedup = timing.get("speedup", {})
+        current = timing.get("current_python", timing.get("rust", {}))
+        native = timing.get("native_rust", {})
         cov_res = workload.get("covariance_residuals", {})
         state_res = workload.get("state_residuals", {})
         sigma_rel = cov_res.get("max_sigma_rel")
@@ -927,8 +984,9 @@ def _format_assist_covariance(data: dict[str, Any]) -> list[str]:
             f"| `{workload.get('name', 'unknown')}` "
             f"| {covariance.get('method', _DASH)} "
             f"| {'yes' if covariance.get('parity_expected') else 'statistical'} "
-            f"| {_format_speed(speedup.get('p50_python_over_rust'))} "
-            f"| {_format_speed(speedup.get('p95_python_over_rust'))} "
+            f"| {_format_seconds(current.get('p50'))} "
+            f"| {_format_native_timing(native)} "
+            f"| {_format_speed(speedup.get('p50_python_over_rust'))} / {_format_speed(speedup.get('p95_python_over_rust'))} "
             f"| {sigma_cell} "
             f"| {state_res.get('position_abs_m', float('nan')):.3e} |"
         )
@@ -941,7 +999,7 @@ def _format_assist_impacts(data: dict[str, Any]) -> list[str]:
         "",
         f"{data.get('description', '')}",
         "",
-        "| Orbits | Days | Impacts | Legacy p50 (s) | Rust p50 (s) | \u00d7p50 | \u00d7p95 "
+        "| Orbits | Days | Impacts | Legacy p50 | Current Python p50 | Native Rust p50 | Legacy/current p50/p95 "
         "| max impact-time \u0394 (days) |",
         "|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
@@ -950,10 +1008,10 @@ def _format_assist_impacts(data: dict[str, Any]) -> list[str]:
             f"| {lane.get('n_orbits', _DASH)} "
             f"| {lane.get('num_days', _DASH)} "
             f"| {lane.get('n_impacts', _DASH)} "
-            f"| {lane.get('python_p50_s', float('nan')):.4f} "
-            f"| {lane.get('rust_p50_s', float('nan')):.4f} "
-            f"| {_format_speed(lane.get('speedup_p50'))} "
-            f"| {_format_speed(lane.get('speedup_p95'))} "
+            f"| {_format_seconds(lane.get('python_p50_s'))} "
+            f"| {_format_seconds(lane.get('current_python_p50_s', lane.get('rust_p50_s')))} "
+            f"| {_format_native_timing({'p50': lane.get('native_rust_p50_s'), 'todo': lane.get('native_rust_todo')})} "
+            f"| {_format_speed(lane.get('speedup_p50'))} / {_format_speed(lane.get('speedup_p95'))} "
             f"| {lane.get('max_impact_time_diff_days', float('nan')):.3e} |"
         )
     return lines

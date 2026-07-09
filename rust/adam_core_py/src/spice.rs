@@ -1,5 +1,7 @@
 use std::collections::HashMap;
+use std::hint::black_box;
 use std::sync::MutexGuard;
+use std::time::Instant;
 
 use adam_core_rs_coords::{
     CoordinateBatch, DataFrame, IntoNestedRecordBatch, ObservatoryCode, ObserverBatch, OriginArray,
@@ -37,6 +39,96 @@ pub struct PyAdamCoreSpiceBackend;
 impl PyAdamCoreSpiceBackend {
     fn lock(&self) -> PyResult<MutexGuard<'static, AdamCoreSpiceBackend>> {
         global_backend().lock().map_err(|_| lock_err_to_py())
+    }
+
+    /// Pure-Rust implementation behind the Arrow-native observers crossing.
+    /// Both the public PyO3 method and the native-Rust benchmark hook call this
+    /// function; no Python/PyO3 operation occurs inside it.
+    fn observer_states_from_codes_record_batch(
+        &self,
+        record_batch: &RecordBatch,
+        scale: TimeScale,
+    ) -> PyResult<RecordBatch> {
+        let rows = record_batch.num_rows();
+        let code_array = record_batch
+            .column_by_name("code")
+            .ok_or_else(|| PyValueError::new_err("input batch missing 'code' column"))?
+            .as_any()
+            .downcast_ref::<LargeStringArray>()
+            .ok_or_else(|| PyValueError::new_err("'code' column must be large_utf8"))?;
+        let days_array = record_batch
+            .column_by_name("days")
+            .ok_or_else(|| PyValueError::new_err("input batch missing 'days' column"))?
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or_else(|| PyValueError::new_err("'days' column must be int64"))?;
+        let nanos_array = record_batch
+            .column_by_name("nanos")
+            .ok_or_else(|| PyValueError::new_err("input batch missing 'nanos' column"))?
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or_else(|| PyValueError::new_err("'nanos' column must be int64"))?;
+
+        // Group rows by observatory code in Rust (replaces the former Python
+        // pc.dictionary_encode boundary), preserving row order.
+        let mut unique_codes: Vec<String> = Vec::new();
+        let mut slot_of: HashMap<&str, usize> = HashMap::new();
+        let mut slots: Vec<usize> = Vec::with_capacity(rows);
+        let mut codes: Vec<ObservatoryCode> = Vec::with_capacity(rows);
+        for row in 0..rows {
+            if code_array.is_null(row) {
+                return Err(PyValueError::new_err("observer code must not be null"));
+            }
+            let code = code_array.value(row);
+            let slot = *slot_of.entry(code).or_insert_with(|| {
+                unique_codes.push(code.to_string());
+                unique_codes.len() - 1
+            });
+            slots.push(slot);
+            codes.push(ObservatoryCode(code.to_string()));
+        }
+
+        let days: Vec<i64> = (0..rows).map(|row| days_array.value(row)).collect();
+        let nanos: Vec<i64> = (0..rows).map(|row| nanos_array.value(row)).collect();
+        // Output coordinates keep the caller's input time scale; SPICE lookups
+        // use a TDB rescale internally.
+        let output_times = TimeArray::from_parts(scale, days, nanos)
+            .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
+        let tdb_times = output_times
+            .clone()
+            .rescale(TimeScale::Tdb)
+            .map_err(|err| {
+                PyValueError::new_err(format!("cannot rescale observer times to TDB: {err}"))
+            })?;
+
+        let origin = OriginId::from_code("SUN");
+        let flat = self
+            .lock()?
+            .observer_states_from_codes(
+                &unique_codes,
+                &slots,
+                &tdb_times,
+                DataFrame::Ecliptic,
+                &origin,
+            )
+            .map_err(spice_err_to_py)?;
+        let states: Vec<[f64; 6]> = flat
+            .chunks_exact(6)
+            .map(|c| [c[0], c[1], c[2], c[3], c[4], c[5]])
+            .collect();
+        let coordinates = CoordinateBatch::cartesian(
+            states,
+            DataFrame::Ecliptic,
+            OriginArray::repeat(origin, rows),
+            Some(output_times),
+            None,
+        )
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let observers = ObserverBatch::new(codes, coordinates)
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        observers
+            .into_nested_record_batch()
+            .map_err(|err| PyValueError::new_err(err.to_string()))
     }
 }
 
@@ -159,90 +251,48 @@ impl PyAdamCoreSpiceBackend {
     ) -> PyResult<PyObject> {
         let record_batch = RecordBatch::from_pyarrow_bound(batch)
             .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
-        let rows = record_batch.num_rows();
-        let code_array = record_batch
-            .column_by_name("code")
-            .ok_or_else(|| PyValueError::new_err("input batch missing 'code' column"))?
-            .as_any()
-            .downcast_ref::<LargeStringArray>()
-            .ok_or_else(|| PyValueError::new_err("'code' column must be large_utf8"))?;
-        let days_array = record_batch
-            .column_by_name("days")
-            .ok_or_else(|| PyValueError::new_err("input batch missing 'days' column"))?
-            .as_any()
-            .downcast_ref::<Int64Array>()
-            .ok_or_else(|| PyValueError::new_err("'days' column must be int64"))?;
-        let nanos_array = record_batch
-            .column_by_name("nanos")
-            .ok_or_else(|| PyValueError::new_err("input batch missing 'nanos' column"))?
-            .as_any()
-            .downcast_ref::<Int64Array>()
-            .ok_or_else(|| PyValueError::new_err("'nanos' column must be int64"))?;
-
         let scale =
             TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        self.observer_states_from_codes_record_batch(&record_batch, scale)?
+            .to_pyarrow(py)
+    }
 
-        // Group rows by observatory code in Rust (replaces the former Python
-        // pc.dictionary_encode boundary), preserving row order.
-        let mut unique_codes: Vec<String> = Vec::new();
-        let mut slot_of: HashMap<&str, usize> = HashMap::new();
-        let mut slots: Vec<usize> = Vec::with_capacity(rows);
-        let mut codes: Vec<ObservatoryCode> = Vec::with_capacity(rows);
-        for row in 0..rows {
-            if code_array.is_null(row) {
-                return Err(PyValueError::new_err("observer code must not be null"));
-            }
-            let code = code_array.value(row);
-            let slot = *slot_of.entry(code).or_insert_with(|| {
-                unique_codes.push(code.to_string());
-                unique_codes.len() - 1
-            });
-            slots.push(slot);
-            codes.push(ObservatoryCode(code.to_string()));
+    /// Benchmark the underlying observers implementation directly in Rust.
+    ///
+    /// PyArrow -> Rust conversion and this outer PyO3 invocation happen once,
+    /// before timing. Every returned sample is measured by ``Instant`` around
+    /// a direct Rust call to ``observer_states_from_codes_record_batch``; no
+    /// Python/PyO3 boundary is inside the timed interval.
+    fn benchmark_observer_states_from_codes_arrow_rust(
+        &self,
+        batch: &Bound<'_, PyAny>,
+        time_scale: &str,
+        reps: usize,
+        warmup: usize,
+        trials: usize,
+    ) -> PyResult<Vec<Vec<f64>>> {
+        if reps == 0 || trials == 0 {
+            return Err(PyValueError::new_err("reps and trials must be >= 1"));
         }
-
-        let days: Vec<i64> = (0..rows).map(|row| days_array.value(row)).collect();
-        let nanos: Vec<i64> = (0..rows).map(|row| nanos_array.value(row)).collect();
-        // Output coordinates keep the caller's input time scale; SPICE lookups
-        // use a TDB rescale internally.
-        let output_times = TimeArray::from_parts(scale, days, nanos)
-            .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
-        let tdb_times = output_times
-            .clone()
-            .rescale(TimeScale::Tdb)
-            .map_err(|err| {
-                PyValueError::new_err(format!("cannot rescale observer times to TDB: {err}"))
-            })?;
-
-        let origin = OriginId::from_code("SUN");
-        let flat = self
-            .lock()?
-            .observer_states_from_codes(
-                &unique_codes,
-                &slots,
-                &tdb_times,
-                DataFrame::Ecliptic,
-                &origin,
-            )
-            .map_err(spice_err_to_py)?;
-        let states: Vec<[f64; 6]> = flat
-            .chunks_exact(6)
-            .map(|c| [c[0], c[1], c[2], c[3], c[4], c[5]])
-            .collect();
-        let coordinates = CoordinateBatch::cartesian(
-            states,
-            DataFrame::Ecliptic,
-            OriginArray::repeat(origin, rows),
-            Some(output_times),
-            None,
-        )
-        .map_err(|err| PyValueError::new_err(err.to_string()))?;
-        let observers = ObserverBatch::new(codes, coordinates)
-            .map_err(|err| PyValueError::new_err(err.to_string()))?;
-        let out = observers
-            .into_nested_record_batch()
-            .map_err(|err| PyValueError::new_err(err.to_string()))?;
-        out.to_pyarrow(py)
+        let record_batch = RecordBatch::from_pyarrow_bound(batch)
+            .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
+        let scale =
+            TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let mut sample_trials = Vec::with_capacity(trials);
+        for _ in 0..trials {
+            for _ in 0..warmup {
+                black_box(self.observer_states_from_codes_record_batch(&record_batch, scale)?);
+            }
+            let mut samples = Vec::with_capacity(reps);
+            for _ in 0..reps {
+                let started = Instant::now();
+                let output = self.observer_states_from_codes_record_batch(&record_batch, scale)?;
+                black_box(&output);
+                samples.push(started.elapsed().as_secs_f64());
+            }
+            sample_trials.push(samples);
+        }
+        Ok(sample_trials)
     }
 
     fn furnsh(&self, path: &str) -> PyResult<()> {
