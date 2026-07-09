@@ -1,0 +1,16 @@
+adam\_core.utils.plots package
+==============================
+
+.. automodule:: adam_core.utils.plots
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Subpackages
+-----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.utils.plots.data
+   adam_core.utils.plots.logos
