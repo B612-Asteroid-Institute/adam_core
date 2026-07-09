@@ -86,7 +86,7 @@ def main() -> int:
     rows.append(("ephemeris 5x2obs", legacy_s, rust_s))
 
     header = (
-        f"{'lane':18} {'legacy50':>11} {'current-py50':>13} {'native-rust50':>16} "
+        f"{'lane':18} {'legacy50':>11} {'current-py50':>13} {'native-rust50':>22} "
         f"{'leg/current':>11} {'legacy95':>11} {'current-py95':>13} {'leg/current':>11}"
     )
     print(
@@ -99,7 +99,7 @@ def main() -> int:
         rp50, rp95 = percentiles(rust_s)
         print(
             f"{label:18} {lp50 * 1e3:>9.2f}ms {rp50 * 1e3:>11.2f}ms "
-            f"{'— (' + NATIVE_RUST_TODO + ')':>16} {lp50 / rp50:>10.2f}x "
+            f"{'— (' + NATIVE_RUST_TODO + ')':>22} {lp50 / rp50:>10.2f}x "
             f"{lp95 * 1e3:>9.2f}ms {rp95 * 1e3:>11.2f}ms {lp95 / rp95:>10.2f}x"
         )
     return 0

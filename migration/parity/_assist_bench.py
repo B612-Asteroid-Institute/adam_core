@@ -40,19 +40,27 @@ def performance_timing_payload(
     """Canonical three-column payload; native stays blank without a Rust timer."""
     legacy_p50, legacy_p95 = percentiles(legacy_samples)
     current_p50, current_p95 = percentiles(current_python_samples)
+    legacy = {"values": legacy_samples, "p50": legacy_p50, "p95": legacy_p95}
     current = {
         "values": current_python_samples,
         "p50": current_p50,
         "p95": current_p95,
     }
     return {
-        "python": {
-            "values": legacy_samples,
+        # Historical payloads retain the raw vectors. Explicit three-column
+        # aliases carry summaries + pointers instead of duplicating matrices.
+        "python": legacy,
+        "legacy_adam_core": {
             "p50": legacy_p50,
             "p95": legacy_p95,
+            "samples_alias": "python.values",
         },
         "rust": current,
-        "current_python": current,
+        "current_python": {
+            "p50": current_p50,
+            "p95": current_p95,
+            "samples_alias": "rust.values",
+        },
         "native_rust": {
             "status": "unavailable",
             "values": [],

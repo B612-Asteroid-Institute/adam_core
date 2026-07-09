@@ -73,12 +73,16 @@ _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
 
 
 def _todo_for(api_id: str) -> str:
+    if api_id == "observers.Observers.from_codes":
+        return "personal-3gg"
     if (
         api_id.startswith("coordinates.transform")
         or api_id.startswith("coordinates.cartesian")
         or api_id.startswith(
             ("coordinates.keplerian", "coordinates.cometary", "coordinates.spherical")
         )
+        or api_id == "coordinates.rotate_cartesian_time_varying"
+        or api_id == "bridge.rotate_orbits_frame"
     ):
         return "personal-cmy.36.3"
     if (
@@ -86,9 +90,12 @@ def _todo_for(api_id: str) -> str:
         or api_id == "bridge.propagate_orbits_2body"
     ):
         return "personal-cmy.36.4"
-    if api_id.startswith("dynamics.generate_ephemeris"):
+    if (
+        api_id.startswith("dynamics.generate_ephemeris")
+        or api_id == "dynamics.add_light_time"
+    ):
         return "personal-cmy.36.5"
-    if "moid" in api_id or "porkchop" in api_id:
+    if "moid" in api_id or "porkchop" in api_id or api_id == "dynamics.solve_lambert":
         return "personal-cmy.36.6"
     if api_id.startswith("orbit_determination"):
         return "personal-cmy.36.7"
@@ -97,6 +104,7 @@ def _todo_for(api_id: str) -> str:
     if (
         api_id.startswith(("coordinates.residuals", "statistics."))
         or api_id == "orbits.classify_orbits"
+        or api_id == "bridge.evaluate_residuals_2body"
     ):
         return "personal-cmy.36.9"
     return "personal-98v.1"

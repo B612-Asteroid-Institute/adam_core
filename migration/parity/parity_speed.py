@@ -1716,9 +1716,8 @@ def _speed_result_to_json(result: SpeedResult) -> dict[str, object]:
         "rust_sample_trials_s": result.rust_sample_trials_s,
         "rust_p50_trials_s": result.rust_p50_trials_s,
         "rust_p95_trials_s": result.rust_p95_trials_s,
-        "current_python_sample_trials_s": result.rust_sample_trials_s,
-        "current_python_p50_trials_s": result.rust_p50_trials_s,
-        "current_python_p95_trials_s": result.rust_p95_trials_s,
+        # Raw current-Python samples remain under backward-compatible
+        # ``rust_*`` keys to avoid duplicating the artifact's large matrices.
         "native_rust_sample_trials_s": result.native_rust_sample_trials_s,
         "native_rust_p50_trials_s": result.native_rust_p50_trials_s,
         "native_rust_p95_trials_s": result.native_rust_p95_trials_s,

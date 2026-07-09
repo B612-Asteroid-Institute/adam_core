@@ -559,6 +559,8 @@ def test_speed_artifact_records_thread_metadata() -> None:
     assert artifact["lanes"][0]["timing_trials"] == [3]
     assert "single-trial" in artifact["timing_policy"]
     assert artifact["apis"][0]["rust_sample_trials_s"] == [[1.0], [1.0], [1.0]]
+    assert "current_python_sample_trials_s" not in artifact["apis"][0]
+    assert "current_python_p50_trials_s" not in artifact["apis"][0]
     row = artifact["apis"][0]
     assert row["legacy_p95_trials_s"] == [2.0, 2.0, 2.0]
     assert row["current_python_p50_s"] == row["rust_p50_s"] == 1.0
@@ -575,7 +577,26 @@ def test_speed_artifact_records_thread_metadata() -> None:
     assert "Python/native 2.00x/2.00x" in lane_cell
 
 
-def test_native_rust_timer_is_internal_and_missing_surfaces_are_blank() -> None:
+def test_native_rust_timer_is_internal_and_missing_surfaces_are_blank(
+    monkeypatch,
+) -> None:
+    def fake_native_timer(**kwargs):
+        assert kwargs["reps"] == 3
+        assert kwargs["trials"] == 3
+        return _native_rust_runner.NativeRustTiming(
+            status="measured",
+            sample_trials_s=[[1.0, 1.0, 1.0]] * 3,
+            entrypoint="example::direct_rust",
+            timing_boundary=(
+                "Rust std::time::Instant; outer Python/PyO3 launch excluded"
+            ),
+        )
+
+    monkeypatch.setitem(
+        _native_rust_runner._ADAPTERS,
+        "observers.Observers.from_codes",
+        fake_native_timer,
+    )
     rng = np.random.default_rng(20260709)
     observer_sample = _inputs.make("observers.Observers.from_codes", rng, 10)
     native = _native_rust_runner.measure(
@@ -590,7 +611,7 @@ def test_native_rust_timer_is_internal_and_missing_surfaces_are_blank() -> None:
     assert all(len(trial) == 3 for trial in native.sample_trials_s)
     assert "Instant" in native.timing_boundary
     assert "PyO3 launch" in native.timing_boundary
-    assert "record_batch" in native.entrypoint
+    assert native.entrypoint == "example::direct_rust"
 
     transform_sample = _inputs.make("coordinates.transform_coordinates", rng, 12)
     missing = _native_rust_runner.measure(
@@ -606,11 +627,39 @@ def test_native_rust_timer_is_internal_and_missing_surfaces_are_blank() -> None:
     assert "PyO3 call is not accepted" in missing.reason
 
 
+def test_every_parity_api_has_an_intentional_native_rust_todo_bucket() -> None:
+    todos = {
+        api_id: _native_rust_runner._todo_for(api_id)
+        for api_id in _inputs.all_api_ids()
+    }
+    assert set(todos.values()) <= {
+        "personal-3gg",
+        "personal-98v.1",
+        "personal-cmy.36.3",
+        "personal-cmy.36.4",
+        "personal-cmy.36.5",
+        "personal-cmy.36.6",
+        "personal-cmy.36.7",
+        "personal-cmy.36.8",
+        "personal-cmy.36.9",
+    }
+    # These scalar/variant helpers do not belong to an Arrow-surface child and
+    # intentionally use the dedicated native-benchmark catch-all bead.
+    assert {api_id for api_id, todo in todos.items() if todo == "personal-98v.1"} == {
+        "dynamics.calc_mean_motion",
+        "dynamics.tisserand_parameter",
+        "bridge.sample_orbit_variants",
+    }
+
+
 def test_assist_payload_does_not_treat_pyo3_as_native_rust() -> None:
     payload = _assist_bench.performance_timing_payload([2.0, 2.0, 2.0], [1.0, 1.0, 1.0])
 
-    assert payload["current_python"] is payload["rust"]
+    assert payload["legacy_adam_core"]["p50"] == 2.0
+    assert payload["legacy_adam_core"]["samples_alias"] == "python.values"
     assert payload["current_python"]["p50"] == 1.0
+    assert payload["current_python"]["samples_alias"] == "rust.values"
+    assert "values" not in payload["current_python"]
     assert payload["native_rust"]["status"] == "unavailable"
     assert payload["native_rust"]["p50"] is None
     assert payload["native_rust"]["todo"] == "personal-98v.1"

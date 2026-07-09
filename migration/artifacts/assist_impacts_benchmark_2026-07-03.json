@@ -7,7 +7,7 @@
     "native_rust": "direct Rust call timed inside Rust with std::time::Instant; null until a Rust-internal adapter exists",
     "gate": "legacy/current_python; native_rust is diagnostic"
   },
-  "generated_at_utc": "2026-07-09T19:10:03Z",
+  "generated_at_utc": "2026-07-09T19:24:01Z",
   "description": "Two-runtime: legacy adam_assist.detect_collisions timed inside the isolated .legacy-assist-venv vs Rust adam_assist_rust.detect_collisions timed locally, on identical same-epoch impactor/safe workloads; parity of impact and survivor sets asserted per lane before timing.",
   "machine": {
     "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
@@ -28,34 +28,33 @@
       "num_days": 30,
       "n_impacts": 2,
       "python_samples_s": [
-        0.08749016560614109,
-        0.11040920857340097,
-        0.10537129268050194
+        0.08838258311152458,
+        0.08903583325445652,
+        0.08732283301651478
       ],
       "rust_samples_s": [
-        0.013925749808549881,
-        0.013129250146448612,
-        0.013585667125880718
+        0.013136332854628563,
+        0.013745791278779507,
+        0.013178999535739422
       ],
-      "python_p50_s": 0.10537129268050194,
-      "python_p95_s": 0.10990541698411108,
-      "rust_p50_s": 0.013585667125880718,
-      "rust_p95_s": 0.013891741540282965,
-      "current_python_samples_s": [
-        0.013925749808549881,
-        0.013129250146448612,
-        0.013585667125880718
-      ],
-      "current_python_p50_s": 0.013585667125880718,
-      "current_python_p95_s": 0.013891741540282965,
+      "python_p50_s": 0.08838258311152458,
+      "python_p95_s": 0.08897050824016332,
+      "legacy_adam_core_p50_s": 0.08838258311152458,
+      "legacy_adam_core_p95_s": 0.08897050824016332,
+      "legacy_adam_core_samples_alias": "python_samples_s",
+      "rust_p50_s": 0.013178999535739422,
+      "rust_p95_s": 0.013689112104475498,
+      "current_python_p50_s": 0.013178999535739422,
+      "current_python_p95_s": 0.013689112104475498,
+      "current_python_samples_alias": "rust_samples_s",
       "native_rust_status": "unavailable",
       "native_rust_samples_s": [],
       "native_rust_p50_s": null,
       "native_rust_p95_s": null,
       "native_rust_unavailable_reason": "no Rust-internal Instant adapter; a Python->PyO3 call is not accepted as native-Rust timing",
       "native_rust_todo": "personal-98v.1",
-      "speedup_p50": 7.756063188076311,
-      "speedup_p95": 7.911565059385087,
+      "speedup_p50": 6.7063196164355725,
+      "speedup_p95": 6.499362965336184,
       "max_impact_time_diff_days": 0.00017516035586595535
     },
     {
@@ -63,34 +62,33 @@
       "num_days": 30,
       "n_impacts": 10,
       "python_samples_s": [
-        0.2766619576141238,
-        0.2621799586340785,
-        0.29562158323824406
+        0.25786708295345306,
+        0.2541095828637481,
+        0.2586857918649912
       ],
       "rust_samples_s": [
-        0.06324062496423721,
-        0.06257066689431667,
-        0.06333416700363159
+        0.06474499963223934,
+        0.06600550003349781,
+        0.06523858290165663
       ],
-      "python_p50_s": 0.2766619576141238,
-      "python_p95_s": 0.293725620675832,
-      "rust_p50_s": 0.06324062496423721,
-      "rust_p95_s": 0.06332481279969215,
-      "current_python_samples_s": [
-        0.06324062496423721,
-        0.06257066689431667,
-        0.06333416700363159
-      ],
-      "current_python_p50_s": 0.06324062496423721,
-      "current_python_p95_s": 0.06332481279969215,
+      "python_p50_s": 0.25786708295345306,
+      "python_p95_s": 0.2586039209738374,
+      "legacy_adam_core_p50_s": 0.25786708295345306,
+      "legacy_adam_core_p95_s": 0.2586039209738374,
+      "legacy_adam_core_samples_alias": "python_samples_s",
+      "rust_p50_s": 0.06523858290165663,
+      "rust_p95_s": 0.0659288083203137,
+      "current_python_p50_s": 0.06523858290165663,
+      "current_python_p95_s": 0.0659288083203137,
+      "current_python_samples_alias": "rust_samples_s",
       "native_rust_status": "unavailable",
       "native_rust_samples_s": [],
       "native_rust_p50_s": null,
       "native_rust_p95_s": null,
       "native_rust_unavailable_reason": "no Rust-internal Instant adapter; a Python->PyO3 call is not accepted as native-Rust timing",
       "native_rust_todo": "personal-98v.1",
-      "speedup_p50": 4.374750530542308,
-      "speedup_p95": 4.638396983579554,
+      "speedup_p50": 3.9526775641673995,
+      "speedup_p95": 3.922472247904373,
       "max_impact_time_diff_days": 0.0004306165501475334
     },
     {
@@ -98,34 +96,33 @@
       "num_days": 30,
       "n_impacts": 40,
       "python_samples_s": [
-        1.0927171669900417,
-        1.1005696253851056,
-        1.0744986655190587
+        1.1025744173675776,
+        1.1060930415987968,
+        1.1078146249055862
       ],
       "rust_samples_s": [
-        0.5804852498695254,
-        0.509466084651649,
-        0.5524530000984669
+        0.5106816254556179,
+        0.5136582916602492,
+        0.5094273323193192
       ],
-      "python_p50_s": 1.0927171669900417,
-      "python_p95_s": 1.0997843795455993,
-      "rust_p50_s": 0.5524530000984669,
-      "rust_p95_s": 0.5776820248924196,
-      "current_python_samples_s": [
-        0.5804852498695254,
-        0.509466084651649,
-        0.5524530000984669
-      ],
-      "current_python_p50_s": 0.5524530000984669,
-      "current_python_p95_s": 0.5776820248924196,
+      "python_p50_s": 1.1060930415987968,
+      "python_p95_s": 1.1076424665749074,
+      "legacy_adam_core_p50_s": 1.1060930415987968,
+      "legacy_adam_core_p95_s": 1.1076424665749074,
+      "legacy_adam_core_samples_alias": "python_samples_s",
+      "rust_p50_s": 0.5106816254556179,
+      "rust_p95_s": 0.5133606250397861,
+      "current_python_p50_s": 0.5106816254556179,
+      "current_python_p95_s": 0.5133606250397861,
+      "current_python_samples_alias": "rust_samples_s",
       "native_rust_status": "unavailable",
       "native_rust_samples_s": [],
       "native_rust_p50_s": null,
       "native_rust_p95_s": null,
       "native_rust_unavailable_reason": "no Rust-internal Instant adapter; a Python->PyO3 call is not accepted as native-Rust timing",
       "native_rust_todo": "personal-98v.1",
-      "speedup_p50": 1.9779368865682339,
-      "speedup_p95": 1.9037884721277412,
+      "speedup_p50": 2.165915095558739,
+      "speedup_p95": 2.1576303529104197,
       "max_impact_time_diff_days": 0.0005431598983705044
     }
   ]
