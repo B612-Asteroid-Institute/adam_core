@@ -573,6 +573,7 @@ def test_speed_artifact_records_thread_metadata() -> None:
     assert "large-n" in artifact["lane_policy"]
     assert "multi-thread" in artifact["thread_policy"]
     lane_cell = parity_table._format_lane_cell(row)
+    assert "legacy adam_core 2.000s/2.000s" in lane_cell
     assert "current Python 1.000s/1.000s" in lane_cell
     assert "native Rust 500.00ms/500.00ms" in lane_cell
     assert "Python/native 2.00x/2.00x" in lane_cell
