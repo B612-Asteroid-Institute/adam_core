@@ -19,6 +19,7 @@ from .rotation import (
     RotationPeriodResult,
     build_rotation_period_observations_from_detections,
     estimate_rotation_period,
+    estimate_rotation_period_best_apparition,
     estimate_rotation_period_from_detections,
     estimate_rotation_period_from_detections_grouped,
 )
@@ -40,6 +41,7 @@ __all__ = [
     # Rotation-period analysis
     "build_rotation_period_observations_from_detections",
     "estimate_rotation_period",
+    "estimate_rotation_period_best_apparition",
     "estimate_rotation_period_from_detections",
     "estimate_rotation_period_from_detections_grouped",
     "RotationPeriodObservations",

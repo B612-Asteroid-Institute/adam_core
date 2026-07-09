@@ -17,6 +17,7 @@ from .core import (
 from .estimator import estimate_rotation_period
 from .wrappers import (
     build_rotation_period_observations_from_detections,
+    estimate_rotation_period_best_apparition,
     estimate_rotation_period_from_detections,
     estimate_rotation_period_from_detections_grouped,
 )
