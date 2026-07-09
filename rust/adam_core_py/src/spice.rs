@@ -1,11 +1,17 @@
+use std::collections::HashMap;
 use std::sync::MutexGuard;
 
-use adam_core_rs_coords::{DataFrame, OriginId, TimeArray, TimeScale};
+use adam_core_rs_coords::{
+    CoordinateBatch, DataFrame, IntoNestedRecordBatch, ObservatoryCode, ObserverBatch, OriginArray,
+    OriginId, TimeArray, TimeScale,
+};
 use adam_core_rs_spice::{
     builtin_bodc2n, builtin_bodn2c, global_backend, parse_text_kernel_bindings, pck_sxform_matrix,
     AdamCoreSpiceBackend, NaifFrame, PckError, PckFile, SpiceBackendError, SpkError, SpkFile,
     SpkWriter, SpkWriterError, Type3Record, Type3Segment, Type9Segment,
 };
+use arrow::pyarrow::{FromPyArrow, ToPyArrow};
+use arrow_array::{Array, Int64Array, LargeStringArray, RecordBatch};
 use numpy::{IntoPyArray, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -134,6 +140,109 @@ impl PyAdamCoreSpiceBackend {
         let arr = ndarray::Array2::from_shape_vec((code_indices.len(), 6), out)
             .map_err(|err| PyValueError::new_err(format!("failed to shape states: {err}")))?;
         Ok(arr.into_pyarray(py))
+    }
+
+    /// Arrow-native ``Observers.from_codes``: a single Arrow C Data Interface
+    /// crossing. Accepts a pyarrow ``RecordBatch`` with ``code`` (large_utf8),
+    /// ``days`` (int64) and ``nanos`` (int64) columns plus the input
+    /// ``time_scale``, and returns one pyarrow ``RecordBatch`` for the nested
+    /// ``Observers`` quivr table (code + heliocentric-ecliptic Cartesian
+    /// coordinates). Grouping by observatory code and epoch dedup happen in
+    /// Rust -- no numpy buffers, no Python ``dictionary_encode``, and no
+    /// Python-side table rebuild. Unknown / space-based codes error so the
+    /// Python boundary can fall back to the legacy per-code assembly.
+    fn observer_states_from_codes_arrow<'py>(
+        &self,
+        py: Python<'py>,
+        batch: &Bound<'py, PyAny>,
+        time_scale: &str,
+    ) -> PyResult<PyObject> {
+        let record_batch = RecordBatch::from_pyarrow_bound(batch)
+            .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
+        let rows = record_batch.num_rows();
+        let code_array = record_batch
+            .column_by_name("code")
+            .ok_or_else(|| PyValueError::new_err("input batch missing 'code' column"))?
+            .as_any()
+            .downcast_ref::<LargeStringArray>()
+            .ok_or_else(|| PyValueError::new_err("'code' column must be large_utf8"))?;
+        let days_array = record_batch
+            .column_by_name("days")
+            .ok_or_else(|| PyValueError::new_err("input batch missing 'days' column"))?
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or_else(|| PyValueError::new_err("'days' column must be int64"))?;
+        let nanos_array = record_batch
+            .column_by_name("nanos")
+            .ok_or_else(|| PyValueError::new_err("input batch missing 'nanos' column"))?
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or_else(|| PyValueError::new_err("'nanos' column must be int64"))?;
+
+        let scale =
+            TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+
+        // Group rows by observatory code in Rust (replaces the former Python
+        // pc.dictionary_encode boundary), preserving row order.
+        let mut unique_codes: Vec<String> = Vec::new();
+        let mut slot_of: HashMap<&str, usize> = HashMap::new();
+        let mut slots: Vec<usize> = Vec::with_capacity(rows);
+        let mut codes: Vec<ObservatoryCode> = Vec::with_capacity(rows);
+        for row in 0..rows {
+            if code_array.is_null(row) {
+                return Err(PyValueError::new_err("observer code must not be null"));
+            }
+            let code = code_array.value(row);
+            let slot = *slot_of.entry(code).or_insert_with(|| {
+                unique_codes.push(code.to_string());
+                unique_codes.len() - 1
+            });
+            slots.push(slot);
+            codes.push(ObservatoryCode(code.to_string()));
+        }
+
+        let days: Vec<i64> = (0..rows).map(|row| days_array.value(row)).collect();
+        let nanos: Vec<i64> = (0..rows).map(|row| nanos_array.value(row)).collect();
+        // Output coordinates keep the caller's input time scale; SPICE lookups
+        // use a TDB rescale internally.
+        let output_times = TimeArray::from_parts(scale, days, nanos)
+            .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
+        let tdb_times = output_times
+            .clone()
+            .rescale(TimeScale::Tdb)
+            .map_err(|err| {
+                PyValueError::new_err(format!("cannot rescale observer times to TDB: {err}"))
+            })?;
+
+        let origin = OriginId::from_code("SUN");
+        let flat = self
+            .lock()?
+            .observer_states_from_codes(
+                &unique_codes,
+                &slots,
+                &tdb_times,
+                DataFrame::Ecliptic,
+                &origin,
+            )
+            .map_err(spice_err_to_py)?;
+        let states: Vec<[f64; 6]> = flat
+            .chunks_exact(6)
+            .map(|c| [c[0], c[1], c[2], c[3], c[4], c[5]])
+            .collect();
+        let coordinates = CoordinateBatch::cartesian(
+            states,
+            DataFrame::Ecliptic,
+            OriginArray::repeat(origin, rows),
+            Some(output_times),
+            None,
+        )
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let observers = ObserverBatch::new(codes, coordinates)
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let out = observers
+            .into_nested_record_batch()
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        out.to_pyarrow(py)
     }
 
     fn furnsh(&self, path: &str) -> PyResult<()> {

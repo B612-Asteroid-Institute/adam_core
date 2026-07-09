@@ -167,6 +167,18 @@ class RustBackend:
                 dtype=np.float64,
             )
 
+    def observer_states_from_codes_arrow(self, batch, time_scale: str):
+        """Arrow-native single-crossing ``Observers.from_codes``.
+
+        Takes one pyarrow ``RecordBatch`` (``code``/``days``/``nanos`` columns)
+        plus the input ``time_scale`` and returns one nested ``Observers``
+        pyarrow ``RecordBatch`` (code + heliocentric-ecliptic Cartesian
+        coordinates). No numpy marshaling on either side; grouping/dedup and
+        table assembly happen in Rust.
+        """
+        with self._lock:
+            return self._inner.observer_states_from_codes_arrow(batch, time_scale)
+
     def bodn2c(self, name: str) -> int:
         with self._lock:
             try:

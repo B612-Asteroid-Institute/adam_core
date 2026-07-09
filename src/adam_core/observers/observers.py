@@ -13,7 +13,7 @@ from typing_extensions import Self
 
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
-from ..coordinates.origin import Origin, OriginCodes
+from ..coordinates.origin import OriginCodes
 from ..time import Timestamp
 
 R_EARTH_EQUATORIAL = c.R_EARTH_EQUATORIAL
@@ -168,42 +168,43 @@ class Observers(qv.Table):
         # unknown codes) fall back to the legacy per-code assembly, which
         # either computes them through their dedicated paths or raises the
         # exact legacy error.
+        from ..orbits.arrow_bridge import _to_quivr_metadata
         from ..utils.spice import get_backend, setup_SPICE
 
+        # SPICE kernels + MPC obscodes still load through the Python data
+        # packages here (Rust-side lazy init tracked in personal-cmy.36.1;
+        # kernel data-crate packaging in personal-3uy). Everything else is a
+        # single Arrow C Data Interface crossing: the codes + epochs go over as
+        # one pyarrow RecordBatch, Rust groups by code / dedups epochs / runs
+        # the DE440 + ITRF93 lookups and returns the finished nested Observers
+        # RecordBatch. No dictionary_encode, no numpy split, no from_kwargs.
         setup_SPICE()
         backend = get_backend()
         _ensure_obscodes_loaded(backend)
-        encoded = pc.dictionary_encode(codes)
-        unique_codes = [str(code) for code in encoded.dictionary.to_pylist()]
-        code_indices = encoded.indices.to_numpy(zero_copy_only=False)
+
+        code_column = (
+            codes if codes.type == pa.large_string() else codes.cast(pa.large_string())
+        )
+        time_table = times.table.combine_chunks()
+        batch = pa.RecordBatch.from_arrays(
+            [
+                code_column,
+                time_table.column("days").chunk(0),
+                time_table.column("nanos").chunk(0),
+            ],
+            names=["code", "days", "nanos"],
+        )
+        # Only SPICE coverage errors (space-based / unknown observatory codes
+        # the Rust ground table cannot serve) fall back to the legacy per-code
+        # assembly. Programming errors (missing method, schema mismatch) must
+        # surface, not silently degrade to the slow path.
         try:
-            values = np.asarray(
-                backend.observer_states_from_codes(
-                    unique_codes,
-                    code_indices,
-                    times.scale,
-                    times.days.to_numpy(zero_copy_only=False),
-                    times.nanos.to_numpy(zero_copy_only=False),
-                    "ecliptic",
-                    "SUN",
-                ),
-                dtype=np.float64,
-            )
-        except Exception:
+            result = backend.observer_states_from_codes_arrow(batch, times.scale)
+        except (RuntimeError, ValueError):
             return cls._from_codes_legacy(codes, times)
 
-        coordinates = CartesianCoordinates.from_kwargs(
-            x=values[:, 0],
-            y=values[:, 1],
-            z=values[:, 2],
-            vx=values[:, 3],
-            vy=values[:, 4],
-            vz=values[:, 5],
-            time=times,
-            origin=Origin.from_kwargs(code=np.full(len(codes), "SUN", dtype="object")),
-            frame="ecliptic",
-        )
-        return cls.from_kwargs(code=codes, coordinates=coordinates)
+        table = pa.Table.from_batches([result])
+        return cls.from_pyarrow(_to_quivr_metadata(table))
 
     @classmethod
     def _from_codes_legacy(cls, codes: pa.Array, times: Timestamp) -> Self:
