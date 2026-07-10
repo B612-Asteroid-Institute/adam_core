@@ -2,19 +2,25 @@
 
 from __future__ import annotations
 
-from typing import Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 import numpy as np
 import pyarrow.compute as pc
 import quivr as qv
 import scipy.optimize
-from mpcq import MPCObservations
-from mpcq.orbits import MPCOrbits
 
 from ..dynamics.propagation import propagate_2body
 from ..observers.observers import Observers
 from .hg12star import hg12star_correction
 from .magnitude import calculate_phase_angle
+
+if TYPE_CHECKING:
+    # mpcq is an optional dependency (install via `adam_core[mpc]`); it is only
+    # referenced in type annotations here, which `from __future__ import
+    # annotations` keeps from being evaluated at runtime. This keeps
+    # `import adam_core.photometry` working without mpcq installed.
+    from mpcq import MPCObservations
+    from mpcq.orbits import MPCOrbits
 
 _BANDS = ("g", "i", "r", "u")
 _PHI_TYPES = ("HG12star", "HG", "c1c2")
@@ -131,7 +137,7 @@ def _fit_per_band_h(
     `_MIN_RETAINED_FRACTION` of the input rows remain, the fit is considered
     unreliable and raises.
 
-    In all cases the fit is solved with iterative 9-sigma outlier rejection.
+    In all cases the fit is solved with iterative 3-sigma outlier rejection.
 
     Returns dict with keys "H_g", "H_i", "H_r", "H_u", "num_obs", "num_outliers".
     """
