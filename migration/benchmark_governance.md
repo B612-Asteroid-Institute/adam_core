@@ -32,7 +32,7 @@ Baseline speed artifacts now carry named size lanes:
 
 Per the 2026-05-04 user decisions captured in `decisions.md`, no large-n
 performance waivers are acceptable. Small-n and large-n must meet ≥1.2×
-p50/p95; tiny-n must meet ≥1.2× p50 while p95 remains diagnostic per the
+p50/p95; tiny-n must meet ≥1.3× p50 while p95 remains diagnostic per the
 2026-05-07 tiny-lane jitter decision. Underlying performance misses must be
 optimized, not waived; transient timing rerouting via short-lived waivers is
 only acceptable while an active optimization is in flight.
@@ -50,6 +50,15 @@ The parity speed gate also uses a built-in source-governed timing trial count
 reps/warmup distribution; pass/fail uses median-of-trial p50/p95 aggregates and
 the JSON artifacts retain the raw sample matrix plus per-trial percentiles. The
 trial count is intentionally not exposed as a CLI flag for canonical scripts.
+
+Canonical warm performance lanes measure **non-cached semantic computation**.
+Before every warmup and timed legacy/current-Python invocation, the harness
+clears adam_core's observer-state, origin-translation, and SPKEZ result caches
+outside the measured interval. Imports, loaded SPICE kernels/readers, JIT state,
+and thread pools remain warm. This prevents repeated identical benchmark inputs
+from becoming a one-sided memoization comparison. There is no separate
+cache-hit performance lane; production caches remain enabled outside the
+benchmark harness.
 
 Artifacts distinguish **legacy adam_core**, **current through Python**, and
 **native Rust**. Gate thresholds apply to legacy/current-through-Python because

@@ -17,7 +17,8 @@ once and returns the output arrays.
 For ``mode == "time"``: the runner invokes the legacy implementation
 ``reps`` times after ``warmup`` warmups, returning per-rep elapsed
 seconds (we send back raw timings so the caller can compute p50/p95
-identically for rust and legacy).
+identically for rust and legacy). Semantic result caches are cleared before
+every warmup and timed invocation, outside the measured interval.
 
 Why a subprocess instead of importing from the migration repo: both
 ``/Users/aleck/Code/adam-core`` (legacy upstream) and the migration repo
@@ -37,6 +38,7 @@ from typing import Any
 
 import numpy as np
 
+from migration.parity._timing_cache import clear_semantic_result_caches
 from migration.parity._porkchop_runner import (
     run_generate_porkchop_data as _dynamics_generate_porkchop_data,
 )
@@ -1436,9 +1438,11 @@ def _handle(request: dict[str, Any]) -> dict[str, Any]:
         warmup: int = int(request.get("warmup", 1))
         reps: int = int(request.get("reps", 7))
         for _ in range(warmup):
+            clear_semantic_result_caches()
             _run_one(api_id, kwargs)
         elapsed: list[float] = []
         for _ in range(reps):
+            clear_semantic_result_caches()
             t0 = time.perf_counter()
             _run_one(api_id, kwargs)
             elapsed.append(time.perf_counter() - t0)

@@ -12,8 +12,10 @@ from adam_core._rust.status import (
 from migration.parity import (
     _assist_bench,
     _inputs,
+    _legacy_runner,
     _native_rust_runner,
     _oracle,
+    _timing_cache,
     _threading,
     comparison_metadata,
     parity_fixed,
@@ -552,6 +554,19 @@ def test_speed_artifact_records_thread_metadata() -> None:
 
     assert artifact["canonical_speed_trials"] == parity_speed.CANONICAL_SPEED_TRIALS
     assert artifact["timing_aggregation"] == "median-of-trial-percentiles"
+    assert artifact["semantic_cache_policy"] == (
+        "semantic-result-caches-cleared-before-each-sample"
+    )
+    assert artifact["semantic_caches_cleared"] == [
+        "observer-state",
+        "origin-translation",
+        "spkez-state",
+    ]
+    assert (
+        artifact["apis"][0]["semantic_cache_policy"]
+        == artifact["semantic_cache_policy"]
+    )
+    assert "Semantic result caches are cleared" in artifact["timing_policy"]
     assert artifact["thread_mode"] == "single"
     assert artifact["thread_env"]["RAYON_NUM_THREADS"] == "1"
     assert artifact["cold_thread_mode"] == "native"
@@ -616,6 +631,60 @@ def test_simple_timing_renderer_uses_canonical_candidate_names_and_blank_native(
     assert "| 6.00ms / 7.00ms | 200.0µs / 300.0µs | 10.0µs / 20.0µs |" in rendered
     assert (
         parity_table._build_arg_parser().parse_args(["--simple-timings"]).simple_timings
+    )
+
+
+def test_current_and_legacy_speed_loops_clear_caches_outside_samples(
+    monkeypatch,
+) -> None:
+    current_events: list[str] = []
+    monkeypatch.setattr(
+        parity_speed,
+        "clear_semantic_result_caches",
+        lambda: current_events.append("clear"),
+    )
+    from migration.parity import _rust_runner
+
+    monkeypatch.setattr(
+        _rust_runner,
+        "run",
+        lambda api_id, **kwargs: current_events.append(f"run:{api_id}"),
+    )
+    samples = parity_speed._time_rust("example", {}, reps=2, warmup=1)
+    assert len(samples) == 2
+    assert current_events == [
+        "clear",
+        "run:example",
+        "clear",
+        "run:example",
+        "clear",
+        "run:example",
+    ]
+
+    legacy_events: list[str] = []
+    monkeypatch.setattr(
+        _legacy_runner,
+        "clear_semantic_result_caches",
+        lambda: legacy_events.append("clear"),
+    )
+    monkeypatch.setattr(
+        _legacy_runner,
+        "_run_one",
+        lambda api_id, kwargs: legacy_events.append(f"run:{api_id}") or {},
+    )
+    response = _legacy_runner._handle(
+        {"api": "example", "mode": "time", "kwargs": {}, "reps": 2, "warmup": 1}
+    )
+    assert response["ok"] is True
+    assert len(response["elapsed"]) == 2
+    assert legacy_events == current_events
+
+
+def test_semantic_cache_policy_names_the_complete_known_cache_set() -> None:
+    assert _timing_cache.SEMANTIC_CACHES_CLEARED == (
+        "observer-state",
+        "origin-translation",
+        "spkez-state",
     )
 
 
@@ -811,7 +880,7 @@ def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> 
     cache_path.write_text("""
         {
           "schema_version": 1,
-          "process_version": "rm-p1-020-built-in-speed-trials-v1",
+          "process_version": "rm-p1-020-noncached-semantic-results-v2",
           "created_at": "2026-05-05T00:00:00+00:00",
           "updated_at": "2026-05-05T00:00:00+00:00",
           "legacy_identity": {

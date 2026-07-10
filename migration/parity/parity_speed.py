@@ -12,7 +12,10 @@ subprocess invocation overhead is excluded from the legacy measurements. The
 canonical gate repeats every warm timing loop across a fixed source-governed
 number of serial trials and gates on the median of the per-trial p50/p95 values;
 there is intentionally no CLI flag to downgrade the canonical command back to
-single-trial evidence.
+single-trial evidence. Before every warmup and timed sample, semantic result
+caches are cleared outside the measured interval; imports, kernels, JIT state,
+and thread pools remain warm. Thus canonical speed lanes measure non-cached
+computation rather than repeated-identical-input memoization.
 
 Warm p50/p95 comparisons default to ``multi-thread`` mode on both sides:
 Rust Rayon and the legacy NumPy/JAX/XLA/BLAS pools both run uncapped, so the
@@ -51,6 +54,11 @@ from pathlib import Path
 from typing import Any, Optional
 
 from . import _threading
+from ._timing_cache import (
+    SEMANTIC_CACHE_POLICY,
+    SEMANTIC_CACHES_CLEARED,
+    clear_semantic_result_caches,
+)
 
 DEFAULT_SMALL_LANE_NAME = "small-n"
 DEFAULT_LARGE_LANE_NAME = "large-n"
@@ -75,7 +83,7 @@ DEFAULT_LEGACY_CACHE_PATH = Path(
 CANONICAL_SPEED_TRIALS = 3
 SPEED_TIMING_AGGREGATION = "median-of-trial-percentiles"
 LEGACY_TIMING_CACHE_SCHEMA_VERSION = 1
-LEGACY_TIMING_CACHE_PROCESS_VERSION = "rm-p1-020-built-in-speed-trials-v1"
+LEGACY_TIMING_CACHE_PROCESS_VERSION = "rm-p1-020-noncached-semantic-results-v2"
 # Dedicated, main-pinned legacy checkout, kept separate from any working
 # checkout so the speed baseline is reproducible and does not silently drift
 # when a working tree changes branches. Override with ADAM_CORE_LEGACY_REPO_ROOT
@@ -226,9 +234,11 @@ def _time_rust(api_id: str, kwargs: dict, *, reps: int, warmup: int) -> list[flo
     from . import _rust_runner
 
     for _ in range(warmup):
+        clear_semantic_result_caches()
         _rust_runner.run(api_id, **kwargs)
     samples: list[float] = []
     for _ in range(reps):
+        clear_semantic_result_caches()
         t0 = time.perf_counter()
         _rust_runner.run(api_id, **kwargs)
         samples.append(time.perf_counter() - t0)
@@ -313,6 +323,7 @@ def _benchmark_source_hash() -> str:
             parity_dir / "_inputs.py",
             parity_dir / "_legacy_runner.py",
             parity_dir / "_oracle.py",
+            parity_dir / "_timing_cache.py",
         ]
     )
 
@@ -1710,6 +1721,7 @@ def _speed_result_to_json(result: SpeedResult) -> dict[str, object]:
         "warmup": result.warmup,
         "timing_trials": result.timing_trials,
         "timing_aggregation": result.timing_aggregation,
+        "semantic_cache_policy": SEMANTIC_CACHE_POLICY,
         # Historical ``rust_*`` keys mean current implementation called
         # through its compatible Python interface. Keep them for readers and
         # provide explicit aliases beside independently timed native Rust.
@@ -1773,6 +1785,9 @@ def to_json(
 ) -> dict:
     artifact = {
         "performance_columns_schema_version": 1,
+        "semantic_cache_policy_schema_version": 1,
+        "semantic_cache_policy": SEMANTIC_CACHE_POLICY,
+        "semantic_caches_cleared": list(SEMANTIC_CACHES_CLEARED),
         "performance_columns": {
             "legacy_adam_core": "pinned legacy checkout in isolated Python runtime",
             "current_python": "current implementation called through compatible Python interface",
@@ -1800,7 +1815,9 @@ def to_json(
             "available, are measured independently inside Rust with Instant around "
             "direct Rust calls; Python/PyO3 is outside every sample and native "
             "timing is diagnostic. Missing native adapters remain null with a "
-            "reason/TODO. Raw sample trials and per-trial percentiles are preserved "
+            "reason/TODO. Semantic result caches are cleared outside every warmup "
+            "and timed current/legacy sample; imports, kernels, JIT state, and thread "
+            "pools stay warm. Raw sample trials and per-trial percentiles are preserved "
             "in each row. Trial count is source-governed rather "
             "than a CLI flag so standard commands cannot silently downgrade to "
             "single-trial evidence."

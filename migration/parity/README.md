@@ -164,6 +164,13 @@ Full baseline-main gate (writes `migration/artifacts/parity_gate.json`):
     --speed-legacy-cache migration/artifacts/parity_legacy_speed_baseline.json
 ```
 
+These canonical warm speed loops are non-cached compute comparisons. Before
+each warmup and timed legacy/current-Python call, the harness clears semantic
+observer-state, origin-translation, and SPKEZ result caches outside the timer.
+Imports, loaded kernels/readers, JIT state, and thread pools remain warm.
+Production caches are unchanged; the policy applies only inside the benchmark
+harness and is recorded in emitted artifacts.
+
 For a compact review view containing only canonical surface name and absolute
 legacy/current-Python/native-Rust p50/p95 columns (blank when a native adapter
 does not exist), render the committed artifacts with:
