@@ -146,6 +146,46 @@ def _transform_coordinates(
     )
 
 
+def _propagate_2body(
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    max_iter: int,
+    tol: float,
+    **kwargs: Any,
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+    from adam_core.dynamics.propagation import _target_times_record_batch
+    from adam_core.orbits.arrow_bridge import orbits_to_record_batch
+
+    from ._public_facades import build_propagate_2body_inputs
+
+    orbits, targets = build_propagate_2body_inputs(**kwargs)
+    samples = _rust_native.benchmark_propagate_orbits_arrow(
+        orbits_to_record_batch(orbits),
+        _target_times_record_batch(targets),
+        reps,
+        trials,
+        warmup,
+        max_iter,
+        tol,
+        100,
+        1,
+    )
+    return NativeRustTiming(
+        status="measured",
+        sample_trials_s=[[float(value) for value in trial] for trial in samples],
+        entrypoint="adam_core_py::coordinates::propagate_orbits_record_batch",
+        timing_boundary=(
+            "Rust std::time::Instant around direct Orbits RecordBatch decode, "
+            "typed 2-body cross-product propagation, covariance transport, and "
+            "RecordBatch assembly calls; outer Python/PyO3 launch and PyArrow "
+            "conversion excluded"
+        ),
+    )
+
+
 def _observers_from_codes(
     *,
     codes: Any,
@@ -185,6 +225,7 @@ def _observers_from_codes(
 
 _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
     "coordinates.transform_coordinates": _transform_coordinates,
+    "dynamics.propagate_2body": _propagate_2body,
     "observers.Observers.from_codes": _observers_from_codes,
 }
 
@@ -203,11 +244,10 @@ def _todo_for(api_id: str) -> str:
         or api_id == "coordinates.rotate_cartesian_time_varying"
     ):
         return "personal-98v.1"
-    if (
-        api_id.startswith("dynamics.propagate_2body")
-        or api_id == "bridge.propagate_orbits_2body"
-    ):
-        return "personal-cmy.36.4"
+    if api_id == "bridge.propagate_orbits_2body":
+        return "personal-cmy.36.10"
+    if api_id.startswith("dynamics.propagate_2body"):
+        return "personal-98v.1"
     if (
         api_id.startswith("dynamics.generate_ephemeris")
         or api_id == "dynamics.add_light_time"

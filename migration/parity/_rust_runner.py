@@ -544,15 +544,11 @@ def _coordinates_residuals_Residuals_calculate(
     }
 
 
-def _dynamics_propagate_2body(
-    orbits: np.ndarray, dts: np.ndarray, mus: np.ndarray, max_iter: int, tol: float
-) -> dict[str, np.ndarray]:
-    return {
-        "out": _ensure(
-            _rust_api.propagate_2body_numpy(orbits, dts, mus, max_iter, tol),
-            "propagate_2body",
-        )
-    }
+def _dynamics_propagate_2body(**kwargs: Any) -> dict[str, np.ndarray]:
+    """Current public Orbits→Orbits 2-body facade."""
+    from ._public_facades import propagate_2body
+
+    return propagate_2body(**kwargs)
 
 
 def _dynamics_propagate_2body_along_arc(
@@ -928,7 +924,7 @@ def _bridge_propagate_orbits_2body(
     from adam_core.coordinates.cartesian import CartesianCoordinates
     from adam_core.coordinates.origin import Origin
     from adam_core.orbits import Orbits
-    from adam_core.orbits.arrow_bridge import _propagate_orbits_2body_ipc_candidate
+    from adam_core.dynamics import propagate_2body
     from adam_core.time import Timestamp
 
     coords = np.asarray(coords, dtype=np.float64)
@@ -951,7 +947,7 @@ def _bridge_propagate_orbits_2body(
     target = Timestamp.from_mjd(
         np.asarray([float(target_mjd)], dtype=np.float64), scale="tdb"
     )
-    out = _propagate_orbits_2body_ipc_candidate(orbits, target)
+    out = propagate_2body(orbits, target, max_processes=1)
     return {"out": _ensure(out.coordinates.values, "bridge.propagate_orbits_2body")}
 
 

@@ -395,6 +395,42 @@ def test_propagate_2body_single_ray_matches_serial() -> None:
     ray.shutdown()  # type: ignore[name-defined]
 
 
+def test_propagate_2body_uses_record_batches_without_numpy_rebuild(monkeypatch) -> None:
+    t0 = Timestamp.from_mjd([60000.0], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["arrow"],
+        object_id=["arrow"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.017],
+            vz=[0.0],
+            time=t0,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    def forbidden_values(_self):
+        raise AssertionError("orbit states must stay inside the Arrow RecordBatch")
+
+    def forbidden_from_kwargs(*_args, **_kwargs):
+        raise AssertionError("propagated output must wrap Rust's RecordBatch directly")
+
+    monkeypatch.setattr(CartesianCoordinates, "values", property(forbidden_values))
+    monkeypatch.setattr(Orbits, "from_kwargs", forbidden_from_kwargs)
+
+    propagated = propagate_2body(
+        orbits,
+        Timestamp.from_mjd([60001.0], scale="tdb"),
+        max_processes=1,
+    )
+    assert len(propagated) == 1
+    assert propagated.orbit_id.to_pylist() == ["arrow"]
+
+
 def test_propagate_2body_single_failfast_nonfinite_input() -> None:
     t0 = Timestamp.from_mjd([60000.0], scale="tdb")
     orbits = Orbits.from_kwargs(
@@ -437,12 +473,13 @@ def test_propagate_2body_single_failfast_nonfinite_output(monkeypatch) -> None:
     )
     times = Timestamp.from_mjd([60001.0], scale="tdb")
 
-    def _nan_rust(orbits_arr, dts, mus, max_iter, tol):
-        out = np.asarray(orbits_arr, dtype=np.float64).copy()
-        out[:] = np.nan
-        return out
+    def _nan_rust(*_args, **_kwargs):
+        raise RuntimeError(
+            "propagation row failure: reason=non_finite_output_state; "
+            "output_row=0; input_orbit_index=0; input_time_index=0"
+        )
 
-    monkeypatch.setattr(propagation_module, "rust_propagate_2body_numpy", _nan_rust)
+    monkeypatch.setattr(propagation_module, "propagate_orbits_arrow", _nan_rust)
 
     with pytest.raises(DynamicsNumericalError, match="non_finite_output_state"):
         propagate_2body(orbits, times, max_processes=1)

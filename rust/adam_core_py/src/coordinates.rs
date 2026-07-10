@@ -1,6 +1,6 @@
 use adam_core_rs_coords::propagation::{
-    CovariancePropagation, EpochPolicy, PropagationOptions, PropagationRequest, Propagator,
-    TwoBodyPropagator, TwoBodyPropagatorConfig,
+    CovariancePropagation, EpochPolicy, PropagationDiagnostics, PropagationFailureCode,
+    PropagationOptions, PropagationRequest, Propagator, TwoBodyPropagator, TwoBodyPropagatorConfig,
 };
 use adam_core_rs_coords::{
     apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat, bound_longitude_value,
@@ -21,7 +21,7 @@ use adam_core_rs_coords::{
 };
 use adam_core_rs_spice::global_backend;
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
-use arrow_array::RecordBatch;
+use arrow_array::{Array, Int64Array, RecordBatch};
 use arrow_ipc::reader::StreamReader;
 use arrow_ipc::writer::StreamWriter;
 use numpy::{
@@ -1227,13 +1227,69 @@ impl TimeScaleProvider for ErfaTimeProvider {
     }
 }
 
+struct TypedPropagationBatchOutput {
+    batch: RecordBatch,
+    validity: Vec<bool>,
+    diagnostics: PropagationDiagnostics,
+}
+
+fn propagate_typed_record_batch(
+    batch: &RecordBatch,
+    is_variants: bool,
+    times: &TimeArray,
+    options: PropagationOptions,
+    propagator: &TwoBodyPropagator,
+) -> Result<TypedPropagationBatchOutput, String> {
+    if is_variants {
+        let variants = DataOrbitVariantBatch::try_from_nested_record_batch(batch)
+            .map_err(|err| format!("failed to decode OrbitVariantBatch: {err}"))?;
+        let request = PropagationRequest::new_variants(&variants, times, options)
+            .map_err(|err| format!("invalid propagation request: {err}"))?;
+        let result = propagator
+            .propagate(&request, &ErfaTimeProvider)
+            .map_err(|err| format!("typed propagation failed: {err}"))?;
+        let validity = (0..result.validity.len())
+            .map(|index| result.validity.is_valid(index))
+            .collect();
+        let diagnostics = result.diagnostics;
+        let batch = result
+            .variants
+            .ok_or_else(|| "typed variant propagation returned no variants".to_string())?
+            .into_nested_record_batch()
+            .map_err(|err| format!("failed to encode variants: {err}"))?;
+        Ok(TypedPropagationBatchOutput {
+            batch,
+            validity,
+            diagnostics,
+        })
+    } else {
+        let orbits = DataOrbitBatch::try_from_nested_record_batch(batch)
+            .map_err(|err| format!("failed to decode OrbitBatch: {err}"))?;
+        let request = PropagationRequest::new(&orbits, times, options)
+            .map_err(|err| format!("invalid propagation request: {err}"))?;
+        let result = propagator
+            .propagate(&request, &ErfaTimeProvider)
+            .map_err(|err| format!("typed propagation failed: {err}"))?;
+        let validity = (0..result.validity.len())
+            .map(|index| result.validity.is_valid(index))
+            .collect();
+        let diagnostics = result.diagnostics;
+        let batch = result
+            .orbits
+            .into_nested_record_batch()
+            .map_err(|err| format!("failed to encode OrbitBatch: {err}"))?;
+        Ok(TypedPropagationBatchOutput {
+            batch,
+            validity,
+            diagnostics,
+        })
+    }
+}
+
 /// W12 typed propagation adapter (bead personal-cmy.15): decode a quivr
 /// `Orbits` or `VariantOrbits` table (nested Arrow IPC) to the Rust-canonical
-/// `OrbitBatch`/`OrbitVariantBatch`, run the typed `TwoBodyPropagator`
-/// `PropagationRequest` pipeline (cross-product epoch policy, optional
-/// linearized covariance transport), and re-encode as quivr IPC. Non-TDB
-/// orbit epochs and target times rescale through the provider-owned ERFA
-/// time service. Returns `(ipc_bytes, per_output_row_valid)`.
+/// typed propagation pipeline. IPC remains only for cross-process/test workflows;
+/// the in-process public facade uses the shared RecordBatch core below.
 #[allow(clippy::too_many_arguments)]
 #[pyfunction]
 #[pyo3(signature = (
@@ -1278,47 +1334,257 @@ fn orbits_propagate_typed_ipc<'py>(
     let propagator = TwoBodyPropagator::new(TwoBodyPropagatorConfig { max_iter, tol })
         .map_err(|err| PyValueError::new_err(format!("invalid propagator config: {err}")))?;
     let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
-    let provider = ErfaTimeProvider;
+    let output = py
+        .allow_threads(|| {
+            propagate_typed_record_batch(&batch, is_variants, &times, options, &propagator)
+        })
+        .map_err(PyValueError::new_err)?;
+    let bytes = write_orbit_ipc(&output.batch)?;
+    Ok((PyBytes::new(py, &bytes), output.validity))
+}
 
-    let (out, validity) = if is_variants {
-        let variants =
-            DataOrbitVariantBatch::try_from_nested_record_batch(&batch).map_err(|err| {
-                PyValueError::new_err(format!("failed to decode OrbitVariantBatch: {err}"))
-            })?;
-        let request = PropagationRequest::new_variants(&variants, &times, options)
-            .map_err(|err| PyValueError::new_err(format!("invalid propagation request: {err}")))?;
-        let result = py
-            .allow_threads(|| propagator.propagate(&request, &provider))
-            .map_err(|err| PyValueError::new_err(format!("typed propagation failed: {err}")))?;
-        let validity: Vec<bool> = (0..result.validity.len())
-            .map(|index| result.validity.is_valid(index))
-            .collect();
-        let variants_out = result.variants.ok_or_else(|| {
-            PyValueError::new_err("typed variant propagation returned no variants".to_string())
-        })?;
-        let out = variants_out
-            .into_nested_record_batch()
-            .map_err(|err| PyValueError::new_err(format!("failed to encode variants: {err}")))?;
-        (out, validity)
-    } else {
-        let orbits = DataOrbitBatch::try_from_nested_record_batch(&batch)
-            .map_err(|err| PyValueError::new_err(format!("failed to decode OrbitBatch: {err}")))?;
-        let request = PropagationRequest::new(&orbits, &times, options)
-            .map_err(|err| PyValueError::new_err(format!("invalid propagation request: {err}")))?;
-        let result = py
-            .allow_threads(|| propagator.propagate(&request, &provider))
-            .map_err(|err| PyValueError::new_err(format!("typed propagation failed: {err}")))?;
-        let validity: Vec<bool> = (0..result.validity.len())
-            .map(|index| result.validity.is_valid(index))
-            .collect();
-        let out = result
-            .orbits
-            .into_nested_record_batch()
-            .map_err(|err| PyValueError::new_err(format!("failed to encode OrbitBatch: {err}")))?;
-        (out, validity)
+fn target_times_from_record_batch(batch: &RecordBatch) -> Result<TimeArray, String> {
+    let scale = batch
+        .schema()
+        .metadata()
+        .get("adam_core_time_scale")
+        .ok_or_else(|| "target time RecordBatch is missing adam_core_time_scale".to_string())
+        .and_then(|value| TimeScale::parse(value).map_err(|err| err.to_string()))?;
+    let column = |name: &str| -> Result<&Int64Array, String> {
+        batch
+            .column_by_name(name)
+            .ok_or_else(|| format!("target time RecordBatch is missing {name}"))?
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or_else(|| format!("target time {name} must be Int64"))
     };
-    let bytes = write_orbit_ipc(&out)?;
-    Ok((PyBytes::new(py, &bytes), validity))
+    let days = column("days")?;
+    let nanos = column("nanos")?;
+    if days.len() != nanos.len() {
+        return Err("target time days/nanos length mismatch".to_string());
+    }
+    let mut epochs = Vec::with_capacity(days.len());
+    for row in 0..days.len() {
+        if days.is_null(row) || nanos.is_null(row) {
+            return Err(format!("target time row {row} is null"));
+        }
+        epochs.push(Epoch::new(days.value(row), nanos.value(row)));
+    }
+    TimeArray::new(scale, epochs).map_err(|err| err.to_string())
+}
+
+fn propagation_failure_reason(code: PropagationFailureCode) -> &'static str {
+    match code {
+        PropagationFailureCode::NonFiniteInputState => "non_finite_input_state",
+        PropagationFailureCode::NonFiniteOutputState => "non_finite_output_state",
+        PropagationFailureCode::NonFiniteCovariance => "non_finite_covariance",
+        PropagationFailureCode::SolverZeroDerivative => "solver_zero_derivative",
+        PropagationFailureCode::SolverMaxIterations => "solver_max_iterations",
+        PropagationFailureCode::IntegratorFailure => "integrator_failure",
+    }
+}
+
+/// Direct Rust implementation behind the Arrow-native public 2-body surface.
+/// RecordBatch decode, epoch cross-product propagation, covariance transport,
+/// physical-parameter repetition, and output table assembly all happen here.
+fn propagate_orbits_record_batch(
+    orbit_batch: &RecordBatch,
+    target_time_batch: &RecordBatch,
+    is_variants: bool,
+    covariance: bool,
+    max_iter: usize,
+    tol: f64,
+    chunk_size: Option<usize>,
+    thread_limit: Option<usize>,
+) -> Result<RecordBatch, String> {
+    let target_times = target_times_from_record_batch(target_time_batch)?;
+    let options = PropagationOptions {
+        chunk_size,
+        thread_limit,
+        epoch_policy: EpochPolicy::CrossProduct,
+        covariance: if covariance {
+            CovariancePropagation::Linearized
+        } else {
+            CovariancePropagation::None
+        },
+    };
+    let propagator = TwoBodyPropagator::new(TwoBodyPropagatorConfig { max_iter, tol })
+        .map_err(|err| format!("invalid propagator config: {err}"))?;
+    let output = propagate_typed_record_batch(
+        orbit_batch,
+        is_variants,
+        &target_times,
+        options,
+        &propagator,
+    )?;
+
+    // Preserve the public function's fail-fast contract for non-finite state
+    // rows. Other solver diagnostics historically returned the final iterate.
+    if let Some(failed) = output.diagnostics.failed_rows().find(|row| {
+        matches!(
+            row.failure_code,
+            Some(
+                PropagationFailureCode::NonFiniteInputState
+                    | PropagationFailureCode::NonFiniteOutputState
+            )
+        )
+    }) {
+        let code = failed
+            .failure_code
+            .expect("filtered propagation failure has a code");
+        return Err(format!(
+            "propagation row failure: reason={}; output_row={}; input_orbit_index={}; input_time_index={}",
+            propagation_failure_reason(code),
+            failed.output_row,
+            failed.input_orbit_index,
+            failed.input_time_index,
+        ));
+    }
+
+    Ok(output.batch)
+}
+
+/// Generic Arrow-native typed propagation for Orbits or VariantOrbits. Returns
+/// the finished nested RecordBatch plus per-output-row validity.
+#[pyfunction]
+#[pyo3(signature = (orbit_batch, target_time_batch, is_variants=false, covariance=true, max_iter=1000, tol=1e-14, chunk_size=None, thread_limit=None))]
+#[allow(clippy::too_many_arguments)]
+fn propagate_orbits_typed_arrow<'py>(
+    py: Python<'py>,
+    orbit_batch: &Bound<'py, PyAny>,
+    target_time_batch: &Bound<'py, PyAny>,
+    is_variants: bool,
+    covariance: bool,
+    max_iter: usize,
+    tol: f64,
+    chunk_size: Option<usize>,
+    thread_limit: Option<usize>,
+) -> PyResult<(PyObject, Vec<bool>)> {
+    let input = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid orbit RecordBatch: {err}")))?;
+    let targets = RecordBatch::from_pyarrow_bound(target_time_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid target time RecordBatch: {err}")))?;
+    let times = target_times_from_record_batch(&targets).map_err(PyValueError::new_err)?;
+    let options = PropagationOptions {
+        chunk_size,
+        thread_limit,
+        epoch_policy: EpochPolicy::CrossProduct,
+        covariance: if covariance {
+            CovariancePropagation::Linearized
+        } else {
+            CovariancePropagation::None
+        },
+    };
+    let propagator = TwoBodyPropagator::new(TwoBodyPropagatorConfig { max_iter, tol })
+        .map_err(|err| PyValueError::new_err(format!("invalid propagator config: {err}")))?;
+    let output = py
+        .allow_threads(|| {
+            propagate_typed_record_batch(&input, is_variants, &times, options, &propagator)
+        })
+        .map_err(PyValueError::new_err)?;
+    let batch = output.batch.to_pyarrow(py).map_err(|err| {
+        PyRuntimeError::new_err(format!("failed to export propagated RecordBatch: {err}"))
+    })?;
+    Ok((batch, output.validity))
+}
+
+/// Arrow-native public 2-body propagation: one Orbits RecordBatch and one
+/// target-Timestamp RecordBatch enter Rust; one finished Orbits RecordBatch
+/// leaves Rust.
+#[pyfunction]
+#[pyo3(signature = (orbit_batch, target_time_batch, is_variants=false, covariance=true, max_iter=1000, tol=1e-14, chunk_size=None, thread_limit=None))]
+fn propagate_orbits_arrow<'py>(
+    py: Python<'py>,
+    orbit_batch: &Bound<'py, PyAny>,
+    target_time_batch: &Bound<'py, PyAny>,
+    is_variants: bool,
+    covariance: bool,
+    max_iter: usize,
+    tol: f64,
+    chunk_size: Option<usize>,
+    thread_limit: Option<usize>,
+) -> PyResult<PyObject> {
+    let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    let targets = RecordBatch::from_pyarrow_bound(target_time_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid target time RecordBatch: {err}")))?;
+    let output = py
+        .allow_threads(|| {
+            propagate_orbits_record_batch(
+                &orbits,
+                &targets,
+                is_variants,
+                covariance,
+                max_iter,
+                tol,
+                chunk_size,
+                thread_limit,
+            )
+        })
+        .map_err(|err| {
+            if err.starts_with("propagation row failure:") {
+                PyRuntimeError::new_err(err)
+            } else {
+                PyValueError::new_err(err)
+            }
+        })?;
+    output
+        .to_pyarrow(py)
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to export RecordBatch: {err}")))
+}
+
+/// Rust-internal timer for the Arrow-native 2-body surface. PyArrow/PyO3
+/// conversion happens once before every warmup and timed sample.
+#[pyfunction]
+#[pyo3(signature = (orbit_batch, target_time_batch, reps, trials, warmup_reps=1, max_iter=1000, tol=1e-14, chunk_size=None, thread_limit=None))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_propagate_orbits_arrow(
+    orbit_batch: &Bound<'_, PyAny>,
+    target_time_batch: &Bound<'_, PyAny>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    max_iter: usize,
+    tol: f64,
+    chunk_size: Option<usize>,
+    thread_limit: Option<usize>,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    let targets = RecordBatch::from_pyarrow_bound(target_time_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid target time RecordBatch: {err}")))?;
+    let run_once = || -> PyResult<()> {
+        let output = propagate_orbits_record_batch(
+            &orbits,
+            &targets,
+            false,
+            true,
+            max_iter,
+            tol,
+            chunk_size,
+            thread_limit,
+        )
+        .map_err(PyRuntimeError::new_err)?;
+        black_box(output);
+        Ok(())
+    };
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            run_once()?;
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            run_once()?;
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
 }
 
 /// W1 data-model bridge (bead personal-cmy.13, mechanism A): zero-copy round-trip
@@ -2531,6 +2797,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(orbits_sample_variants_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_propagate_typed_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_propagate_2body_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(propagate_orbits_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(propagate_orbits_typed_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_propagate_orbits_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_nested_round_trip_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(observers_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(observations_nested_ipc_round_trip, m)?)?;

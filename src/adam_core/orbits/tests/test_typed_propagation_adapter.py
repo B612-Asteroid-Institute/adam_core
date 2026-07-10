@@ -15,7 +15,7 @@ import pytest
 from adam_core.coordinates import CartesianCoordinates, CoordinateCovariances, Origin
 from adam_core.dynamics import propagate_2body
 from adam_core.orbits import Orbits
-from adam_core.orbits.arrow_bridge import _propagate_orbits_typed_ipc_candidate
+from adam_core.orbits.arrow_bridge import _propagate_orbits_typed_arrow
 from adam_core.orbits.variants import VariantOrbits
 from adam_core.time import Timestamp
 
@@ -68,7 +68,7 @@ def _sort(table):
 def test_typed_adapter_matches_public_propagate_2body():
     orbits = _orbits()
     times = _times()
-    typed, valid = _propagate_orbits_typed_ipc_candidate(orbits, times)
+    typed, valid = _propagate_orbits_typed_arrow(orbits, times)
     assert all(valid)
     public = propagate_2body(orbits, times)
     typed, public = _sort(typed), _sort(public)
@@ -85,7 +85,7 @@ def test_typed_adapter_matches_public_propagate_2body():
 def test_typed_adapter_covariance_matches_public():
     orbits = _orbits(with_covariance=True)
     times = _times()
-    typed, valid = _propagate_orbits_typed_ipc_candidate(orbits, times, covariance=True)
+    typed, valid = _propagate_orbits_typed_arrow(orbits, times, covariance=True)
     assert all(valid)
     public = propagate_2body(orbits, times)
     typed, public = _sort(typed), _sort(public)
@@ -110,7 +110,7 @@ def test_typed_adapter_preserves_variant_metadata():
         coordinates=orbits.coordinates,
     )
     times = _times()
-    typed, valid = _propagate_orbits_typed_ipc_candidate(variants, times)
+    typed, valid = _propagate_orbits_typed_arrow(variants, times)
     assert all(valid)
     assert isinstance(typed, VariantOrbits)
     assert len(typed) == n * len(times)
@@ -123,7 +123,7 @@ def test_typed_adapter_preserves_variant_metadata():
         typed.weights.to_numpy(zero_copy_only=False), expected_weights, rtol=0, atol=0
     )
     # States equal the plain-Orbits typed path on identical coordinates.
-    plain, _ = _propagate_orbits_typed_ipc_candidate(orbits, times)
+    plain, _ = _propagate_orbits_typed_arrow(orbits, times)
     plain = _sort(plain)
     np.testing.assert_array_equal(typed.coordinates.values, plain.coordinates.values)
 
@@ -138,8 +138,8 @@ def test_typed_adapter_rescales_utc_epochs_via_provider():
     )
     orbits_tdb = orbits_utc.set_column("coordinates", coordinates_tdb)
     times = _times()
-    from_utc, valid_utc = _propagate_orbits_typed_ipc_candidate(orbits_utc, times)
-    from_tdb, valid_tdb = _propagate_orbits_typed_ipc_candidate(orbits_tdb, times)
+    from_utc, valid_utc = _propagate_orbits_typed_arrow(orbits_utc, times)
+    from_tdb, valid_tdb = _propagate_orbits_typed_arrow(orbits_tdb, times)
     assert all(valid_utc) and all(valid_tdb)
     np.testing.assert_array_equal(
         _sort(from_utc).coordinates.values, _sort(from_tdb).coordinates.values
@@ -149,7 +149,7 @@ def test_typed_adapter_rescales_utc_epochs_via_provider():
 def test_typed_adapter_reports_invalid_rows():
     orbits = _orbits(nan_row=True)
     times = _times()
-    typed, valid = _propagate_orbits_typed_ipc_candidate(orbits, times)
+    typed, valid = _propagate_orbits_typed_arrow(orbits, times)
     valid = np.asarray(valid)
     assert valid.shape == (len(orbits) * len(times),)
     assert not valid.all()
@@ -159,4 +159,4 @@ def test_typed_adapter_reports_invalid_rows():
 def test_typed_adapter_ut1_epochs_fail_loudly():
     orbits = _orbits(scale="ut1")
     with pytest.raises(ValueError, match="typed propagation failed|rescale"):
-        _propagate_orbits_typed_ipc_candidate(orbits, _times())
+        _propagate_orbits_typed_arrow(orbits, _times())

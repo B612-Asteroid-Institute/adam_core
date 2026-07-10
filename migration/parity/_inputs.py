@@ -1187,12 +1187,26 @@ def _sample_arc_dts(rng: np.random.Generator, n: int) -> np.ndarray:
     return np.ascontiguousarray(dts, dtype=np.float64)
 
 
-def make_propagate_2body(rng: np.random.Generator, n: int) -> Sample:
-    coords = _kep_to_cart(_sample_keplerian_elements(rng, n))
-    dts = _sample_dts(rng, n)
-    mus = np.full(n, MU_SUN, dtype=np.float64)
-    kw = {"orbits": coords, "dts": dts, "mus": mus, "max_iter": 100, "tol": 1e-15}
+def _make_public_propagate_2body_sample(
+    rng: np.random.Generator, *, n_orbits: int, n_epochs: int
+) -> Sample:
+    coords = _kep_to_cart(_sample_keplerian_elements(rng, n_orbits))
+    epoch_mjd = 59_800.0 + rng.uniform(0.0, 100.0, size=n_orbits)
+    target_mjd = 60_000.0 + np.sort(rng.uniform(0.0, 200.0, size=n_epochs))
+    kw = {
+        "coords": np.ascontiguousarray(coords, dtype=np.float64),
+        "epoch_mjd": np.ascontiguousarray(epoch_mjd, dtype=np.float64),
+        "target_mjd": np.ascontiguousarray(target_mjd, dtype=np.float64),
+        "origin": "SUN",
+        "frame": "ecliptic",
+        "max_iter": 100,
+        "tol": 1e-15,
+    }
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+
+
+def make_propagate_2body(rng: np.random.Generator, n: int) -> Sample:
+    return _make_public_propagate_2body_sample(rng, n_orbits=n, n_epochs=1)
 
 
 def make_propagate_2body_along_arc(rng: np.random.Generator, n: int) -> Sample:
@@ -1631,12 +1645,9 @@ def make_propagate_2body_shape(
     rng: np.random.Generator, shape: WorkloadShape
 ) -> Sample:
     n_orbits, n_epochs = _orbit_epoch_grid(shape)
-    orbit_rows = _kep_to_cart(_sample_keplerian_elements(rng, n_orbits))
-    coords = np.repeat(orbit_rows, n_epochs, axis=0)
-    dts = np.tile(_sample_dts(rng, n_epochs), n_orbits)
-    mus = np.full(shape.rows, MU_SUN, dtype=np.float64)
-    kw = {"orbits": coords, "dts": dts, "mus": mus, "max_iter": 100, "tol": 1e-15}
-    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
+    return _make_public_propagate_2body_sample(
+        rng, n_orbits=n_orbits, n_epochs=n_epochs
+    )
 
 
 def make_propagate_2body_arc_batch_shape(
@@ -1651,7 +1662,18 @@ def make_propagate_2body_arc_batch_shape(
 def make_propagate_2body_with_covariance_shape(
     rng: np.random.Generator, shape: WorkloadShape
 ) -> Sample:
-    base = make_propagate_2body_shape(rng, shape).rust_kwargs
+    n_orbits, n_epochs = _orbit_epoch_grid(shape)
+    orbit_rows = _kep_to_cart(_sample_keplerian_elements(rng, n_orbits))
+    coords = np.repeat(orbit_rows, n_epochs, axis=0)
+    dts = np.tile(_sample_dts(rng, n_epochs), n_orbits)
+    mus = np.full(shape.rows, MU_SUN, dtype=np.float64)
+    base = {
+        "orbits": np.ascontiguousarray(coords, dtype=np.float64),
+        "dts": np.ascontiguousarray(dts, dtype=np.float64),
+        "mus": mus,
+        "max_iter": 100,
+        "tol": 1e-15,
+    }
     sigmas = np.array([1e-8, 1e-8, 1e-8, 1e-10, 1e-10, 1e-10])
     diag = np.diag(sigmas**2)
     cov_3d = np.broadcast_to(diag, (shape.rows, 6, 6)).copy()

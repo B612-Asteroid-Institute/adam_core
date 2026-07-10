@@ -641,7 +641,7 @@ def _coordinates_residuals_Residuals_calculate(
     }
 
 
-def _dynamics_propagate_2body(
+def _dynamics_propagate_2body_raw(
     orbits: np.ndarray, dts: np.ndarray, mus: np.ndarray, max_iter: int, tol: float
 ) -> dict[str, np.ndarray]:
     # Legacy signature is (orbit, t0, t1, mu) with dt = t1 - t0.
@@ -656,13 +656,20 @@ def _dynamics_propagate_2body(
     return {"out": out}
 
 
+def _dynamics_propagate_2body(**kwargs: Any) -> dict[str, np.ndarray]:
+    """Pinned legacy public Orbits→Orbits 2-body facade."""
+    from ._public_facades import propagate_2body
+
+    return propagate_2body(**kwargs)
+
+
 def _dynamics_propagate_2body_along_arc(
     orbit: np.ndarray, dts: np.ndarray, mu: float, max_iter: int, tol: float
 ) -> dict[str, np.ndarray]:
     n = dts.shape[0]
     orbits = np.broadcast_to(orbit.reshape(1, 6), (n, 6)).copy()
     mus = np.full(n, mu, dtype=np.float64)
-    return _dynamics_propagate_2body(orbits, dts, mus, max_iter, tol)
+    return _dynamics_propagate_2body_raw(orbits, dts, mus, max_iter, tol)
 
 
 def _dynamics_propagate_2body_arc_batch(
@@ -672,7 +679,7 @@ def _dynamics_propagate_2body_arc_batch(
     flat_orbits = np.repeat(orbits, n_epochs, axis=0)
     flat_dts = dts.reshape(n_orbits * n_epochs)
     flat_mus = np.repeat(mus, n_epochs)
-    return _dynamics_propagate_2body(flat_orbits, flat_dts, flat_mus, max_iter, tol)
+    return _dynamics_propagate_2body_raw(flat_orbits, flat_dts, flat_mus, max_iter, tol)
 
 
 def _dynamics_propagate_2body_with_covariance(

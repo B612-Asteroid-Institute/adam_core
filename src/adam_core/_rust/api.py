@@ -83,6 +83,9 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "naif_spk_writer",
     "orbit_schema_metadata",
     "porkchop_grid_numpy",
+    "propagate_orbits_arrow",
+    "propagate_orbits_typed_arrow",
+    "benchmark_propagate_orbits_arrow",
     "predict_magnitudes_bandpass_numpy",
     "propagate_2body_along_arc_numpy",
     "propagate_2body_arc_batch_numpy",
@@ -309,6 +312,29 @@ def transform_coordinates_arrow(
         f,
         max_iter,
         tol,
+    )
+
+
+def propagate_orbits_arrow(
+    orbit_batch: pa.RecordBatch,
+    target_time_batch: pa.RecordBatch,
+    is_variants: bool = False,
+    covariance: bool = True,
+    max_iter: int = 1000,
+    tol: float = 1e-14,
+    chunk_size: int | None = None,
+    thread_limit: int | None = None,
+) -> pa.RecordBatch:
+    """Propagate an Orbits RecordBatch to target epochs entirely in Rust."""
+    return _native.propagate_orbits_arrow(
+        orbit_batch,
+        target_time_batch,
+        is_variants,
+        covariance,
+        max_iter,
+        tol,
+        chunk_size,
+        thread_limit,
     )
 
 

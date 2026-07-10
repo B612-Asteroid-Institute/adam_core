@@ -141,6 +141,26 @@ def orbits_from_record_batch(record_batch: pa.RecordBatch) -> Orbits:
     return Orbits.from_pyarrow(_to_quivr_metadata(table))
 
 
+def variants_to_record_batch(variants: VariantOrbits) -> pa.RecordBatch:
+    """Materialize ``VariantOrbits`` as one metadata-stamped RecordBatch."""
+    coordinates = variants.coordinates
+    table = _stamp_adam_core_metadata(
+        variants.table.combine_chunks(),
+        "cartesian",
+        coordinates.frame,
+        coordinates.time.scale,
+        _VARIANT_NESTED_SCHEMA,
+    )
+    arrays = [column.combine_chunks() for column in table.columns]
+    return pa.RecordBatch.from_arrays(arrays, schema=table.schema)
+
+
+def variants_from_record_batch(record_batch: pa.RecordBatch) -> VariantOrbits:
+    """Wrap a Rust-produced VariantOrbits RecordBatch directly."""
+    table = pa.Table.from_batches([record_batch])
+    return VariantOrbits.from_pyarrow(_to_quivr_metadata(table))
+
+
 # --- Workflows -----------------------------------------------------------------
 
 
@@ -338,7 +358,7 @@ def _sample_orbit_variants_ipc_candidate(
     return variants_from_ipc(raw)
 
 
-def _propagate_orbits_typed_ipc_candidate(
+def _propagate_orbits_typed_arrow(
     orbits,
     times,
     covariance: bool = False,
@@ -347,11 +367,11 @@ def _propagate_orbits_typed_ipc_candidate(
     chunk_size: int | None = None,
     thread_limit: int | None = None,
 ):
-    """W12 typed-propagation adapter candidate (bead personal-cmy.15).
+    """Arrow-native typed propagation for ``Orbits`` or ``VariantOrbits``.
 
-    Runs a quivr ``Orbits`` or ``VariantOrbits`` table through the
-    Rust-canonical typed ``TwoBodyPropagator`` ``PropagationRequest`` pipeline
-    in one crossing: cross-product epoch policy over ``times``, optional
+    Runs the table through the Rust-canonical ``TwoBodyPropagator``
+    ``PropagationRequest`` pipeline over the Arrow C Data Interface in one
+    crossing: cross-product epoch policy over ``times``, optional
     linearized covariance transport, variant metadata preservation, and
     provider-owned ERFA rescaling for non-TDB epochs (UT1/GPS fail loudly).
     Private: the canonical public API remains ``dynamics.propagate_2body`` /
@@ -359,20 +379,34 @@ def _propagate_orbits_typed_ipc_candidate(
     boundary. Returns ``(table, per_row_valid)``.
     """
     is_variants = isinstance(orbits, VariantOrbits)
-    raw_in = variants_to_ipc(orbits) if is_variants else orbits_to_ipc(orbits)
-    raw, valid = _rn.orbits_propagate_typed_ipc(
-        raw_in,
+    orbit_batch = (
+        variants_to_record_batch(orbits)
+        if is_variants
+        else orbits_to_record_batch(orbits)
+    )
+    time_table = times.table.combine_chunks()
+    metadata = dict(time_table.schema.metadata or {})
+    metadata[b"adam_core_time_scale"] = times.scale.encode()
+    time_table = time_table.replace_schema_metadata(metadata)
+    time_batch = pa.RecordBatch.from_arrays(
+        [column.combine_chunks() for column in time_table.columns],
+        schema=time_table.schema,
+    )
+    output, valid = _rn.propagate_orbits_typed_arrow(
+        orbit_batch,
+        time_batch,
         is_variants,
-        times.scale,
-        times.days.to_pylist(),
-        times.nanos.to_pylist(),
         covariance,
         max_iter,
         tol,
         chunk_size,
         thread_limit,
     )
-    table = variants_from_ipc(raw) if is_variants else orbits_from_ipc(raw)
+    table = (
+        variants_from_record_batch(output)
+        if is_variants
+        else orbits_from_record_batch(output)
+    )
     return table, valid
 
 

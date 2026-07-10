@@ -297,10 +297,15 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
     ApiMigration(
         api_id="dynamics.propagate_2body",
         status=PUBLIC_RUST_DEFAULT,
-        boundary="numpy",
+        boundary="arrow",
         default="rust",
-        rust_module="adam_core._rust_native.propagate_2body_numpy",
+        rust_module="adam_core._rust_native.propagate_orbits_arrow",
         parity_coverage="random-fuzz",
+        coverage_note=(
+            "Public Orbits facade: one Arrow crossing owns the orbit×epoch "
+            "cross product, time rescaling, origin-mu lookup, covariance "
+            "transport, physical-parameter repetition, and output assembly."
+        ),
         latency_gate=True,
     ),
     ApiMigration(
@@ -339,7 +344,7 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
     ),
     ApiMigration(
         api_id="dynamics.propagate_2body_with_covariance",
-        status=PUBLIC_RUST_DEFAULT,
+        status=RAW_KERNEL_ONLY,
         boundary="numpy",
         default="rust",
         rust_module="adam_core._rust_native.propagate_2body_with_covariance_numpy",
@@ -354,7 +359,6 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
             "Random covariance rows against baseline-main Jacobian covariance propagation",
             "High-a slow-moving 2516-day finite-difference covariance witness",
         ),
-        latency_gate=True,
     ),
     ApiMigration(
         api_id="dynamics.generate_ephemeris_2body",

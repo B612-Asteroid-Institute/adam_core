@@ -244,6 +244,12 @@ pub(super) fn assemble_result(
         }
     };
     let orbits = OrbitBatch::new(orbit_ids, object_ids, coordinates)?;
+    let orbits = match input_physical_parameters {
+        Some(physical_parameters) => {
+            orbits.with_physical_parameters(physical_parameters.take(&source_orbit_indices))?
+        }
+        None => orbits,
+    };
     Ok(PropagationResult {
         orbits,
         variants,
