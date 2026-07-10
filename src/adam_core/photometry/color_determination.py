@@ -1,4 +1,4 @@
-# Obtaining different colors and matching the color mix to asteroid class.
+# Obtaining different colors for asteroids.
 
 from __future__ import annotations
 
