@@ -13,7 +13,7 @@ from mpcq.orbits import MPCOrbits
 
 from adam_core.time import Timestamp
 
-from ..color_detemination import ColorFit, estimate_colors
+from ..color_determination import ColorFit, estimate_colors
 
 DATA_DIR = Path(__file__).parent / "data"
 
