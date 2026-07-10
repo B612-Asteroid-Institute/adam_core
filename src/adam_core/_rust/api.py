@@ -2,8 +2,8 @@
 
 Each wrapper does three things and nothing else:
 
-1. Coerces Python-side inputs (list/tuple/non-contiguous arrays) into
-   contiguous ``float64`` NumPy arrays so they can cross the PyO3 boundary.
+1. Passes composed typed surfaces as PyArrow ``RecordBatch`` objects, or
+   coerces raw-kernel inputs into contiguous ``float64`` NumPy arrays.
 2. Delegates to ``adam_core._rust_native`` and trusts Rust to own all
    shape/length/value validation. Do not re-implement checks here - PyO3
    raises ``ValueError`` with the same messages.
@@ -18,6 +18,7 @@ from __future__ import annotations
 from typing import Optional
 
 import numpy as np
+import pyarrow as pa
 
 try:
     from adam_core import _rust_native as _native
@@ -30,7 +31,8 @@ except Exception as exc:  # pragma: no cover - depends on build/install state
 
 _REQUIRED_NATIVE_SYMBOLS = (
     "AdamCoreSpiceBackend",
-    "transform_coordinates_native",
+    "benchmark_transform_coordinates_arrow",
+    "transform_coordinates_arrow",
     "calculate_perturber_moids_native",
     "add_light_time_numpy",
     "add_stellar_aberration_numpy",
@@ -287,49 +289,26 @@ def transform_coordinates_with_covariance_numpy(
     )
 
 
-def transform_coordinates_native(
-    coords: np.ndarray,
-    representation_in: str,
+def transform_coordinates_arrow(
+    batch: pa.RecordBatch,
     representation_out: str,
-    frame_in: str,
     frame_out: str,
-    origin_codes: list[str],
-    target_origin: str | None,
-    time_scale: str,
-    time_days: np.ndarray,
-    time_nanos: np.ndarray,
-    covariances: np.ndarray | None = None,
-    t0: np.ndarray | list[float] | tuple[float, ...] | None = None,
-    mu: np.ndarray | list[float] | tuple[float, ...] | None = None,
-    a: float | None = None,
-    f: float | None = None,
+    target_origin: str | None = None,
+    a: float = 0.0,
+    f: float = 0.0,
     max_iter: int = 100,
     tol: float = 1e-15,
-) -> Optional[tuple[np.ndarray, Optional[np.ndarray]]]:
-    """Fully-Rust ``transform_coordinates`` (single Python->Rust crossing).
-
-    Returns ``None`` when the native path does not cover the requested
-    combination (time-varying ITRF93 / geodetic input), signalling the caller
-    to fall back to the legacy composition.
-    """
-    return _native.transform_coordinates_native(
-        _as_contiguous_f64(coords),
-        representation_in,
+) -> Optional[pa.RecordBatch]:
+    """Transform one coordinate RecordBatch entirely in Rust."""
+    return _native.transform_coordinates_arrow(
+        batch,
         representation_out,
-        frame_in,
         frame_out,
-        list(origin_codes),
         target_origin,
-        time_scale,
-        np.ascontiguousarray(np.asarray(time_days, dtype=np.int64)),
-        np.ascontiguousarray(np.asarray(time_nanos, dtype=np.int64)),
-        covariances=None if covariances is None else _as_contiguous_f64(covariances),
-        t0=None if t0 is None else _as_contiguous_f64(t0),
-        mu=None if mu is None else _as_contiguous_f64(mu),
-        a=a,
-        f=f,
-        max_iter=max_iter,
-        tol=tol,
+        a,
+        f,
+        max_iter,
+        tol,
     )
 
 

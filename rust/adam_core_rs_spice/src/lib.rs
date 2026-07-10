@@ -1678,8 +1678,9 @@ mod tests {
         assert_eq!(out_cov.values, exp_vals);
         assert_eq!(out_cov.covariance.unwrap(), exp_cov);
 
-        // Time-varying ITRF93 falls back to the legacy path (Ok(None)).
-        let itrf = backend
+        // Time-varying ITRF93 is native, but an empty backend has no PCK
+        // coverage for the requested sxform and must fail explicitly.
+        let itrf_error = backend
             .transform_coordinates(
                 &coords,
                 None,
@@ -1697,8 +1698,8 @@ mod tests {
                 100,
                 1e-15,
             )
-            .unwrap();
-        assert!(itrf.is_none());
+            .unwrap_err();
+        assert!(matches!(itrf_error, SpiceBackendError::NotCovered(_)));
     }
 
     #[test]

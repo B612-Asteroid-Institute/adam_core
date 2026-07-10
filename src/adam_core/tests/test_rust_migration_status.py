@@ -121,10 +121,9 @@ def test_transform_coordinates_partial_coverage_is_visible() -> None:
     assert any("origin translations" in case for case in migration.covered_subcases)
     assert any("ITRF93" in case for case in migration.covered_subcases)
     assert any("covariance-bearing" in case for case in migration.covered_subcases)
-    assert any("Cartesian->Cartesian" in case for case in migration.excluded_subcases)
-    assert any(
-        "covariance-bearing ITRF93" in case for case in migration.excluded_subcases
-    )
+    assert migration.boundary == "arrow"
+    assert any("non-Cartesian input" in case for case in migration.excluded_subcases)
+    assert any("geodetic input" in case for case in migration.excluded_subcases)
 
 
 def test_covariance_finite_difference_fixtures_are_visible() -> None:
@@ -724,9 +723,11 @@ def test_native_rust_timer_is_internal_and_missing_surfaces_are_blank(
     assert "PyO3 launch" in native.timing_boundary
     assert native.entrypoint == "example::direct_rust"
 
-    transform_sample = _inputs.make("coordinates.transform_coordinates", rng, 12)
+    transform_sample = _inputs.make(
+        "coordinates.transform_coordinates_with_covariance", rng, 4
+    )
     missing = _native_rust_runner.measure(
-        "coordinates.transform_coordinates",
+        "coordinates.transform_coordinates_with_covariance",
         transform_sample.rust_kwargs,
         reps=3,
         warmup=1,
@@ -757,6 +758,30 @@ def test_observer_native_rust_adapter_live() -> None:
     assert all(value > 0.0 for trial in native.sample_trials_s for value in trial)
     assert native.entrypoint == (
         "adam_core_py::spice::observer_states_from_codes_record_batch"
+    )
+    assert "std::time::Instant" in native.timing_boundary
+    assert "PyArrow conversion excluded" in native.timing_boundary
+
+
+@pytest.mark.integration
+def test_transform_coordinates_native_rust_adapter_live() -> None:
+    """The Arrow transform adapter times only Rust-owned direct calls."""
+    rng = np.random.default_rng(20260709)
+    transform_sample = _inputs.make("coordinates.transform_coordinates", rng, 12)
+    native = _native_rust_runner.measure(
+        "coordinates.transform_coordinates",
+        transform_sample.rust_kwargs,
+        reps=2,
+        warmup=1,
+        trials=2,
+    )
+
+    assert native.status == "measured", native.reason
+    assert len(native.sample_trials_s) == 2
+    assert all(len(trial) == 2 for trial in native.sample_trials_s)
+    assert all(value > 0.0 for trial in native.sample_trials_s for value in trial)
+    assert native.entrypoint == (
+        "adam_core_py::coordinates::transform_coordinates_record_batch"
     )
     assert "std::time::Instant" in native.timing_boundary
     assert "PyArrow conversion excluded" in native.timing_boundary

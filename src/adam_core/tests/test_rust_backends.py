@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.testing as npt
+import pyarrow as pa
 import pytest
 
 from adam_core._rust import api as rust_api
@@ -20,6 +21,40 @@ from adam_core.coordinates.transform import (
     transform_coordinates,
 )
 from adam_core.time import Timestamp
+
+_ARROW_COORDINATE_FIELDS = {
+    "cartesian": ("x", "y", "z", "vx", "vy", "vz"),
+    "spherical": ("rho", "lon", "lat", "vrho", "vlon", "vlat"),
+    "geodetic": ("alt", "lon", "lat", "vup", "veast", "vnorth"),
+}
+
+
+def _fake_transform_record_batch(
+    batch: pa.RecordBatch,
+    representation_out: str,
+    frame_out: str,
+    first_value: float,
+) -> pa.RecordBatch:
+    assert isinstance(batch, pa.RecordBatch)
+    fields = _ARROW_COORDINATE_FIELDS[representation_out]
+    columns = [
+        pa.array(
+            [first_value if column == 0 else 0.0] * batch.num_rows,
+            type=pa.float64(),
+        )
+        for column in range(6)
+    ]
+    columns.extend(
+        batch.column(batch.schema.get_field_index(name))
+        for name in ("time", "covariance", "origin")
+    )
+    output = pa.RecordBatch.from_arrays(
+        columns, names=[*fields, "time", "covariance", "origin"]
+    )
+    metadata = dict(batch.schema.metadata or {})
+    metadata[b"adam_core_representation"] = representation_out.encode()
+    metadata[b"adam_core_frame"] = frame_out.encode()
+    return output.replace_schema_metadata(metadata)
 
 
 class _FakeRustNative:
@@ -300,34 +335,32 @@ def test_transform_coordinates_with_covariance_requires_rep_parameters() -> None
 def test_transform_coordinates_uses_single_rust_crossing_for_supported_path(
     monkeypatch,
 ):
+    monkeypatch.setattr(
+        "adam_core.coordinates.transform.ensure_spice_backend", lambda: None
+    )
+
     class _StrictRustNative(_FakeRustNative):
         def __init__(self) -> None:
             self.calls: list[tuple[str, str]] = []
 
-        def transform_coordinates_native(
+        def transform_coordinates_arrow(
             self,
-            coords: np.ndarray,
-            representation_in: str,
+            batch: pa.RecordBatch,
             representation_out: str,
-            frame_in: str,
             frame_out: str,
-            origin_codes: list[str],
             target_origin: str | None,
-            time_scale: str,
-            time_days: np.ndarray,
-            time_nanos: np.ndarray,
-            covariances: np.ndarray | None = None,
-            t0: np.ndarray | None = None,
-            mu: np.ndarray | None = None,
-            a: float | None = None,
-            f: float | None = None,
-            max_iter: int = 100,
-            tol: float = 1e-15,
-        ) -> tuple[np.ndarray, np.ndarray | None]:
+            a: float,
+            f: float,
+            max_iter: int,
+            tol: float,
+        ) -> pa.RecordBatch:
+            representation_in = batch.schema.metadata[
+                b"adam_core_representation"
+            ].decode()
             self.calls.append((representation_in, representation_out))
-            out = np.zeros((coords.shape[0], 6), dtype=np.float64)
-            out[:, 0] = 12.34
-            return out, None
+            return _fake_transform_record_batch(
+                batch, representation_out, frame_out, 12.34
+            )
 
         def spherical_to_cartesian_numpy(self, coords: np.ndarray) -> np.ndarray:  # type: ignore[override]
             raise AssertionError(
@@ -355,6 +388,15 @@ def test_transform_coordinates_uses_single_rust_crossing_for_supported_path(
         frame="itrf93",
     )
 
+    def forbidden_values(_self):
+        raise AssertionError("input values must stay in the Arrow RecordBatch")
+
+    def forbidden_from_kwargs(*_args, **_kwargs):
+        raise AssertionError("output must wrap the returned RecordBatch directly")
+
+    monkeypatch.setattr(SphericalCoordinates, "values", property(forbidden_values))
+    monkeypatch.setattr(GeodeticCoordinates, "from_kwargs", forbidden_from_kwargs)
+
     got = transform_coordinates(
         coords,
         representation_out=GeodeticCoordinates,
@@ -372,36 +414,35 @@ def test_transform_coordinates_uses_single_rust_crossing_for_supported_path(
 
 
 def test_transform_coordinates_uses_single_rust_crossing_for_frame_change(monkeypatch):
+    monkeypatch.setattr(
+        "adam_core.coordinates.transform.ensure_spice_backend", lambda: None
+    )
+
     class _StrictRustNative(_FakeRustNative):
         def __init__(self) -> None:
             self.calls: list[tuple[str, str, str | None, str | None]] = []
 
-        def transform_coordinates_native(
+        def transform_coordinates_arrow(
             self,
-            coords: np.ndarray,
-            representation_in: str,
+            batch: pa.RecordBatch,
             representation_out: str,
-            frame_in: str,
             frame_out: str,
-            origin_codes: list[str],
             target_origin: str | None,
-            time_scale: str,
-            time_days: np.ndarray,
-            time_nanos: np.ndarray,
-            covariances: np.ndarray | None = None,
-            t0: np.ndarray | None = None,
-            mu: np.ndarray | None = None,
-            a: float | None = None,
-            f: float | None = None,
-            max_iter: int = 100,
-            tol: float = 1e-15,
-        ) -> tuple[np.ndarray, np.ndarray | None]:
+            a: float,
+            f: float,
+            max_iter: int,
+            tol: float,
+        ) -> pa.RecordBatch:
+            representation_in = batch.schema.metadata[
+                b"adam_core_representation"
+            ].decode()
+            frame_in = batch.schema.metadata[b"adam_core_frame"].decode()
             self.calls.append(
                 (representation_in, representation_out, frame_in, frame_out)
             )
-            out = np.zeros((coords.shape[0], 6), dtype=np.float64)
-            out[:, 0] = 99.0
-            return out, None
+            return _fake_transform_record_batch(
+                batch, representation_out, frame_out, 99.0
+            )
 
         def spherical_to_cartesian_numpy(self, coords: np.ndarray) -> np.ndarray:  # type: ignore[override]
             raise AssertionError(
@@ -449,34 +490,32 @@ def test_transform_coordinates_uses_single_rust_crossing_for_frame_change(monkey
 def test_transform_coordinates_uses_single_rust_crossing_for_keplerian_input(
     monkeypatch,
 ):
+    monkeypatch.setattr(
+        "adam_core.coordinates.transform.ensure_spice_backend", lambda: None
+    )
+
     class _StrictRustNative(_FakeRustNative):
         def __init__(self) -> None:
             self.calls: list[tuple[str, str, bool]] = []
 
-        def transform_coordinates_native(
+        def transform_coordinates_arrow(
             self,
-            coords: np.ndarray,
-            representation_in: str,
+            batch: pa.RecordBatch,
             representation_out: str,
-            frame_in: str,
             frame_out: str,
-            origin_codes: list[str],
             target_origin: str | None,
-            time_scale: str,
-            time_days: np.ndarray,
-            time_nanos: np.ndarray,
-            covariances: np.ndarray | None = None,
-            t0: np.ndarray | None = None,
-            mu: np.ndarray | None = None,
-            a: float | None = None,
-            f: float | None = None,
-            max_iter: int = 100,
-            tol: float = 1e-15,
-        ) -> tuple[np.ndarray, np.ndarray | None]:
-            self.calls.append((representation_in, representation_out, mu is not None))
-            out = np.zeros((coords.shape[0], 6), dtype=np.float64)
-            out[:, 0] = 7.0
-            return out, None
+            a: float,
+            f: float,
+            max_iter: int,
+            tol: float,
+        ) -> pa.RecordBatch:
+            representation_in = batch.schema.metadata[
+                b"adam_core_representation"
+            ].decode()
+            self.calls.append((representation_in, representation_out, True))
+            return _fake_transform_record_batch(
+                batch, representation_out, frame_out, 7.0
+            )
 
         def keplerian_to_cartesian_numpy(  # type: ignore[override]
             self, coords: np.ndarray, mu: np.ndarray, max_iter: int, tol: float

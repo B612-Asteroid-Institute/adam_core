@@ -120,9 +120,9 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
     ApiMigration(
         api_id="coordinates.transform_coordinates",
         status=PUBLIC_RUST_DEFAULT,
-        boundary="python+numpy",
+        boundary="arrow",
         default="rust",
-        rust_module="adam_core._rust_native.transform_coordinates_numpy",
+        rust_module="adam_core._rust_native.transform_coordinates_arrow",
         parity_coverage="random-fuzz",
         covered_subcases=(
             "Public dispatcher CartesianCoordinates ecliptic->equatorial "
@@ -139,21 +139,22 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
             "ITRF93->equatorial time-varying rotations to SphericalCoordinates "
             "at vetted PCK epochs",
             "Public dispatcher covariance-bearing Cartesian/Keplerian inputs "
-            "through constant-frame and SUN->EARTH origin-translation outputs",
+            "through constant/time-varying frames and origin translations",
+            "Public dispatcher mixed-origin preservation/translation and "
+            "observatory-origin translation through the shared SPICE backend",
         ),
         excluded_subcases=(
-            "Cartesian->Cartesian frame-only public dispatcher fallthrough "
-            "(intentional: cached cartesian_to_frame path is faster)",
-            "covariance-bearing ITRF93 public dispatcher subcases",
-            "mixed-origin arrays, observatory origins, and user-furnished "
-            "SPICE body coverage beyond the SUN/EARTH origin-translation matrix",
+            "non-Cartesian input into a time-varying ITRF93 frame change",
+            "geodetic input representation transforms",
         ),
         coverage_note=(
             "Random fuzz exercises a public quivr-object dispatcher subcase "
             "matrix spanning constant-frame inverse directions, non-Cartesian "
             "inputs, representative covariance-bearing paths, SUN/EARTH origin "
-            "translations, and ITRF93 time-varying rotations at vetted PCK "
-            "epochs. Remaining exclusions are explicit and should not be "
+            "translations, mixed/observatory origins, covariance AD, and ITRF93 "
+            "time-varying rotations at vetted PCK epochs. The canonical surface "
+            "crosses as one pyarrow RecordBatch and Rust assembles the returned "
+            "RecordBatch. Remaining exclusions are explicit and should not be "
             "inferred as fuzz-covered."
         ),
         latency_gate=True,

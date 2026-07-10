@@ -11,11 +11,13 @@ use adam_core_rs_coords::{
     origin_mu_au3_day2, rotate_cartesian_time_varying_flat6, spherical_to_cartesian_flat6,
     spherical_to_cartesian_row, tisserand_parameter_flat, transform_values_flat6,
     transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat,
-    ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch, DataFrame, Epoch, Frame,
-    IntoNestedRecordBatch, LeastSquaresConfig, ObserverBatch as DataObserverBatch,
-    OrbitBatch as DataOrbitBatch, OrbitVariantBatch as DataOrbitVariantBatch,
-    OrbitVariantSamplingMethod, OriginArray, OriginId, Representation as CoordsRepresentation,
-    TimeArray, TimeScale, TimeScaleProvider, TryFromNestedRecordBatch,
+    ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch,
+    CoordinateRepresentation as DataRepresentation, CoordinateValues, CovarianceBatch,
+    CovarianceUnits, DataFrame, Epoch, Frame, IntoNestedRecordBatch, LeastSquaresConfig,
+    ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch,
+    OrbitVariantBatch as DataOrbitVariantBatch, OrbitVariantSamplingMethod, OriginArray, OriginId,
+    Representation as CoordsRepresentation, TimeArray, TimeScale, TimeScaleProvider,
+    TryFromNestedRecordBatch,
 };
 use adam_core_rs_spice::global_backend;
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
@@ -27,8 +29,10 @@ use numpy::{
 };
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyBytes;
+use pyo3::types::{PyBytes, PyList};
 use std::collections::HashMap;
+use std::hint::black_box;
+use std::time::Instant;
 
 fn schema_metadata(schema: arrow_schema::Schema) -> (Vec<String>, HashMap<String, String>) {
     let fields = schema
@@ -2092,187 +2096,330 @@ fn fit_orbit_2body_least_squares_ipc<'py>(
     ))
 }
 
-/// Native `transform_coordinates`: run the full composition (representation,
-/// origin translation via the global SPICE backend, constant-frame rotation,
-/// covariance forward-AD) in a single Python->Rust crossing. Returns `None`
-/// for combinations the native path does not yet cover (time-varying ITRF93),
-/// signalling the Python veneer to fall back to the legacy composition.
-#[pyfunction]
-#[pyo3(signature = (coords, representation_in, representation_out, frame_in, frame_out, origin_codes, target_origin, time_scale, time_days, time_nanos, covariances=None, t0=None, mu=None, a=None, f=None, max_iter=100, tol=1e-15))]
-#[allow(clippy::too_many_arguments)]
-fn transform_coordinates_native<'py>(
-    py: Python<'py>,
-    coords: PyReadonlyArray2<'py, f64>,
-    representation_in: &str,
-    representation_out: &str,
-    frame_in: &str,
-    frame_out: &str,
-    origin_codes: Vec<String>,
-    target_origin: Option<&str>,
-    time_scale: &str,
-    time_days: PyReadonlyArray1<'py, i64>,
-    time_nanos: PyReadonlyArray1<'py, i64>,
-    covariances: Option<PyReadonlyArray2<'py, f64>>,
-    t0: Option<PyReadonlyArray1<'py, f64>>,
-    mu: Option<PyReadonlyArray1<'py, f64>>,
-    a: Option<f64>,
-    f: Option<f64>,
+#[derive(Clone)]
+struct TransformArrowConfig {
+    representation_out: DataRepresentation,
+    frame_out: DataFrame,
+    target_origin: Option<OriginId>,
+    a: f64,
+    f: f64,
     max_iter: usize,
     tol: f64,
-) -> PyResult<Option<(Bound<'py, PyArray2<f64>>, Option<Bound<'py, PyArray2<f64>>>)>> {
-    let arr = coords.as_array();
-    if arr.ncols() != 6 {
-        return Err(PyValueError::new_err("coords must have shape (N, 6)"));
-    }
-    let n = arr.nrows();
-    let coords_flat = arr
-        .as_slice()
-        .ok_or_else(|| PyValueError::new_err("coords must be contiguous"))?;
+}
 
-    let rep_in_local = parse_representation(representation_in)?;
-    let rep_out_local = parse_representation(representation_out)?;
-    if rep_in_local == Representation::Geodetic {
-        // Geodetic input is not a supported native source; fall back.
+fn local_representation(rep: DataRepresentation) -> Representation {
+    match rep {
+        DataRepresentation::Cartesian => Representation::Cartesian,
+        DataRepresentation::Spherical => Representation::Spherical,
+        DataRepresentation::Geodetic => Representation::Geodetic,
+        DataRepresentation::Keplerian => Representation::Keplerian,
+        DataRepresentation::Cometary => Representation::Cometary,
+    }
+}
+
+fn data_representation(rep: Representation) -> DataRepresentation {
+    match rep {
+        Representation::Cartesian => DataRepresentation::Cartesian,
+        Representation::Spherical => DataRepresentation::Spherical,
+        Representation::Geodetic => DataRepresentation::Geodetic,
+        Representation::Keplerian => DataRepresentation::Keplerian,
+        Representation::Cometary => DataRepresentation::Cometary,
+    }
+}
+
+fn parse_data_frame(value: &str) -> PyResult<DataFrame> {
+    match value {
+        "ecliptic" => Ok(DataFrame::Ecliptic),
+        "equatorial" => Ok(DataFrame::Equatorial),
+        "itrf93" => Ok(DataFrame::Itrf93),
+        other => Err(PyValueError::new_err(format!("unsupported frame: {other}"))),
+    }
+}
+
+fn transformed_coordinate_values(
+    flat: Vec<f64>,
+    ncols: usize,
+    rows: usize,
+    representation: DataRepresentation,
+) -> PyResult<CoordinateValues> {
+    let values = if ncols == 6 {
+        if flat.len() != rows * 6 {
+            return Err(PyRuntimeError::new_err(format!(
+                "coordinate transform returned {} values for {rows} rows",
+                flat.len()
+            )));
+        }
+        flat.chunks_exact(6)
+            .map(|row| [row[0], row[1], row[2], row[3], row[4], row[5]])
+            .collect()
+    } else if representation == DataRepresentation::Keplerian && ncols == 13 {
+        if flat.len() != rows * 13 {
+            return Err(PyRuntimeError::new_err(format!(
+                "Keplerian transform returned {} values for {rows} rows",
+                flat.len()
+            )));
+        }
+        flat.chunks_exact(13)
+            .map(|row| [row[0], row[4], row[5], row[6], row[7], row[8]])
+            .collect()
+    } else {
+        return Err(PyRuntimeError::new_err(format!(
+            "unsupported coordinate transform output width {ncols}"
+        )));
+    };
+
+    Ok(match representation {
+        DataRepresentation::Cartesian => CoordinateValues::Cartesian(values),
+        DataRepresentation::Spherical => CoordinateValues::Spherical(values),
+        DataRepresentation::Keplerian => CoordinateValues::Keplerian(values),
+        DataRepresentation::Cometary => CoordinateValues::Cometary(values),
+        DataRepresentation::Geodetic => CoordinateValues::Geodetic(values),
+    })
+}
+
+/// Decode one quivr-compatible coordinate RecordBatch, run the complete native
+/// transform, and assemble the output RecordBatch without crossing Python.
+fn transform_coordinates_record_batch(
+    record_batch: &RecordBatch,
+    config: &TransformArrowConfig,
+) -> PyResult<Option<RecordBatch>> {
+    let coordinates = DataCoordinateBatch::try_from_nested_record_batch(record_batch)
+        .map_err(|err| PyValueError::new_err(format!("failed to decode coordinates: {err}")))?;
+    let rows = coordinates.len();
+    let representation_in = coordinates.representation();
+    if representation_in == DataRepresentation::Geodetic {
         return Ok(None);
     }
-    let rep_in = to_coords_rep(rep_in_local);
-    let rep_out = to_coords_rep(rep_out_local);
-
-    let parse_data_frame = |value: &str| -> PyResult<DataFrame> {
-        match value {
-            "ecliptic" => Ok(DataFrame::Ecliptic),
-            "equatorial" => Ok(DataFrame::Equatorial),
-            "itrf93" => Ok(DataFrame::Itrf93),
-            other => Err(PyValueError::new_err(format!("unsupported frame: {other}"))),
-        }
-    };
-    let frame_in_value = parse_data_frame(frame_in)?;
-    let frame_out_value = parse_data_frame(frame_out)?;
-
-    if origin_codes.len() != n {
-        return Err(PyValueError::new_err(
-            "origin_codes must have length N for coords shape (N, 6)",
-        ));
-    }
-    let origins = OriginArray::new(
-        origin_codes
+    let times = coordinates.times.as_ref().ok_or_else(|| {
+        PyValueError::new_err("coordinate transform requires non-null coordinate times")
+    })?;
+    let local_in = local_representation(representation_in);
+    let local_out = local_representation(config.representation_out);
+    let needs_mu = covariance_transform_requires_mu(local_in, local_out);
+    let needs_t0 = covariance_transform_requires_t0(local_in, local_out);
+    let mu = if needs_mu {
+        coordinates
+            .origins
+            .origins
             .iter()
-            .map(|code| OriginId::from_code(code.clone()))
-            .collect(),
-    );
-    let target = target_origin.map(OriginId::from_code);
-
-    let scale =
-        TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
-    let days = time_days.as_slice()?;
-    let nanos = time_nanos.as_slice()?;
-    if days.len() != n || nanos.len() != n {
-        return Err(PyValueError::new_err("times must have length N"));
-    }
-    let times = TimeArray::from_parts(scale, days.to_vec(), nanos.to_vec())
-        .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
-
-    let needs_mu = covariance_transform_requires_mu(rep_in_local, rep_out_local);
-    let needs_t0 = covariance_transform_requires_t0(rep_in_local, rep_out_local);
-
-    let mu_view = mu.as_ref().map(|arr| arr.as_array());
-    let mu_fallback: Vec<f64>;
-    let mu_slice: &[f64] = if let Some(view) = mu_view.as_ref() {
-        if view.len() != n {
-            return Err(PyValueError::new_err("mu must have length N"));
-        }
-        view.as_slice()
-            .ok_or_else(|| PyValueError::new_err("mu must be contiguous"))?
-    } else if needs_mu {
-        return Err(PyValueError::new_err("mu is required"));
+            .map(origin_mu_au3_day2)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|err| PyValueError::new_err(format!("failed to resolve origin mu: {err}")))?
     } else {
-        mu_fallback = vec![0.0_f64; n];
-        &mu_fallback
+        vec![0.0; rows]
     };
-
-    let t0_view = t0.as_ref().map(|arr| arr.as_array());
-    let t0_fallback: Vec<f64>;
-    let t0_slice: &[f64] = if let Some(view) = t0_view.as_ref() {
-        if view.len() != n {
-            return Err(PyValueError::new_err("t0 must have length N"));
-        }
-        view.as_slice()
-            .ok_or_else(|| PyValueError::new_err("t0 must be contiguous"))?
-    } else if needs_t0 {
-        return Err(PyValueError::new_err("t0 is required"));
+    let t0 = if needs_t0 {
+        times.mjd_values()
     } else {
-        t0_fallback = vec![0.0_f64; n];
-        &t0_fallback
+        vec![0.0; rows]
     };
-
-    let a_value = if rep_out_local == Representation::Geodetic {
-        a.ok_or_else(|| PyValueError::new_err("a is required"))?
-    } else {
-        a.unwrap_or(0.0)
-    };
-    let f_value = if rep_out_local == Representation::Geodetic {
-        f.ok_or_else(|| PyValueError::new_err("f is required"))?
-    } else {
-        f.unwrap_or(0.0)
-    };
-
-    let cov_view = covariances.as_ref().map(|arr| arr.as_array());
-    let cov_slice: Option<&[f64]> = if let Some(view) = cov_view.as_ref() {
-        if view.nrows() != n || view.ncols() != 36 {
-            return Err(PyValueError::new_err(
-                "covariances must have shape (N, 36) with row-major 6x6 per row",
-            ));
-        }
-        Some(
-            view.as_slice()
-                .ok_or_else(|| PyValueError::new_err("covariances must be contiguous"))?,
-        )
-    } else {
-        None
-    };
+    let values_flat = coordinates
+        .values
+        .raw_values()
+        .iter()
+        .flatten()
+        .copied()
+        .collect::<Vec<_>>();
+    let covariance_flat = coordinates
+        .covariance
+        .as_ref()
+        .map(|covariance| covariance.values_row_major.as_slice());
 
     let backend = global_backend()
         .lock()
         .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
     let output = backend
         .transform_coordinates(
-            coords_flat,
-            cov_slice,
-            rep_in,
-            rep_out,
-            frame_in_value,
-            frame_out_value,
-            &origins,
-            target.as_ref(),
-            &times,
-            t0_slice,
-            mu_slice,
-            a_value,
-            f_value,
-            max_iter,
-            tol,
+            &values_flat,
+            covariance_flat,
+            to_coords_rep(local_in),
+            to_coords_rep(local_out),
+            coordinates.frame,
+            config.frame_out,
+            &coordinates.origins,
+            config.target_origin.as_ref(),
+            times,
+            &t0,
+            &mu,
+            config.a,
+            config.f,
+            config.max_iter,
+            config.tol,
         )
         .map_err(|err| PyRuntimeError::new_err(err.to_string()))?;
+    drop(backend);
+    let Some(output) = output else {
+        return Ok(None);
+    };
 
-    match output {
-        None => Ok(None),
-        Some(out) => {
-            let values = ndarray::Array2::from_shape_vec((n, out.ncols), out.values)
-                .map_err(|err| PyValueError::new_err(format!("failed to shape output: {err}")))?
-                .into_pyarray(py);
-            let covariance = match out.covariance {
-                Some(cov) => Some(
-                    ndarray::Array2::from_shape_vec((n, 36), cov)
-                        .map_err(|err| {
-                            PyValueError::new_err(format!("failed to shape covariance: {err}"))
-                        })?
-                        .into_pyarray(py),
-                ),
-                None => None,
-            };
-            Ok(Some((values, covariance)))
+    let values = transformed_coordinate_values(
+        output.values,
+        output.ncols,
+        rows,
+        config.representation_out,
+    )?;
+    let covariance = match output.covariance {
+        Some(values) => {
+            let mut covariance = CovarianceBatch::new(
+                rows,
+                6,
+                values,
+                CovarianceUnits::Coordinate(config.representation_out),
+            )
+            .map_err(|err| PyRuntimeError::new_err(err.to_string()))?;
+            if let Some(validity) = coordinates
+                .covariance
+                .as_ref()
+                .and_then(|input| input.row_validity.clone())
+            {
+                covariance = covariance
+                    .with_row_validity(validity)
+                    .map_err(|err| PyRuntimeError::new_err(err.to_string()))?;
+            }
+            Some(covariance)
         }
+        None => None,
+    };
+    let origins = config.target_origin.as_ref().map_or_else(
+        || coordinates.origins.clone(),
+        |target| OriginArray::repeat(target.clone(), rows),
+    );
+    let output = DataCoordinateBatch::new(
+        values,
+        config.frame_out,
+        origins,
+        coordinates.times.clone(),
+        covariance,
+    )
+    .map_err(|err| PyRuntimeError::new_err(err.to_string()))?
+    .into_nested_record_batch()
+    .map_err(|err| PyRuntimeError::new_err(err.to_string()))?;
+    Ok(Some(output))
+}
+
+/// Arrow-native `transform_coordinates`: one RecordBatch enters Rust and one
+/// transformed RecordBatch leaves Rust. PyArrow conversion is outside the
+/// Rust-owned implementation.
+#[pyfunction]
+#[pyo3(signature = (batch, representation_out, frame_out, target_origin=None, a=0.0, f=0.0, max_iter=100, tol=1e-15))]
+fn transform_coordinates_arrow<'py>(
+    py: Python<'py>,
+    batch: &Bound<'py, PyAny>,
+    representation_out: &str,
+    frame_out: &str,
+    target_origin: Option<&str>,
+    a: f64,
+    f: f64,
+    max_iter: usize,
+    tol: f64,
+) -> PyResult<Option<PyObject>> {
+    let record_batch = RecordBatch::from_pyarrow_bound(batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
+    let config = TransformArrowConfig {
+        representation_out: data_representation(parse_representation(representation_out)?),
+        frame_out: parse_data_frame(frame_out)?,
+        target_origin: target_origin.map(OriginId::from_code),
+        a,
+        f,
+        max_iter,
+        tol,
+    };
+    transform_coordinates_record_batch(&record_batch, &config)?
+        .map(|output| {
+            output.to_pyarrow(py).map_err(|err| {
+                PyRuntimeError::new_err(format!("failed to export RecordBatch: {err}"))
+            })
+        })
+        .transpose()
+}
+
+/// Benchmark the Arrow-native transform entirely inside Rust. PyArrow/PyO3
+/// conversion and typed option parsing happen once before warmups and samples.
+#[pyfunction]
+#[pyo3(signature = (batches, representations_out, frames_out, target_origins, axes, flattenings, reps, trials, warmup_reps=1, max_iter=100, tol=1e-15))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_transform_coordinates_arrow(
+    batches: &Bound<'_, PyList>,
+    representations_out: Vec<String>,
+    frames_out: Vec<String>,
+    target_origins: Vec<Option<String>>,
+    axes: Vec<f64>,
+    flattenings: Vec<f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    max_iter: usize,
+    tol: f64,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
     }
+    let record_batches = batches
+        .iter()
+        .map(|batch| {
+            RecordBatch::from_pyarrow_bound(&batch)
+                .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    let case_count = record_batches.len();
+    if [
+        representations_out.len(),
+        frames_out.len(),
+        target_origins.len(),
+        axes.len(),
+        flattenings.len(),
+    ]
+    .into_iter()
+    .any(|len| len != case_count)
+    {
+        return Err(PyValueError::new_err(
+            "all transform benchmark option lists must match batches length",
+        ));
+    }
+    let configs = representations_out
+        .iter()
+        .zip(frames_out.iter())
+        .zip(target_origins.iter())
+        .zip(axes.iter().copied())
+        .zip(flattenings.iter().copied())
+        .map(
+            |((((representation_out, frame_out), target_origin), a), f)| {
+                Ok(TransformArrowConfig {
+                    representation_out: data_representation(parse_representation(
+                        representation_out,
+                    )?),
+                    frame_out: parse_data_frame(frame_out)?,
+                    target_origin: target_origin.as_deref().map(OriginId::from_code),
+                    a,
+                    f,
+                    max_iter,
+                    tol,
+                })
+            },
+        )
+        .collect::<PyResult<Vec<_>>>()?;
+    let run_once = || -> PyResult<()> {
+        for (batch, config) in record_batches.iter().zip(configs.iter()) {
+            let output = transform_coordinates_record_batch(batch, config)?
+                .ok_or_else(|| PyRuntimeError::new_err("native transform case fell back"))?;
+            black_box(output);
+        }
+        Ok(())
+    };
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            run_once()?;
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            run_once()?;
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
 }
 
 /// Single-crossing perturber-MOID orchestrator over the global SPICE backend:
@@ -2353,7 +2500,8 @@ fn calculate_perturber_moids_native<'py>(
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cartesian_coordinate_schema_metadata, m)?)?;
-    m.add_function(wrap_pyfunction!(transform_coordinates_native, m)?)?;
+    m.add_function(wrap_pyfunction!(transform_coordinates_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_transform_coordinates_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_perturber_moids_native, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(cartesian_to_spherical_numpy, m)?)?;

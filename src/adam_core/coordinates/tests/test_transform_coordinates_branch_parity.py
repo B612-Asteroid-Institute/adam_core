@@ -167,11 +167,7 @@ def test_transform_coordinates_value_cases_run_natively(
     )
     frame_out = case.get("frame_out") or coords.frame
     origin_out = case.get("origin_out")
-    origin_out_value = (
-        OriginCodes[str(origin_out)]
-        if origin_out is not None
-        else coords.origin.code.to_numpy(zero_copy_only=False)
-    )
+    origin_out_value = OriginCodes[str(origin_out)] if origin_out is not None else None
     native = _transform_coordinates_native(
         coords,
         representation_out_type,

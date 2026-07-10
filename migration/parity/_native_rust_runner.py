@@ -30,6 +30,122 @@ class NativeRustTiming:
     timing_boundary: str = ""
 
 
+def _build_transform_coordinates_case(case: dict[str, Any]) -> Any:
+    """Build one typed coordinate input outside every native Rust sample."""
+    from adam_core.coordinates.cartesian import CartesianCoordinates
+    from adam_core.coordinates.cometary import CometaryCoordinates
+    from adam_core.coordinates.covariances import CoordinateCovariances
+    from adam_core.coordinates.keplerian import KeplerianCoordinates
+    from adam_core.coordinates.origin import Origin
+    from adam_core.coordinates.spherical import SphericalCoordinates
+    from adam_core.time import Timestamp
+
+    values = np.asarray(case["coords"], dtype=np.float64)
+    common: dict[str, Any] = {
+        "time": Timestamp.from_mjd(
+            np.asarray(case["time_mjd"], dtype=np.float64), scale="tdb"
+        ),
+        "origin": Origin.from_kwargs(
+            code=np.full(values.shape[0], str(case["origin_in"]), dtype="object")
+        ),
+        "frame": str(case["frame_in"]),
+    }
+    if "covariance" in case:
+        common["covariance"] = CoordinateCovariances.from_matrix(
+            np.asarray(case["covariance"], dtype=np.float64)
+        )
+    representation = str(case["representation_in"])
+    if representation == "cartesian":
+        return CartesianCoordinates.from_kwargs(
+            x=values[:, 0],
+            y=values[:, 1],
+            z=values[:, 2],
+            vx=values[:, 3],
+            vy=values[:, 4],
+            vz=values[:, 5],
+            **common,
+        )
+    if representation == "spherical":
+        return SphericalCoordinates.from_kwargs(
+            rho=values[:, 0],
+            lon=values[:, 1],
+            lat=values[:, 2],
+            vrho=values[:, 3],
+            vlon=values[:, 4],
+            vlat=values[:, 5],
+            **common,
+        )
+    if representation == "keplerian":
+        return KeplerianCoordinates.from_kwargs(
+            a=values[:, 0],
+            e=values[:, 1],
+            i=values[:, 2],
+            raan=values[:, 3],
+            ap=values[:, 4],
+            M=values[:, 5],
+            **common,
+        )
+    if representation == "cometary":
+        return CometaryCoordinates.from_kwargs(
+            q=values[:, 0],
+            e=values[:, 1],
+            i=values[:, 2],
+            raan=values[:, 3],
+            ap=values[:, 4],
+            tp=values[:, 5],
+            **common,
+        )
+    raise ValueError(f"unsupported native transform representation: {representation}")
+
+
+def _transform_coordinates(
+    *, cases: list[dict[str, Any]], reps: int, warmup: int, trials: int
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+    from adam_core._rust.arrow import ensure_spice_backend
+    from adam_core.coordinates.geodetics import WGS84
+    from adam_core.coordinates.transform import _coordinate_record_batch
+
+    ensure_spice_backend()
+    coordinates = [_build_transform_coordinates_case(case) for case in cases]
+    batches = [
+        _coordinate_record_batch(coords, str(case["representation_in"]))
+        for coords, case in zip(coordinates, cases)
+    ]
+    representations_out = [str(case["representation_out"]) for case in cases]
+    frames_out = [str(case["frame_out"]) for case in cases]
+    target_origins = [case.get("origin_out") for case in cases]
+    axes = [
+        float(WGS84.a) if representation == "geodetic" else 0.0
+        for representation in representations_out
+    ]
+    flattenings = [
+        float(WGS84.f) if representation == "geodetic" else 0.0
+        for representation in representations_out
+    ]
+    samples = _rust_native.benchmark_transform_coordinates_arrow(
+        batches,
+        representations_out,
+        frames_out,
+        target_origins,
+        axes,
+        flattenings,
+        reps,
+        trials,
+        warmup,
+    )
+    return NativeRustTiming(
+        status="measured",
+        sample_trials_s=[[float(value) for value in trial] for trial in samples],
+        entrypoint="adam_core_py::coordinates::transform_coordinates_record_batch",
+        timing_boundary=(
+            "Rust std::time::Instant around direct RecordBatch decode, composed "
+            "coordinate/covariance transform, and RecordBatch assembly calls; outer "
+            "Python/PyO3 launch and PyArrow conversion excluded"
+        ),
+    )
+
+
 def _observers_from_codes(
     *,
     codes: Any,
@@ -68,6 +184,7 @@ def _observers_from_codes(
 
 
 _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
+    "coordinates.transform_coordinates": _transform_coordinates,
     "observers.Observers.from_codes": _observers_from_codes,
 }
 

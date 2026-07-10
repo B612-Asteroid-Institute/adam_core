@@ -1,8 +1,8 @@
 """Comparison-mode metadata for parity and speed artifacts.
 
 The migration gates intentionally compare different layers depending on the API:
-public Python facades, thin PyO3/NumPy bindings, raw helper kernels, or private
-backend candidates. This module centralizes the labels so JSON artifacts and
+public Python facades (including Arrow-native typed surfaces), thin PyO3/NumPy
+bindings, raw helper kernels, or private backend candidates. This module centralizes the labels so JSON artifacts and
 markdown reports make that distinction explicit.
 """
 
@@ -98,13 +98,21 @@ def for_api(api_id: str) -> dict[str, Any]:
         return base
 
     if migration.status == "public-rust-default":
-        if "python" in migration.boundary or "quivr" in migration.boundary:
+        if (
+            "python" in migration.boundary
+            or "quivr" in migration.boundary
+            or migration.boundary == "arrow"
+        ):
             base.update(
                 {
                     "comparison_mode": PUBLIC_PYTHON_FACADE,
                     "comparison_mode_short": "public facade",
                     "comparison_mode_label": "current public Python facade vs legacy public Python",
-                    "current_entrypoint_kind": "public_python_facade_rust_backed",
+                    "current_entrypoint_kind": (
+                        "public_python_facade_arrow_rust_backed"
+                        if migration.boundary == "arrow"
+                        else "public_python_facade_rust_backed"
+                    ),
                     "speed_gate_scope": "public_facade_enforced",
                 }
             )

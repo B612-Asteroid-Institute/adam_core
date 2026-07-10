@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from typing import Literal, Optional
 
 import numpy as np
+import pyarrow as pa
 import pyarrow.compute as pc
 
 from .._rust import (
@@ -21,13 +22,18 @@ from .._rust import (
 )
 from ..constants import Constants as c
 from ..utils.bounded_lru import bounded_lru_get, bounded_lru_put
+from .._rust.arrow import (
+    ensure_spice_backend,
+    stamp_adam_core_metadata,
+    table_from_record_batch,
+)
 from . import types
 from .cartesian import COVARIANCE_ROTATION_TOLERANCE, CartesianCoordinates
 from .cometary import CometaryCoordinates
 from .covariances import CoordinateCovariances
 from .geodetics import WGS84, GeodeticCoordinates
 from .keplerian import KeplerianCoordinates
-from .origin import Origin, OriginCodes
+from .origin import OriginCodes
 from .spherical import SphericalCoordinates
 
 TRANSFORM_EQ2EC = np.zeros((6, 6))
@@ -105,211 +111,71 @@ _RUST_TRANSFORM_REPRESENTATIONS = {
 }
 
 
-def _coordinates_from_rust_values(
-    values: np.ndarray,
-    coords_in: types.CoordinateType,
-    representation_out: type[types.CoordinateType],
-    frame_out: Literal["ecliptic", "equatorial", "itrf93"],
-    covariance: CoordinateCovariances | None = None,
-) -> types.CoordinateType:
-    cov = coords_in.covariance if covariance is None else covariance
-    if representation_out is CartesianCoordinates:
-        return CartesianCoordinates.from_kwargs(
-            x=values[:, 0],
-            y=values[:, 1],
-            z=values[:, 2],
-            vx=values[:, 3],
-            vy=values[:, 4],
-            vz=values[:, 5],
-            time=coords_in.time,
-            covariance=cov,
-            origin=coords_in.origin,
-            frame=frame_out,
-        )
-    if representation_out is SphericalCoordinates:
-        return SphericalCoordinates.from_kwargs(
-            rho=values[:, 0],
-            lon=values[:, 1],
-            lat=values[:, 2],
-            vrho=values[:, 3],
-            vlon=values[:, 4],
-            vlat=values[:, 5],
-            time=coords_in.time,
-            covariance=cov,
-            origin=coords_in.origin,
-            frame=frame_out,
-        )
-    if representation_out is GeodeticCoordinates:
-        return GeodeticCoordinates.from_kwargs(
-            alt=values[:, 0],
-            lon=values[:, 1],
-            lat=values[:, 2],
-            vup=values[:, 3],
-            veast=values[:, 4],
-            vnorth=values[:, 5],
-            time=coords_in.time,
-            covariance=cov,
-            origin=coords_in.origin,
-            frame=frame_out,
-        )
-    if representation_out is KeplerianCoordinates:
-        # The non-covariance path (cartesian_to_keplerian_flat6) returns 13 columns
-        # (a, Q, q, e, i, raan, ap, M, nu, E, P, T, tp) for legacy compat; the
-        # covariance path evaluates the 6-column generic kernel to keep the Jacobian
-        # square. Dispatch on column count.
-        if values.shape[1] == 13:
-            kep_cols = (0, 4, 5, 6, 7, 8)
-        else:
-            kep_cols = (0, 1, 2, 3, 4, 5)
-        a_col, e_col, i_col, raan_col, ap_col, m_col = kep_cols
-        return KeplerianCoordinates.from_kwargs(
-            a=values[:, a_col],
-            e=values[:, e_col],
-            i=values[:, i_col],
-            raan=values[:, raan_col],
-            ap=values[:, ap_col],
-            M=values[:, m_col],
-            time=coords_in.time,
-            covariance=cov,
-            origin=coords_in.origin,
-            frame=frame_out,
-        )
-    if representation_out is CometaryCoordinates:
-        return CometaryCoordinates.from_kwargs(
-            q=values[:, 0],
-            e=values[:, 1],
-            i=values[:, 2],
-            raan=values[:, 3],
-            ap=values[:, 4],
-            tp=values[:, 5],
-            time=coords_in.time,
-            covariance=cov,
-            origin=coords_in.origin,
-            frame=frame_out,
-        )
-    raise ValueError(f"Unsupported representation_out: {representation_out}")
+def _coordinate_record_batch(
+    coords: types.CoordinateType, representation: str
+) -> pa.RecordBatch:
+    """Expose a coordinate table as one metadata-stamped RecordBatch."""
+    table = stamp_adam_core_metadata(
+        coords.table.combine_chunks(),
+        representation=representation,
+        frame=coords.frame,
+        scale=coords.time.scale,
+        schema_name="CoordinateBatch.cartesian.nested.quivr.v1",
+    )
+    batches = table.to_batches(max_chunksize=max(len(coords), 1))
+    if batches:
+        return batches[0]
+    return pa.RecordBatch.from_arrays(
+        [pa.array([], type=field.type) for field in table.schema],
+        schema=table.schema,
+    )
 
 
 def _transform_coordinates_native(
     coords: types.CoordinateType,
     representation_out: type[types.CoordinateType],
     frame_out: Literal["ecliptic", "equatorial", "itrf93"],
-    origin_out: OriginCodes | np.ndarray,
+    origin_out: OriginCodes | None,
 ) -> types.CoordinateType | None:
-    """Fully-Rust single-crossing transform: representation change, origin
-    translation (perturber or observatory) via the global SPICE backend,
-    constant-frame rotation, and covariance forward-AD all resolved in Rust.
+    """Transform one coordinate RecordBatch entirely in Rust.
 
-    Returns ``None`` when the native path does not cover the case (time-varying
-    ITRF93 frames, geodetic input, or an unsupported representation), so
-    ``_try_transform_coordinates_rust`` continues with its per-case fallback.
+    Python stamps schema metadata and directly wraps the returned RecordBatch;
+    representation/frame/origin composition, SPICE calls, covariance AD, and
+    Arrow table assembly remain behind this one crossing.
     """
-    from .._rust import transform_coordinates_native as _native_transform
+    from .._rust import transform_coordinates_arrow
 
     representation_in_name = _RUST_TRANSFORM_REPRESENTATIONS.get(type(coords))
     representation_out_name = _RUST_TRANSFORM_REPRESENTATIONS.get(representation_out)
     if representation_in_name is None or representation_out_name is None:
         return None
 
-    # A single OriginCodes target is a real origin shift; a per-row string
-    # array means "preserve each row's origin" (no shift).
-    origin_codes = list(coords.origin.code.to_numpy(zero_copy_only=False))
-    if isinstance(origin_out, OriginCodes):
-        target_origin: str | None = origin_out.name
-        origin_differs = bool(np.any(np.asarray(origin_codes) != origin_out.name))
-    else:
-        target_origin = None
-        origin_differs = False
-
-    # The native origin translation (spkez / ground-observer) and the
-    # time-varying ITRF93 rotation (sxform) both read the process-global SPICE
-    # backend directly, so ensure its kernels are furnsh-ed whenever either is
-    # involved (the legacy path did this via get_perturber_state /
-    # apply_time_varying_rotation -> setup_SPICE).
+    target_origin = origin_out.name if isinstance(origin_out, OriginCodes) else None
     itrf93_frame_change = frame_out != coords.frame and "itrf93" in (
         coords.frame,
         frame_out,
     )
-    if origin_differs or itrf93_frame_change:
-        from ..utils.spice import setup_SPICE
+    if target_origin is not None or itrf93_frame_change:
+        ensure_spice_backend()
 
-        setup_SPICE()
-    # Observatory-code source origins (not OriginCodes members / SSB) are
-    # resolved natively from the loaded MPC obscodes ground-observer states;
-    # ensure the obscodes table is loaded.
-    if origin_differs and any(
-        code not in OriginCodes.__members__ for code in origin_codes
-    ):
-        from ..utils.spice import setup_mpc_obscodes
-
-        setup_mpc_obscodes()
-
-    times = coords.time
-    time_days = times.days.to_numpy(zero_copy_only=False)
-    time_nanos = times.nanos.to_numpy(zero_copy_only=False)
-    # t0/mu are consumed only by the Keplerian/Cometary kernels; a/f only by
-    # geodetic output. Compute them only when needed: `origin.mu()` raises for
-    # non-body origins (e.g. observatory codes), so it must not run for a
-    # Cartesian observatory-origin transform.
-    kep_com = (KeplerianCoordinates, CometaryCoordinates)
-    needs_mu = type(coords) in kep_com or representation_out in kep_com
-    needs_t0 = type(coords) is CometaryCoordinates or representation_out in kep_com
-    t0 = times.to_numpy() if needs_t0 else None
-    mu = coords.origin.mu() if needs_mu else None
-    a = float(WGS84.a) if representation_out is GeodeticCoordinates else None
-    f = float(WGS84.f) if representation_out is GeodeticCoordinates else None
-
-    covariance_matrices = None
-    if not coords.covariance.is_all_nan():
-        matrices = coords.covariance.to_matrix()
-        n = matrices.shape[0]
-        covariance_matrices = np.ascontiguousarray(
-            matrices.reshape(n, 36), dtype=np.float64
-        )
-
-    result = _native_transform(
-        coords.values,
-        representation_in_name,
+    result = transform_coordinates_arrow(
+        _coordinate_record_batch(coords, representation_in_name),
         representation_out_name,
-        coords.frame,
         frame_out,
-        origin_codes,
         target_origin,
-        times.scale,
-        time_days,
-        time_nanos,
-        covariances=covariance_matrices,
-        t0=t0,
-        mu=mu,
-        a=a,
-        f=f,
+        a=float(WGS84.a) if representation_out is GeodeticCoordinates else 0.0,
+        f=float(WGS84.f) if representation_out is GeodeticCoordinates else 0.0,
     )
     if result is None:
         return None
-
-    values, cov_flat = result
-    values = np.asarray(values, dtype=np.float64)
-    cov_out = None
-    if cov_flat is not None:
-        n = values.shape[0]
-        cov_out = CoordinateCovariances.from_matrix(
-            np.asarray(cov_flat, dtype=np.float64).reshape(n, 6, 6)
-        )
-    out = _coordinates_from_rust_values(
-        values, coords, representation_out, frame_out, covariance=cov_out
-    )
-    if origin_differs and isinstance(origin_out, OriginCodes):
-        out = out.set_column(
-            "origin", Origin.from_kwargs(code=[origin_out.name] * len(out))
-        )
-    return out
+    return table_from_record_batch(representation_out, result)
 
 
 def _try_transform_coordinates_rust(
     coords: types.CoordinateType,
     representation_out: type[types.CoordinateType],
     frame_out: Literal["ecliptic", "equatorial", "itrf93"],
-    origin_out: OriginCodes | np.ndarray,
+    origin_out: OriginCodes | None,
 ) -> types.CoordinateType | None:
     """
     Run ``transform_coordinates`` on the fully-Rust single-crossing path.
@@ -1045,25 +911,15 @@ def transform_coordinates(
         )
 
     coord_frame = coords.frame
-    # Extract the origins from the input coordinates. These typically correspond
-    # to the name of OriginCode enums but stored as an array of strings.
-    coord_origin = coords.origin.code.to_numpy(zero_copy_only=False)
-
     if frame_out is None:
         frame_out = coord_frame
 
-    # If origin out is not None, then origin_out will be an OriginCode
-    # passed directly to this function. Otherwise, it will be an array of strings
-    # extracted from the input coordinates.
-    if origin_out is None:
-        origin_out = coord_origin
-
-    # `~adam_core.coordinates.origin.Origin` support equality checks with
-    # `~adam_core.coordinates.origin.OriginCodes` so we can compare them directly.
-    # If its not an OriginCodes enum then origin_out will be an array of strings which
-    # also can be checked for equality.
+    # A missing target means preserve the per-row origins already present in
+    # the input RecordBatch. Avoid splitting the origin column just to express
+    # that no origin translation is requested.
+    origin_unchanged = origin_out is None or np.all(coords.origin == origin_out)
     if type(coords) is representation_out_:
-        if coord_frame == frame_out and np.all(coord_origin == origin_out):
+        if coord_frame == frame_out and origin_unchanged:
             return coords
 
     rust_coords = _try_transform_coordinates_rust(
@@ -1072,14 +928,23 @@ def transform_coordinates(
     if rust_coords is not None:
         return rust_coords
 
+    # Only the deliberately-uncovered legacy fallthrough needs a Python array
+    # of per-row origins. The canonical Arrow-native path above never extracts
+    # coordinate columns.
+    fallback_origin_out: OriginCodes | np.ndarray
+    if origin_out is None:
+        fallback_origin_out = coords.origin.code.to_numpy(zero_copy_only=False)
+    else:
+        fallback_origin_out = origin_out
+
     if not isinstance(coords, CartesianCoordinates):
         cartesian = coords.to_cartesian()
     else:
         cartesian = coords
 
     # Translate coordinates to new origin (if any are different from current)
-    if np.any(cartesian.origin != origin_out):
-        cartesian = cartesian_to_origin(cartesian, origin_out)
+    if np.any(cartesian.origin != fallback_origin_out):
+        cartesian = cartesian_to_origin(cartesian, fallback_origin_out)
 
     # Rotate coordinates to new frame (if different from current)
     if cartesian.frame != frame_out:

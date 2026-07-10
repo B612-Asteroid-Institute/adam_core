@@ -67,10 +67,11 @@ def to_quivr_metadata(table: pa.Table) -> pa.Table:
     metadata = dict(table.schema.metadata or {})
     frame = metadata.get(b"adam_core_frame", b"unspecified").decode()
     scale = metadata.get(b"adam_core_time_scale", b"utc").decode()
+    prefix = b"coordinates." if "coordinates" in table.column_names else b""
     return table.replace_schema_metadata(
         {
-            b"coordinates.frame": frame.encode(),
-            b"coordinates.time.scale": scale.encode(),
+            prefix + b"frame": frame.encode(),
+            prefix + b"time.scale": scale.encode(),
         }
     )
 
