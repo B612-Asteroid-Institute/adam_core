@@ -164,6 +164,22 @@ Full baseline-main gate (writes `migration/artifacts/parity_gate.json`):
     --speed-legacy-cache migration/artifacts/parity_legacy_speed_baseline.json
 ```
 
+For a compact review view containing only canonical surface name and absolute
+legacy/current-Python/native-Rust p50/p95 columns (blank when a native adapter
+does not exist), render the committed artifacts with:
+
+```bash
+.venv/bin/python -m migration.scripts.parity_table \
+    --parity-artifact migration/artifacts/parity_gate.json \
+    --speed-artifact migration/artifacts/parity_gate.json \
+    --simple-timings
+```
+
+Temporary `bridge.*` candidate IDs are shown under their canonical public
+surface name plus an implementation qualifier in this view; they remain
+separate diagnostic lanes until `personal-cmy.36.10` retires them after their
+coverage is absorbed.
+
 The canonical thread mode is **multi-thread**: both Rust Rayon and the legacy
 NumPy/JAX/XLA/BLAS pools run uncapped, giving a production-realistic
 best-effort comparison. The historical `--threads single` mode is retained as

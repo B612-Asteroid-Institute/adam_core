@@ -579,6 +579,46 @@ def test_speed_artifact_records_thread_metadata() -> None:
     assert "Python/native 2.00x/2.00x" in lane_cell
 
 
+def test_simple_timing_renderer_uses_canonical_candidate_names_and_blank_native() -> (
+    None
+):
+    rows = [
+        {
+            "api_id": "bridge.sample_orbit_variants",
+            "lane": "tiny-n",
+            "legacy_p50_s": 2.0,
+            "legacy_p95_s": 2.5,
+            "current_python_p50_s": 1.0,
+            "current_python_p95_s": 1.5,
+            "native_rust_p50_s": None,
+            "native_rust_p95_s": None,
+        },
+        {
+            "api_id": "observers.Observers.from_codes",
+            "lane": "tiny-n",
+            "legacy_p50_s": 0.006,
+            "legacy_p95_s": 0.007,
+            "current_python_p50_s": 0.0002,
+            "current_python_p95_s": 0.0003,
+            "native_rust_p50_s": 0.00001,
+            "native_rust_p95_s": 0.00002,
+        },
+    ]
+
+    rendered = parity_table._format_simple_speed_timing_tables(rows)
+
+    assert "bridge.sample_orbit_variants" not in rendered
+    assert (
+        "`orbits.VariantOrbits.create — Arrow IPC covariance-variant sampler workflow`"
+        in rendered
+    )
+    assert "| 2.000s / 2.500s | 1.000s / 1.500s |  |" in rendered
+    assert "| 6.00ms / 7.00ms | 200.0µs / 300.0µs | 10.0µs / 20.0µs |" in rendered
+    assert (
+        parity_table._build_arg_parser().parse_args(["--simple-timings"]).simple_timings
+    )
+
+
 def test_native_rust_timer_is_internal_and_missing_surfaces_are_blank(
     monkeypatch,
 ) -> None:

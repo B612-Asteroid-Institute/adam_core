@@ -733,6 +733,70 @@ def _format_speed_markdown(rows: list[dict[str, Any]], *, long: bool = False) ->
     return "\n".join(lines)
 
 
+def _simple_timing_pair(p50: float | None, p95: float | None) -> str:
+    """Format a compact timing pair, leaving unavailable measurements blank."""
+    if p50 is None:
+        return ""
+    if p95 is None:
+        return _format_seconds(p50)
+    return f"{_format_seconds(p50)} / {_format_seconds(p95)}"
+
+
+def _simple_display_name(row: dict[str, Any]) -> str:
+    """Use the canonical public surface before any temporary candidate label."""
+    api_id = str(row["api_id"])
+    candidate = backend_candidates.get(api_id)
+    if candidate is None:
+        return api_id
+    return f"{candidate.canonical_name} — {candidate.implementation_label}"
+
+
+def _format_simple_timing_table(
+    title: str,
+    rows: list[tuple[str, str, str, str]],
+) -> str:
+    lines = [
+        f"## {title}",
+        "",
+        "| Name | Legacy p50 / p95 | Current Python p50 / p95 | Native Rust p50 / p95 |",
+        "|---|---:|---:|---:|",
+    ]
+    lines.extend(
+        f"| `{name}` | {legacy} | {current} | {native} |"
+        for name, legacy, current, native in rows
+    )
+    return "\n".join(lines)
+
+
+def _format_simple_speed_timing_tables(rows: list[dict[str, Any]]) -> str:
+    sections: list[str] = []
+    lane_order = list(dict.fromkeys(str(row.get("lane", "small-n")) for row in rows))
+    for lane in lane_order:
+        timing_rows: list[tuple[str, str, str, str]] = []
+        for row in sorted(
+            (row for row in rows if row.get("lane", "small-n") == lane),
+            key=_simple_display_name,
+        ):
+            timing_rows.append(
+                (
+                    _simple_display_name(row),
+                    _simple_timing_pair(
+                        row.get("legacy_p50_s"), row.get("legacy_p95_s")
+                    ),
+                    _simple_timing_pair(
+                        row.get("current_python_p50_s", row.get("rust_p50_s")),
+                        row.get("current_python_p95_s", row.get("rust_p95_s")),
+                    ),
+                    _simple_timing_pair(
+                        row.get("native_rust_p50_s"),
+                        row.get("native_rust_p95_s"),
+                    ),
+                )
+            )
+        sections.append(_format_simple_timing_table(f"adam_core — {lane}", timing_rows))
+    return "\n\n".join(sections)
+
+
 def _coverage_summary(rows: list[dict]) -> str:
     public_rows = [r for r in rows if not _is_backend_candidate_row(r)]
     candidate_rows = [r for r in rows if _is_backend_candidate_row(r)]
@@ -1038,6 +1102,73 @@ def _format_assist_impacts(data: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _simple_assist_payload_row(
+    name: str, timing: dict[str, Any]
+) -> tuple[str, str, str, str]:
+    legacy = timing.get("legacy_adam_core", timing.get("python", {}))
+    current = timing.get("current_python", timing.get("rust", {}))
+    native = timing.get("native_rust", {})
+    return (
+        name,
+        _simple_timing_pair(legacy.get("p50"), legacy.get("p95")),
+        _simple_timing_pair(current.get("p50"), current.get("p95")),
+        _simple_timing_pair(native.get("p50"), native.get("p95")),
+    )
+
+
+def _format_simple_assist_timing_tables(
+    propagation_path: Path | None = DEFAULT_ASSIST_PROPAGATION_BENCHMARK,
+    covariance_path: Path | None = DEFAULT_ASSIST_COVARIANCE_BENCHMARK,
+    impacts_path: Path | None = DEFAULT_ASSIST_IMPACTS_BENCHMARK,
+) -> str:
+    sections: list[str] = []
+    propagation = _load_json_artifact(propagation_path)
+    if propagation:
+        rows = [
+            _simple_assist_payload_row(str(item["name"]), item["timing_seconds"])
+            for item in propagation.get("workloads", [])
+        ]
+        sections.append(_format_simple_timing_table("ASSIST — propagation", rows))
+
+    covariance = _load_json_artifact(covariance_path)
+    if covariance:
+        rows = [
+            _simple_assist_payload_row(str(item["name"]), item["timing_seconds"])
+            for item in covariance.get("workloads", [])
+        ]
+        sections.append(
+            _format_simple_timing_table("ASSIST — covariance propagation", rows)
+        )
+
+    impacts = _load_json_artifact(impacts_path)
+    if impacts:
+        rows = []
+        for lane in impacts.get("lanes", []):
+            name = (
+                f"detect_collisions — {lane['n_orbits']} orbits × "
+                f"{lane['num_days']} days"
+            )
+            rows.append(
+                (
+                    name,
+                    _simple_timing_pair(
+                        lane.get("legacy_adam_core_p50_s", lane.get("python_p50_s")),
+                        lane.get("legacy_adam_core_p95_s", lane.get("python_p95_s")),
+                    ),
+                    _simple_timing_pair(
+                        lane.get("current_python_p50_s", lane.get("rust_p50_s")),
+                        lane.get("current_python_p95_s", lane.get("rust_p95_s")),
+                    ),
+                    _simple_timing_pair(
+                        lane.get("native_rust_p50_s"),
+                        lane.get("native_rust_p95_s"),
+                    ),
+                )
+            )
+        sections.append(_format_simple_timing_table("ASSIST — impact detection", rows))
+    return "\n\n".join(sections)
+
+
 def _format_assist_section(
     residuals_path: Path | None = DEFAULT_ASSIST_RESIDUALS_ARTIFACT,
     propagation_path: Path | None = DEFAULT_ASSIST_PROPAGATION_BENCHMARK,
@@ -1238,6 +1369,14 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         help="Render speed rows in long lane-per-row form instead of pivoting by API.",
     )
     p.add_argument(
+        "--simple-timings",
+        action="store_true",
+        help=(
+            "Render only name plus legacy/current-Python/native-Rust p50/p95 "
+            "tables; unavailable native measurements are blank."
+        ),
+    )
+    p.add_argument(
         "--refresh",
         action="store_true",
         help="Run parity_fuzz and fixed fixtures instead of reading --parity-artifact.",
@@ -1273,7 +1412,15 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Optional[list[str]] = None) -> int:
-    args = _build_arg_parser().parse_args(argv)
+    parser = _build_arg_parser()
+    args = parser.parse_args(argv)
+    if args.simple_timings and args.no_speed:
+        parser.error("--simple-timings cannot be combined with --no-speed")
+    if args.simple_timings and args.speed_long:
+        parser.error("--simple-timings cannot be combined with --speed-long")
+    if args.simple_timings and args.refresh:
+        parser.error("--simple-timings is artifact-only and cannot use --refresh")
+
     random_api_ids = list(_inputs.all_api_ids())
     fixed_api_ids = list(parity_fixed.all_api_ids())
     if args.apis is None:
@@ -1317,25 +1464,34 @@ def main(argv: Optional[list[str]] = None) -> int:
         ]
 
     max_text = None if args.max_text == 0 else args.max_text
-    sections = [
-        "# Rust Migration Parity And Performance Tables",
-        "",
-        "## Parity Tolerance + Observed Difference",
-        "",
-        _coverage_summary(rows),
-        "",
-        _format_parity_markdown(rows, max_text=max_text),
-    ]
-    if speed_rows:
-        speed_metadata_md = _format_speed_metadata(speed_metadata)
-        sections.extend(["", "## Performance", ""])
-        if speed_metadata_md:
-            sections.extend([speed_metadata_md, ""])
-        sections.append(_format_speed_markdown(speed_rows, long=args.speed_long))
-    if not args.no_assist and requested_api_ids is None:
-        assist_md = _format_assist_section()
-        if assist_md:
-            sections.extend(["", assist_md])
+    if args.simple_timings:
+        sections = ["# Three-implementation performance timings"]
+        if speed_rows:
+            sections.extend(["", _format_simple_speed_timing_tables(speed_rows)])
+        if not args.no_assist and requested_api_ids is None:
+            assist_md = _format_simple_assist_timing_tables()
+            if assist_md:
+                sections.extend(["", assist_md])
+    else:
+        sections = [
+            "# Rust Migration Parity And Performance Tables",
+            "",
+            "## Parity Tolerance + Observed Difference",
+            "",
+            _coverage_summary(rows),
+            "",
+            _format_parity_markdown(rows, max_text=max_text),
+        ]
+        if speed_rows:
+            speed_metadata_md = _format_speed_metadata(speed_metadata)
+            sections.extend(["", "## Performance", ""])
+            if speed_metadata_md:
+                sections.extend([speed_metadata_md, ""])
+            sections.append(_format_speed_markdown(speed_rows, long=args.speed_long))
+        if not args.no_assist and requested_api_ids is None:
+            assist_md = _format_assist_section()
+            if assist_md:
+                sections.extend(["", assist_md])
     report = "\n".join(sections)
 
     print(report)
