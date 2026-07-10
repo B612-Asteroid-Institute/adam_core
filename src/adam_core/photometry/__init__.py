@@ -23,6 +23,7 @@ from .rotation import (
     estimate_rotation_period_from_detections,
     estimate_rotation_period_from_detections_grouped,
 )
+from .color_determination import ColorFit, estimate_colors
 
 __all__ = [
     # Simple magnitude system
@@ -47,4 +48,7 @@ __all__ = [
     "RotationPeriodObservations",
     "RotationPeriodResult",
     "GroupedRotationPeriodResults",
+    # Color determination
+    "ColorFit",
+    "estimate_colors",
 ]
