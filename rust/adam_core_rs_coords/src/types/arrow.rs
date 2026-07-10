@@ -846,6 +846,9 @@ fn parse_nested_covariance(
     representation: CoordinateRepresentation,
     rows: usize,
 ) -> SchemaResult<Option<CovarianceBatch>> {
+    if covariance.null_count() == rows {
+        return Ok(None);
+    }
     let values_col = sliced_struct_field(covariance, "values")?;
     let list = values_col
         .as_any()
@@ -968,6 +971,9 @@ fn parse_nested_physical_parameters(
     physical_parameters: &StructArray,
     rows: usize,
 ) -> SchemaResult<Option<PhysicalParametersBatch>> {
+    if physical_parameters.null_count() == rows {
+        return Ok(None);
+    }
     // Honor the struct-level null buffer: a null struct row means "no value",
     // regardless of any masked child placeholder values quivr may carry.
     let read = |name: &str| -> SchemaResult<Vec<Option<f64>>> {
