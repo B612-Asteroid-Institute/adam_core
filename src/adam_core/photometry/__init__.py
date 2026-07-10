@@ -47,6 +47,6 @@ __all__ = [
     "RotationPeriodResult",
     "GroupedRotationPeriodResults",
     # Color determination
-    "ColorFit",
     "estimate_colors",
+    "ColorFit",
 ]
