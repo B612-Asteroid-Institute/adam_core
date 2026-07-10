@@ -811,6 +811,30 @@ def test_propagate_2body_native_rust_adapter_live() -> None:
     assert "PyArrow conversion excluded" in native.timing_boundary
 
 
+@pytest.mark.integration
+def test_generate_ephemeris_native_rust_adapter_live() -> None:
+    """The Arrow ephemeris adapter times only Rust-owned direct calls."""
+    rng = np.random.default_rng(20260709)
+    sample = _inputs.make("dynamics.generate_ephemeris_2body", rng, 10)
+    native = _native_rust_runner.measure(
+        "dynamics.generate_ephemeris_2body",
+        sample.rust_kwargs,
+        reps=2,
+        warmup=1,
+        trials=2,
+    )
+
+    assert native.status == "measured", native.reason
+    assert len(native.sample_trials_s) == 2
+    assert all(len(trial) == 2 for trial in native.sample_trials_s)
+    assert all(value > 0.0 for trial in native.sample_trials_s for value in trial)
+    assert native.entrypoint == (
+        "adam_core_py::coordinates::generate_ephemeris_record_batch"
+    )
+    assert "std::time::Instant" in native.timing_boundary
+    assert "PyArrow conversion excluded" in native.timing_boundary
+
+
 def test_every_parity_api_has_an_intentional_native_rust_todo_bucket() -> None:
     todos = {
         api_id: _native_rust_runner._todo_for(api_id)
@@ -935,7 +959,7 @@ def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> 
     cache_path.write_text("""
         {
           "schema_version": 1,
-          "process_version": "rm-p1-021-arrow-public-propagation-v1",
+          "process_version": "rm-p1-022-arrow-public-ephemeris-v1",
           "created_at": "2026-05-05T00:00:00+00:00",
           "updated_at": "2026-05-05T00:00:00+00:00",
           "legacy_identity": {

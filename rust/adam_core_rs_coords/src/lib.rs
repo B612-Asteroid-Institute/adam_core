@@ -87,8 +87,8 @@ pub use variant_sampling::{
 
 pub mod translation;
 pub use translation::{
-    normalize_coordinates_to, rotate_coordinates_to_frame, translate_coordinates_to_origin,
-    OriginTranslationProvider,
+    deduplicated_origin_translation_vectors, normalize_coordinates_to, rotate_coordinates_to_frame,
+    translate_coordinates_to_origin, OriginTranslationProvider,
 };
 
 pub mod abs_mag;

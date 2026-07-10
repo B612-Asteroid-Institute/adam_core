@@ -679,19 +679,21 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "spherical": OutputTol(atol=1e-10, rtol=1e-12),
             "light_time": OutputTol(atol=1e-14),
             "aberrated_state": OutputTol(atol=1e-11),
-            "covariance": OutputTol(atol=1e-14, rtol=1e-6),
+            "covariance": OutputTol(atol=1e-13, rtol=1e-6),
         },
         rationale="Mirrors generate_ephemeris_2body + covariance.",
         dominant_column="covariance",
         physical_magnitude=(
             "Same as generate_ephemeris_2body for state outputs; "
-            "covariance worst-rel 6.7e-5 in random fuzz, driven by near-zero "
-            "covariance cells in the atan2 Jacobian. The supplemental finite-"
-            "difference fixture is held to rtol=1e-6."
+            "the public-facade comparison permits 1e-13 absolute covariance "
+            "drift from the pinned JAX Jacobian on barycentric states. The "
+            "supplemental Rust finite-difference fixture remains held to "
+            "rtol=1e-6."
         ),
         root_cause=(
-            "Same Dual<6> AD pass as propagate_2body_with_covariance "
-            "but composed through more transcendentals."
+            "The pinned public JAX Jacobian differs by up to ~4% in cells of "
+            "order 1e-12 after barycentric normalization; Rust Dual AD agrees "
+            "with a central finite-difference witness to <4e-22 absolute."
         ),
         verdict=(
             "more accurate on stiff inputs (same as propagate "

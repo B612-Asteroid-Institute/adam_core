@@ -128,11 +128,35 @@ def coordinates_to_ipc(coordinates, representation: str) -> bytes:
 # --- Arrow C Data Interface (zero-copy) transport ------------------------------
 
 
+def _to_record_batch(
+    table: pa.Table,
+    *,
+    representation: str,
+    frame: str,
+    scale: str,
+    schema_name: str,
+) -> pa.RecordBatch:
+    """Stamp one quivr table and expose its combined chunks as a RecordBatch."""
+    stamped = _stamp_adam_core_metadata(
+        table, representation, frame, scale, schema_name
+    )
+    arrays = [
+        column.chunk(0) if column.num_chunks == 1 else column.combine_chunks()
+        for column in stamped.columns
+    ]
+    return pa.RecordBatch.from_arrays(arrays, schema=stamped.schema)
+
+
 def orbits_to_record_batch(orbits: Orbits) -> pa.RecordBatch:
     """Materialize ``Orbits`` as a single pyarrow ``RecordBatch`` for zero-copy hand-off."""
-    table = _with_adam_core_metadata(orbits)
-    arrays = [column.combine_chunks() for column in table.columns]
-    return pa.RecordBatch.from_arrays(arrays, schema=table.schema)
+    coordinates = orbits.coordinates
+    return _to_record_batch(
+        orbits.table,
+        representation="cartesian",
+        frame=coordinates.frame,
+        scale=coordinates.time.scale,
+        schema_name=_NESTED_SCHEMA,
+    )
 
 
 def orbits_from_record_batch(record_batch: pa.RecordBatch) -> Orbits:
@@ -144,21 +168,31 @@ def orbits_from_record_batch(record_batch: pa.RecordBatch) -> Orbits:
 def variants_to_record_batch(variants: VariantOrbits) -> pa.RecordBatch:
     """Materialize ``VariantOrbits`` as one metadata-stamped RecordBatch."""
     coordinates = variants.coordinates
-    table = _stamp_adam_core_metadata(
-        variants.table.combine_chunks(),
-        "cartesian",
-        coordinates.frame,
-        coordinates.time.scale,
-        _VARIANT_NESTED_SCHEMA,
+    return _to_record_batch(
+        variants.table,
+        representation="cartesian",
+        frame=coordinates.frame,
+        scale=coordinates.time.scale,
+        schema_name=_VARIANT_NESTED_SCHEMA,
     )
-    arrays = [column.combine_chunks() for column in table.columns]
-    return pa.RecordBatch.from_arrays(arrays, schema=table.schema)
 
 
 def variants_from_record_batch(record_batch: pa.RecordBatch) -> VariantOrbits:
     """Wrap a Rust-produced VariantOrbits RecordBatch directly."""
     table = pa.Table.from_batches([record_batch])
     return VariantOrbits.from_pyarrow(_to_quivr_metadata(table))
+
+
+def observers_to_record_batch(observers: Observers) -> pa.RecordBatch:
+    """Materialize ``Observers`` as one metadata-stamped RecordBatch."""
+    coordinates = observers.coordinates
+    return _to_record_batch(
+        observers.table,
+        representation="cartesian",
+        frame=coordinates.frame,
+        scale=coordinates.time.scale,
+        schema_name=_OBSERVER_SCHEMA,
+    )
 
 
 # --- Workflows -----------------------------------------------------------------

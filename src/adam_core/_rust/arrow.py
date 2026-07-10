@@ -68,12 +68,22 @@ def to_quivr_metadata(table: pa.Table) -> pa.Table:
     frame = metadata.get(b"adam_core_frame", b"unspecified").decode()
     scale = metadata.get(b"adam_core_time_scale", b"utc").decode()
     prefix = b"coordinates." if "coordinates" in table.column_names else b""
-    return table.replace_schema_metadata(
-        {
-            prefix + b"frame": frame.encode(),
-            prefix + b"time.scale": scale.encode(),
-        }
-    )
+    quivr_metadata = {
+        prefix + b"frame": frame.encode(),
+        prefix + b"time.scale": scale.encode(),
+    }
+    if "aberrated_coordinates" in table.column_names:
+        aberrated_frame = metadata.get(b"adam_core_aberrated_frame", b"ecliptic")
+        aberrated_scale = metadata.get(
+            b"adam_core_aberrated_time_scale", scale.encode()
+        )
+        quivr_metadata.update(
+            {
+                b"aberrated_coordinates.frame": aberrated_frame,
+                b"aberrated_coordinates.time.scale": aberrated_scale,
+            }
+        )
+    return table.replace_schema_metadata(quivr_metadata)
 
 
 def table_from_record_batch(

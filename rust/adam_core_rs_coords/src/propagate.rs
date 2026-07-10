@@ -707,6 +707,16 @@ pub fn propagate_2body_with_covariance_row_with_diagnostics(
     max_iter: usize,
     tol: f64,
 ) -> ([f64; 6], [f64; 36], ChiConvergence) {
+    if dt == 0.0 {
+        return (
+            orbit,
+            *covariance,
+            ChiConvergence {
+                iterations: 0,
+                status: ChiConvergenceStatus::Converged,
+            },
+        );
+    }
     let (value, jac, convergence) =
         propagate_with_jacobian_row_with_diagnostics(orbit, dt, mu, max_iter, tol);
     let mut covariance_out = [0.0_f64; 36];

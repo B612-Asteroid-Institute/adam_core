@@ -11,8 +11,10 @@
 //! origin shift needs ephemeris body states, so that is what this trait owns.
 
 use crate::types::{
-    CoordinateBatch, Frame, OriginArray, OriginId, SchemaError, SchemaResult, TimeArray,
+    CoordinateBatch, CovarianceBatch, Epoch, Frame, OriginArray, OriginId, SchemaError,
+    SchemaResult, TimeArray,
 };
+use std::collections::HashMap;
 
 /// Supplies per-row origin-translation state vectors `[x, y, z, vx, vy, vz]`
 /// (AU, AU/day) in `frame`, taking coordinates from each row's current origin
@@ -30,6 +32,63 @@ pub trait OriginTranslationProvider {
         frame: Frame,
         times: &TimeArray,
     ) -> SchemaResult<Vec<[f64; 6]>>;
+}
+
+/// Resolve origin translations once per unique `(origin, epoch)` pair and
+/// expand them back to caller row order.
+pub fn deduplicated_origin_translation_vectors<P>(
+    provider: &P,
+    origins: &OriginArray,
+    target_origin: &OriginId,
+    frame: Frame,
+    times: &TimeArray,
+) -> SchemaResult<Vec<[f64; 6]>>
+where
+    P: OriginTranslationProvider + ?Sized,
+{
+    if origins.len() != times.len() {
+        return Err(SchemaError::LengthMismatch {
+            field: "origin_translation.times".to_string(),
+            expected: origins.len(),
+            actual: times.len(),
+        });
+    }
+    let mut unique_indices = HashMap::<(OriginId, Epoch), usize>::new();
+    let mut unique_origins = Vec::new();
+    let mut unique_epochs = Vec::new();
+    let mut row_to_unique = Vec::with_capacity(times.len());
+    for (origin, epoch) in origins.origins.iter().zip(times.epochs.iter()) {
+        let key = (origin.clone(), *epoch);
+        let index = match unique_indices.get(&key) {
+            Some(index) => *index,
+            None => {
+                let index = unique_origins.len();
+                unique_indices.insert(key, index);
+                unique_origins.push(origin.clone());
+                unique_epochs.push(*epoch);
+                index
+            }
+        };
+        row_to_unique.push(index);
+    }
+    let unique_times = TimeArray::new(times.scale, unique_epochs)?;
+    let unique_vectors = provider.origin_translation_vectors(
+        &OriginArray::new(unique_origins),
+        target_origin,
+        frame,
+        &unique_times,
+    )?;
+    if unique_vectors.len() != unique_indices.len() {
+        return Err(SchemaError::LengthMismatch {
+            field: "origin_translation.unique_vectors".to_string(),
+            expected: unique_indices.len(),
+            actual: unique_vectors.len(),
+        });
+    }
+    Ok(row_to_unique
+        .into_iter()
+        .map(|index| unique_vectors[index])
+        .collect())
 }
 
 /// Translate a Cartesian `CoordinateBatch` from its per-row origins to a single
@@ -56,7 +115,8 @@ where
         .as_ref()
         .ok_or_else(|| SchemaError::MissingRequiredField("coordinates.time".to_string()))?;
 
-    let vectors = provider.origin_translation_vectors(
+    let vectors = deduplicated_origin_translation_vectors(
+        provider,
         &coordinates.origins,
         target_origin,
         coordinates.frame,
@@ -94,10 +154,9 @@ where
 /// Rotate a Cartesian `CoordinateBatch` between the ecliptic and equatorial
 /// frames using the canonical adam-core obliquity kernels.
 ///
-/// Frame rotation is not covariance-invariant, and this helper does not rotate
-/// covariance, so it requires `covariance == None` for an actual frame change
-/// (a no-op same-frame call preserves covariance). Only ecliptic<->equatorial
-/// is supported here; time-varying (ITRF93) rotation is out of scope.
+/// Covariance is rotated by the same constant 6x6 block rotation as the state.
+/// Only ecliptic<->equatorial is supported here; time-varying (ITRF93) rotation
+/// is out of scope.
 pub fn rotate_coordinates_to_frame(
     coordinates: &CoordinateBatch,
     target_frame: Frame,
@@ -105,23 +164,12 @@ pub fn rotate_coordinates_to_frame(
     if coordinates.frame == target_frame {
         return Ok(coordinates.clone());
     }
-    if coordinates.covariance.is_some() {
-        return Err(SchemaError::InvalidRecordBatch(
-            "frame rotation of coordinates with covariance is not supported here".to_string(),
-        ));
-    }
     let states = coordinates.values.cartesian().ok_or_else(|| {
         SchemaError::InvalidRecordBatch("frame rotation requires Cartesian coordinates".to_string())
     })?;
-    let rotated: Vec<[f64; 6]> = match (coordinates.frame, target_frame) {
-        (Frame::Equatorial, Frame::Ecliptic) => states
-            .iter()
-            .map(crate::rotate_equatorial_to_ecliptic_row)
-            .collect(),
-        (Frame::Ecliptic, Frame::Equatorial) => states
-            .iter()
-            .map(crate::rotate_ecliptic_to_equatorial_row)
-            .collect(),
+    let rotation: fn(&[f64; 6]) -> [f64; 6] = match (coordinates.frame, target_frame) {
+        (Frame::Equatorial, Frame::Ecliptic) => crate::rotate_equatorial_to_ecliptic_row,
+        (Frame::Ecliptic, Frame::Equatorial) => crate::rotate_ecliptic_to_equatorial_row,
         _ => {
             return Err(SchemaError::InvalidRecordBatch(format!(
                 "unsupported frame rotation from {} to {}",
@@ -130,13 +178,66 @@ pub fn rotate_coordinates_to_frame(
             )))
         }
     };
+    let rotated = states.iter().map(rotation).collect::<Vec<_>>();
+    let covariance = coordinates
+        .covariance
+        .as_ref()
+        .map(|covariance| rotate_covariance(covariance, rotation))
+        .transpose()?;
     CoordinateBatch::cartesian(
         rotated,
         target_frame,
         coordinates.origins.clone(),
         coordinates.times.clone(),
-        None,
+        covariance,
     )
+}
+
+fn rotate_covariance(
+    covariance: &CovarianceBatch,
+    rotation: fn(&[f64; 6]) -> [f64; 6],
+) -> SchemaResult<CovarianceBatch> {
+    let mut jacobian = [[0.0_f64; 6]; 6];
+    for column in 0..6 {
+        let mut basis = [0.0_f64; 6];
+        basis[column] = 1.0;
+        let rotated = rotation(&basis);
+        for row in 0..6 {
+            jacobian[row][column] = rotated[row];
+        }
+    }
+    let mut values = Vec::with_capacity(covariance.rows * 36);
+    for row in 0..covariance.rows {
+        let input = covariance.row_values(row);
+        let mut intermediate = [[0.0_f64; 6]; 6];
+        for (output_row, intermediate_row) in intermediate.iter_mut().enumerate() {
+            for (column, value) in intermediate_row.iter_mut().enumerate() {
+                for inner in 0..6 {
+                    *value += jacobian[output_row][inner] * input[inner * 6 + column];
+                }
+            }
+        }
+        for intermediate_row in &intermediate {
+            for jacobian_row in &jacobian {
+                let value = intermediate_row
+                    .iter()
+                    .zip(jacobian_row.iter())
+                    .map(|(left, right)| left * right)
+                    .sum();
+                values.push(value);
+            }
+        }
+    }
+    let rotated = CovarianceBatch::new(
+        covariance.rows,
+        covariance.dimension,
+        values,
+        covariance.units.clone(),
+    )?;
+    Ok(match &covariance.row_validity {
+        Some(validity) => rotated.with_row_validity(validity.clone())?,
+        None => rotated,
+    })
 }
 
 /// Normalize a Cartesian `CoordinateBatch` to a single `target_origin` and
@@ -259,11 +360,16 @@ mod tests {
     }
 
     #[test]
-    fn rotate_to_frame_rejects_covariance_change() {
+    fn rotate_to_frame_roundtrips_covariance() {
         let (coords, _) = sample_batch();
-        // coords is equatorial with covariance; rotating to ecliptic must error.
-        let err = rotate_coordinates_to_frame(&coords, Frame::Ecliptic).unwrap_err();
-        assert!(matches!(err, SchemaError::InvalidRecordBatch(_)));
+        let ecliptic = rotate_coordinates_to_frame(&coords, Frame::Ecliptic).unwrap();
+        let back = rotate_coordinates_to_frame(&ecliptic, Frame::Equatorial).unwrap();
+        let expected = &coords.covariance.as_ref().unwrap().values_row_major;
+        let actual = &back.covariance.as_ref().unwrap().values_row_major;
+        assert_eq!(actual.len(), expected.len());
+        for (actual, expected) in actual.iter().zip(expected.iter()) {
+            assert!((actual - expected).abs() < 1e-24);
+        }
     }
 
     #[test]

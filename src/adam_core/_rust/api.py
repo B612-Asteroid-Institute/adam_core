@@ -86,6 +86,8 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "propagate_orbits_arrow",
     "propagate_orbits_typed_arrow",
     "benchmark_propagate_orbits_arrow",
+    "generate_ephemeris_arrow",
+    "benchmark_generate_ephemeris_arrow",
     "predict_magnitudes_bandpass_numpy",
     "propagate_2body_along_arc_numpy",
     "propagate_2body_arc_batch_numpy",
@@ -333,6 +335,33 @@ def propagate_orbits_arrow(
         covariance,
         max_iter,
         tol,
+        chunk_size,
+        thread_limit,
+    )
+
+
+def generate_ephemeris_arrow(
+    orbit_batch: pa.RecordBatch,
+    observer_batch: pa.RecordBatch,
+    lt_tol: float = 1e-10,
+    max_iter: int = 1000,
+    tol: float = 1e-15,
+    stellar_aberration: bool = False,
+    predict_magnitudes: bool = True,
+    predict_phase_angle: bool = False,
+    chunk_size: int | None = None,
+    thread_limit: int | None = None,
+) -> pa.RecordBatch:
+    """Generate a finished Ephemeris RecordBatch entirely in Rust."""
+    return _native.generate_ephemeris_arrow(
+        orbit_batch,
+        observer_batch,
+        lt_tol,
+        max_iter,
+        tol,
+        stellar_aberration,
+        predict_magnitudes,
+        predict_phase_angle,
         chunk_size,
         thread_limit,
     )

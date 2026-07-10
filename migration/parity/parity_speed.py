@@ -83,7 +83,7 @@ DEFAULT_LEGACY_CACHE_PATH = Path(
 CANONICAL_SPEED_TRIALS = 3
 SPEED_TIMING_AGGREGATION = "median-of-trial-percentiles"
 LEGACY_TIMING_CACHE_SCHEMA_VERSION = 1
-LEGACY_TIMING_CACHE_PROCESS_VERSION = "rm-p1-021-arrow-public-propagation-v1"
+LEGACY_TIMING_CACHE_PROCESS_VERSION = "rm-p1-022-arrow-public-ephemeris-v1"
 # Dedicated, main-pinned legacy checkout, kept separate from any working
 # checkout so the speed baseline is reproducible and does not silently drift
 # when a working tree changes branches. Override with ADAM_CORE_LEGACY_REPO_ROOT

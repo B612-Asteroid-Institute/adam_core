@@ -363,20 +363,23 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
     ApiMigration(
         api_id="dynamics.generate_ephemeris_2body",
         status=PUBLIC_RUST_DEFAULT,
-        boundary="numpy",
+        boundary="arrow",
         default="rust",
-        rust_module="adam_core._rust_native.generate_ephemeris_2body_numpy",
+        rust_module="adam_core._rust_native.generate_ephemeris_arrow",
         parity_coverage="random-fuzz",
+        coverage_note=(
+            "Public Orbits+Observers to Ephemeris facade crosses once through "
+            "nested Arrow RecordBatches; Rust owns normalization, light-time, "
+            "photometry, diagnostics, and finished table assembly."
+        ),
         latency_gate=True,
     ),
     ApiMigration(
         api_id="dynamics.generate_ephemeris_2body_with_covariance",
         status=PUBLIC_RUST_DEFAULT,
-        boundary="numpy",
+        boundary="arrow",
         default="rust",
-        rust_module=(
-            "adam_core._rust_native.generate_ephemeris_2body_with_covariance_numpy"
-        ),
+        rust_module="adam_core._rust_native.generate_ephemeris_arrow",
         parity_coverage="random-fuzz",
         coverage_note=(
             "Baseline-main random fuzz is supplemented by a distant-object "

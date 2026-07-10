@@ -7,11 +7,11 @@
 
 use super::{
     CoordinateBatch, CoordinateRepresentation, CoordinateValues, CovarianceBatch, CovarianceUnits,
-    Epoch, Frame, ObjectId, ObservatoryCode, ObserverBatch, OrbitBatch, OrbitId, OrbitVariantBatch,
-    OriginArray, OriginId, PhysicalParametersBatch, SchemaError, SchemaResult, TimeArray,
-    TimeScale, Validity, VariantId,
+    EphemerisBatch, Epoch, Frame, ObjectId, ObservatoryCode, ObserverBatch, OrbitBatch, OrbitId,
+    OrbitVariantBatch, OriginArray, OriginId, PhysicalParametersBatch, SchemaError, SchemaResult,
+    TimeArray, TimeScale, Validity, VariantId,
 };
-use arrow_array::builder::{Float64Builder, LargeListBuilder};
+use arrow_array::builder::{Float64Builder, LargeListBuilder, LargeStringBuilder};
 use arrow_array::{
     Array, ArrayRef, Float64Array, Int64Array, LargeListArray, LargeStringArray, RecordBatch,
     StructArray,
@@ -34,6 +34,7 @@ const CARTESIAN_NESTED_SCHEMA: &str = "CoordinateBatch.cartesian.nested.quivr.v1
 const ORBIT_NESTED_SCHEMA: &str = "OrbitBatch.cartesian.nested.quivr.v1";
 const ORBIT_VARIANT_NESTED_SCHEMA: &str = "OrbitVariantBatch.cartesian.nested.quivr.v1";
 const OBSERVER_NESTED_SCHEMA: &str = "ObserverBatch.cartesian.nested.quivr.v1";
+const EPHEMERIS_NESTED_SCHEMA: &str = "EphemerisBatch.spherical.nested.quivr.v1";
 
 pub trait ArrowSchemaExport {
     fn schema() -> Schema;
@@ -162,25 +163,28 @@ impl TryFromNestedRecordBatch for ObserverBatch {
     }
 }
 
+impl IntoNestedRecordBatch for EphemerisBatch {
+    fn into_nested_record_batch(self) -> SchemaResult<RecordBatch> {
+        ephemeris_to_nested_record_batch(&self)
+    }
+}
+
 // ---- nested (quivr-compatible) builders: W1 option (a) ----
 
 fn nested_time_struct(coordinates: &CoordinateBatch, rows: usize) -> SchemaResult<StructArray> {
-    let (days, nanos): (Vec<Option<i64>>, Vec<Option<i64>>) = match &coordinates.times {
+    let (days, nanos) = match &coordinates.times {
         Some(times) => (
-            times.epochs.iter().map(|epoch| Some(epoch.days)).collect(),
-            times.epochs.iter().map(|epoch| Some(epoch.nanos)).collect(),
+            Int64Array::from_iter_values(times.epochs.iter().map(|epoch| epoch.days)),
+            Int64Array::from_iter_values(times.epochs.iter().map(|epoch| epoch.nanos)),
         ),
-        None => (vec![None; rows], vec![None; rows]),
+        None => (Int64Array::new_null(rows), Int64Array::new_null(rows)),
     };
     StructArray::try_new(
         Fields::from(vec![
             Field::new("days", DataType::Int64, true),
             Field::new("nanos", DataType::Int64, true),
         ]),
-        vec![
-            Arc::new(Int64Array::from(days)) as ArrayRef,
-            Arc::new(Int64Array::from(nanos)) as ArrayRef,
-        ],
+        vec![Arc::new(days) as ArrayRef, Arc::new(nanos) as ArrayRef],
         None,
     )
     .map_err(|err| SchemaError::Arrow(err.to_string()))
@@ -199,10 +203,10 @@ fn nested_covariance_struct(
             });
         }
     }
-    let mut builder = LargeListBuilder::new(Float64Builder::new());
     let mut validity = vec![false; rows];
-    match coordinates.covariance.as_ref() {
+    let list = match coordinates.covariance.as_ref() {
         Some(covariance) => {
+            let mut builder = LargeListBuilder::new(Float64Builder::new());
             for (row, valid) in validity.iter_mut().enumerate() {
                 if covariance.is_row_valid(row) {
                     for element in 0..36 {
@@ -216,14 +220,12 @@ fn nested_covariance_struct(
                     builder.append(false);
                 }
             }
+            builder.finish()
         }
         None => {
-            for _ in 0..rows {
-                builder.append(false);
-            }
+            LargeListArray::new_null(Arc::new(Field::new("item", DataType::Float64, true)), rows)
         }
-    }
-    let list = builder.finish();
+    };
     // quivr marks an absent covariance as a null struct row (not just a null list),
     // so mirror that with a struct-level null buffer for lossless round-trips.
     StructArray::try_new(
@@ -235,8 +237,15 @@ fn nested_covariance_struct(
 }
 
 fn nested_origin_struct(coordinates: &CoordinateBatch) -> SchemaResult<StructArray> {
-    let codes =
-        LargeStringArray::from_iter_values(coordinates.origins.origins.iter().map(OriginId::code));
+    let mut builder = LargeStringBuilder::new();
+    for origin in &coordinates.origins.origins {
+        match origin {
+            OriginId::SolarSystemBarycenter => builder.append_value("SOLAR_SYSTEM_BARYCENTER"),
+            OriginId::Naif(id) => builder.append_value(format!("NAIF:{id}")),
+            OriginId::Named(code) => builder.append_value(code),
+        }
+    }
+    let codes = builder.finish();
     StructArray::try_new(
         Fields::from(vec![Field::new("code", DataType::LargeUtf8, true)]),
         vec![Arc::new(codes) as ArrayRef],
@@ -272,8 +281,8 @@ fn nested_coordinate_named_arrays(
     let rows = values.len();
     let mut out: Vec<(Arc<Field>, ArrayRef)> = Vec::with_capacity(9);
     for (column, name) in field_names.into_iter().enumerate() {
-        let array = Arc::new(Float64Array::from(
-            values.iter().map(|row| row[column]).collect::<Vec<_>>(),
+        let array = Arc::new(Float64Array::from_iter_values(
+            values.iter().map(|row| row[column]),
         )) as ArrayRef;
         out.push((Arc::new(Field::new(name, DataType::Float64, true)), array));
     }
@@ -473,6 +482,132 @@ fn observer_to_nested_record_batch(observers: &ObserverBatch) -> SchemaResult<Re
         .map_err(|err| SchemaError::Arrow(err.to_string()))
 }
 
+fn ephemeris_to_nested_record_batch(ephemeris: &EphemerisBatch) -> SchemaResult<RecordBatch> {
+    ephemeris.validate()?;
+    let rows = ephemeris.len();
+    let time_scale = ephemeris.coordinates.times.as_ref().map(|time| time.scale);
+
+    let coordinate_columns = nested_coordinate_named_arrays(&ephemeris.coordinates)?;
+    let coordinate_fields = coordinate_columns
+        .iter()
+        .map(|(field, _)| field.clone())
+        .collect::<Fields>();
+    let coordinate_arrays = coordinate_columns
+        .into_iter()
+        .map(|(_, array)| array)
+        .collect::<Vec<_>>();
+    let coordinates = StructArray::try_new(coordinate_fields, coordinate_arrays, None)
+        .map_err(|err| SchemaError::Arrow(err.to_string()))?;
+
+    let (aberrated_coordinates, aberrated_scale) = match &ephemeris.aberrated_coordinates {
+        Some(aberrated) => {
+            let columns = nested_coordinate_named_arrays(aberrated)?;
+            let fields = columns
+                .iter()
+                .map(|(field, _)| field.clone())
+                .collect::<Fields>();
+            let arrays = columns
+                .into_iter()
+                .map(|(_, array)| array)
+                .collect::<Vec<_>>();
+            let scale = aberrated.times.as_ref().map(|time| time.scale);
+            (
+                StructArray::try_new(fields, arrays, None)
+                    .map_err(|err| SchemaError::Arrow(err.to_string()))?,
+                scale,
+            )
+        }
+        None => {
+            let placeholder = CoordinateBatch::cartesian(
+                vec![[f64::NAN; 6]; rows],
+                Frame::Ecliptic,
+                ephemeris.coordinates.origins.clone(),
+                ephemeris.coordinates.times.clone(),
+                None,
+            )?;
+            let columns = nested_coordinate_named_arrays(&placeholder)?;
+            let fields = columns
+                .iter()
+                .map(|(field, _)| field.clone())
+                .collect::<Fields>();
+            let arrays = columns
+                .into_iter()
+                .map(|(_, array)| array)
+                .collect::<Vec<_>>();
+            (
+                StructArray::try_new(fields, arrays, Some(NullBuffer::new_null(rows)))
+                    .map_err(|err| SchemaError::Arrow(err.to_string()))?,
+                time_scale,
+            )
+        }
+    };
+
+    let nullable_values = |values: Option<&Vec<f64>>| {
+        Float64Array::from_iter((0..rows).map(|row| {
+            values
+                .and_then(|values| values.get(row).copied())
+                .filter(|value| value.is_finite())
+        }))
+    };
+    let light_time = Float64Array::from_iter(
+        ephemeris
+            .light_time_days
+            .iter()
+            .copied()
+            .map(|value| value.is_finite().then_some(value)),
+    );
+    let fields = vec![
+        Field::new("orbit_id", DataType::LargeUtf8, false),
+        Field::new("object_id", DataType::LargeUtf8, true),
+        Field::new("coordinates", coordinates.data_type().clone(), true),
+        Field::new("predicted_magnitude_v", DataType::Float64, true),
+        Field::new("alpha", DataType::Float64, true),
+        Field::new("light_time", DataType::Float64, true),
+        Field::new(
+            "aberrated_coordinates",
+            aberrated_coordinates.data_type().clone(),
+            true,
+        ),
+    ];
+    let arrays: Vec<ArrayRef> = vec![
+        Arc::new(LargeStringArray::from_iter_values(
+            ephemeris.orbit_id.iter().map(|id| id.0.as_str()),
+        )),
+        Arc::new(LargeStringArray::from_iter(
+            ephemeris
+                .object_id
+                .iter()
+                .map(|id| id.as_ref().map(|id| id.0.as_str())),
+        )),
+        Arc::new(coordinates),
+        Arc::new(nullable_values(ephemeris.predicted_magnitude_v.as_ref())),
+        Arc::new(nullable_values(ephemeris.alpha_deg.as_ref())),
+        Arc::new(light_time),
+        Arc::new(aberrated_coordinates),
+    ];
+    let mut metadata = coordinate_metadata(
+        EPHEMERIS_NESTED_SCHEMA,
+        ephemeris.coordinates.frame,
+        time_scale,
+        ephemeris.coordinates.covariance.is_some(),
+    );
+    metadata.insert(
+        "adam_core_aberrated_frame".to_string(),
+        Frame::Ecliptic.as_str().to_string(),
+    );
+    if let Some(scale) = aberrated_scale {
+        metadata.insert(
+            "adam_core_aberrated_time_scale".to_string(),
+            scale.as_str().to_string(),
+        );
+    }
+    RecordBatch::try_new(
+        Arc::new(Schema::new_with_metadata(fields, metadata)),
+        arrays,
+    )
+    .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
 fn observer_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<ObserverBatch> {
     let rows = batch.num_rows();
     let schema = batch.schema();
@@ -495,6 +630,7 @@ fn observer_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<Observ
     let coordinates = coordinate_from_nested_columns(
         |name| coordinates.column_by_name(name),
         rows,
+        coordinates.offset(),
         schema.metadata(),
     )?;
     ObserverBatch::new(code, coordinates)
@@ -503,6 +639,7 @@ fn observer_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<Observ
 fn coordinate_from_nested_columns<'a, F>(
     column: F,
     rows: usize,
+    parent_offset: usize,
     metadata: &HashMap<String, String>,
 ) -> SchemaResult<CoordinateBatch>
 where
@@ -530,14 +667,25 @@ where
         .map(|value| Frame::parse(value))
         .transpose()?
         .unwrap_or(Frame::Unspecified);
-    let require = |name: &str| -> SchemaResult<&'a ArrayRef> {
-        column(name).ok_or_else(|| SchemaError::MissingRequiredField(name.to_string()))
+    let require = |name: &str| -> SchemaResult<ArrayRef> {
+        let array =
+            column(name).ok_or_else(|| SchemaError::MissingRequiredField(name.to_string()))?;
+        if array.len() == rows {
+            Ok(array.clone())
+        } else {
+            Ok(array.slice(parent_offset, rows))
+        }
     };
 
-    let columns = field_names
+    let value_arrays = field_names
         .iter()
         .copied()
-        .map(|name| array_as_f64(require(name)?, name))
+        .map(require)
+        .collect::<SchemaResult<Vec<_>>>()?;
+    let columns = value_arrays
+        .iter()
+        .zip(field_names.iter())
+        .map(|(array, name)| array_as_f64(array, name))
         .collect::<SchemaResult<Vec<_>>>()?;
     let mut values = Vec::with_capacity(rows);
     for row in 0..rows {
@@ -555,7 +703,8 @@ where
         values.push(entry);
     }
 
-    let time = array_as_struct(require("time")?, "time")?;
+    let time_array = require("time")?;
+    let time = array_as_struct(&time_array, "time")?;
     let days_array = sliced_struct_field(time, "days")?;
     let nanos_array = sliced_struct_field(time, "nanos")?;
     let days = days_array
@@ -568,7 +717,8 @@ where
         .ok_or_else(|| SchemaError::InvalidRecordBatch("nanos must be Int64".to_string()))?;
     let times = parse_time_array(metadata, days, nanos)?;
 
-    let origin = array_as_struct(require("origin")?, "origin")?;
+    let origin_array = require("origin")?;
+    let origin = array_as_struct(&origin_array, "origin")?;
     let code_array = sliced_struct_field(origin, "code")?;
     let code = code_array
         .as_any()
@@ -588,7 +738,8 @@ where
             .collect::<SchemaResult<Vec<_>>>()?,
     );
 
-    let covariance = array_as_struct(require("covariance")?, "covariance")?;
+    let covariance_array = require("covariance")?;
+    let covariance = array_as_struct(&covariance_array, "covariance")?;
     let covariance = parse_nested_covariance(covariance, representation, rows)?;
 
     let values = match representation {
@@ -606,6 +757,7 @@ fn coordinate_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<Coor
     coordinate_from_nested_columns(
         |name| batch.column_by_name(name),
         batch.num_rows(),
+        0,
         schema.metadata(),
     )
 }
@@ -636,6 +788,7 @@ fn orbit_variant_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<O
     let coordinates = coordinate_from_nested_columns(
         |name| coordinates.column_by_name(name),
         rows,
+        coordinates.offset(),
         schema.metadata(),
     )?;
     let physical_parameters = batch
@@ -669,6 +822,7 @@ fn orbit_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<OrbitBatc
     let coordinates = coordinate_from_nested_columns(
         |name| coordinates.column_by_name(name),
         batch.num_rows(),
+        coordinates.offset(),
         schema.metadata(),
     )?;
     let physical_parameters = batch
@@ -764,15 +918,6 @@ fn sliced_struct_field(array: &StructArray, name: &str) -> SchemaResult<ArrayRef
     Ok(child.slice(array.offset(), array.len()))
 }
 
-fn struct_field_f64<'a>(array: &'a StructArray, name: &str) -> SchemaResult<&'a Float64Array> {
-    array
-        .column_by_name(name)
-        .ok_or_else(|| SchemaError::MissingRequiredField(name.to_string()))?
-        .as_any()
-        .downcast_ref::<Float64Array>()
-        .ok_or_else(|| SchemaError::InvalidRecordBatch(format!("{name} must be Float64")))
-}
-
 fn nested_physical_parameters_struct(
     physical_parameters: Option<&PhysicalParametersBatch>,
     rows: usize,
@@ -826,7 +971,11 @@ fn parse_nested_physical_parameters(
     // Honor the struct-level null buffer: a null struct row means "no value",
     // regardless of any masked child placeholder values quivr may carry.
     let read = |name: &str| -> SchemaResult<Vec<Option<f64>>> {
-        let array = struct_field_f64(physical_parameters, name)?;
+        let array_ref = sliced_struct_field(physical_parameters, name)?;
+        let array = array_ref
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .ok_or_else(|| SchemaError::InvalidRecordBatch(format!("{name} must be Float64")))?;
         Ok((0..rows)
             .map(|row| {
                 if physical_parameters.is_null(row) || array.is_null(row) {
@@ -1727,6 +1876,44 @@ mod tests {
 
         let decoded = CoordinateBatch::try_from_nested_record_batch(&nullable_batch).unwrap();
         assert!(decoded.values.cartesian().unwrap()[0][0].is_nan());
+    }
+
+    #[test]
+    fn orbit_nested_decode_respects_sliced_parent_struct_offsets() {
+        let coordinates = CoordinateBatch::cartesian(
+            vec![
+                [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [2.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                [3.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            ],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::Named("SUN".to_string()), 3),
+            Some(
+                TimeArray::from_parts(TimeScale::Tdb, vec![60_000, 60_001, 60_002], vec![0, 1, 2])
+                    .unwrap(),
+            ),
+            None,
+        )
+        .unwrap();
+        let orbits = OrbitBatch::new(
+            vec![
+                OrbitId("one".to_string()),
+                OrbitId("two".to_string()),
+                OrbitId("three".to_string()),
+            ],
+            vec![None, None, None],
+            coordinates,
+        )
+        .unwrap();
+        let batch = orbits.into_nested_record_batch().unwrap().slice(2, 1);
+
+        let decoded = OrbitBatch::try_from_nested_record_batch(&batch).unwrap();
+        assert_eq!(decoded.orbit_id[0].0, "three");
+        assert_eq!(decoded.coordinates.values.cartesian().unwrap()[0][0], 3.0);
+        assert_eq!(
+            decoded.coordinates.times.unwrap().epochs[0],
+            Epoch::new(60_002, 2)
+        );
     }
 
     #[test]

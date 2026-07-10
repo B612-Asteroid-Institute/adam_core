@@ -186,6 +186,56 @@ def _propagate_2body(
     )
 
 
+def _generate_ephemeris_2body(
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    lt_tol: float,
+    max_iter: int,
+    tol: float,
+    stellar_aberration: bool,
+    **kwargs: Any,
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+    from adam_core._rust.arrow import ensure_spice_backend
+    from adam_core.orbits.arrow_bridge import (
+        observers_to_record_batch,
+        orbits_to_record_batch,
+    )
+
+    from ._public_facades import build_generate_ephemeris_inputs
+
+    orbits, observers = build_generate_ephemeris_inputs(**kwargs)
+    ensure_spice_backend()
+    samples = _rust_native.benchmark_generate_ephemeris_arrow(
+        orbits_to_record_batch(orbits),
+        observers_to_record_batch(observers),
+        reps,
+        trials,
+        warmup,
+        lt_tol,
+        max_iter,
+        tol,
+        stellar_aberration,
+        False,
+        False,
+        100,
+        None,
+    )
+    return NativeRustTiming(
+        status="measured",
+        sample_trials_s=[[float(value) for value in trial] for trial in samples],
+        entrypoint="adam_core_py::coordinates::generate_ephemeris_record_batch",
+        timing_boundary=(
+            "Rust std::time::Instant around direct Orbits/Observers RecordBatch "
+            "decode, frame/origin normalization, pairwise propagation, light-time, "
+            "covariance/photometry, diagnostics, and Ephemeris RecordBatch assembly; "
+            "outer Python/PyO3 launch and PyArrow conversion excluded"
+        ),
+    )
+
+
 def _observers_from_codes(
     *,
     codes: Any,
@@ -226,6 +276,8 @@ def _observers_from_codes(
 _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
     "coordinates.transform_coordinates": _transform_coordinates,
     "dynamics.propagate_2body": _propagate_2body,
+    "dynamics.generate_ephemeris_2body": _generate_ephemeris_2body,
+    "dynamics.generate_ephemeris_2body_with_covariance": _generate_ephemeris_2body,
     "observers.Observers.from_codes": _observers_from_codes,
 }
 

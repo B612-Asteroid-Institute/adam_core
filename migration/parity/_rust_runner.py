@@ -598,70 +598,20 @@ def _dynamics_propagate_2body_with_covariance(
     }
 
 
-def _dynamics_generate_ephemeris_2body(
-    orbits: np.ndarray,
-    observer_states: np.ndarray,
-    mus: np.ndarray,
-    lt_tol: float,
-    max_iter: int,
-    tol: float,
-    stellar_aberration: bool,
-    max_lt_iter: int,
-) -> dict[str, np.ndarray]:
-    result = _rust_api.generate_ephemeris_2body_numpy(
-        orbits,
-        observer_states,
-        mus,
-        lt_tol,
-        max_iter,
-        tol,
-        stellar_aberration,
-        max_lt_iter,
-    )
-    if result is None:
-        raise RuntimeError("rust generate_ephemeris_2body unavailable")
-    sph, lt, cart = result
-    return {
-        "spherical": np.asarray(sph, dtype=np.float64),
-        "light_time": np.asarray(lt, dtype=np.float64),
-        "aberrated_state": np.asarray(cart, dtype=np.float64),
-    }
+def _dynamics_generate_ephemeris_2body(**kwargs: Any) -> dict[str, np.ndarray]:
+    """Current public Orbits+Observers→Ephemeris facade."""
+    from ._public_facades import generate_ephemeris_2body
+
+    return generate_ephemeris_2body(**kwargs)
 
 
 def _dynamics_generate_ephemeris_2body_with_covariance(
-    orbits: np.ndarray,
-    covariances: np.ndarray,
-    observer_states: np.ndarray,
-    mus: np.ndarray,
-    lt_tol: float,
-    max_iter: int,
-    tol: float,
-    stellar_aberration: bool,
-    max_lt_iter: int,
+    **kwargs: Any,
 ) -> dict[str, np.ndarray]:
-    result = _rust_api.generate_ephemeris_2body_with_covariance_numpy(
-        orbits,
-        covariances,
-        observer_states,
-        mus,
-        lt_tol,
-        max_iter,
-        tol,
-        stellar_aberration,
-        max_lt_iter,
-    )
-    if result is None:
-        raise RuntimeError("rust generate_ephemeris_2body_with_covariance unavailable")
-    sph, lt, cart, cov = result
-    cov_arr = np.asarray(cov, dtype=np.float64)
-    if cov_arr.ndim == 2 and cov_arr.shape[1] == 36:
-        cov_arr = cov_arr.reshape(-1, 6, 6)
-    return {
-        "spherical": np.asarray(sph, dtype=np.float64),
-        "light_time": np.asarray(lt, dtype=np.float64),
-        "aberrated_state": np.asarray(cart, dtype=np.float64),
-        "covariance": cov_arr,
-    }
+    """Current public ephemeris facade with covariance-bearing Orbits."""
+    from ._public_facades import generate_ephemeris_2body
+
+    return generate_ephemeris_2body(**kwargs)
 
 
 def _dynamics_solve_lambert(

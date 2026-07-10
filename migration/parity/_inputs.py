@@ -1284,6 +1284,7 @@ def make_generate_ephemeris_2body(rng: np.random.Generator, n: int) -> Sample:
     kw = {
         "orbits": coords,
         "observer_states": obs,
+        "epoch_mjd": 60000.0 + np.arange(n, dtype=np.float64) / 1440.0,
         "mus": mus,
         "lt_tol": 1e-10,
         "max_iter": 1000,
@@ -1695,6 +1696,10 @@ def make_generate_ephemeris_2body_shape(
     kw = {
         "orbits": coords,
         "observer_states": obs,
+        "epoch_mjd": np.tile(
+            60000.0 + np.arange(n_epochs, dtype=np.float64) / 1440.0,
+            n_orbits,
+        ),
         "mus": mus,
         "lt_tol": 1e-10,
         "max_iter": 1000,

@@ -714,94 +714,20 @@ def _dynamics_propagate_2body_with_covariance(
     return {"state": states, "covariance": cov_out}
 
 
-def _dynamics_generate_ephemeris_2body(
-    orbits: np.ndarray,
-    observer_states: np.ndarray,
-    mus: np.ndarray,
-    lt_tol: float,
-    max_iter: int,
-    tol: float,
-    stellar_aberration: bool,
-    max_lt_iter: int,
-) -> dict[str, np.ndarray]:
-    # Legacy signature: (orbit, t0, observer_coordinates, mu, lt_tol,
-    # max_iter, tol, stellar_aberration). vmap'd over the first four.
-    # Rust kernel implicitly uses t0=0 (back-prop by -lt), so we pass
-    # t0=0 per row to match.
-    from adam_core.dynamics.ephemeris import _generate_ephemeris_2body_vmap
+def _dynamics_generate_ephemeris_2body(**kwargs: Any) -> dict[str, np.ndarray]:
+    """Pinned legacy public Orbits+Observers→Ephemeris facade."""
+    from ._public_facades import generate_ephemeris_2body
 
-    n = orbits.shape[0]
-    t0 = np.zeros(n, dtype=np.float64)
-    sph, lt, cart = _generate_ephemeris_2body_vmap(
-        orbits,
-        t0,
-        observer_states,
-        mus,
-        lt_tol,
-        max_iter,
-        tol,
-        stellar_aberration,
-    )
-    return {
-        "spherical": np.asarray(sph, dtype=np.float64),
-        "light_time": np.asarray(lt, dtype=np.float64),
-        "aberrated_state": np.asarray(cart, dtype=np.float64),
-    }
+    return generate_ephemeris_2body(**kwargs)
 
 
 def _dynamics_generate_ephemeris_2body_with_covariance(
-    orbits: np.ndarray,
-    covariances: np.ndarray,
-    observer_states: np.ndarray,
-    mus: np.ndarray,
-    lt_tol: float,
-    max_iter: int,
-    tol: float,
-    stellar_aberration: bool,
-    max_lt_iter: int,
+    **kwargs: Any,
 ) -> dict[str, np.ndarray]:
-    # Legacy doesn't have a direct vmap that returns covariance — we
-    # propagate covariance via transform_covariances_jacobian per row.
-    from adam_core.coordinates.covariances import transform_covariances_jacobian
-    from adam_core.dynamics.ephemeris import (
-        _generate_ephemeris_2body,
-        _generate_ephemeris_2body_vmap,
-    )
+    """Pinned legacy public ephemeris facade with covariance-bearing Orbits."""
+    from ._public_facades import generate_ephemeris_2body
 
-    n = orbits.shape[0]
-    t0 = np.zeros(n, dtype=np.float64)
-    sph, lt, cart = _generate_ephemeris_2body_vmap(
-        orbits, t0, observer_states, mus, lt_tol, max_iter, tol, stellar_aberration
-    )
-
-    cov_out = np.empty_like(covariances)
-    for i in range(n):
-        cov_out[i] = np.asarray(
-            transform_covariances_jacobian(
-                orbits[i : i + 1],
-                covariances[i : i + 1],
-                lambda x: _generate_ephemeris_2body(
-                    x,
-                    0.0,
-                    observer_states[i],
-                    float(mus[i]),
-                    lt_tol,
-                    max_iter,
-                    tol,
-                    stellar_aberration,
-                )[
-                    0
-                ],  # only the spherical output's Jacobian
-            )[0],
-            dtype=np.float64,
-        )
-
-    return {
-        "spherical": np.asarray(sph, dtype=np.float64),
-        "light_time": np.asarray(lt, dtype=np.float64),
-        "aberrated_state": np.asarray(cart, dtype=np.float64),
-        "covariance": cov_out,
-    }
+    return generate_ephemeris_2body(**kwargs)
 
 
 def _dynamics_solve_lambert(

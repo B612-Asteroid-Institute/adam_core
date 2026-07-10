@@ -556,7 +556,7 @@ fn generate_ephemeris_2body_row_topo_eq_no_stellar_f64(
 /// Single-row kernel that also returns the 6×6 Jacobian of the spherical
 /// output w.r.t. the input Cartesian orbit state. `observer_state`, `mu`,
 /// and the observation time are treated as constants (zero tangents).
-fn generate_ephemeris_2body_with_jacobian_row(
+pub(crate) fn generate_ephemeris_2body_with_jacobian_row(
     orbit: [f64; 6],
     observer_state: [f64; 6],
     mu: f64,

@@ -13,6 +13,7 @@ from ...coordinates.origin import Origin
 from ...dynamics.exceptions import DynamicsNumericalError
 from ...observers import Observers
 from ...orbits import Orbits
+from ...orbits.ephemeris import Ephemeris
 from ...photometry import calculate_phase_angle
 from ...time import Timestamp
 from ...utils import spice as spice_mod
@@ -249,6 +250,63 @@ def test_generate_ephemeris_2body_covariance_branch_uses_input_times() -> None:
     assert eph.coordinates.covariance.to_matrix().shape == (1, 6, 6)
 
 
+def test_generate_ephemeris_2body_uses_record_batches_and_direct_wrap(
+    monkeypatch,
+) -> None:
+    time = Timestamp.from_mjd([60000.0], scale="tdb")
+    origin = Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"])
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["obj1"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[2.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.01],
+            vz=[0.0],
+            time=time,
+            origin=origin,
+            frame="ecliptic",
+        ),
+    )
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.01],
+            vz=[0.0],
+            time=time,
+            origin=origin,
+            frame="ecliptic",
+        ),
+    )
+    native = ephemeris_module.generate_ephemeris_arrow
+    called = {"value": False}
+
+    def _checked(orbit_batch, observer_batch, **kwargs):
+        import pyarrow as pa
+
+        assert isinstance(orbit_batch, pa.RecordBatch)
+        assert isinstance(observer_batch, pa.RecordBatch)
+        called["value"] = True
+        return native(orbit_batch, observer_batch, **kwargs)
+
+    def _forbid_from_kwargs(*args, **kwargs):
+        raise AssertionError("Ephemeris.from_kwargs must not rebuild Rust output")
+
+    monkeypatch.setattr(ephemeris_module, "generate_ephemeris_arrow", _checked)
+    monkeypatch.setattr(Ephemeris, "from_kwargs", _forbid_from_kwargs)
+    result = generate_ephemeris_2body(
+        orbits, observers, predict_magnitudes=False, max_processes=1
+    )
+    assert called["value"]
+    assert len(result) == 1
+
+
 def test_generate_ephemeris_2body_does_not_include_padded_rows() -> None:
     """
     `process_in_chunks` pads the final chunk to a fixed size. Ensure ephemeris generation
@@ -273,13 +331,10 @@ def test_generate_ephemeris_2body_does_not_include_padded_rows() -> None:
     np.testing.assert_allclose(out_mjd, in_mjd)
 
 
-def test_generate_ephemeris_2body_sun_to_ssb_fast_path_reuses_translation(
+def test_generate_ephemeris_2body_sun_to_ssb_translation_stays_in_rust(
     monkeypatch,
 ) -> None:
-    """
-    When both orbits and observers are heliocentric and share an aligned time grid, the
-    barycentric translation vectors should be computed once and reused.
-    """
+    """The Arrow-native path must not call Python's SPICE translation helper."""
     spice_mod.clear_spkez_cache()
 
     calls = {"n": 0}
@@ -326,7 +381,7 @@ def test_generate_ephemeris_2body_sun_to_ssb_fast_path_reuses_translation(
     eph_fast = generate_ephemeris_2body(
         orbits_sun, observers_sun, predict_magnitudes=False
     )
-    assert int(calls["n"]) == 1
+    assert int(calls["n"]) == 0
 
     # Reference: pre-transform inputs to SSB so the internal origin transform is a no-op.
     from ...coordinates.origin import OriginCodes
@@ -354,12 +409,7 @@ def test_generate_ephemeris_2body_sun_to_ssb_fast_path_reuses_translation(
         orbits_ssb, observers_ssb, predict_magnitudes=False
     )
 
-    # eph_fast reuses the fast-path SUN-wrt-SSB translation from
-    # get_perturber_state; eph_ref pre-transforms via transform_coordinates,
-    # which now resolves the origin shift through the native Rust path. Both
-    # are the same SPICE spkez state but reach it via slightly different ET
-    # arithmetic, so they agree to ~2e-22 AU rather than bit-for-bit. Gate at a
-    # still-negligible tolerance (~1.5e-6 mm) that catches any real regression.
+    # Both paths resolve the same SPICE state through Rust-owned translation.
     np.testing.assert_allclose(
         eph_fast.coordinates.values, eph_ref.coordinates.values, rtol=0.0, atol=1e-15
     )
@@ -635,36 +685,14 @@ def test_generate_ephemeris_2body_failfast_nonfinite_light_time(monkeypatch) -> 
         ),
     )
 
-    def _bad_ephemeris_rust(orbits_flat, observer_states, mus, *args, **kwargs):
-        n = orbits_flat.shape[0]
-        eph = np.zeros((n, 6), dtype=np.float64)
-        lt = np.zeros((n,), dtype=np.float64)
-        lt[0] = np.nan
-        aberrated = np.zeros((n, 6), dtype=np.float64)
-        return eph, lt, aberrated
+    def _bad_ephemeris_arrow(*args, **kwargs):
+        raise RuntimeError(
+            "ephemeris row failure: reason=non_finite_light_time; "
+            "output_row=0; input_orbit_index=0; observer_index=0"
+        )
 
-    def _bad_ephemeris_rust_cov(
-        orbits_flat, cov_flat, observer_states, mus, *args, **kwargs
-    ):
-        n = orbits_flat.shape[0]
-        eph = np.zeros((n, 6), dtype=np.float64)
-        lt = np.zeros((n,), dtype=np.float64)
-        lt[0] = np.nan
-        aberrated = np.zeros((n, 6), dtype=np.float64)
-        cov = np.zeros((n, 36), dtype=np.float64)
-        return eph, lt, aberrated, cov
-
-    # Patch the Rust backend entry points so this test asserts the row-level
-    # error pass, not which backend happens to be default.
     monkeypatch.setattr(
-        ephemeris_module,
-        "rust_generate_ephemeris_2body_numpy",
-        _bad_ephemeris_rust,
-    )
-    monkeypatch.setattr(
-        ephemeris_module,
-        "rust_generate_ephemeris_2body_with_covariance_numpy",
-        _bad_ephemeris_rust_cov,
+        ephemeris_module, "generate_ephemeris_arrow", _bad_ephemeris_arrow
     )
 
     with pytest.raises(DynamicsNumericalError, match="non_finite_light_time"):

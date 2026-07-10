@@ -124,7 +124,7 @@ impl TimeScale {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Epoch {
     pub days: i64,
     pub nanos: i64,
@@ -303,7 +303,7 @@ impl CoordinateRepresentation {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum OriginId {
     SolarSystemBarycenter,
     Naif(i32),

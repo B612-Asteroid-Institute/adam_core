@@ -1,5 +1,6 @@
 use adam_core_rs_coords::propagation::{
-    CovariancePropagation, EpochPolicy, PropagationDiagnostics, PropagationFailureCode,
+    generate_ephemeris_barycentric, CovariancePropagation, EphemerisFailureCode, EphemerisOptions,
+    EphemerisPhotometryOptions, EpochPolicy, PropagationDiagnostics, PropagationFailureCode,
     PropagationOptions, PropagationRequest, Propagator, TwoBodyPropagator, TwoBodyPropagatorConfig,
 };
 use adam_core_rs_coords::{
@@ -8,10 +9,10 @@ use adam_core_rs_coords::{
     cartesian_to_keplerian_flat6, cartesian_to_spherical_flat6, cartesian_to_spherical_row,
     classify_orbits_flat, cometary_to_cartesian_flat6, create_sampled_orbit_variants,
     fit_orbit_2body_least_squares, generate_ephemeris_2body_flat6, keplerian_to_cartesian_flat6,
-    origin_mu_au3_day2, rotate_cartesian_time_varying_flat6, spherical_to_cartesian_flat6,
-    spherical_to_cartesian_row, tisserand_parameter_flat, transform_values_flat6,
-    transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat,
-    ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch,
+    origin_mu_au3_day2, rotate_cartesian_time_varying_flat6, rotate_coordinates_to_frame,
+    spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
+    transform_values_flat6, transform_with_covariance_flat6, weighted_covariance_flat,
+    weighted_mean_flat, ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch,
     CoordinateRepresentation as DataRepresentation, CoordinateValues, CovarianceBatch,
     CovarianceUnits, DataFrame, Epoch, Frame, IntoNestedRecordBatch, LeastSquaresConfig,
     ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch,
@@ -1587,6 +1588,243 @@ fn benchmark_propagate_orbits_arrow(
     Ok(sample_trials)
 }
 
+fn ephemeris_failure_reason(code: EphemerisFailureCode) -> &'static str {
+    match code {
+        EphemerisFailureCode::PropagationRowFailure => "propagation_row_failure",
+        EphemerisFailureCode::NonFiniteObserverState => "non_finite_observer_state",
+        EphemerisFailureCode::LightTimeNonConvergence => "non_finite_light_time",
+        EphemerisFailureCode::NonFiniteEphemerisState => "non_finite_ephemeris_state",
+        EphemerisFailureCode::NonFiniteAberratedState => "non_finite_aberrated_state",
+    }
+}
+
+fn generate_ephemeris_record_batch(
+    orbit_batch: &RecordBatch,
+    observer_batch: &RecordBatch,
+    lt_tol: f64,
+    max_iter: usize,
+    tol: f64,
+    stellar_aberration: bool,
+    predict_magnitudes: bool,
+    predict_phase_angle: bool,
+    chunk_size: Option<usize>,
+    thread_limit: Option<usize>,
+) -> Result<RecordBatch, String> {
+    let mut orbits = DataOrbitBatch::try_from_nested_record_batch(orbit_batch)
+        .map_err(|err| format!("failed to decode OrbitBatch: {err}"))?;
+    let mut observers = DataObserverBatch::try_from_nested_record_batch(observer_batch)
+        .map_err(|err| format!("failed to decode ObserverBatch: {err}"))?;
+    if orbits.len() != observers.len() {
+        return Err(format!(
+            "orbits and observers must be pairwise: orbit_rows={}; observer_rows={}",
+            orbits.len(),
+            observers.len()
+        ));
+    }
+    orbits.coordinates = rotate_coordinates_to_frame(&orbits.coordinates, DataFrame::Ecliptic)
+        .map_err(|err| format!("failed to rotate orbit coordinates: {err}"))?;
+    observers.coordinates =
+        rotate_coordinates_to_frame(&observers.coordinates, DataFrame::Ecliptic)
+            .map_err(|err| format!("failed to rotate observer coordinates: {err}"))?;
+    orbits
+        .validate()
+        .map_err(|err| format!("invalid rotated OrbitBatch: {err}"))?;
+    observers
+        .validate()
+        .map_err(|err| format!("invalid rotated ObserverBatch: {err}"))?;
+
+    let output_time_scale = orbits
+        .coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| "orbit coordinates require times".to_string())?
+        .scale;
+    let compute_magnitudes = predict_magnitudes
+        && orbits
+            .physical_parameters
+            .as_ref()
+            .is_some_and(|parameters| {
+                parameters
+                    .h_v
+                    .iter()
+                    .zip(parameters.g.iter())
+                    .any(|(h_v, g)| {
+                        h_v.is_some_and(f64::is_finite) && g.is_some_and(f64::is_finite)
+                    })
+            });
+    let (h_v, g) = if compute_magnitudes {
+        let parameters = orbits
+            .physical_parameters
+            .as_ref()
+            .expect("magnitude parameters were checked");
+        (Some(parameters.h_v.clone()), Some(parameters.g.clone()))
+    } else {
+        (None, None)
+    };
+    let covariance = if orbits.coordinates.covariance.is_some() {
+        CovariancePropagation::Linearized
+    } else {
+        CovariancePropagation::None
+    };
+    let options = EphemerisOptions {
+        propagation: PropagationOptions {
+            chunk_size,
+            thread_limit,
+            epoch_policy: EpochPolicy::Pairwise,
+            covariance,
+        },
+        lt_tol,
+        max_iter,
+        tol,
+        stellar_aberration,
+        max_lt_iter: 10,
+        output_time_scale,
+        include_aberrated_coordinates: true,
+        photometry: EphemerisPhotometryOptions {
+            predict_magnitude_v: compute_magnitudes,
+            predict_phase_angle,
+            h_v,
+            g,
+        },
+    };
+    let propagator = TwoBodyPropagator::new(TwoBodyPropagatorConfig { max_iter, tol })
+        .map_err(|err| format!("invalid propagator config: {err}"))?;
+    let backend = global_backend()
+        .lock()
+        .map_err(|_| "SPICE backend lock is poisoned".to_string())?;
+    let result = generate_ephemeris_barycentric(
+        &propagator,
+        &orbits,
+        &observers,
+        &options,
+        &ErfaTimeProvider,
+        &*backend,
+    )
+    .map_err(|err| format!("typed ephemeris generation failed: {err}"))?;
+    drop(backend);
+
+    if let Some(failed) = result.diagnostics.failed_rows().next() {
+        return Err(format!(
+            "ephemeris row failure: reason={}; output_row={}; input_orbit_index={}; observer_index={}",
+            ephemeris_failure_reason(failed.failure_code.expect("failed row has a code")),
+            failed.output_row,
+            failed.input_orbit_index,
+            failed.observer_index,
+        ));
+    }
+    result
+        .ephemeris
+        .into_nested_record_batch()
+        .map_err(|err| format!("failed to encode EphemerisBatch: {err}"))
+}
+
+/// Arrow-native public two-body ephemeris generation.
+#[pyfunction]
+#[pyo3(signature = (orbit_batch, observer_batch, lt_tol=1e-10, max_iter=1000, tol=1e-15, stellar_aberration=false, predict_magnitudes=true, predict_phase_angle=false, chunk_size=None, thread_limit=None))]
+#[allow(clippy::too_many_arguments)]
+fn generate_ephemeris_arrow<'py>(
+    py: Python<'py>,
+    orbit_batch: &Bound<'py, PyAny>,
+    observer_batch: &Bound<'py, PyAny>,
+    lt_tol: f64,
+    max_iter: usize,
+    tol: f64,
+    stellar_aberration: bool,
+    predict_magnitudes: bool,
+    predict_phase_angle: bool,
+    chunk_size: Option<usize>,
+    thread_limit: Option<usize>,
+) -> PyResult<PyObject> {
+    let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    let observers = RecordBatch::from_pyarrow_bound(observer_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Observers RecordBatch: {err}")))?;
+    let output = py
+        .allow_threads(|| {
+            generate_ephemeris_record_batch(
+                &orbits,
+                &observers,
+                lt_tol,
+                max_iter,
+                tol,
+                stellar_aberration,
+                predict_magnitudes,
+                predict_phase_angle,
+                chunk_size,
+                thread_limit,
+            )
+        })
+        .map_err(|err| {
+            if err.starts_with("ephemeris row failure:") {
+                PyRuntimeError::new_err(err)
+            } else {
+                PyValueError::new_err(err)
+            }
+        })?;
+    output
+        .to_pyarrow(py)
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to export RecordBatch: {err}")))
+}
+
+/// Rust-owned Instant timer for Arrow-native ephemeris generation.
+#[pyfunction]
+#[pyo3(signature = (orbit_batch, observer_batch, reps, trials, warmup_reps=1, lt_tol=1e-10, max_iter=1000, tol=1e-15, stellar_aberration=false, predict_magnitudes=true, predict_phase_angle=false, chunk_size=None, thread_limit=None))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_generate_ephemeris_arrow(
+    orbit_batch: &Bound<'_, PyAny>,
+    observer_batch: &Bound<'_, PyAny>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    lt_tol: f64,
+    max_iter: usize,
+    tol: f64,
+    stellar_aberration: bool,
+    predict_magnitudes: bool,
+    predict_phase_angle: bool,
+    chunk_size: Option<usize>,
+    thread_limit: Option<usize>,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    let observers = RecordBatch::from_pyarrow_bound(observer_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Observers RecordBatch: {err}")))?;
+    let run_once = || -> PyResult<()> {
+        let output = generate_ephemeris_record_batch(
+            &orbits,
+            &observers,
+            lt_tol,
+            max_iter,
+            tol,
+            stellar_aberration,
+            predict_magnitudes,
+            predict_phase_angle,
+            chunk_size,
+            thread_limit,
+        )
+        .map_err(PyRuntimeError::new_err)?;
+        black_box(output);
+        Ok(())
+    };
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            run_once()?;
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            run_once()?;
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
+}
+
 /// W1 data-model bridge (bead personal-cmy.13, mechanism A): zero-copy round-trip
 /// of a quivr `Orbits` table through the Rust-canonical `OrbitBatch` using the
 /// Arrow C Data Interface (no IPC serialize/deserialize copy). Accepts a pyarrow
@@ -2800,6 +3038,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(propagate_orbits_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(propagate_orbits_typed_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_propagate_orbits_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(generate_ephemeris_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_generate_ephemeris_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(orbits_nested_round_trip_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(observers_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(observations_nested_ipc_round_trip, m)?)?;

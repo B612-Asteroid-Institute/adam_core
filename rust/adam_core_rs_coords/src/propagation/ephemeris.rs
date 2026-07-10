@@ -1,15 +1,20 @@
 use super::request::{CovariancePropagation, EpochPolicy, PropagationOptions, PropagationRequest};
 use super::{PropagationError, PropagationResultValue, Propagator};
-use crate::ephemeris::generate_ephemeris_2body_row;
+use crate::ephemeris::{
+    generate_ephemeris_2body_flat6, generate_ephemeris_2body_with_covariance_flat6,
+};
 use crate::photometry::{
     calculate_apparent_magnitude_v_and_phase_angle_flat, calculate_apparent_magnitude_v_flat,
     calculate_phase_angle_flat,
 };
-use crate::translation::{normalize_coordinates_to, OriginTranslationProvider};
+use crate::translation::{
+    deduplicated_origin_translation_vectors, normalize_coordinates_to, OriginTranslationProvider,
+};
 use crate::types::time::TimeScaleProvider;
 use crate::types::{
-    origin_mu_au3_day2, CoordinateBatch, EphemerisBatch, Frame, ObserverBatch, OriginArray,
-    OriginId, TimeArray, TimeScale, Validity, NANOS_PER_DAY,
+    origin_mu_au3_day2, CoordinateBatch, CoordinateRepresentation, CovarianceBatch,
+    CovarianceUnits, EphemerisBatch, Frame, ObserverBatch, OriginArray, OriginId, TimeArray,
+    TimeScale, Validity, NANOS_PER_DAY,
 };
 use crate::{Epoch, OrbitBatch};
 
@@ -48,15 +53,17 @@ impl Default for EphemerisOptions {
 impl EphemerisOptions {
     pub fn validate(&self, orbit_rows: usize) -> PropagationResultValue<()> {
         self.propagation.validate()?;
-        if self.propagation.epoch_policy != EpochPolicy::CrossProduct {
+        if matches!(self.propagation.epoch_policy, EpochPolicy::PerOrbit { .. }) {
             return Err(PropagationError::InvalidRequest(
-                "typed ephemeris generation currently requires CrossProduct propagation"
-                    .to_string(),
+                "typed ephemeris generation does not support PerOrbit propagation".to_string(),
             ));
         }
-        if self.propagation.covariance != CovariancePropagation::None {
+        if !matches!(
+            self.propagation.covariance,
+            CovariancePropagation::None | CovariancePropagation::Linearized
+        ) {
             return Err(PropagationError::InvalidRequest(
-                "typed ephemeris covariance transport is not implemented yet; use covariance=None"
+                "typed ephemeris generation supports covariance=None or linearized only"
                     .to_string(),
             ));
         }
@@ -155,12 +162,12 @@ pub fn generate_ephemeris<P: Propagator>(
 }
 
 /// Like [`generate_ephemeris`], but performs the light-time geometry in the
-/// solar-system-barycentric (SSB) frame: the propagated object and the observer
-/// are translated to SSB via `translation_provider` while the orbit-origin
-/// gravitational parameter is retained for the light-time 2-body sub-step. This
-/// matches Python adam_assist / adam_core public ephemeris semantics, whose
-/// `add_light_time` runs on barycentric states (so the light-time correction
-/// uses barycentric velocity). The aberrated coordinates are emitted in SSB.
+/// solar-system-barycentric (SSB) frame: the propagated object and observer
+/// are translated to SSB via `translation_provider`, and the SSB gravitational
+/// parameter is used for the light-time 2-body sub-step. This matches the public
+/// Python ephemeris composition, whose barycentric normalization precedes both
+/// origin-mu lookup and `add_light_time`. Aberrated coordinates are emitted in
+/// SSB.
 pub fn generate_ephemeris_barycentric<P, T>(
     propagator: &P,
     orbits: &OrbitBatch,
@@ -201,9 +208,21 @@ fn generate_ephemeris_impl<P: Propagator>(
     })?;
     let propagation_request =
         PropagationRequest::new(orbits, observer_times, options.propagation.clone())?;
-    let propagation = propagator.propagate(&propagation_request, provider)?;
-    let output_rows = propagation.orbits.len();
+    let pairwise = options.propagation.epoch_policy == EpochPolicy::Pairwise;
+    let (propagated_orbits, propagation_validity) = if pairwise {
+        // The public pairwise contract receives orbits already propagated to
+        // the paired observer epochs. PropagationRequest above owns length and
+        // time-scale validation; avoid an unnecessary zero-dt solver pass.
+        (orbits.clone(), Validity::all_valid(orbits.len()))
+    } else {
+        let propagation = propagator.propagate(&propagation_request, provider)?;
+        (propagation.orbits, propagation.validity)
+    };
+    let output_rows = propagated_orbits.len();
     let observer_rows = observers.len();
+    let propagated_covariance = propagated_orbits.coordinates.covariance.as_ref();
+    let transport_covariance = options.propagation.covariance == CovariancePropagation::Linearized
+        && propagated_covariance.is_some();
 
     let observer_output_times = rescale_output_times(
         observer_times,
@@ -211,8 +230,7 @@ fn generate_ephemeris_impl<P: Propagator>(
         provider,
         "observer output times",
     )?;
-    let propagated_times = propagation
-        .orbits
+    let propagated_times = propagated_orbits
         .coordinates
         .times
         .as_ref()
@@ -221,8 +239,7 @@ fn generate_ephemeris_impl<P: Propagator>(
                 "propagator output is missing coordinate times".to_string(),
             )
         })?;
-    let propagated_states = propagation
-        .orbits
+    let propagated_states = propagated_orbits
         .coordinates
         .values
         .cartesian()
@@ -239,10 +256,11 @@ fn generate_ephemeris_impl<P: Propagator>(
 
     // Barycentric geometry: translate the propagated object and the observer to
     // SSB so the light-time 2-body sub-step uses barycentric velocity (Python
-    // parity). The orbit-origin gravitational parameter is retained below.
+    // parity). The SSB gravitational parameter is selected below.
     let barycentric_orbit_offsets = match barycentric {
-        Some(translation_provider) => Some(translation_provider.origin_translation_vectors(
-            &propagation.orbits.coordinates.origins,
+        Some(translation_provider) => Some(deduplicated_origin_translation_vectors(
+            translation_provider,
+            &propagated_orbits.coordinates.origins,
             &OriginId::SolarSystemBarycenter,
             Frame::Ecliptic,
             propagated_times,
@@ -250,7 +268,14 @@ fn generate_ephemeris_impl<P: Propagator>(
         None => None,
     };
     let barycentric_observer_offsets = match barycentric {
-        Some(translation_provider) => Some(translation_provider.origin_translation_vectors(
+        Some(_)
+            if propagated_orbits.coordinates.origins == observers.coordinates.origins
+                && propagated_times == observer_times =>
+        {
+            barycentric_orbit_offsets.clone()
+        }
+        Some(translation_provider) => Some(deduplicated_origin_translation_vectors(
+            translation_provider,
             &observers.coordinates.origins,
             &OriginId::SolarSystemBarycenter,
             Frame::Ecliptic,
@@ -260,6 +285,10 @@ fn generate_ephemeris_impl<P: Propagator>(
     };
 
     let mut spherical_states = Vec::with_capacity(output_rows);
+    let mut spherical_covariance_values =
+        transport_covariance.then(|| Vec::with_capacity(output_rows * 36));
+    let mut spherical_covariance_validity =
+        transport_covariance.then(|| Vec::with_capacity(output_rows));
     let mut light_time_days = Vec::with_capacity(output_rows);
     let mut aberrated_states = Vec::with_capacity(output_rows);
     let mut aberrated_epochs = Vec::with_capacity(output_rows);
@@ -273,16 +302,23 @@ fn generate_ephemeris_impl<P: Propagator>(
     let mut h_v_rows = Vec::with_capacity(output_rows);
     let mut g_rows = Vec::with_capacity(output_rows);
 
-    for (output_row, propagated_state) in propagated_states.iter().copied().enumerate() {
-        let input_orbit_index = output_row / observer_rows;
-        let observer_index = output_row % observer_rows;
-        let observer_state = observer_states[observer_index];
-        let propagated_origin = &propagation.orbits.coordinates.origins.origins[output_row];
-        let observer_origin = &observers.coordinates.origins.origins[observer_index];
-        let observer_time = observer_output_times.epochs[observer_index];
-        let propagated_time = propagated_times.epochs[output_row];
+    let mut geometry_objects_flat = Vec::with_capacity(output_rows * 6);
+    let mut geometry_observers_flat = Vec::with_capacity(output_rows * 6);
+    let mut mus = Vec::with_capacity(output_rows);
+    let mut input_failures = Vec::with_capacity(output_rows);
+    let mut covariance_row_validity = Vec::with_capacity(output_rows);
+    let mut covariance_input_flat =
+        transport_covariance.then(|| Vec::with_capacity(output_rows * 36));
 
-        let mut row_failure = if propagation.validity.is_valid(output_row) {
+    for (output_row, propagated_state) in propagated_states.iter().copied().enumerate() {
+        let observer_index = if pairwise {
+            output_row
+        } else {
+            output_row % observer_rows
+        };
+        let observer_state = observer_states[observer_index];
+        let propagated_origin = &propagated_orbits.coordinates.origins.origins[output_row];
+        let mut row_failure = if propagation_validity.is_valid(output_row) {
             None
         } else {
             Some(EphemerisFailureCode::PropagationRowFailure)
@@ -290,6 +326,7 @@ fn generate_ephemeris_impl<P: Propagator>(
         if row_failure.is_none() && !state_is_finite(&observer_state) {
             row_failure = Some(EphemerisFailureCode::NonFiniteObserverState);
         }
+        input_failures.push(row_failure);
 
         let mut geometry_object = propagated_state;
         let mut geometry_observer = observer_state;
@@ -301,27 +338,97 @@ fn generate_ephemeris_impl<P: Propagator>(
                 geometry_observer[axis] += observer_offsets[observer_index][axis];
             }
         }
-        let (spherical, light_time, aberrated) = if row_failure.is_none() {
-            let mu = origin_mu_au3_day2(propagated_origin)?;
-            generate_ephemeris_2body_row::<f64>(
-                geometry_object,
-                geometry_observer,
-                mu,
-                options.lt_tol,
-                options.max_iter,
-                options.tol,
-                options.stellar_aberration,
-                options.max_lt_iter,
-            )
+        geometry_objects_flat.extend_from_slice(&geometry_object);
+        geometry_observers_flat.extend_from_slice(&geometry_observer);
+        let light_time_origin = if barycentric.is_some() {
+            &OriginId::SolarSystemBarycenter
         } else {
-            ([f64::NAN; 6], f64::NAN, [f64::NAN; 6])
+            propagated_origin
+        };
+        mus.push(origin_mu_au3_day2(light_time_origin)?);
+
+        let covariance_valid =
+            propagated_covariance.is_some_and(|covariance| covariance.is_row_valid(output_row));
+        covariance_row_validity.push(covariance_valid);
+        if let Some(values) = &mut covariance_input_flat {
+            if covariance_valid {
+                values.extend_from_slice(
+                    propagated_covariance
+                        .expect("transported covariance is present")
+                        .row_values(output_row),
+                );
+            } else {
+                values.extend_from_slice(&[f64::NAN; 36]);
+            }
+        }
+    }
+
+    let (spherical_flat, light_time_output, aberrated_flat, covariance_output) =
+        match covariance_input_flat {
+            Some(covariance_input) => {
+                let (spherical, light_time, aberrated, covariance) =
+                    generate_ephemeris_2body_with_covariance_flat6(
+                        &geometry_objects_flat,
+                        &covariance_input,
+                        &geometry_observers_flat,
+                        &mus,
+                        options.lt_tol,
+                        options.max_iter,
+                        options.tol,
+                        options.stellar_aberration,
+                        options.max_lt_iter,
+                    );
+                (spherical, light_time, aberrated, Some(covariance))
+            }
+            None => {
+                let (spherical, light_time, aberrated) = generate_ephemeris_2body_flat6(
+                    &geometry_objects_flat,
+                    &geometry_observers_flat,
+                    &mus,
+                    options.lt_tol,
+                    options.max_iter,
+                    options.tol,
+                    options.stellar_aberration,
+                    options.max_lt_iter,
+                );
+                (spherical, light_time, aberrated, None)
+            }
         };
 
+    for output_row in 0..output_rows {
+        let input_orbit_index = if pairwise {
+            output_row
+        } else {
+            output_row / observer_rows
+        };
+        let observer_index = if pairwise {
+            output_row
+        } else {
+            output_row % observer_rows
+        };
+        let spherical = std::array::from_fn(|axis| spherical_flat[output_row * 6 + axis]);
+        let light_time = light_time_output[output_row];
+        let aberrated = std::array::from_fn(|axis| aberrated_flat[output_row * 6 + axis]);
+        let propagated_origin = &propagated_orbits.coordinates.origins.origins[output_row];
+        let observer_origin = &observers.coordinates.origins.origins[observer_index];
+        let observer_time = observer_output_times.epochs[observer_index];
+        let propagated_time = propagated_times.epochs[output_row];
+        let observer_state = observer_states[observer_index];
+        let mut row_failure = input_failures[output_row];
         if row_failure.is_none() {
             row_failure = ephemeris_failure_code(&spherical, light_time, &aberrated);
         }
 
         let valid = row_failure.is_none();
+        if let Some(values) = &mut spherical_covariance_values {
+            let covariance = covariance_output
+                .as_ref()
+                .expect("covariance output is present");
+            values.extend_from_slice(&covariance[output_row * 36..(output_row + 1) * 36]);
+        }
+        if let Some(covariance_validity) = &mut spherical_covariance_validity {
+            covariance_validity.push(valid && covariance_row_validity[output_row]);
+        }
         let emission_epoch = if light_time.is_finite() {
             epoch_add_fractional_days(propagated_time, -light_time)
         } else {
@@ -415,6 +522,8 @@ fn generate_ephemeris_impl<P: Propagator>(
         options.output_time_scale,
         coordinate_epochs,
         spherical_origins,
+        spherical_covariance_values,
+        spherical_covariance_validity,
     )?;
     let aberrated_coordinates = build_aberrated_coordinates(
         options,
@@ -424,8 +533,8 @@ fn generate_ephemeris_impl<P: Propagator>(
         aberrated_origins,
     )?;
     let ephemeris = EphemerisBatch::new(
-        propagation.orbits.orbit_id,
-        propagation.orbits.object_id,
+        propagated_orbits.orbit_id,
+        propagated_orbits.object_id,
         coordinates,
         predicted_magnitude_v,
         alpha_deg,
@@ -481,13 +590,31 @@ fn build_ephemeris_coordinates(
     scale: TimeScale,
     epochs: Vec<Epoch>,
     origins: Vec<OriginId>,
+    covariance_values: Option<Vec<f64>>,
+    covariance_validity: Option<Vec<bool>>,
 ) -> PropagationResultValue<CoordinateBatch> {
+    let covariance = match covariance_values {
+        Some(values) => {
+            let rows = spherical_states.len();
+            let covariance = CovarianceBatch::new(
+                rows,
+                6,
+                values,
+                CovarianceUnits::Coordinate(CoordinateRepresentation::Spherical),
+            )?;
+            Some(match covariance_validity {
+                Some(validity) => covariance.with_row_validity(Validity::from_bools(&validity))?,
+                None => covariance,
+            })
+        }
+        None => None,
+    };
     CoordinateBatch::spherical(
         spherical_states,
         Frame::Equatorial,
         OriginArray::new(origins),
         Some(TimeArray::new(scale, epochs)?),
-        None,
+        covariance,
     )
     .map_err(PropagationError::from)
 }
@@ -601,7 +728,8 @@ fn validate_ephemeris_input_contract(
                 .to_string(),
         ));
     }
-    if options.photometry.any_requested()
+    if require_same_origin
+        && options.photometry.any_requested()
         && !orbits
             .coordinates
             .origins
