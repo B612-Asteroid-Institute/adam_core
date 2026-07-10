@@ -99,8 +99,9 @@ def propagate_2body(
     tol : float, optional
         Universal-anomaly convergence tolerance.
     max_processes : int, optional
-        Retained compatibility control; selects the Rust Rayon thread limit.
-        No Python/Ray compute fan-out occurs.
+        Retained compatibility control for callers that previously selected an
+        outer process count. No Python/Ray compute fan-out occurs; local
+        parallelism remains owned by Rust's warmed global Rayon pool.
     chunk_size : int, optional
         Number of input orbits per Rust propagation chunk.
 
@@ -109,11 +110,16 @@ def propagate_2body(
     `~adam_core.orbits.orbits.Orbits` (N*M)
         Fully assembled propagated orbit table.
     """
+    # Preserve input validation for the compatibility option, but do not build
+    # a fresh per-call Rayon pool. `max_processes` historically controlled only
+    # optional outer Python distribution; warmed local parallelism belongs to
+    # Rust and uses the process-global Rayon pool.
+    resolve_max_processes(max_processes)
     return _propagate_2body_serial(
         orbits,
         times,
         max_iter=max_iter,
         tol=tol,
         chunk_size=chunk_size,
-        thread_limit=resolve_max_processes(max_processes),
+        thread_limit=None,
     )

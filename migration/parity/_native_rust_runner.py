@@ -171,7 +171,7 @@ def _propagate_2body(
         max_iter,
         tol,
         100,
-        1,
+        None,
     )
     return NativeRustTiming(
         status="measured",
