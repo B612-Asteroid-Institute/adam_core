@@ -735,7 +735,7 @@ def test_native_rust_timer_is_internal_and_missing_surfaces_are_blank(
     )
     assert missing.status == "unavailable"
     assert missing.sample_trials_s == []
-    assert missing.todo == "personal-cmy.36.3"
+    assert missing.todo == "personal-98v.1"
     assert "PyO3 call is not accepted" in missing.reason
 
 
@@ -795,21 +795,26 @@ def test_every_parity_api_has_an_intentional_native_rust_todo_bucket() -> None:
     assert set(todos.values()) <= {
         "personal-3gg",
         "personal-98v.1",
-        "personal-cmy.36.3",
         "personal-cmy.36.4",
         "personal-cmy.36.5",
         "personal-cmy.36.6",
         "personal-cmy.36.7",
         "personal-cmy.36.8",
         "personal-cmy.36.9",
+        "personal-cmy.36.10",
     }
-    # These scalar/variant helpers do not belong to an Arrow-surface child and
-    # intentionally use the dedicated native-benchmark catch-all bead.
-    assert {api_id for api_id, todo in todos.items() if todo == "personal-98v.1"} == {
+    # Scalar/variant and already-promoted raw coordinate helpers use the
+    # dedicated native-benchmark catch-all bead. The temporary frame-rotation
+    # candidate is retired separately once canonical coverage absorbs it.
+    catch_all = {api_id for api_id, todo in todos.items() if todo == "personal-98v.1"}
+    assert {
         "dynamics.calc_mean_motion",
         "dynamics.tisserand_parameter",
         "bridge.sample_orbit_variants",
-    }
+        "coordinates.transform_coordinates_with_covariance",
+        "coordinates.rotate_cartesian_time_varying",
+    } <= catch_all
+    assert todos["bridge.rotate_orbits_frame"] == "personal-cmy.36.10"
 
 
 def test_assist_payload_does_not_treat_pyo3_as_native_rust() -> None:

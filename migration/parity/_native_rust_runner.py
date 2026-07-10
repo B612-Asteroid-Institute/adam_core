@@ -192,6 +192,8 @@ _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
 def _todo_for(api_id: str) -> str:
     if api_id == "observers.Observers.from_codes":
         return "personal-3gg"
+    if api_id == "bridge.rotate_orbits_frame":
+        return "personal-cmy.36.10"
     if (
         api_id.startswith("coordinates.transform")
         or api_id.startswith("coordinates.cartesian")
@@ -199,9 +201,8 @@ def _todo_for(api_id: str) -> str:
             ("coordinates.keplerian", "coordinates.cometary", "coordinates.spherical")
         )
         or api_id == "coordinates.rotate_cartesian_time_varying"
-        or api_id == "bridge.rotate_orbits_frame"
     ):
-        return "personal-cmy.36.3"
+        return "personal-98v.1"
     if (
         api_id.startswith("dynamics.propagate_2body")
         or api_id == "bridge.propagate_orbits_2body"
