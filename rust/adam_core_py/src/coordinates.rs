@@ -58,6 +58,34 @@ fn orbit_schema_metadata() -> (Vec<String>, HashMap<String, String>) {
     schema_metadata(DataOrbitBatch::schema())
 }
 
+fn benchmark_trials<F, T>(
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    mut run_once: F,
+) -> PyResult<Vec<Vec<f64>>>
+where
+    F: FnMut() -> PyResult<T>,
+{
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            black_box(run_once()?);
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            black_box(run_once()?);
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Representation {
     Cartesian,
@@ -2074,6 +2102,100 @@ fn ades_to_string_ipc<'py>(
     })
 }
 
+fn ades_to_string_fused_core(
+    mut observations: adam_core_rs_coords::observations::AdesObservationBatch,
+    contexts_json: &std::collections::HashMap<String, String>,
+    seconds_precision: i32,
+    columns_precision: &std::collections::HashMap<String, i32>,
+) -> Result<String, adam_core_rs_coords::SchemaError> {
+    if observations.obs_time.scale != TimeScale::Utc {
+        let rescaled = TimeArray::from_parts(
+            observations.obs_time.scale,
+            observations.obs_time.days.clone(),
+            observations.obs_time.nanos.clone(),
+        )?
+        .rescale(TimeScale::Utc)?;
+        observations.obs_time.scale = TimeScale::Utc;
+        observations.obs_time.days = rescaled.epochs.iter().map(|epoch| epoch.days).collect();
+        observations.obs_time.nanos = rescaled.epochs.iter().map(|epoch| epoch.nanos).collect();
+    }
+    let contexts = contexts_json
+        .iter()
+        .map(|(code, context_json)| {
+            adam_core_rs_coords::ades_io::obs_context_to_string(context_json)
+                .map(|rendered| (code.clone(), rendered))
+        })
+        .collect::<Result<std::collections::HashMap<_, _>, _>>()?;
+    adam_core_rs_coords::ades_to_string(
+        &observations,
+        &contexts,
+        seconds_precision,
+        columns_precision,
+    )
+}
+
+fn ades_error(err: adam_core_rs_coords::SchemaError) -> PyErr {
+    match err {
+        adam_core_rs_coords::SchemaError::InvalidRecordBatch(message) => {
+            PyValueError::new_err(message)
+        }
+        other => PyValueError::new_err(other.to_string()),
+    }
+}
+
+#[pyfunction]
+fn ades_to_string_fused_ipc(
+    ipc_bytes: &Bound<'_, PyBytes>,
+    contexts_json: std::collections::HashMap<String, String>,
+    seconds_precision: i32,
+    columns_precision: std::collections::HashMap<String, i32>,
+) -> PyResult<String> {
+    let observations =
+        adam_core_rs_coords::observations::AdesObservationBatch::try_from_nested_record_batch(
+            &read_orbit_ipc(ipc_bytes.as_bytes())?,
+        )
+        .map_err(ades_error)?;
+    ades_to_string_fused_core(
+        observations,
+        &contexts_json,
+        seconds_precision,
+        &columns_precision,
+    )
+    .map_err(ades_error)
+}
+
+#[pyfunction]
+#[pyo3(signature = (ipc_bytes, contexts_json, seconds_precision, columns_precision, reps, trials, warmup_reps=1))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_ades_to_string_fused_ipc(
+    ipc_bytes: &Bound<'_, PyBytes>,
+    contexts_json: std::collections::HashMap<String, String>,
+    seconds_precision: i32,
+    columns_precision: std::collections::HashMap<String, i32>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let observations =
+        adam_core_rs_coords::observations::AdesObservationBatch::try_from_nested_record_batch(
+            &read_orbit_ipc(ipc_bytes.as_bytes())?,
+        )
+        .map_err(ades_error)?;
+    let run_once = || {
+        ades_to_string_fused_core(
+            observations.clone(),
+            &contexts_json,
+            seconds_precision,
+            &columns_precision,
+        )
+        .map_err(ades_error)
+    };
+    benchmark_trials(reps, trials, warmup_reps, run_once)
+}
+
 /// ObsContext renderer (bead personal-cmy.26): renders the
 /// `dataclasses.asdict` JSON payload of an ObsContext into the legacy
 /// `# section` / `! key value` header block.
@@ -2279,6 +2401,39 @@ fn ades_string_to_observations_ipc<'py>(
     })?;
     let bytes = write_orbit_ipc(&batch)?;
     Ok((PyBytes::new(py, &bytes), unknown_columns))
+}
+
+fn ades_string_to_tables_fused_core(ades_string: &str) -> PyResult<(Vec<u8>, Vec<String>, String)> {
+    let (observations, unknown_columns) =
+        adam_core_rs_coords::ades_string_to_observations(ades_string).map_err(ades_error)?;
+    let contexts_json =
+        adam_core_rs_coords::ades_io::ades_parse_obs_contexts(ades_string).map_err(ades_error)?;
+    let batch = observations
+        .into_nested_record_batch()
+        .map_err(ades_error)?;
+    Ok((write_orbit_ipc(&batch)?, unknown_columns, contexts_json))
+}
+
+#[pyfunction]
+fn ades_string_to_tables_fused_ipc<'py>(
+    py: Python<'py>,
+    ades_string: &str,
+) -> PyResult<(Bound<'py, PyBytes>, Vec<String>, String)> {
+    let (bytes, unknown_columns, contexts_json) = ades_string_to_tables_fused_core(ades_string)?;
+    Ok((PyBytes::new(py, &bytes), unknown_columns, contexts_json))
+}
+
+#[pyfunction]
+#[pyo3(signature = (ades_string, reps, trials, warmup_reps=1))]
+fn benchmark_ades_string_to_tables_fused(
+    ades_string: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    benchmark_trials(reps, trials, warmup_reps, || {
+        ades_string_to_tables_fused_core(ades_string)
+    })
 }
 
 fn time_value_error(err: adam_core_rs_coords::SchemaError) -> PyErr {
@@ -5149,6 +5304,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(timestamp_rescale, m)?)?;
     m.add_function(wrap_pyfunction!(ades_obs_context_to_string, m)?)?;
     m.add_function(wrap_pyfunction!(ades_parse_obs_contexts, m)?)?;
+    m.add_function(wrap_pyfunction!(ades_to_string_fused_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_ades_to_string_fused_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(ades_string_to_tables_fused_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_ades_string_to_tables_fused, m)?)?;
     m.add_function(wrap_pyfunction!(unpack_mpc_date_isot, m)?)?;
     m.add_function(wrap_pyfunction!(unpack_mpc_dates_isot, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_unpack_mpc_dates_isot, m)?)?;

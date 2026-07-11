@@ -137,6 +137,49 @@ def test_parser_matches_legacy_fixture(fixture):
         assert actual_contexts == panel["parsed"]["contexts"], panel["name"]
 
 
+def test_fused_ades_native_timing(fixture):
+    from adam_core import _rust_native
+    from adam_core.observations.arrow_bridge import observations_to_ipc
+
+    panel = fixture["panels"][0]
+    observations = observations_from_flat(panel["observations"])
+    contexts = build_contexts(fixture["context_spec"])
+    contexts_json = {
+        code: json.dumps(asdict(context)) for code, context in contexts.items()
+    }
+    options = panel.get("options") or {}
+    seconds_precision = int(options.get("seconds_precision", 3))
+    columns_precision = options.get(
+        "columns_precision",
+        {
+            "ra": 9,
+            "dec": 9,
+            "rmsRACosDec": 5,
+            "rmsDec": 5,
+            "rmsCorr": 8,
+            "mag": 4,
+            "rmsMag": 4,
+            "exp": 2,
+            "logSNR": 2,
+            "seeing": 2,
+        },
+    )
+    writer_samples = _rust_native.benchmark_ades_to_string_fused_ipc(
+        observations_to_ipc(observations),
+        contexts_json,
+        seconds_precision,
+        columns_precision,
+        2,
+        2,
+        1,
+    )
+    parser_samples = _rust_native.benchmark_ades_string_to_tables_fused(
+        panel["ades_string"], 2, 2, 1
+    )
+    assert all(sample > 0.0 for trial in writer_samples for sample in trial)
+    assert all(sample > 0.0 for trial in parser_samples for sample in trial)
+
+
 def test_writer_empty_observations():
     contexts = build_contexts(
         {

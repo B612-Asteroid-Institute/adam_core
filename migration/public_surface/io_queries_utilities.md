@@ -67,7 +67,7 @@ query paths depend on them, but they are not counted as public API commitments.
 | NEOCC | OEF parser only | **Gap:** requests loop, policy/error handling, per-object assembly, coordinate conversion, and concatenation are Python |
 | Scout | orbit-row normalization only | **Gap:** both HTTP entrypoints, summary parsing, table construction, per-object loop, conversion, and concatenation are Python |
 | SBDB | direct-payload normalization only | **Gap:** legacy astroquery client is Python; new client owns sessions, retries, backoff, concurrency/fair-use, filtering, JSON crossings, and table construction in Python |
-| ADES PSV | observation/context parse and rendering kernels | **Gap:** public writer performs time rescale, per-context Rust calls, Arrow bridge, then another Rust call; parser reconstructs Python context objects after a second Rust call |
+| ADES PSV | fused Rust writer/parser plus observation/context kernels | Public writer/parser each satisfy one crossing; Python only reconstructs compatibility dataclasses/quivr objects |
 | OEM | KVN parser/writer and file read/write | **Gap:** validation, transforms, metadata, unit/covariance conversion, row loops, and Orbits reconstruction remain Python; propagated writer also invokes Python propagation |
 | OpenSpace | Lua node and initialization text rendering | **Gap:** orbit transform, model graph, CSV generation, loops, path handling, and all asset file orchestration remain Python |
 | SPK | low-level Rust DAF writer | **Gap:** propagation dispatch, transform, grouping, Chebyshev fit/windows, segment preparation, and final orchestration remain Python |
@@ -146,17 +146,14 @@ Public observation-package names include `ADESObservations`, the five context
 dataclasses, and `ObsContext`; module-public operations are `ADES_to_string`,
 `ADES_string_to_tables`, and `ObsContext.to_string`.
 
-Substantial deterministic behavior is already Rust-owned, including PSV
-observation parse/render and context parse/render. The public writer is still
-multi-crossing: Python rescales the table, calls `ObsContext.to_string` once per
-context, builds an IPC payload, and then invokes the Rust writer. The parser
-calls Rust for observations, calls Rust again for contexts, and builds nested
-Python dataclasses. Therefore the public endpoints are not yet one crossing.
-
-Closure requires Rust context models and one writer/parser entrypoint each.
-Python dataclass/quivr objects may remain compatibility representations at the
-outer boundary, but may not orchestrate repeated native calls. File convenience
-APIs, if added, must also perform file I/O in Rust.
+PSV observation/context parse and rendering are Rust-owned. The public writer
+now performs UTC rescaling, all context JSON rendering, observation rendering,
+and output assembly in one `ades_to_string_fused_ipc` crossing. The public
+parser performs observation parsing, context parsing, nested Arrow encoding,
+and unknown-column collection in one `ades_string_to_tables_fused_ipc`
+crossing. Python only reconstructs the declared `ObsContext` dataclasses and
+`ADESObservations` quivr compatibility object. Frozen byte/error parity and
+Rust-Instant timing cover both fused operations.
 
 ### OEM products
 

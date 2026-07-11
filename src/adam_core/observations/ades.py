@@ -213,16 +213,12 @@ def ADES_to_string(
 
     from .arrow_bridge import observations_to_ipc
 
-    if len(observations) > 0 and observations.obsTime.scale != "utc":
-        observations = observations.set_column(
-            "obsTime", observations.obsTime.rescale("utc")
-        )
-    contexts_rendered = {
-        code: context.to_string() for code, context in obs_contexts.items()
+    contexts_json = {
+        code: json.dumps(asdict(context)) for code, context in obs_contexts.items()
     }
-    return _rn.ades_to_string_ipc(
+    return _rn.ades_to_string_fused_ipc(
         observations_to_ipc(observations),
-        contexts_rendered,
+        contexts_json,
         seconds_precision,
         {column: int(value) for column, value in columns_precision.items()},
     )
@@ -254,7 +250,9 @@ def ADES_string_to_tables(
 
     from .arrow_bridge import observations_from_ipc
 
-    raw, unknown_columns = _rn.ades_string_to_observations_ipc(ades_string)
+    raw, unknown_columns, contexts_json = _rn.ades_string_to_tables_fused_ipc(
+        ades_string
+    )
     if unknown_columns:
         logger.warning(
             f"Found unknown ADES columns that will be ignored: {set(unknown_columns)}"
@@ -263,7 +261,7 @@ def ADES_string_to_tables(
 
     # The metadata sections are parsed in the Rust backend (bead
     # personal-cmy.26); the ObsContext dataclasses are built here.
-    pairs = json.loads(_rn.ades_parse_obs_contexts(ades_string))
+    pairs = json.loads(contexts_json)
     obs_contexts = {code: _build_obs_context(context) for code, context in pairs}
     return obs_contexts, observations
 
