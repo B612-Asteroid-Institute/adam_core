@@ -769,6 +769,153 @@ def _variant_orbits_create(
     )
 
 
+def _photometry_timing(
+    samples: Any, *, entrypoint: str, fitting: bool = False
+) -> NativeRustTiming:
+    semantic_scope = (
+        "complete row/group fit setup, internal allocations, and direct fit call"
+        if fitting
+        else "semantic output allocation and direct photometry kernel call"
+    )
+    return NativeRustTiming(
+        status="measured",
+        sample_trials_s=[[float(value) for value in trial] for trial in samples],
+        entrypoint=entrypoint,
+        timing_boundary=(
+            f"Rust std::time::Instant around {semantic_scope}; NumPy extraction, "
+            "outer Python/PyO3 launch, and return conversion excluded"
+        ),
+    )
+
+
+def _photometry_calculate_phase_angle(
+    *, object_pos: Any, observer_pos: Any, reps: int, warmup: int, trials: int
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    samples = _rust_native.benchmark_calculate_phase_angle_numpy(
+        np.ascontiguousarray(object_pos, dtype=np.float64),
+        np.ascontiguousarray(observer_pos, dtype=np.float64),
+        reps,
+        trials,
+        warmup,
+    )
+    return _photometry_timing(
+        samples,
+        entrypoint="adam_core_rs_coords::calculate_phase_angle_into",
+    )
+
+
+def _photometry_calculate_apparent_magnitude_v(
+    *, h_v: Any, object_pos: Any, observer_pos: Any, g: Any,
+    reps: int, warmup: int, trials: int
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    samples = _rust_native.benchmark_calculate_apparent_magnitude_v_numpy(
+        np.ascontiguousarray(h_v, dtype=np.float64),
+        np.ascontiguousarray(object_pos, dtype=np.float64),
+        np.ascontiguousarray(observer_pos, dtype=np.float64),
+        np.ascontiguousarray(g, dtype=np.float64),
+        reps,
+        trials,
+        warmup,
+    )
+    return _photometry_timing(
+        samples,
+        entrypoint="adam_core_rs_coords::calculate_apparent_magnitude_v_into",
+    )
+
+
+def _photometry_calculate_apparent_magnitude_v_and_phase_angle(
+    *, h_v: Any, object_pos: Any, observer_pos: Any, g: Any,
+    reps: int, warmup: int, trials: int
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    samples = (
+        _rust_native.benchmark_calculate_apparent_magnitude_v_and_phase_angle_numpy(
+            np.ascontiguousarray(h_v, dtype=np.float64),
+            np.ascontiguousarray(object_pos, dtype=np.float64),
+            np.ascontiguousarray(observer_pos, dtype=np.float64),
+            np.ascontiguousarray(g, dtype=np.float64),
+            reps,
+            trials,
+            warmup,
+        )
+    )
+    return _photometry_timing(
+        samples,
+        entrypoint=(
+            "adam_core_rs_coords::"
+            "calculate_apparent_magnitude_v_and_phase_angle_into"
+        ),
+    )
+
+
+def _photometry_predict_magnitudes(
+    *, h_v: Any, object_pos: Any, observer_pos: Any, g: Any,
+    target_ids: Any, delta_table: Any, reps: int, warmup: int, trials: int
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    samples = _rust_native.benchmark_predict_magnitudes_bandpass_numpy(
+        np.ascontiguousarray(h_v, dtype=np.float64),
+        np.ascontiguousarray(object_pos, dtype=np.float64),
+        np.ascontiguousarray(observer_pos, dtype=np.float64),
+        np.ascontiguousarray(g, dtype=np.float64),
+        np.ascontiguousarray(target_ids, dtype=np.int32),
+        np.ascontiguousarray(delta_table, dtype=np.float64),
+        reps,
+        trials,
+        warmup,
+    )
+    return _photometry_timing(
+        samples,
+        entrypoint="adam_core_rs_coords::predict_magnitudes_bandpass_into",
+    )
+
+
+def _photometry_fit_absolute_magnitude_rows(
+    *, h_rows: Any, sigma_rows: Any, reps: int, warmup: int, trials: int
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    samples = _rust_native.benchmark_fit_absolute_magnitude_rows_numpy(
+        np.ascontiguousarray(h_rows, dtype=np.float64),
+        np.ascontiguousarray(sigma_rows, dtype=np.float64),
+        reps,
+        trials,
+        warmup,
+    )
+    return _photometry_timing(
+        samples,
+        entrypoint="adam_core_rs_coords::fit_absolute_magnitude_rows",
+        fitting=True,
+    )
+
+
+def _photometry_fit_absolute_magnitude_grouped(
+    *, h_rows: Any, sigma_rows: Any, group_offsets: Any,
+    reps: int, warmup: int, trials: int
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    samples = _rust_native.benchmark_fit_absolute_magnitude_grouped_numpy(
+        np.ascontiguousarray(h_rows, dtype=np.float64),
+        np.ascontiguousarray(sigma_rows, dtype=np.float64),
+        np.ascontiguousarray(group_offsets, dtype=np.int64),
+        reps,
+        trials,
+        warmup,
+    )
+    return _photometry_timing(
+        samples,
+        entrypoint="adam_core_rs_coords::fit_absolute_magnitude_grouped",
+        fitting=True,
+    )
+
+
 def _observers_from_codes(
     *,
     codes: Any,
@@ -826,6 +973,20 @@ _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
     "orbit_determination.gaussIOD": _gauss_iod,
     "coordinates.residuals.Residuals.calculate": _residuals_calculate,
     "orbits.VariantOrbits.create": _variant_orbits_create,
+    "photometry.calculate_phase_angle": _photometry_calculate_phase_angle,
+    "photometry.calculate_apparent_magnitude_v": (
+        _photometry_calculate_apparent_magnitude_v
+    ),
+    "photometry.calculate_apparent_magnitude_v_and_phase_angle": (
+        _photometry_calculate_apparent_magnitude_v_and_phase_angle
+    ),
+    "photometry.predict_magnitudes": _photometry_predict_magnitudes,
+    "photometry.fit_absolute_magnitude_rows": (
+        _photometry_fit_absolute_magnitude_rows
+    ),
+    "photometry.fit_absolute_magnitude_grouped": (
+        _photometry_fit_absolute_magnitude_grouped
+    ),
     "observers.Observers.from_codes": _observers_from_codes,
 }
 
@@ -863,7 +1024,7 @@ def _todo_for(api_id: str) -> str:
         # All photometry surfaces are classified numpy-flat position/fitting
         # kernels (bead personal-cmy.36.8); native columns route to the
         # catch-all adapter bead.
-        return "personal-98v.1"
+        return "personal-98v.1.3"
     if (
         api_id.startswith(("coordinates.residuals", "statistics."))
         or api_id == "orbits.classify_orbits"

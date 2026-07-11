@@ -2,6 +2,8 @@ use adam_core_rs_coords::{fit_absolute_magnitude_grouped, fit_absolute_magnitude
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use std::hint::black_box;
+use std::time::Instant;
 
 #[pyfunction]
 fn fit_absolute_magnitude_rows_numpy<'py>(
@@ -276,6 +278,280 @@ fn predict_magnitudes_bandpass_numpy<'py>(
     Ok(out)
 }
 
+fn benchmark_samples<T, F>(
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    mut run_once: F,
+) -> PyResult<Vec<Vec<f64>>>
+where
+    F: FnMut() -> T,
+{
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            black_box(run_once());
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            let output = run_once();
+            black_box(&output);
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
+}
+
+fn owned_positions(
+    object_pos: &PyReadonlyArray2<'_, f64>,
+    observer_pos: &PyReadonlyArray2<'_, f64>,
+) -> PyResult<(Vec<f64>, Vec<f64>, usize)> {
+    let object = object_pos.as_array();
+    let observer = observer_pos.as_array();
+    if object.ncols() != 3 {
+        return Err(PyValueError::new_err("object_pos must have shape (N, 3)"));
+    }
+    let n = object.nrows();
+    if observer.nrows() != n || observer.ncols() != 3 {
+        return Err(PyValueError::new_err(
+            "observer_pos must have shape (N, 3) matching object_pos rows",
+        ));
+    }
+    let object = object
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("object_pos must be contiguous"))?
+        .to_vec();
+    let observer = observer
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("observer_pos must be contiguous"))?
+        .to_vec();
+    Ok((object, observer, n))
+}
+
+/// Rust-owned Instant timer for the phase-angle parity surface. NumPy/PyO3
+/// extraction happens once above the timing loop; every sample allocates its
+/// semantic output and calls the Rust kernel directly.
+#[pyfunction]
+#[pyo3(signature = (object_pos, observer_pos, reps, trials, warmup_reps=1))]
+fn benchmark_calculate_phase_angle_numpy(
+    object_pos: PyReadonlyArray2<'_, f64>,
+    observer_pos: PyReadonlyArray2<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let (object, observer, n) = owned_positions(&object_pos, &observer_pos)?;
+    benchmark_samples(reps, trials, warmup_reps, || {
+        let mut output = vec![0.0; n];
+        adam_core_rs_coords::calculate_phase_angle_into(&object, &observer, &mut output);
+        output
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (h_v, object_pos, observer_pos, g, reps, trials, warmup_reps=1))]
+fn benchmark_calculate_apparent_magnitude_v_numpy(
+    h_v: PyReadonlyArray1<'_, f64>,
+    object_pos: PyReadonlyArray2<'_, f64>,
+    observer_pos: PyReadonlyArray2<'_, f64>,
+    g: PyReadonlyArray1<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let (object, observer, n) = owned_positions(&object_pos, &observer_pos)?;
+    let h = h_v.as_array();
+    let g = g.as_array();
+    if h.len() != n || g.len() != n {
+        return Err(PyValueError::new_err("h_v and g must each have length N"));
+    }
+    let h = h
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("h_v must be contiguous"))?;
+    let g = g
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("g must be contiguous"))?;
+    benchmark_samples(reps, trials, warmup_reps, || {
+        let mut output = vec![0.0; n];
+        adam_core_rs_coords::calculate_apparent_magnitude_v_into(
+            h,
+            &object,
+            &observer,
+            g,
+            &mut output,
+        );
+        output
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (h_v, object_pos, observer_pos, g, reps, trials, warmup_reps=1))]
+fn benchmark_calculate_apparent_magnitude_v_and_phase_angle_numpy(
+    h_v: PyReadonlyArray1<'_, f64>,
+    object_pos: PyReadonlyArray2<'_, f64>,
+    observer_pos: PyReadonlyArray2<'_, f64>,
+    g: PyReadonlyArray1<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let (object, observer, n) = owned_positions(&object_pos, &observer_pos)?;
+    let h = h_v.as_array();
+    let g = g.as_array();
+    if h.len() != n || g.len() != n {
+        return Err(PyValueError::new_err("h_v and g must each have length N"));
+    }
+    let h = h
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("h_v must be contiguous"))?;
+    let g = g
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("g must be contiguous"))?;
+    benchmark_samples(reps, trials, warmup_reps, || {
+        let mut magnitude = vec![0.0; n];
+        let mut phase_angle = vec![0.0; n];
+        adam_core_rs_coords::calculate_apparent_magnitude_v_and_phase_angle_into(
+            h,
+            &object,
+            &observer,
+            g,
+            &mut magnitude,
+            &mut phase_angle,
+        );
+        (magnitude, phase_angle)
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (h_v, object_pos, observer_pos, g, target_ids, delta_table, reps, trials, warmup_reps=1))]
+fn benchmark_predict_magnitudes_bandpass_numpy(
+    h_v: PyReadonlyArray1<'_, f64>,
+    object_pos: PyReadonlyArray2<'_, f64>,
+    observer_pos: PyReadonlyArray2<'_, f64>,
+    g: PyReadonlyArray1<'_, f64>,
+    target_ids: PyReadonlyArray1<'_, i32>,
+    delta_table: PyReadonlyArray1<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let (object, observer, n) = owned_positions(&object_pos, &observer_pos)?;
+    let h = h_v.as_array();
+    let g = g.as_array();
+    let targets = target_ids.as_array();
+    let deltas = delta_table.as_array();
+    if h.len() != n || g.len() != n || targets.len() != n {
+        return Err(PyValueError::new_err(
+            "h_v, g, and target_ids must each have length N",
+        ));
+    }
+    let h = h
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("h_v must be contiguous"))?;
+    let g = g
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("g must be contiguous"))?;
+    let targets = targets
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("target_ids must be contiguous"))?;
+    let deltas = deltas
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("delta_table must be contiguous"))?;
+    benchmark_samples(reps, trials, warmup_reps, || {
+        let mut output = vec![0.0; n];
+        adam_core_rs_coords::predict_magnitudes_bandpass_into(
+            h,
+            &object,
+            &observer,
+            g,
+            targets,
+            deltas,
+            &mut output,
+        );
+        output
+    })
+}
+
+/// Rust-owned timer for one-group fitting. The complete fit, including its
+/// per-fit residual/MAD setup and allocations, is inside each semantic sample.
+#[pyfunction]
+#[pyo3(signature = (h_rows, sigma_rows, reps, trials, warmup_reps=1))]
+fn benchmark_fit_absolute_magnitude_rows_numpy(
+    h_rows: PyReadonlyArray1<'_, f64>,
+    sigma_rows: PyReadonlyArray1<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let h = h_rows.as_array();
+    let sigma = sigma_rows.as_array();
+    if h.len() != sigma.len() {
+        return Err(PyValueError::new_err(
+            "h_rows and sigma_rows must be equal length",
+        ));
+    }
+    let h = h
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("h_rows must be contiguous"))?;
+    let sigma = sigma
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("sigma_rows must be contiguous"))?;
+    benchmark_samples(reps, trials, warmup_reps, || {
+        fit_absolute_magnitude_rows(h, sigma)
+    })
+}
+
+/// Rust-owned timer for grouped fitting. Offset conversion/validation is input
+/// preparation outside samples; each sample includes grouped orchestration,
+/// per-group row-fit setup, Rayon collection, and result allocation.
+#[pyfunction]
+#[pyo3(signature = (h_rows, sigma_rows, group_offsets, reps, trials, warmup_reps=1))]
+fn benchmark_fit_absolute_magnitude_grouped_numpy(
+    h_rows: PyReadonlyArray1<'_, f64>,
+    sigma_rows: PyReadonlyArray1<'_, f64>,
+    group_offsets: PyReadonlyArray1<'_, i64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let h = h_rows.as_array();
+    let sigma = sigma_rows.as_array();
+    let offsets = group_offsets.as_array();
+    if h.len() != sigma.len() {
+        return Err(PyValueError::new_err(
+            "h_rows and sigma_rows must be equal length",
+        ));
+    }
+    let h = h
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("h_rows must be contiguous"))?;
+    let sigma = sigma
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("sigma_rows must be contiguous"))?;
+    let offsets = offsets
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("group_offsets must be contiguous"))?;
+    if offsets.len() < 2
+        || offsets[0] != 0
+        || offsets.last().copied() != Some(h.len() as i64)
+        || offsets.windows(2).any(|pair| pair[0] > pair[1])
+        || offsets.iter().any(|&offset| offset < 0)
+    {
+        return Err(PyValueError::new_err(
+            "group_offsets must be monotonic from 0 through the row count",
+        ));
+    }
+    let offsets: Vec<usize> = offsets.iter().map(|&offset| offset as usize).collect();
+    benchmark_samples(reps, trials, warmup_reps, || {
+        fit_absolute_magnitude_grouped(h, sigma, &offsets)
+    })
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fit_absolute_magnitude_rows_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(fit_absolute_magnitude_grouped_numpy, m)?)?;
@@ -286,5 +562,26 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(predict_magnitudes_bandpass_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_calculate_phase_angle_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_calculate_apparent_magnitude_v_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_calculate_apparent_magnitude_v_and_phase_angle_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_predict_magnitudes_bandpass_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_fit_absolute_magnitude_rows_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_fit_absolute_magnitude_grouped_numpy,
+        m
+    )?)?;
     Ok(())
 }
