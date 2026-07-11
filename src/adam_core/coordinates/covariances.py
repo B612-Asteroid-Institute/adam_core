@@ -5,8 +5,6 @@ import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 import quivr as qv
-from scipy.linalg import sqrtm
-from scipy.stats import multivariate_normal
 
 logger = logging.getLogger(__name__)
 
@@ -302,6 +300,9 @@ def sample_covariance_random(
     # that something has gone wrong with the covariance. However, when the negative eigenvalues
     # are very close to zero, they can be flipped to positive without an issue. This is due to
     # the way the covariance matrix is calculated.
+    #
+    # Governance note: this validation intentionally remains a NumPy/LAPACK
+    # boundary (eigvals); the sampling itself is Rust-owned below.
     if np.any(np.linalg.eigvals(cov) < 0):
         if np.any(np.linalg.eigvals(cov) < -1 * semidef_tol):
             raise ValueError(
@@ -312,11 +313,22 @@ def sample_covariance_random(
                 "Covariance matrix is not positive semidefinite, but within tolerance, adjusting..."
             )
             cov = make_positive_semidefinite(cov)
-    normal = multivariate_normal(mean=mean, cov=cov, allow_singular=True, seed=seed)
-    samples = normal.rvs(num_samples)
-    W = np.full(num_samples, 1 / num_samples)
-    W_cov = np.full(num_samples, 1 / num_samples)
-    return samples, W, W_cov
+
+    # Rust-native RNG (decision 2026-07-03): statistically equivalent to, but
+    # not bit-identical with, the legacy scipy multivariate_normal sampler.
+    from adam_core import _rust_native
+
+    samples, W, W_cov = _rust_native.sample_covariance_random_numpy(
+        np.ascontiguousarray(mean, dtype=np.float64),
+        np.ascontiguousarray(cov, dtype=np.float64),
+        int(num_samples),
+        seed,
+    )
+    return (
+        np.asarray(samples, dtype=np.float64),
+        np.asarray(W, dtype=np.float64),
+        np.asarray(W_cov, dtype=np.float64),
+    )
 
 
 def sample_covariance_sigma_points(
@@ -359,48 +371,25 @@ def sample_covariance_sigma_points(
         Communications, and Control Symposium, 153-158.
         https://doi.org/10.1109/ASSPCC.2000.882463
     """
-    # Calculate the dimensionality of the distribution
-    D = mean.shape[0]
+    # Rust-owned sigma-point sampling: mean row first, then mean +/- rows of
+    # the symmetric square root of (D + lambda) * cov. The Rust Jacobi
+    # symmetric square root replaces scipy.linalg.sqrtm and reconstructs the
+    # input covariance within the same tolerances validated for
+    # VariantOrbits.create sigma-point parity.
+    from adam_core import _rust_native
 
-    # See equation 15 in Wan & Van Der Merwe (2000) [1]
-    N = 2 * D + 1
-    sigma_points = np.empty((N, D))
-    W = np.empty(N)
-    W_cov = np.empty(N)
-
-    # Calculate the scaling parameter lambda
-    lambd = alpha**2 * (D + kappa) - D
-
-    # First sigma point is the mean
-    sigma_points[0] = mean
-
-    # Beta is used to encode prior knowledge about the distribution.
-    # If the distribution is a well-constrained Gaussian, beta = 2 is optimal
-    # but lets set beta to 0 for now which has the effect of not weighting the mean state
-    # with 0 for the covariance matrix. This is generally better for more distributions.
-    # Calculate the weights for mean and the covariance matrix
-    # Weight are used to reconstruct the mean and covariance matrix from the sigma points
-    W[0] = lambd / (D + lambd)
-    W_cov[0] = W[0] + (1 - alpha**2 + beta)
-
-    # Take the matrix square root of the scaled covariance matrix.
-    # Sometimes you'll see this done with a Cholesky decomposition for speed
-    # but sqrtm is sufficiently optimized for this use case and typically provides
-    # better results
-    L = sqrtm((D + lambd) * cov)
-
-    # Calculate the remaining sigma points
-    for i in range(D):
-        offset = L[i]
-        sigma_points[i + 1] = mean + offset
-        sigma_points[i + 1 + D] = mean - offset
-
-    # The weights for the remaining sigma points are the same
-    # for the mean and the covariance matrix
-    W[1:] = 1 / (2 * (D + lambd))
-    W_cov[1:] = 1 / (2 * (D + lambd))
-
-    return sigma_points, W, W_cov
+    sigma_points, W, W_cov = _rust_native.sample_covariance_sigma_points_numpy(
+        np.ascontiguousarray(mean, dtype=np.float64),
+        np.ascontiguousarray(cov, dtype=np.float64),
+        float(alpha),
+        float(beta),
+        float(kappa),
+    )
+    return (
+        np.asarray(sigma_points, dtype=np.float64),
+        np.asarray(W, dtype=np.float64),
+        np.asarray(W_cov, dtype=np.float64),
+    )
 
 
 def weighted_mean(samples: np.ndarray, W: np.ndarray) -> np.ndarray:

@@ -5,8 +5,10 @@
 //! crossing per public property/function.
 
 use adam_core_rs_coords::{
-    calc_apoapsis_distance, calc_mean_motion, calc_period, calc_semi_latus_rectum,
-    calc_semi_major_axis, origin_mu_au3_day2, OriginId,
+    bound_longitude_residuals_flat, calc_apoapsis_distance, calc_mean_motion, calc_period,
+    calc_semi_latus_rectum, calc_semi_major_axis, chi2_survival, compute_residuals_chi2_flat,
+    origin_mu_au3_day2, sample_coordinate_covariances_flat, sample_covariance_random_flat,
+    sample_covariance_sigma_points_flat, OrbitVariantSamplingMethod, OriginId,
 };
 use numpy::{
     IntoPyArray, PyArray1, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
@@ -914,6 +916,378 @@ fn benchmark_origin_mu_numpy(
     bench(reps, trials, warmup_reps, || origin_mu_values(&codes))
 }
 
+// ---------------------------------------------------------------------------
+// Residual convenience surface
+// ---------------------------------------------------------------------------
+
+fn broadcast_predicted(predicted: &[f64], rows: usize) -> Result<Vec<f64>, String> {
+    let predicted_rows = predicted.len() / 6;
+    if predicted_rows == rows {
+        Ok(predicted.to_vec())
+    } else if predicted_rows == 1 {
+        Ok(predicted.repeat(rows))
+    } else {
+        Err(format!(
+            "Predicted coordinates must have length 1 or match observed length ({rows}), got {predicted_rows}."
+        ))
+    }
+}
+
+fn residual_values(
+    observed: &[f64],
+    predicted: &[f64],
+    is_spherical: bool,
+) -> Result<Vec<f64>, String> {
+    let rows = observed.len() / 6;
+    let predicted = broadcast_predicted(predicted, rows)?;
+    let mut residuals: Vec<f64> = observed
+        .iter()
+        .zip(predicted.iter())
+        .map(|(observed, predicted)| observed - predicted)
+        .collect();
+    if is_spherical {
+        bound_longitude_residuals_flat(observed, &mut residuals, rows, 6);
+        for row in 0..rows {
+            let cos_lat = observed[row * 6 + 2].to_radians().cos();
+            residuals[row * 6 + 1] *= cos_lat;
+            residuals[row * 6 + 4] *= cos_lat;
+        }
+    }
+    Ok(residuals)
+}
+
+#[pyfunction]
+#[pyo3(signature = (observed, predicted, is_spherical=false))]
+fn compute_residual_values_numpy<'py>(
+    py: Python<'py>,
+    observed: PyReadonlyArray2<'py, f64>,
+    predicted: PyReadonlyArray2<'py, f64>,
+    is_spherical: bool,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let observed = rows6(&observed, "observed")?;
+    let predicted = rows6(&predicted, "predicted")?;
+    let rows = observed.len() / 6;
+    let residuals =
+        residual_values(&observed, &predicted, is_spherical).map_err(PyValueError::new_err)?;
+    array2(py, residuals, rows, 6)
+}
+
+#[pyfunction]
+#[pyo3(signature = (observed, predicted, is_spherical, reps, trials, warmup_reps=1))]
+fn benchmark_compute_residual_values_numpy(
+    observed: PyReadonlyArray2<'_, f64>,
+    predicted: PyReadonlyArray2<'_, f64>,
+    is_spherical: bool,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let observed = rows6(&observed, "observed")?;
+    let predicted = rows6(&predicted, "predicted")?;
+    bench(reps, trials, warmup_reps, || {
+        residual_values(&observed, &predicted, is_spherical)
+    })
+}
+
+#[pyfunction]
+fn reduced_chi2_numpy(
+    chi2: PyReadonlyArray1<'_, f64>,
+    dof: PyReadonlyArray1<'_, i64>,
+    parameters: i64,
+) -> PyResult<f64> {
+    let chi2 = scalars(&chi2, "chi2")?;
+    let dof = dof
+        .as_array()
+        .as_slice()
+        .map(<[i64]>::to_vec)
+        .ok_or_else(|| PyValueError::new_err("dof must be contiguous"))?;
+    let chi2_total: f64 = chi2.iter().sum();
+    let dof_total: i64 = dof.iter().sum::<i64>() - parameters;
+    Ok(chi2_total / dof_total as f64)
+}
+
+#[pyfunction]
+fn chi2_survival_numpy<'py>(
+    py: Python<'py>,
+    chi2: PyReadonlyArray1<'py, f64>,
+    dof: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let chi2 = scalars(&chi2, "chi2")?;
+    let dof = scalars(&dof, "dof")?;
+    if chi2.len() != dof.len() {
+        return Err(PyValueError::new_err("chi2 and dof must have equal length"));
+    }
+    Ok(array1(
+        py,
+        chi2.iter()
+            .zip(dof.iter())
+            .map(|(&chi2, &dof)| {
+                if chi2.is_nan() {
+                    f64::NAN
+                } else {
+                    chi2_survival(chi2, dof)
+                }
+            })
+            .collect(),
+    ))
+}
+
+type ResidualsProbabilityResult<'py> = (
+    Bound<'py, PyArray2<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<i64>>,
+    Bound<'py, PyArray1<f64>>,
+    bool,
+);
+
+/// One-crossing custom-coordinates fallback for `Residuals.calculate`:
+/// broadcast, NaN-covariance policy, fused residual/chi2 kernel, and
+/// chi-squared survival probability all execute here.
+#[pyfunction]
+#[pyo3(signature = (observed, predicted, observed_covariances, predicted_covariances=None, is_spherical=false))]
+fn compute_residuals_chi2_probability_numpy<'py>(
+    py: Python<'py>,
+    observed: PyReadonlyArray2<'py, f64>,
+    predicted: PyReadonlyArray2<'py, f64>,
+    observed_covariances: PyReadonlyArray3<'py, f64>,
+    predicted_covariances: Option<PyReadonlyArray3<'py, f64>>,
+    is_spherical: bool,
+) -> PyResult<ResidualsProbabilityResult<'py>> {
+    let observed = rows6(&observed, "observed")?;
+    let rows = observed.len() / 6;
+    let predicted = broadcast_predicted(&rows6(&predicted, "predicted")?, rows)
+        .map_err(PyValueError::new_err)?;
+    let (observed_cov, cov_rows, dim) =
+        covariance_rows(&observed_covariances, "observed_covariances")?;
+    if cov_rows != rows || dim != 6 {
+        return Err(PyValueError::new_err(
+            "observed_covariances must have shape (N, 6, 6)",
+        ));
+    }
+    let predicted_cov = match predicted_covariances {
+        Some(values) => {
+            let (flat, pred_rows, dim) = covariance_rows(&values, "predicted_covariances")?;
+            if dim != 6 {
+                return Err(PyValueError::new_err(
+                    "predicted_covariances must have shape (N, 6, 6)",
+                ));
+            }
+            let mut broadcast = if pred_rows == rows {
+                flat
+            } else if pred_rows == 1 {
+                flat.repeat(rows)
+            } else {
+                return Err(PyValueError::new_err(format!(
+                    "Predicted covariance length must be 1 or {rows}, got {pred_rows}"
+                )));
+            };
+            for value in broadcast.iter_mut() {
+                if value.is_nan() {
+                    *value = 0.0;
+                }
+            }
+            broadcast
+        }
+        None => vec![0.0_f64; rows * 36],
+    };
+    let output = compute_residuals_chi2_flat(
+        &observed,
+        &predicted,
+        &observed_cov,
+        &predicted_cov,
+        rows,
+        6,
+        is_spherical,
+    )
+    .map_err(|err| PyValueError::new_err(format!("residual computation failed: {err:?}")))?;
+    let probability = output
+        .chi2
+        .iter()
+        .zip(output.dof.iter())
+        .map(|(&chi2, &dof)| {
+            if chi2.is_nan() {
+                f64::NAN
+            } else {
+                chi2_survival(chi2, dof as f64)
+            }
+        })
+        .collect::<Vec<_>>();
+    Ok((
+        array2(py, output.residuals, rows, 6)?,
+        array1(py, output.chi2),
+        output.dof.into_pyarray(py),
+        array1(py, probability),
+        output.had_off_diagonal_nan,
+    ))
+}
+
+// ---------------------------------------------------------------------------
+// Covariance sampling
+// ---------------------------------------------------------------------------
+
+fn parse_sampling_method(method: &str) -> PyResult<OrbitVariantSamplingMethod> {
+    match method {
+        "auto" => Ok(OrbitVariantSamplingMethod::Auto),
+        "sigma-point" => Ok(OrbitVariantSamplingMethod::SigmaPoint),
+        "monte-carlo" => Ok(OrbitVariantSamplingMethod::MonteCarlo),
+        other => Err(PyValueError::new_err(format!(
+            "Unknown coordinate covariance sampling method: {other}"
+        ))),
+    }
+}
+
+type SamplingResult<'py> = (
+    Bound<'py, PyArray2<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<i64>>,
+);
+
+#[pyfunction]
+#[pyo3(signature = (means, covariances, method, num_samples=10000, seed=None, alpha=1.0, beta=0.0, kappa=0.0))]
+#[allow(clippy::too_many_arguments)]
+fn sample_coordinate_variants_numpy<'py>(
+    py: Python<'py>,
+    means: PyReadonlyArray2<'py, f64>,
+    covariances: PyReadonlyArray3<'py, f64>,
+    method: &str,
+    num_samples: usize,
+    seed: Option<u64>,
+    alpha: f64,
+    beta: f64,
+    kappa: f64,
+) -> PyResult<SamplingResult<'py>> {
+    let means = rows6(&means, "means")?;
+    let (covariances, _, dim) = covariance_rows(&covariances, "covariances")?;
+    if dim != 6 {
+        return Err(PyValueError::new_err(
+            "covariances must have shape (N, 6, 6)",
+        ));
+    }
+    let method = parse_sampling_method(method)?;
+    let (samples, weights, weights_cov, source_rows) = py
+        .allow_threads(|| {
+            sample_coordinate_covariances_flat(
+                &means,
+                &covariances,
+                method,
+                num_samples,
+                seed,
+                alpha,
+                beta,
+                kappa,
+            )
+        })
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let rows = weights.len();
+    Ok((
+        array2(py, samples, rows, 6)?,
+        array1(py, weights),
+        array1(py, weights_cov),
+        source_rows.into_pyarray(py),
+    ))
+}
+
+#[pyfunction]
+#[pyo3(signature = (means, covariances, method, reps, trials, warmup_reps=1, num_samples=10000, seed=None, alpha=1.0, beta=0.0, kappa=0.0))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_sample_coordinate_variants_numpy(
+    means: PyReadonlyArray2<'_, f64>,
+    covariances: PyReadonlyArray3<'_, f64>,
+    method: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    num_samples: usize,
+    seed: Option<u64>,
+    alpha: f64,
+    beta: f64,
+    kappa: f64,
+) -> PyResult<Vec<Vec<f64>>> {
+    let means = rows6(&means, "means")?;
+    let (covariances, _, _) = covariance_rows(&covariances, "covariances")?;
+    let method = parse_sampling_method(method)?;
+    bench(reps, trials, warmup_reps, || {
+        sample_coordinate_covariances_flat(
+            &means,
+            &covariances,
+            method,
+            num_samples,
+            seed,
+            alpha,
+            beta,
+            kappa,
+        )
+    })
+}
+
+type SingleSampleResult<'py> = (
+    Bound<'py, PyArray2<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+);
+
+#[pyfunction]
+#[pyo3(signature = (mean, covariance, alpha=1.0, beta=0.0, kappa=0.0))]
+fn sample_covariance_sigma_points_numpy<'py>(
+    py: Python<'py>,
+    mean: PyReadonlyArray1<'py, f64>,
+    covariance: PyReadonlyArray2<'py, f64>,
+    alpha: f64,
+    beta: f64,
+    kappa: f64,
+) -> PyResult<SingleSampleResult<'py>> {
+    let mean = scalars(&mean, "mean")?;
+    let view = covariance.as_array();
+    let flat = view
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("covariance must be contiguous"))?;
+    if mean.len() != 6 || view.shape() != [6, 6] {
+        return Err(PyValueError::new_err(
+            "mean must have shape (6,) and covariance (6, 6)",
+        ));
+    }
+    let (samples, weights, weights_cov) =
+        sample_covariance_sigma_points_flat(&mean, flat, alpha, beta, kappa)
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let rows = weights.len();
+    Ok((
+        array2(py, samples, rows, 6)?,
+        array1(py, weights),
+        array1(py, weights_cov),
+    ))
+}
+
+#[pyfunction]
+#[pyo3(signature = (mean, covariance, num_samples=10000, seed=None))]
+fn sample_covariance_random_numpy<'py>(
+    py: Python<'py>,
+    mean: PyReadonlyArray1<'py, f64>,
+    covariance: PyReadonlyArray2<'py, f64>,
+    num_samples: usize,
+    seed: Option<u64>,
+) -> PyResult<SingleSampleResult<'py>> {
+    let mean = scalars(&mean, "mean")?;
+    let view = covariance.as_array();
+    let flat = view
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("covariance must be contiguous"))?;
+    if mean.len() != 6 || view.shape() != [6, 6] {
+        return Err(PyValueError::new_err(
+            "mean must have shape (6,) and covariance (6, 6)",
+        ));
+    }
+    let (samples, weights, weights_cov) =
+        sample_covariance_random_flat(&mean, flat, num_samples, seed)
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let rows = weights.len();
+    Ok((
+        array2(py, samples, rows, 6)?,
+        array1(py, weights),
+        array1(py, weights_cov),
+    ))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(row_norm3_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(row_unit3_numpy, m)?)?;
@@ -969,5 +1343,23 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(spherical_to_unit_sphere_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(origin_mu_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_origin_mu_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_residual_values_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_compute_residual_values_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(reduced_chi2_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(chi2_survival_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        compute_residuals_chi2_probability_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(sample_coordinate_variants_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_sample_coordinate_variants_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(sample_covariance_sigma_points_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(sample_covariance_random_numpy, m)?)?;
     Ok(())
 }

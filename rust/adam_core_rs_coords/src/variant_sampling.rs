@@ -210,6 +210,129 @@ where
     })
 }
 
+/// Flat per-row covariance sampling with public `create_coordinate_variants`
+/// semantics: NaN covariance/mean rows are rejected with the legacy error
+/// messages and per-row samples are concatenated with source-row indices.
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub fn sample_coordinate_covariances_flat(
+    means_flat: &[f64],
+    covariances_flat: &[f64],
+    method: OrbitVariantSamplingMethod,
+    num_samples: usize,
+    seed: Option<u64>,
+    alpha: f64,
+    beta: f64,
+    kappa: f64,
+) -> SchemaResult<(Vec<f64>, Vec<f64>, Vec<f64>, Vec<i64>)> {
+    let rows = means_flat.len() / DIM;
+    if !means_flat.len().is_multiple_of(DIM) || covariances_flat.len() != rows * DIM * DIM {
+        return Err(SchemaError::InvalidRecordBatch(
+            "means must have shape (N, 6) and covariances (N, 6, 6)".to_string(),
+        ));
+    }
+    match method {
+        OrbitVariantSamplingMethod::Auto => {
+            validate_sigma_point_parameters(alpha, beta, kappa)?;
+            validate_monte_carlo_parameters(num_samples)?;
+        }
+        OrbitVariantSamplingMethod::SigmaPoint => {
+            validate_sigma_point_parameters(alpha, beta, kappa)?
+        }
+        OrbitVariantSamplingMethod::MonteCarlo => validate_monte_carlo_parameters(num_samples)?,
+    }
+    let mut samples_out = Vec::new();
+    let mut weights = Vec::new();
+    let mut weights_cov = Vec::new();
+    let mut source_rows = Vec::new();
+    for row in 0..rows {
+        let covariance = &covariances_flat[row * DIM * DIM..(row + 1) * DIM * DIM];
+        if covariance.iter().any(|value| value.is_nan()) {
+            return Err(SchemaError::InvalidRecordBatch(
+                "Cannot sample coordinate covariances when some covariance elements are undefined."
+                    .to_string(),
+            ));
+        }
+        let mean_slice = &means_flat[row * DIM..(row + 1) * DIM];
+        if mean_slice.iter().any(|value| value.is_nan()) {
+            return Err(SchemaError::InvalidRecordBatch(
+                "Cannot sample coordinate covariances when some coordinate dimensions are undefined."
+                    .to_string(),
+            ));
+        }
+        let mut mean = [0.0_f64; DIM];
+        mean.copy_from_slice(mean_slice);
+        let row_samples = match method {
+            OrbitVariantSamplingMethod::SigmaPoint => {
+                sigma_point_samples(&mean, covariance, alpha, beta, kappa)?
+            }
+            OrbitVariantSamplingMethod::MonteCarlo => {
+                monte_carlo_samples(&mean, covariance, num_samples, seed_for_row(seed, row))?
+            }
+            OrbitVariantSamplingMethod::Auto => auto_samples(
+                row,
+                &mean,
+                covariance,
+                num_samples,
+                seed,
+                alpha,
+                beta,
+                kappa,
+            )?,
+        };
+        for sample in row_samples {
+            samples_out.extend_from_slice(&sample.values);
+            weights.push(sample.weight);
+            weights_cov.push(sample.weight_cov);
+            source_rows.push(row as i64);
+        }
+    }
+    Ok((samples_out, weights, weights_cov, source_rows))
+}
+
+/// Public single-distribution sigma-point sampler matching
+/// `sample_covariance_sigma_points` output ordering and weights.
+pub fn sample_covariance_sigma_points_flat(
+    mean: &[f64],
+    covariance: &[f64],
+    alpha: f64,
+    beta: f64,
+    kappa: f64,
+) -> SchemaResult<(Vec<f64>, Vec<f64>, Vec<f64>)> {
+    validate_sigma_point_parameters(alpha, beta, kappa)?;
+    let mut mean6 = [0.0_f64; DIM];
+    mean6.copy_from_slice(mean);
+    let samples = sigma_point_samples(&mean6, covariance, alpha, beta, kappa)?;
+    Ok(split_samples(samples))
+}
+
+/// Public single-distribution Monte Carlo sampler (Rust-native RNG;
+/// statistically equivalent to, but not bit-identical with, the legacy scipy
+/// sampler per decision 2026-07-03).
+pub fn sample_covariance_random_flat(
+    mean: &[f64],
+    covariance: &[f64],
+    num_samples: usize,
+    seed: Option<u64>,
+) -> SchemaResult<(Vec<f64>, Vec<f64>, Vec<f64>)> {
+    validate_monte_carlo_parameters(num_samples)?;
+    let mut mean6 = [0.0_f64; DIM];
+    mean6.copy_from_slice(mean);
+    let samples = monte_carlo_samples(&mean6, covariance, num_samples, seed_for_row(seed, 0))?;
+    Ok(split_samples(samples))
+}
+
+fn split_samples(samples: Vec<CoordinateSample>) -> (Vec<f64>, Vec<f64>, Vec<f64>) {
+    let mut values = Vec::with_capacity(samples.len() * DIM);
+    let mut weights = Vec::with_capacity(samples.len());
+    let mut weights_cov = Vec::with_capacity(samples.len());
+    for sample in samples {
+        values.extend_from_slice(&sample.values);
+        weights.push(sample.weight);
+        weights_cov.push(sample.weight_cov);
+    }
+    (values, weights, weights_cov)
+}
+
 fn sigma_point_samples(
     mean: &[f64; DIM],
     covariance: &[f64],

@@ -84,7 +84,9 @@ pub mod variant_sampling;
 pub use variant_sampling::{
     collapse_propagated_variants_to_orbits, collapse_variant_ephemeris,
     create_monte_carlo_orbit_variants, create_sampled_orbit_variants,
-    create_sigma_point_orbit_variants, OrbitVariantSamples, OrbitVariantSamplingMethod,
+    create_sigma_point_orbit_variants, sample_coordinate_covariances_flat,
+    sample_covariance_random_flat, sample_covariance_sigma_points_flat, OrbitVariantSamples,
+    OrbitVariantSamplingMethod,
 };
 
 pub mod translation;
