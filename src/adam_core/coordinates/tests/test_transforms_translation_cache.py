@@ -69,6 +69,13 @@ def test_mpc_observer_state_cache_avoids_recompute(monkeypatch):
 
     import adam_core.observers.state as state_mod
 
+    # The pxform cache under test lives on the retained legacy composition;
+    # force it so the counted batch query below is actually exercised.
+    def _no_rust(*args, **kwargs):
+        raise RuntimeError("forced legacy path for cache test")
+
+    monkeypatch.setattr(state_mod, "_rust_backend_observer_states", _no_rust)
+
     calls = {"n": 0}
     batch_orig = state_mod._query_pxform_itrf93_batch
 

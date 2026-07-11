@@ -4034,15 +4034,33 @@ fn benchmark_prepare_ephemeris_observer_linkage_arrow(
     })
 }
 
-fn group_by_orbit_id_record_batch(
+fn take_record_batch_groups(
     batch: &RecordBatch,
+    groups: Vec<(String, Vec<u32>)>,
 ) -> Result<Vec<(String, RecordBatch)>, String> {
-    let orbits = DataOrbitBatch::try_from_nested_record_batch(batch)
-        .map_err(|err| format!("failed to decode OrbitBatch: {err}"))?;
+    groups
+        .into_iter()
+        .map(|(id, rows)| {
+            let indices = UInt32Array::from(rows);
+            let columns = batch
+                .columns()
+                .iter()
+                .map(|column| {
+                    arrow::compute::take(column.as_ref(), &indices, None)
+                        .map_err(|err| format!("failed to group column: {err}"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let grouped = RecordBatch::try_new(batch.schema(), columns)
+                .map_err(|err| format!("failed to assemble grouped batch: {err}"))?;
+            Ok((id, grouped))
+        })
+        .collect()
+}
+
+fn first_appearance_groups(ids: Vec<String>) -> Result<Vec<(String, Vec<u32>)>, String> {
     let mut group_lookup = HashMap::<String, usize>::new();
     let mut groups = Vec::<(String, Vec<u32>)>::new();
-    for (row, orbit_id) in orbits.orbit_id.iter().enumerate() {
-        let id = orbit_id.0.clone();
+    for (row, id) in ids.into_iter().enumerate() {
         let group = match group_lookup.get(&id) {
             Some(group) => *group,
             None => {
@@ -4054,23 +4072,56 @@ fn group_by_orbit_id_record_batch(
         };
         groups[group]
             .1
-            .push(u32::try_from(row).map_err(|_| "orbit row index exceeds UInt32".to_string())?);
+            .push(u32::try_from(row).map_err(|_| "row index exceeds UInt32".to_string())?);
     }
-    groups
+    Ok(groups)
+}
+
+fn group_by_orbit_id_record_batch(
+    batch: &RecordBatch,
+) -> Result<Vec<(String, RecordBatch)>, String> {
+    let orbits = DataOrbitBatch::try_from_nested_record_batch(batch)
+        .map_err(|err| format!("failed to decode OrbitBatch: {err}"))?;
+    let ids = orbits
+        .orbit_id
+        .iter()
+        .map(|orbit_id| orbit_id.0.clone())
+        .collect();
+    take_record_batch_groups(batch, first_appearance_groups(ids)?)
+}
+
+/// Sorted-by-code grouping over the nested Observers RecordBatch, matching
+/// the legacy `iterate_codes` (unique().sort()) iteration order.
+fn group_observers_by_code_record_batch(
+    batch: &RecordBatch,
+) -> Result<Vec<(String, RecordBatch)>, String> {
+    let observers = DataObserverBatch::try_from_nested_record_batch(batch)
+        .map_err(|err| format!("failed to decode ObserverBatch: {err}"))?;
+    let ids = observers.code.iter().map(|code| code.0.clone()).collect();
+    let mut groups = first_appearance_groups(ids)?;
+    groups.sort_by(|a, b| a.0.cmp(&b.0));
+    take_record_batch_groups(batch, groups)
+}
+
+#[pyfunction]
+fn group_observers_by_code_arrow<'py>(
+    py: Python<'py>,
+    observer_batch: &Bound<'py, PyAny>,
+) -> PyResult<Vec<(String, PyObject)>> {
+    let batch = RecordBatch::from_pyarrow_bound(observer_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Observers RecordBatch: {err}")))?;
+    py.allow_threads(|| group_observers_by_code_record_batch(&batch))
+        .map_err(PyValueError::new_err)?
         .into_iter()
-        .map(|(id, rows)| {
-            let indices = UInt32Array::from(rows);
-            let columns = batch
-                .columns()
-                .iter()
-                .map(|column| {
-                    arrow::compute::take(column.as_ref(), &indices, None)
-                        .map_err(|err| format!("failed to group orbit column: {err}"))
+        .map(|(code, grouped)| {
+            grouped
+                .to_pyarrow(py)
+                .map(|value| (code, value))
+                .map_err(|err| {
+                    PyRuntimeError::new_err(format!(
+                        "failed to export grouped Observers batch: {err}"
+                    ))
                 })
-                .collect::<Result<Vec<_>, _>>()?;
-            let grouped = RecordBatch::try_new(batch.schema(), columns)
-                .map_err(|err| format!("failed to assemble grouped OrbitBatch: {err}"))?;
-            Ok((id, grouped))
         })
         .collect()
 }
@@ -4499,6 +4550,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(group_by_orbit_id_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(group_observers_by_code_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(collapse_variant_orbits_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(
         collapse_variant_orbits_by_object_id_arrow,

@@ -1288,6 +1288,50 @@ fn sample_covariance_random_numpy<'py>(
     ))
 }
 
+// ---------------------------------------------------------------------------
+// Observatory geodesy
+// ---------------------------------------------------------------------------
+
+type LonLatResult<'py> = (Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>);
+
+/// Observatory longitude/geodetic-latitude from MPC parallax coefficients,
+/// matching the legacy NumPy composition (NaN rows are space-based sites).
+#[pyfunction]
+fn observatory_lon_lat_numpy<'py>(
+    py: Python<'py>,
+    longitude: PyReadonlyArray1<'py, f64>,
+    cos_phi: PyReadonlyArray1<'py, f64>,
+    sin_phi: PyReadonlyArray1<'py, f64>,
+    e2: f64,
+) -> PyResult<LonLatResult<'py>> {
+    let longitude = scalars(&longitude, "longitude")?;
+    let cos_phi = scalars(&cos_phi, "cos_phi")?;
+    let sin_phi = scalars(&sin_phi, "sin_phi")?;
+    if cos_phi.len() != longitude.len() || sin_phi.len() != longitude.len() {
+        return Err(PyValueError::new_err(
+            "longitude, cos_phi, sin_phi must have equal length",
+        ));
+    }
+    let mut lon_out = Vec::with_capacity(longitude.len());
+    let mut lat_out = Vec::with_capacity(longitude.len());
+    for row in 0..longitude.len() {
+        if longitude[row].is_nan() {
+            lon_out.push(f64::NAN);
+            lat_out.push(f64::NAN);
+            continue;
+        }
+        let mut lon = longitude[row];
+        if lon > 180.0 {
+            lon -= 360.0;
+        }
+        let tan_phi_geo = sin_phi[row] / cos_phi[row];
+        let latitude_geodetic = (tan_phi_geo / (1.0 - e2)).atan();
+        lon_out.push(lon);
+        lat_out.push(latitude_geodetic.to_degrees());
+    }
+    Ok((array1(py, lon_out), array1(py, lat_out)))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(row_norm3_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(row_unit3_numpy, m)?)?;
@@ -1361,5 +1405,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(sample_covariance_sigma_points_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(sample_covariance_random_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(observatory_lon_lat_numpy, m)?)?;
     Ok(())
 }

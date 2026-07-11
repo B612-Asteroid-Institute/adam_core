@@ -43,24 +43,19 @@ class ObservatoryParallaxCoefficients(qv.Table):
             The latitude of the observatories in degrees. In the range -90 to 90 degrees,
             with positive values north of the equator.
         """
-        # Filter out Space-based observatories
-        mask = pc.is_nan(self.longitude).to_numpy(zero_copy_only=False)
+        from adam_core import _rust_native
 
-        longitude = np.where(
-            mask, np.nan, self.longitude.to_numpy(zero_copy_only=False)
+        # One Rust crossing owns the space-site NaN masking, geodetic
+        # latitude conversion, and longitude wrap.
+        longitude, latitude = _rust_native.observatory_lon_lat_numpy(
+            self.longitude.to_numpy(zero_copy_only=False),
+            self.cos_phi.to_numpy(zero_copy_only=False),
+            self.sin_phi.to_numpy(zero_copy_only=False),
+            float(E_EARTH**2),
         )
-        tan_phi_geo = np.where(
-            mask,
-            np.nan,
-            self.sin_phi.to_numpy(zero_copy_only=False)
-            / self.cos_phi.to_numpy(zero_copy_only=False),
+        return np.asarray(longitude, dtype=np.float64), np.asarray(
+            latitude, dtype=np.float64
         )
-        latitude_geodetic = np.arctan(tan_phi_geo / (1 - E_EARTH**2))
-
-        # Scale longitude to -180 to 180
-        longitude = np.where(longitude > 180, longitude - 360, longitude)
-
-        return longitude, np.degrees(latitude_geodetic)
 
     def timezone(self) -> npt.NDArray[np.str_]:
         """
@@ -297,5 +292,15 @@ class Observers(qv.Table):
         observers : `~adam_core.observers.observers.Observers`
             The Observers table for this observer.
         """
-        for code in self.code.unique().sort():
-            yield code.as_py(), self.select("code", code)
+        from adam_core import _rust_native
+
+        from .._rust.arrow import table_from_record_batch
+        from ..orbits.arrow_bridge import observers_to_record_batch
+
+        # One Rust crossing owns the sorted grouping; each group batch is
+        # wrapped directly.
+        grouped = _rust_native.group_observers_by_code_arrow(
+            observers_to_record_batch(self)
+        )
+        for code, batch in grouped:
+            yield str(code), table_from_record_batch(Observers, batch)
