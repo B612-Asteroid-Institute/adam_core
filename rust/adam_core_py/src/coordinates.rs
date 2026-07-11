@@ -7,18 +7,19 @@ use adam_core_rs_coords::{
     apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat, bound_longitude_value,
     calculate_chi2_flat, cartesian_to_cometary_flat6, cartesian_to_geodetic_flat6,
     cartesian_to_keplerian_flat6, cartesian_to_spherical_flat6, cartesian_to_spherical_row,
-    classify_orbits_flat, cometary_to_cartesian_flat6, create_sampled_orbit_variants,
-    fit_orbit_2body_least_squares, generate_ephemeris_2body_flat6, keplerian_to_cartesian_flat6,
-    origin_mu_au3_day2, porkchop_grid_flat, rotate_cartesian_time_varying_flat6,
-    rotate_coordinates_to_frame, spherical_to_cartesian_flat6, spherical_to_cartesian_row,
-    tisserand_parameter_flat, transform_values_flat6, transform_with_covariance_flat6,
-    weighted_covariance_flat, weighted_mean_flat, ArrowSchemaExport,
-    CoordinateBatch as DataCoordinateBatch, CoordinateRepresentation as DataRepresentation,
-    CoordinateValues, CovarianceBatch, CovarianceUnits, DataFrame, Epoch, Frame,
-    IntoNestedRecordBatch, LeastSquaresConfig, ObserverBatch as DataObserverBatch,
-    OrbitBatch as DataOrbitBatch, OrbitVariantBatch as DataOrbitVariantBatch,
-    OrbitVariantSamplingMethod, OriginArray, OriginId, Representation as CoordsRepresentation,
-    TimeArray, TimeScale, TimeScaleProvider, TryFromNestedRecordBatch,
+    chi2_survival, classify_orbits_flat, cometary_to_cartesian_flat6, compute_residuals_chi2_flat,
+    create_sampled_orbit_variants, fit_orbit_2body_least_squares, generate_ephemeris_2body_flat6,
+    keplerian_to_cartesian_flat6, origin_mu_au3_day2, porkchop_grid_flat,
+    rotate_cartesian_time_varying_flat6, rotate_coordinates_to_frame, spherical_to_cartesian_flat6,
+    spherical_to_cartesian_row, tisserand_parameter_flat, transform_values_flat6,
+    transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat,
+    ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch,
+    CoordinateRepresentation as DataRepresentation, CoordinateValues, CovarianceBatch,
+    CovarianceUnits, DataFrame, Epoch, Frame, IntoNestedRecordBatch, LeastSquaresConfig,
+    ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch,
+    OrbitVariantBatch as DataOrbitVariantBatch, OrbitVariantSamplingMethod, OriginArray, OriginId,
+    Representation as CoordsRepresentation, TimeArray, TimeScale, TimeScaleProvider,
+    TryFromNestedRecordBatch,
 };
 use adam_core_rs_spice::global_backend;
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
@@ -2969,6 +2970,214 @@ where
     .map_err(|err| format!("failed to build origin struct: {err}"))
 }
 
+/// Flatten a coordinate covariance to row-major (rows_out, 36), broadcasting
+/// a single source row when needed. `missing` fills absent/invalid rows;
+/// `nan_to_zero` mirrors the legacy predicted-covariance NaN policy.
+fn coordinate_covariance_flat(
+    coordinates: &DataCoordinateBatch,
+    rows_out: usize,
+    missing: f64,
+    nan_to_zero: bool,
+) -> Vec<f64> {
+    let source_rows = coordinates.len();
+    let mut out = vec![missing; rows_out * 36];
+    if let Some(covariance) = &coordinates.covariance {
+        for out_row in 0..rows_out {
+            let source_row = if source_rows == 1 { 0 } else { out_row };
+            if covariance.is_row_valid(source_row) {
+                let values = covariance.row_values(source_row);
+                for (element, value) in values.iter().enumerate() {
+                    out[out_row * 36 + element] = if nan_to_zero && value.is_nan() {
+                        0.0
+                    } else {
+                        *value
+                    };
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Arrow-native `Residuals.calculate` core: decode observed/predicted
+/// coordinate RecordBatches, broadcast, run the fused residual/chi2 kernel,
+/// evaluate chi-squared survival probabilities, and assemble the finished
+/// Residuals RecordBatch. Returns the batch plus the off-diagonal-NaN flag.
+fn residuals_calculate_record_batch(
+    observed_batch: &RecordBatch,
+    predicted_batch: &RecordBatch,
+    use_predicted_covariance: bool,
+) -> Result<(RecordBatch, bool), String> {
+    let observed = DataCoordinateBatch::try_from_nested_record_batch(observed_batch)
+        .map_err(|err| format!("failed to decode observed coordinates: {err}"))?;
+    let predicted = DataCoordinateBatch::try_from_nested_record_batch(predicted_batch)
+        .map_err(|err| format!("failed to decode predicted coordinates: {err}"))?;
+    if observed.representation() != predicted.representation() {
+        return Err("observed and predicted representations must match".to_string());
+    }
+    let rows = observed.len();
+    let predicted_rows = predicted.len();
+    if predicted_rows != rows && predicted_rows != 1 {
+        return Err(format!(
+            "predicted coordinates must have length 1 or match observed length ({rows}), got {predicted_rows}"
+        ));
+    }
+
+    let observed_flat: Vec<f64> = observed
+        .values
+        .raw_values()
+        .iter()
+        .flatten()
+        .copied()
+        .collect();
+    let predicted_raw = predicted.values.raw_values();
+    let mut predicted_flat = Vec::with_capacity(rows * 6);
+    for row in 0..rows {
+        let source = if predicted_rows == 1 {
+            &predicted_raw[0]
+        } else {
+            &predicted_raw[row]
+        };
+        predicted_flat.extend_from_slice(source);
+    }
+    let observed_covariance = coordinate_covariance_flat(&observed, rows, f64::NAN, false);
+    let predicted_covariance = if use_predicted_covariance {
+        coordinate_covariance_flat(&predicted, rows, 0.0, true)
+    } else {
+        vec![0.0; rows * 36]
+    };
+
+    let is_spherical = observed.representation() == DataRepresentation::Spherical;
+    let output = compute_residuals_chi2_flat(
+        &observed_flat,
+        &predicted_flat,
+        &observed_covariance,
+        &predicted_covariance,
+        rows,
+        6,
+        is_spherical,
+    )
+    .map_err(|err| format!("fused residuals kernel failed: {err:?}"))?;
+
+    let probability: Vec<f64> = output
+        .chi2
+        .iter()
+        .zip(output.dof.iter())
+        .map(|(&chi2, &dof)| {
+            if chi2.is_nan() {
+                f64::NAN
+            } else {
+                chi2_survival(chi2, dof as f64)
+            }
+        })
+        .collect();
+
+    let mut values_builder =
+        arrow_array::builder::ListBuilder::new(arrow_array::builder::Float64Builder::new());
+    for row in 0..rows {
+        for column in 0..6 {
+            values_builder
+                .values()
+                .append_value(output.residuals[row * 6 + column]);
+        }
+        values_builder.append(true);
+    }
+    let values = values_builder.finish();
+
+    let fields = vec![
+        arrow_schema::Field::new("values", values.data_type().clone(), true),
+        arrow_schema::Field::new("chi2", arrow_schema::DataType::Float64, true),
+        arrow_schema::Field::new("dof", arrow_schema::DataType::Int64, true),
+        arrow_schema::Field::new("probability", arrow_schema::DataType::Float64, true),
+    ];
+    let arrays: Vec<arrow_array::ArrayRef> = vec![
+        std::sync::Arc::new(values),
+        std::sync::Arc::new(arrow_array::Float64Array::from(output.chi2)),
+        std::sync::Arc::new(Int64Array::from(output.dof)),
+        std::sync::Arc::new(arrow_array::Float64Array::from(probability)),
+    ];
+    let mut metadata = HashMap::new();
+    metadata.insert(
+        "adam_core_schema".to_string(),
+        "Residuals.nested.quivr.v1".to_string(),
+    );
+    let batch = RecordBatch::try_new(
+        std::sync::Arc::new(arrow_schema::Schema::new_with_metadata(fields, metadata)),
+        arrays,
+    )
+    .map_err(|err| format!("failed to build Residuals RecordBatch: {err}"))?;
+    Ok((batch, output.had_off_diagonal_nan))
+}
+
+/// Arrow-native public `Residuals.calculate` surface.
+#[pyfunction]
+#[pyo3(signature = (observed_batch, predicted_batch, use_predicted_covariance=true))]
+fn residuals_calculate_arrow<'py>(
+    py: Python<'py>,
+    observed_batch: &Bound<'py, PyAny>,
+    predicted_batch: &Bound<'py, PyAny>,
+    use_predicted_covariance: bool,
+) -> PyResult<(PyObject, bool)> {
+    let observed = RecordBatch::from_pyarrow_bound(observed_batch).map_err(|err| {
+        PyValueError::new_err(format!("invalid observed coordinates RecordBatch: {err}"))
+    })?;
+    let predicted = RecordBatch::from_pyarrow_bound(predicted_batch).map_err(|err| {
+        PyValueError::new_err(format!("invalid predicted coordinates RecordBatch: {err}"))
+    })?;
+    let (batch, had_off_diagonal_nan) = py
+        .allow_threads(|| {
+            residuals_calculate_record_batch(&observed, &predicted, use_predicted_covariance)
+        })
+        .map_err(PyValueError::new_err)?;
+    let exported = batch.to_pyarrow(py).map_err(|err| {
+        PyRuntimeError::new_err(format!("failed to export Residuals RecordBatch: {err}"))
+    })?;
+    Ok((exported, had_off_diagonal_nan))
+}
+
+/// Rust-owned Instant timer for the Arrow-native `Residuals.calculate` surface.
+#[pyfunction]
+#[pyo3(signature = (observed_batch, predicted_batch, reps, trials, warmup_reps=1, use_predicted_covariance=true))]
+fn benchmark_residuals_calculate_arrow(
+    observed_batch: &Bound<'_, PyAny>,
+    predicted_batch: &Bound<'_, PyAny>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    use_predicted_covariance: bool,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let observed = RecordBatch::from_pyarrow_bound(observed_batch).map_err(|err| {
+        PyValueError::new_err(format!("invalid observed coordinates RecordBatch: {err}"))
+    })?;
+    let predicted = RecordBatch::from_pyarrow_bound(predicted_batch).map_err(|err| {
+        PyValueError::new_err(format!("invalid predicted coordinates RecordBatch: {err}"))
+    })?;
+    let run_once = || -> PyResult<()> {
+        let output =
+            residuals_calculate_record_batch(&observed, &predicted, use_predicted_covariance)
+                .map_err(PyRuntimeError::new_err)?;
+        black_box(output);
+        Ok(())
+    };
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            run_once()?;
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            run_once()?;
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
+}
+
 /// Arrow-native perturber-MOID crossing: decode one Orbits RecordBatch, run
 /// the SPICE-backed perturber loop + batched MOID kernel in Rust, and return
 /// the finished PerturberMOIDs nested RecordBatch (perturber-major rows).
@@ -3551,6 +3760,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         benchmark_calculate_perturber_moids_arrow,
         m
     )?)?;
+    m.add_function(wrap_pyfunction!(residuals_calculate_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_residuals_calculate_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(generate_porkchop_data_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_generate_porkchop_data_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;

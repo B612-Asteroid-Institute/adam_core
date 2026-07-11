@@ -73,7 +73,9 @@ pub mod chi2;
 pub use chi2::{calculate_chi2_flat, Chi2Error};
 
 pub mod residuals;
-pub use residuals::{compute_residuals_chi2_flat, ResidualsChi2Output, ResidualsError};
+pub use residuals::{
+    chi2_survival, compute_residuals_chi2_flat, ResidualsChi2Output, ResidualsError,
+};
 
 pub mod weighted;
 pub use weighted::{weighted_covariance_flat, weighted_mean_flat};

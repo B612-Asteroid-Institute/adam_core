@@ -91,6 +91,7 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "calculate_perturber_moids_arrow",
     "generate_porkchop_data_arrow",
     "gauss_iod_orbits_arrow",
+    "residuals_calculate_arrow",
     "predict_magnitudes_bandpass_numpy",
     "propagate_2body_along_arc_numpy",
     "propagate_2body_arc_batch_numpy",
@@ -367,6 +368,19 @@ def generate_ephemeris_arrow(
         predict_phase_angle,
         chunk_size,
         thread_limit,
+    )
+
+
+def residuals_calculate_arrow(
+    observed_batch: pa.RecordBatch,
+    predicted_batch: pa.RecordBatch,
+    use_predicted_covariance: bool = True,
+) -> tuple[pa.RecordBatch, bool]:
+    """Return the finished Residuals RecordBatch and off-diagonal-NaN flag."""
+    return _native.residuals_calculate_arrow(
+        observed_batch,
+        predicted_batch,
+        use_predicted_covariance,
     )
 
 

@@ -370,6 +370,65 @@ def _generate_porkchop_data(
     )
 
 
+def _residuals_calculate(
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    observed_values: Any,
+    predicted_values: Any,
+    observed_covariance_matrices: Any,
+    origin_codes: Any,
+    frame: str,
+    **_unused: Any,
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+    from adam_core.coordinates import CoordinateCovariances, SphericalCoordinates
+    from adam_core.coordinates.origin import Origin
+    from adam_core.coordinates.transform import _coordinate_record_batch
+
+    observed = SphericalCoordinates.from_kwargs(
+        rho=observed_values[:, 0],
+        lon=observed_values[:, 1],
+        lat=observed_values[:, 2],
+        vrho=observed_values[:, 3],
+        vlon=observed_values[:, 4],
+        vlat=observed_values[:, 5],
+        covariance=CoordinateCovariances.from_matrix(observed_covariance_matrices),
+        origin=Origin.from_kwargs(code=origin_codes),
+        frame=frame,
+    )
+    predicted = SphericalCoordinates.from_kwargs(
+        rho=predicted_values[:, 0],
+        lon=predicted_values[:, 1],
+        lat=predicted_values[:, 2],
+        vrho=predicted_values[:, 3],
+        vlon=predicted_values[:, 4],
+        vlat=predicted_values[:, 5],
+        origin=Origin.from_kwargs(code=origin_codes),
+        frame=frame,
+    )
+    samples = _rust_native.benchmark_residuals_calculate_arrow(
+        _coordinate_record_batch(observed, "spherical"),
+        _coordinate_record_batch(predicted, "spherical"),
+        reps,
+        trials,
+        warmup,
+        True,
+    )
+    return NativeRustTiming(
+        status="measured",
+        sample_trials_s=[[float(value) for value in trial] for trial in samples],
+        entrypoint="adam_core_py::coordinates::residuals_calculate_record_batch",
+        timing_boundary=(
+            "Rust std::time::Instant around direct coordinate RecordBatch "
+            "decode, fused residual/chi2 kernel, chi-squared survival "
+            "probability, and Residuals RecordBatch assembly; outer "
+            "Python/PyO3 launch and PyArrow conversion excluded"
+        ),
+    )
+
+
 def _gauss_iod(
     *,
     reps: int,
@@ -459,6 +518,7 @@ _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
     "dynamics.calculate_perturber_moids": _calculate_perturber_moids,
     "dynamics.generate_porkchop_data": _generate_porkchop_data,
     "orbit_determination.gaussIOD": _gauss_iod,
+    "coordinates.residuals.Residuals.calculate": _residuals_calculate,
     "observers.Observers.from_codes": _observers_from_codes,
 }
 
@@ -506,7 +566,10 @@ def _todo_for(api_id: str) -> str:
         or api_id == "orbits.classify_orbits"
         or api_id == "bridge.evaluate_residuals_2body"
     ):
-        return "personal-cmy.36.9"
+        # The remaining residuals/statistics helpers are classified numpy-flat
+        # array kernels (bead personal-cmy.36.9); native columns route to the
+        # catch-all adapter bead.
+        return "personal-98v.1"
     return "personal-98v.1"
 
 

@@ -342,3 +342,126 @@ mod tests {
         assert_eq!(out.dof, vec![6]);
     }
 }
+
+/// Natural log of the gamma function (Lanczos approximation, g=7, n=9).
+/// Absolute accuracy is ~1e-15 over the positive reals used here.
+#[allow(clippy::excessive_precision)]
+fn ln_gamma(x: f64) -> f64 {
+    const COEFFICIENTS: [f64; 9] = [
+        0.999_999_999_999_809_93,
+        676.520_368_121_885_1,
+        -1_259.139_216_722_402_8,
+        771.323_428_777_653_1,
+        -176.615_029_162_140_6,
+        12.507_343_278_686_905,
+        -0.138_571_095_265_720_12,
+        9.984_369_578_019_572e-6,
+        1.505_632_735_149_311_6e-7,
+    ];
+    if x < 0.5 {
+        // Reflection formula.
+        return std::f64::consts::PI.ln()
+            - (std::f64::consts::PI * x).sin().ln()
+            - ln_gamma(1.0 - x);
+    }
+    let x = x - 1.0;
+    let mut accumulator = COEFFICIENTS[0];
+    for (index, coefficient) in COEFFICIENTS.iter().enumerate().skip(1) {
+        accumulator += coefficient / (x + index as f64);
+    }
+    let t = x + 7.5;
+    0.5 * (2.0 * std::f64::consts::PI).ln() + (x + 0.5) * t.ln() - t + accumulator.ln()
+}
+
+fn gamma_p_series(a: f64, x: f64) -> f64 {
+    let mut term = 1.0 / a;
+    let mut sum = term;
+    let mut denominator = a;
+    for _ in 0..500 {
+        denominator += 1.0;
+        term *= x / denominator;
+        sum += term;
+        if term.abs() < sum.abs() * 1e-16 {
+            break;
+        }
+    }
+    sum * (-x + a * x.ln() - ln_gamma(a)).exp()
+}
+
+fn gamma_q_continued_fraction(a: f64, x: f64) -> f64 {
+    const TINY: f64 = 1e-300;
+    let mut b = x + 1.0 - a;
+    let mut c = 1.0 / TINY;
+    let mut d = 1.0 / b;
+    let mut h = d;
+    for iteration in 1..500 {
+        let an = -(iteration as f64) * (iteration as f64 - a);
+        b += 2.0;
+        d = an * d + b;
+        if d.abs() < TINY {
+            d = TINY;
+        }
+        c = b + an / c;
+        if c.abs() < TINY {
+            c = TINY;
+        }
+        d = 1.0 / d;
+        let delta = d * c;
+        h *= delta;
+        if (delta - 1.0).abs() < 1e-16 {
+            break;
+        }
+    }
+    (-x + a * x.ln() - ln_gamma(a)).exp() * h
+}
+
+/// Chi-squared survival function `P(X > chi2)` for `dof` degrees of freedom:
+/// the regularized upper incomplete gamma `Q(dof/2, chi2/2)`. Mirrors
+/// `1 - scipy.stats.chi2.cdf(chi2, dof)` to ~1e-15.
+pub fn chi2_survival(chi2: f64, dof: f64) -> f64 {
+    if !chi2.is_finite() || !dof.is_finite() || dof <= 0.0 || chi2 < 0.0 {
+        return f64::NAN;
+    }
+    let a = dof / 2.0;
+    let x = chi2 / 2.0;
+    if x == 0.0 {
+        return 1.0;
+    }
+    if x < a + 1.0 {
+        1.0 - gamma_p_series(a, x)
+    } else {
+        gamma_q_continued_fraction(a, x)
+    }
+}
+
+#[cfg(test)]
+mod chi2_survival_tests {
+    use super::chi2_survival;
+
+    #[test]
+    fn matches_scipy_reference_values() {
+        // scipy.stats.chi2.sf reference values.
+        let cases = [
+            (1.0_f64, 1.0_f64, 0.31731050786291115_f64),
+            (2.5, 2.0, 0.2865047968601901),
+            (0.3, 2.0, 0.8607079764250578),
+            (10.0, 4.0, 0.04042768199451279),
+            (55.0, 6.0, 4.6354918724416246e-10),
+            (0.05, 1.0, 0.8230632737581214),
+        ];
+        for (chi2, dof, expected) in cases {
+            let actual = chi2_survival(chi2, dof);
+            assert!(
+                (actual - expected).abs() <= 1e-12 * expected.max(1e-300),
+                "chi2_survival({chi2}, {dof}) = {actual}, expected {expected}"
+            );
+        }
+    }
+
+    #[test]
+    fn handles_edges() {
+        assert!(chi2_survival(f64::NAN, 2.0).is_nan());
+        assert!(chi2_survival(1.0, 0.0).is_nan());
+        assert_eq!(chi2_survival(0.0, 2.0), 1.0);
+    }
+}

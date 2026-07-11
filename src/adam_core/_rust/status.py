@@ -224,6 +224,8 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         rust_module=("adam_core._rust_native.apply_cosine_latitude_correction_numpy"),
         parity_coverage="random-fuzz",
         coverage_note=(
+            "Classified numpy-flat (bead personal-cmy.36.9): pure residual-"
+            "array helper with no table identity. "
             "Randomized parity covers cos(latitude) scaling for six-column "
             "spherical residual rows and covariance matrices, including NaN "
             "covariance-cell preservation. End-to-end Residuals.calculate remains "
@@ -244,7 +246,9 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         coverage_note=(
             "Randomized parity covers longitude residual no-wrap rows plus both "
             ">180° and <-180° wrap branches on each side of the 0°/360° sign "
-            "convention. End-to-end Residuals.calculate remains separately governed."
+            "convention. End-to-end Residuals.calculate remains separately governed. "
+            "Classified numpy-flat (bead personal-cmy.36.9): pure residual-array "
+            "helper with no table identity."
         ),
         covered_subcases=(
             "no-wrap longitude residual rows",
@@ -255,17 +259,20 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
     ApiMigration(
         api_id="coordinates.residuals.Residuals.calculate",
         status=PUBLIC_RUST_DEFAULT,
-        boundary="numpy",
+        boundary="arrow",
         default="rust",
-        rust_module="adam_core._rust_native.compute_residuals_chi2_numpy",
+        rust_module="adam_core._rust_native.residuals_calculate_arrow",
         parity_coverage="random-fuzz",
         coverage_note=(
-            "End-to-end Residuals.calculate fused path (RM-WE2-002). Inputs are "
-            "the OD-inner-loop shape: spherical 6-D coordinates with only "
-            "lon/lat observed (rho/vrho/vlon/vlat NaN), SPD 2x2 astrometric "
-            "covariance lifted into a 6x6 with NaN-padded inactive dims. Outputs "
-            "are the four quivr columns (values, chi2, dof, probability) compared "
-            "as ndarrays. Underlying chi2 numpy kernel parity remains gated by "
+            "End-to-end Residuals.calculate crosses once as observed/predicted "
+            "coordinate RecordBatches; Rust owns decode, broadcasting, "
+            "longitude wrap, cos(lat) correction, covariance sum, Cholesky "
+            "chi2, chi-squared survival probability, and finished Residuals "
+            "RecordBatch assembly. Inputs are the OD-inner-loop shape: "
+            "spherical 6-D coordinates with only lon/lat observed and SPD 2x2 "
+            "astrometric covariance lifted into a NaN-padded 6x6. Custom "
+            "coordinate classes keep the numpy fallback. Underlying chi2 "
+            "numpy kernel parity remains gated by "
             "coordinates.residuals.calculate_chi2."
         ),
     ),
@@ -281,7 +288,9 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         ),
         coverage_note=(
             "Wave E2 OD-inner-loop kernel; RM-P1-013 documents the SPD "
-            "covariance contract and targeted tests cover non-SPD diagnostics."
+            "covariance contract and targeted tests cover non-SPD diagnostics. "
+            "Classified numpy-flat (bead personal-cmy.36.9): pure residual/"
+            "covariance array kernel with no table identity."
         ),
         latency_gate=True,
     ),
@@ -691,7 +700,9 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         coverage_note=(
             "Randomized parity and shaped speed lanes cover the NumPy rule "
             "core over (a, e, q, Q); public coordinate-table extraction remains "
-            "covered by classification tests."
+            "covered by classification tests. Classified numpy-flat (bead "
+            "personal-cmy.36.9): element arrays in, label array out, no table "
+            "assembly."
         ),
     ),
     ApiMigration(
@@ -706,7 +717,8 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
             "directly with the baseline-main NumPy/BLAS formula. Public "
             "coordinate covariance wrappers remain BLAS-backed for performance, "
             "so speed rows are diagnostic raw-kernel comparisons rather than "
-            "public-dispatch promotion gates."
+            "public-dispatch promotion gates. Classified numpy-flat (bead "
+            "personal-cmy.36.9): pure array statistics with no table identity."
         ),
         covered_subcases=("normalized finite weights over 6-D sample matrices",),
     ),

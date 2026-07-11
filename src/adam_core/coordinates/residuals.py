@@ -214,6 +214,36 @@ class Residuals(qv.Table):
                 f"Observed ({observed.frame}) and predicted ({predicted.frame}) coordinates must have the same frame."
             )
 
+        # Arrow-native single crossing for the supported coordinate classes:
+        # both tables enter Rust as RecordBatches; decode, broadcast,
+        # longitude wrap, cos(lat) correction, covariance sum, Cholesky chi2,
+        # chi-squared survival probability, and Residuals table assembly all
+        # run behind one call, and the returned RecordBatch is wrapped
+        # directly. Custom coordinate classes keep the numpy fallback below.
+        if not custom_coordinates:
+            from .._rust.api import residuals_calculate_arrow
+            from .transform import (
+                _RUST_TRANSFORM_REPRESENTATIONS,
+                _coordinate_record_batch,
+            )
+
+            representation = _RUST_TRANSFORM_REPRESENTATIONS.get(type(observed))
+            if representation is not None:
+                result, had_off_diagonal_nan = residuals_calculate_arrow(
+                    _coordinate_record_batch(observed, representation),
+                    _coordinate_record_batch(predicted, representation),
+                    use_predicted_covariance,
+                )
+                if had_off_diagonal_nan:
+                    warnings.warn(
+                        "Covariance matrix has NaNs on the off-diagonal "
+                        "(these will be assumed to be 0.0).",
+                        UserWarning,
+                    )
+                return cls.from_pyarrow(
+                    pa.Table.from_batches([result]).replace_schema_metadata(None)
+                )
+
         # Extract the observed and predicted values
         observed_values = observed.values
         observed_covariances = observed.covariance.to_matrix()
