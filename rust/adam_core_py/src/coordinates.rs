@@ -33,7 +33,7 @@ use numpy::{
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyList};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hint::black_box;
 use std::time::Instant;
 
@@ -3902,6 +3902,138 @@ fn calculate_perturber_moids_native<'py>(
     Ok((moids.into_pyarray(py), dt_mins.into_pyarray(py)))
 }
 
+fn linkage_precision_nanos(precision: &str) -> Result<i64, String> {
+    match precision {
+        "ns" => Ok(1),
+        "us" => Ok(1_000),
+        "ms" => Ok(1_000_000),
+        "s" => Ok(1_000_000_000),
+        _ => Err(format!("Unsupported precision: {precision}")),
+    }
+}
+
+fn rounded_time_columns(times: &TimeArray, precision: i64) -> (Vec<i64>, Vec<i64>) {
+    let days = times.epochs.iter().map(|epoch| epoch.days).collect();
+    let nanos = times
+        .epochs
+        .iter()
+        .map(|epoch| epoch.nanos / precision * precision)
+        .collect();
+    (days, nanos)
+}
+
+struct EphemerisObserverLinkageKeys {
+    left_days: Vec<i64>,
+    left_nanos: Vec<i64>,
+    right_days: Vec<i64>,
+    right_nanos: Vec<i64>,
+    observer_days: Vec<i64>,
+    observer_nanos: Vec<i64>,
+    expected_unique_observers: usize,
+}
+
+fn prepare_ephemeris_observer_linkage(
+    ephemeris_batch: &RecordBatch,
+    observer_batch: &RecordBatch,
+    precision: &str,
+) -> Result<EphemerisObserverLinkageKeys, String> {
+    let ephemeris_coordinates = DataCoordinateBatch::try_from_nested_record_batch(ephemeris_batch)
+        .map_err(|err| format!("failed to decode ephemeris coordinates: {err}"))?;
+    let observers = DataObserverBatch::try_from_nested_record_batch(observer_batch)
+        .map_err(|err| format!("failed to decode ObserverBatch: {err}"))?;
+    let ephemeris_times = ephemeris_coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| "ephemeris coordinates require times".to_string())?;
+    let observer_times = observers
+        .coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| "observer coordinates require times".to_string())?
+        .rescale(ephemeris_times.scale)
+        .map_err(|err| format!("failed to rescale observer times: {err}"))?;
+    let precision = linkage_precision_nanos(precision)?;
+    let (left_days, left_nanos) = rounded_time_columns(ephemeris_times, precision);
+    let (right_days, right_nanos) = rounded_time_columns(&observer_times, precision);
+    let expected_unique_observers = observers
+        .code
+        .iter()
+        .zip(observer_times.epochs.iter())
+        .map(|(code, epoch)| (code.0.as_str(), epoch.days, epoch.nanos))
+        .collect::<HashSet<_>>()
+        .len();
+    Ok(EphemerisObserverLinkageKeys {
+        left_days,
+        left_nanos,
+        right_days,
+        right_nanos,
+        observer_days: observer_times
+            .epochs
+            .iter()
+            .map(|epoch| epoch.days)
+            .collect(),
+        observer_nanos: observer_times
+            .epochs
+            .iter()
+            .map(|epoch| epoch.nanos)
+            .collect(),
+        expected_unique_observers,
+    })
+}
+
+#[pyfunction]
+fn prepare_ephemeris_observer_linkage_arrow(
+    ephemeris_batch: &Bound<'_, PyAny>,
+    observer_batch: &Bound<'_, PyAny>,
+    precision: &str,
+) -> PyResult<(
+    Vec<i64>,
+    Vec<i64>,
+    Vec<i64>,
+    Vec<i64>,
+    Vec<i64>,
+    Vec<i64>,
+    usize,
+)> {
+    let ephemeris = RecordBatch::from_pyarrow_bound(ephemeris_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Ephemeris RecordBatch: {err}")))?;
+    let observers = RecordBatch::from_pyarrow_bound(observer_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Observer RecordBatch: {err}")))?;
+    let keys = prepare_ephemeris_observer_linkage(&ephemeris, &observers, precision)
+        .map_err(PyValueError::new_err)?;
+    Ok((
+        keys.left_days,
+        keys.left_nanos,
+        keys.right_days,
+        keys.right_nanos,
+        keys.observer_days,
+        keys.observer_nanos,
+        keys.expected_unique_observers,
+    ))
+}
+
+#[pyfunction]
+#[pyo3(signature = (ephemeris_batch, observer_batch, precision, reps, trials, warmup_reps=1))]
+fn benchmark_prepare_ephemeris_observer_linkage_arrow(
+    ephemeris_batch: &Bound<'_, PyAny>,
+    observer_batch: &Bound<'_, PyAny>,
+    precision: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let ephemeris = RecordBatch::from_pyarrow_bound(ephemeris_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Ephemeris RecordBatch: {err}")))?;
+    let observers = RecordBatch::from_pyarrow_bound(observer_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Observer RecordBatch: {err}")))?;
+    benchmark_orbit_surface(reps, trials, warmup_reps, || {
+        black_box(prepare_ephemeris_observer_linkage(
+            &ephemeris, &observers, precision,
+        )?);
+        Ok(())
+    })
+}
+
 fn group_by_orbit_id_record_batch(
     batch: &RecordBatch,
 ) -> Result<Vec<(String, RecordBatch)>, String> {
@@ -4085,6 +4217,14 @@ fn benchmark_dynamical_class_arrow(
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cartesian_coordinate_schema_metadata, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        prepare_ephemeris_observer_linkage_arrow,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_prepare_ephemeris_observer_linkage_arrow,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(group_by_orbit_id_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(dynamical_class_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_group_by_orbit_id_arrow, m)?)?;
