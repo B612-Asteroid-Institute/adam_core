@@ -13,6 +13,7 @@ mod native_benchmarks;
 mod orbit_determination;
 mod photometry;
 mod spice;
+mod timestamp_ops;
 mod variant_ephemeris;
 
 #[pymodule]
@@ -24,6 +25,7 @@ fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     photometry::register(m)?;
     orbit_determination::register(m)?;
     spice::register(m)?;
+    timestamp_ops::register(m)?;
     variant_ephemeris::register(m)?;
     Ok(())
 }

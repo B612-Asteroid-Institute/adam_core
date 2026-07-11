@@ -110,13 +110,25 @@ class Timestamp(qv.Table):
     nanos = qv.Int64Column()
 
     def micros(self) -> pa.Int64Array:
-        return pc.divide(self.nanos, 1_000)
+        return self._unit_floor(1_000)
 
     def millis(self) -> pa.Int64Array:
-        return pc.divide(self.nanos, 1_000_000)
+        return self._unit_floor(1_000_000)
 
     def seconds(self) -> pa.Int64Array:
-        return pc.divide(self.nanos, 1_000_000_000)
+        return self._unit_floor(1_000_000_000)
+
+    def _unit_floor(self, divisor: int) -> pa.Int64Array:
+        if _has_nulls(self.nanos):
+            return pc.divide(self.nanos, divisor)
+        from adam_core import _rust_native as _rn
+
+        return pa.array(
+            _rn.timestamp_unit_floor_numpy(
+                self.nanos.to_numpy(zero_copy_only=False), divisor
+            ),
+            type=pa.int64(),
+        )
 
     def key(self, *, scale: str | None = "tdb") -> np.ndarray:
         """
@@ -128,10 +140,18 @@ class Timestamp(qv.Table):
         if len(self) == 0:
             return np.empty(0, dtype=np.int64)
 
-        t = self if scale is None else self.rescale(scale)
-        days = t.days.to_numpy(zero_copy_only=False).astype(np.int64)
-        nanos = t.nanos.to_numpy(zero_copy_only=False).astype(np.int64)
-        return days * _NANOS_IN_DAY + nanos
+        from adam_core import _rust_native as _rn
+
+        # One Rust crossing owns the optional rescale plus key assembly.
+        return np.asarray(
+            _rn.timestamp_key_numpy(
+                self.days.to_numpy(zero_copy_only=False),
+                self.nanos.to_numpy(zero_copy_only=False),
+                self.scale,
+                scale,
+            ),
+            dtype=np.int64,
+        )
 
     def signature(self, *, scale: str | None = "tdb") -> tuple[int, int, int, int]:
         """
@@ -139,15 +159,18 @@ class Timestamp(qv.Table):
 
         The signature is (n, first_key, last_key, sum_mod) where keys are produced by `key()`.
         """
-        n = int(len(self))
-        if n == 0:
+        if len(self) == 0:
             return 0, 0, 0, 0
 
-        key = self.key(scale=scale)
-        first = int(key[0])
-        last = int(key[-1])
-        sum_mod = int(np.sum(key, dtype=np.int64) & np.int64(0x7FFF_FFFF_FFFF_FFFF))
-        return n, first, last, sum_mod
+        from adam_core import _rust_native as _rn
+
+        n, first, last, sum_mod = _rn.timestamp_signature_numpy(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+            self.scale,
+            scale,
+        )
+        return int(n), int(first), int(last), int(sum_mod)
 
     def cache_digest(self, *, scale: str | None = "tdb") -> int:
         """
@@ -177,12 +200,34 @@ class Timestamp(qv.Table):
         )
 
     def jd(self) -> pa.lib.DoubleArray:
-        return pc.add(self.mjd(), 2400000.5)
+        if _has_nulls(self.days, self.nanos):
+            return pc.add(self.mjd(), 2400000.5)
+        from adam_core import _rust_native as _rn
+
+        return pa.array(
+            _rn.timestamp_jd_numpy(
+                self.days.to_numpy(zero_copy_only=False),
+                self.nanos.to_numpy(zero_copy_only=False),
+            ),
+            type=pa.float64(),
+        )
 
     def et(self) -> pa.lib.DoubleArray:
         """
         Returns the times as ET seconds in a pyarrow array.
         """
+        if self.scale in _RUST_RESCALE_SCALES and not _has_nulls(self.days, self.nanos):
+            from adam_core import _rust_native as _rn
+
+            # Fused rescale-to-TDB plus ET conversion in one crossing.
+            return pa.array(
+                _rn.timestamp_et_numpy(
+                    self.days.to_numpy(zero_copy_only=False),
+                    self.nanos.to_numpy(zero_copy_only=False),
+                    self.scale,
+                ),
+                type=pa.float64(),
+            )
         tdb = self.rescale("tdb")
         mjd = tdb.mjd()
         return pc.multiply(pc.subtract(mjd, _J2000_TDB_MJD), _SECONDS_IN_DAY)
@@ -248,13 +293,24 @@ class Timestamp(qv.Table):
         if precision == "ns":
             return self
         elif precision == "us":
-            nanos = pc.multiply(self.micros(), 1_000)
+            divisor = 1_000
         elif precision == "ms":
-            nanos = pc.multiply(self.millis(), 1_000_000)
+            divisor = 1_000_000
         elif precision == "s":
-            nanos = pc.multiply(self.seconds(), 1_000_000_000)
+            divisor = 1_000_000_000
         else:
             raise ValueError(f"Unsupported precision: {precision}")
+        if _has_nulls(self.nanos):
+            nanos = pc.multiply(pc.divide(self.nanos, divisor), divisor)
+        else:
+            from adam_core import _rust_native as _rn
+
+            nanos = pa.array(
+                _rn.timestamp_rounded_nanos_numpy(
+                    self.nanos.to_numpy(zero_copy_only=False), divisor
+                ),
+                type=pa.int64(),
+            )
         return self.set_column("nanos", nanos)
 
     def equals(self, other: Timestamp, precision: str = "ns") -> pa.BooleanArray:
@@ -268,18 +324,19 @@ class Timestamp(qv.Table):
     def equals_scalar(
         self, days: int, nanos: int, precision: str = "ns"
     ) -> pa.BooleanArray:
-        delta_days, delta_nanos = self.difference_scalar(days, nanos)
-        if precision == "ns":
-            max_deviation = 0
-        elif precision == "us":
-            max_deviation = 999
-        elif precision == "ms":
-            max_deviation = 999_999
-        elif precision == "s":
-            max_deviation = 999_999_999
-        else:
-            raise ValueError(f"Unsupported precision: {precision}")
-        return _duration_arrays_within_tolerance(delta_days, delta_nanos, max_deviation)
+        max_deviation = _precision_max_deviation(precision)
+        from adam_core import _rust_native as _rn
+
+        return pa.array(
+            _rn.timestamp_equals_numpy(
+                self.days.to_numpy(zero_copy_only=False),
+                self.nanos.to_numpy(zero_copy_only=False),
+                _int64_values(days, 1),
+                _int64_values(nanos, 1),
+                max_deviation,
+            ),
+            type=pa.bool_(),
+        )
 
     def equals_array(self, other: Timestamp, precision: str = "ns") -> pa.BooleanArray:
         """
@@ -293,18 +350,19 @@ class Timestamp(qv.Table):
         if len(self) != len(other):
             raise ValueError("Timestamps must have the same length")
 
-        delta_days, delta_nanos = self.difference(other)
-        if precision == "ns":
-            max_deviation = 0
-        elif precision == "us":
-            max_deviation = 999
-        elif precision == "ms":
-            max_deviation = 999_999
-        elif precision == "s":
-            max_deviation = 999_999_999
-        else:
-            raise ValueError(f"Unsupported precision: {precision}")
-        return _duration_arrays_within_tolerance(delta_days, delta_nanos, max_deviation)
+        max_deviation = _precision_max_deviation(precision)
+        from adam_core import _rust_native as _rn
+
+        return pa.array(
+            _rn.timestamp_equals_numpy(
+                self.days.to_numpy(zero_copy_only=False),
+                self.nanos.to_numpy(zero_copy_only=False),
+                other.days.to_numpy(zero_copy_only=False),
+                other.nanos.to_numpy(zero_copy_only=False),
+                max_deviation,
+            ),
+            type=pa.bool_(),
+        )
 
     def max(self) -> Timestamp:
         """
@@ -316,15 +374,14 @@ class Timestamp(qv.Table):
             The maximum time. If there are multiple maximum times,
             one of them is returned.
         """
-        # Compute the maximum day
-        max_day = pc.max(self.days)
-        days_mask = pc.equal(self.days, max_day)
+        from adam_core import _rust_native as _rn
 
-        # Compute the maximum nanos for the maximum day
-        max_nanos = pc.max(self.nanos.filter(days_mask))
-        nanos_mask = pc.equal(self.nanos, max_nanos)
-
-        return self.apply_mask(pc.and_(days_mask, nanos_mask))[0]
+        index = _rn.timestamp_extremum_index_numpy(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+            True,
+        )
+        return self[index : index + 1]
 
     def min(self) -> Timestamp:
         """
@@ -336,15 +393,14 @@ class Timestamp(qv.Table):
             The minimum time. If there are multiple minimum times,
             one of them is returned.
         """
-        # Compute the minimum day
-        min_day = pc.min(self.days)
-        days_mask = pc.equal(self.days, min_day)
+        from adam_core import _rust_native as _rn
 
-        # Compute the minimum nanos for the minimum day
-        min_nanos = pc.min(self.nanos.filter(days_mask))
-        nanos_mask = pc.equal(self.nanos, min_nanos)
-
-        return self.apply_mask(pc.and_(days_mask, nanos_mask))[0]
+        index = _rn.timestamp_extremum_index_numpy(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+            False,
+        )
+        return self[index : index + 1]
 
     @classmethod
     def from_astropy(cls, astropy_time: astropy.time.Time) -> Timestamp:
@@ -632,9 +688,13 @@ class Timestamp(qv.Table):
         elements from self. Order is not necessarily preserved.
 
         """
-        uniqued = self.table.group_by(["days", "nanos"]).aggregate([])
-        uniqued = uniqued.replace_schema_metadata(self.table.schema.metadata)
-        return Timestamp.from_pyarrow(uniqued)
+        from adam_core import _rust_native as _rn
+
+        days, nanos = _rn.timestamp_unique_numpy(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+        )
+        return Timestamp.from_kwargs(days=days, nanos=nanos, scale=self.scale)
 
     def rescale_astropy(self, new_scale: str) -> Timestamp:
 
@@ -728,6 +788,18 @@ class Timestamp(qv.Table):
         left_keys = {"days": rounded.days, "nanos": rounded.nanos}
         right_keys = {"days": other_rounded.days, "nanos": other_rounded.nanos}
         return qv.MultiKeyLinkage(self, other, left_keys, right_keys)
+
+
+def _precision_max_deviation(precision: str) -> int:
+    if precision == "ns":
+        return 0
+    if precision == "us":
+        return 999
+    if precision == "ms":
+        return 999_999
+    if precision == "s":
+        return 999_999_999
+    raise ValueError(f"Unsupported precision: {precision}")
 
 
 def _duration_arrays_within_tolerance(
