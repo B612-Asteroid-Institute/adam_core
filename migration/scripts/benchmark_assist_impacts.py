@@ -42,10 +42,10 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from migration.parity._assist_bench import (  # noqa: E402
-    NATIVE_RUST_TODO,
     PERFORMANCE_COLUMNS,
     TWO_RUNTIME_COMPARISON_MODE,
     percentiles,
+    time_native_rust,
     time_rust,
 )
 from migration.parity._assist_oracle import (  # noqa: E402
@@ -184,6 +184,9 @@ def main(argv: list[str] | None = None) -> int:
             repeats=args.repeats,
             warmups=args.warmups,
         )
+        native_operation, native_samples = time_native_rust(
+            rust_propagator, repeats=args.repeats, warmups=args.warmups
+        )
 
         py_impacted = sorted(py_events.orbit_id.to_pylist())
         rust_impacted = sorted(rust_events.orbit_id.to_pylist())
@@ -206,6 +209,7 @@ def main(argv: list[str] | None = None) -> int:
 
         py_p50, py_p95 = percentiles(py_samples)
         rust_p50, rust_p95 = percentiles(rust_samples)
+        native_p50, native_p95 = percentiles(native_samples)
         lane = {
             "n_orbits": n,
             "num_days": args.num_days,
@@ -222,15 +226,12 @@ def main(argv: list[str] | None = None) -> int:
             "current_python_p50_s": rust_p50,
             "current_python_p95_s": rust_p95,
             "current_python_samples_alias": "rust_samples_s",
-            "native_rust_status": "unavailable",
-            "native_rust_samples_s": [],
-            "native_rust_p50_s": None,
-            "native_rust_p95_s": None,
-            "native_rust_unavailable_reason": (
-                "no Rust-internal Instant adapter; a Python->PyO3 call is not "
-                "accepted as native-Rust timing"
-            ),
-            "native_rust_todo": NATIVE_RUST_TODO,
+            "native_rust_status": "measured",
+            "native_rust_operation": native_operation,
+            "native_rust_timer": "std::time::Instant",
+            "native_rust_samples_s": native_samples,
+            "native_rust_p50_s": native_p50,
+            "native_rust_p95_s": native_p95,
             "speedup_p50": py_p50 / rust_p50,
             "speedup_p95": py_p95 / rust_p95,
             "max_impact_time_diff_days": max_impact_time_diff,

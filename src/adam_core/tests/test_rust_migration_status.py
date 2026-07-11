@@ -929,6 +929,7 @@ def test_every_parity_api_has_an_intentional_native_rust_todo_bucket() -> None:
     assert set(todos.values()) <= {
         "personal-3gg",
         "personal-98v.1",
+        "personal-98v.1.3",
         "personal-cmy.36.4",
         "personal-cmy.36.5",
         "personal-cmy.36.6",
@@ -950,18 +951,44 @@ def test_every_parity_api_has_an_intentional_native_rust_todo_bucket() -> None:
     assert not any(api_id.startswith("bridge.") for api_id in todos)
 
 
-def test_assist_payload_does_not_treat_pyo3_as_native_rust() -> None:
-    payload = _assist_bench.performance_timing_payload([2.0, 2.0, 2.0], [1.0, 1.0, 1.0])
+def test_all_26_assist_lanes_are_wired_to_native_rust_timing() -> None:
+    root = Path(__file__).resolve().parents[3]
+    propagation = (
+        root / "migration/scripts/benchmark_assist_public_semantics.py"
+    ).read_text()
+    covariance = (root / "migration/scripts/benchmark_assist_covariance.py").read_text()
+    impacts = (root / "migration/scripts/benchmark_assist_impacts.py").read_text()
+
+    assert propagation.count("Workload(") == 17
+    assert covariance.count("CovarianceWorkload(") == 6
+    assert "LANES = (10, 50, 200)" in impacts
+    assert (
+        sum(
+            "time_native_rust" in source
+            for source in (propagation, covariance, impacts)
+        )
+        == 3
+    )
+    assert 'native_rust_status": "measured' in impacts
+
+
+def test_assist_payload_requires_rust_owned_native_samples() -> None:
+    payload = _assist_bench.performance_timing_payload(
+        [2.0, 2.0, 2.0],
+        [1.0, 1.0, 1.0],
+        [0.5, 0.5, 0.5],
+        native_operation="propagation",
+    )
 
     assert payload["legacy_adam_core"]["p50"] == 2.0
     assert payload["legacy_adam_core"]["samples_alias"] == "python.values"
     assert payload["current_python"]["p50"] == 1.0
     assert payload["current_python"]["samples_alias"] == "rust.values"
     assert "values" not in payload["current_python"]
-    assert payload["native_rust"]["status"] == "unavailable"
-    assert payload["native_rust"]["p50"] is None
-    assert payload["native_rust"]["todo"] == "personal-98v.1"
-    assert "PyO3 call is not accepted" in payload["native_rust"]["reason"]
+    assert payload["native_rust"]["status"] == "measured"
+    assert payload["native_rust"]["operation"] == "propagation"
+    assert payload["native_rust"]["timer"] == "std::time::Instant"
+    assert payload["native_rust"]["p50"] == 0.5
 
 
 def test_parity_main_exposes_additive_legacy_cache_refresh_controls() -> None:

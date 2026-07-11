@@ -19,10 +19,7 @@ TWO_RUNTIME_COMPARISON_MODE = "gpl_rust_assist_backend_vs_legacy_python_adam_ass
 PERFORMANCE_COLUMNS = {
     "legacy_adam_core": "legacy adam_assist over pinned legacy adam_core",
     "current_python": "current adam_assist public Python method",
-    "native_rust": (
-        "direct Rust call timed inside Rust with std::time::Instant; null until "
-        "a Rust-internal adapter exists"
-    ),
+    "native_rust": "direct Rust call timed inside Rust with std::time::Instant",
     "gate": "legacy/current_python; native_rust is diagnostic",
 }
 NATIVE_RUST_TODO = "personal-98v.1"
@@ -35,11 +32,16 @@ def percentiles(samples: list[float]) -> tuple[float, float]:
 
 
 def performance_timing_payload(
-    legacy_samples: list[float], current_python_samples: list[float]
+    legacy_samples: list[float],
+    current_python_samples: list[float],
+    native_rust_samples: list[float],
+    *,
+    native_operation: str,
 ) -> dict[str, Any]:
-    """Canonical three-column payload; native stays blank without a Rust timer."""
+    """Canonical three-column payload with Rust-owned native samples."""
     legacy_p50, legacy_p95 = percentiles(legacy_samples)
     current_p50, current_p95 = percentiles(current_python_samples)
+    native_p50, native_p95 = percentiles(native_rust_samples)
     legacy = {"values": legacy_samples, "p50": legacy_p50, "p95": legacy_p95}
     current = {
         "values": current_python_samples,
@@ -62,15 +64,12 @@ def performance_timing_payload(
             "samples_alias": "rust.values",
         },
         "native_rust": {
-            "status": "unavailable",
-            "values": [],
-            "p50": None,
-            "p95": None,
-            "reason": (
-                "no Rust-internal Instant adapter; a Python->PyO3 call is not "
-                "accepted as native-Rust timing"
-            ),
-            "todo": NATIVE_RUST_TODO,
+            "status": "measured",
+            "operation": native_operation,
+            "timer": "std::time::Instant",
+            "values": native_rust_samples,
+            "p50": native_p50,
+            "p95": native_p95,
         },
         "speedup": {
             "p50_python_over_rust": legacy_p50 / current_p50,
@@ -79,6 +78,16 @@ def performance_timing_payload(
             "p95_legacy_over_current_python": legacy_p95 / current_p95,
         },
     }
+
+
+def time_native_rust(
+    propagator: Any, *, repeats: int, warmups: int
+) -> tuple[str, list[float]]:
+    """Read Rust-Instant samples for the most recently prepared operation."""
+    operation, trials = propagator.benchmark_last_native(
+        repeats, trials=1, warmup_reps=warmups
+    )
+    return operation, list(trials[0])
 
 
 def time_rust(

@@ -52,6 +52,7 @@ from migration.parity._assist_bench import (  # noqa: E402
     PERFORMANCE_COLUMNS,
     TWO_RUNTIME_COMPARISON_MODE,
     performance_timing_payload,
+    time_native_rust,
     time_rust,
 )
 from migration.parity._assist_oracle import (  # noqa: E402
@@ -292,6 +293,9 @@ def _benchmark_workload(
         workload.orbits, workload.times, **kwargs
     )
     rust_timings, rust_output = time_rust(run_rust, repeats=repeats, warmups=warmups)
+    native_operation, native_timings = time_native_rust(
+        rust_propagator, repeats=repeats, warmups=warmups
+    )
     input_rows = len(workload.orbits)
     target_rows = len(workload.times)
     return {
@@ -321,7 +325,12 @@ def _benchmark_workload(
             "chunk_size_ceiling": workload.chunk_size,
             "max_processes": max_processes,
         },
-        "timing_seconds": performance_timing_payload(python_timings, rust_timings),
+        "timing_seconds": performance_timing_payload(
+            python_timings,
+            rust_timings,
+            native_timings,
+            native_operation=native_operation,
+        ),
         "state_residuals": base._state_residuals(rust_output, python_output),
         "covariance_residuals": _covariance_residuals(rust_output, python_output),
     }
