@@ -825,21 +825,49 @@ def _orbit_determination_gauss_iod(
     # is fragile. The best-root case is what downstream IOD orchestration
     # actually picks, and the shared-root tolerance is tight enough to catch
     # metre-scale state drift.
+    #
+    # Runs the PUBLIC gaussIOD facade (Arrow-native Orbits output) so the
+    # comparison and timing stay symmetric with the pinned-legacy runner,
+    # which also calls its public gaussIOD.
+    from adam_core.orbit_determination.gauss import gaussIOD
+
     n = ra_deg_per_triplet.shape[0]
     K_MAX = 1
     epoch_out = np.full((n, K_MAX), np.nan, dtype=np.float64)
     orbit_out = np.full((n, K_MAX, 6), np.nan, dtype=np.float64)
     for i in range(n):
-        ra = np.ascontiguousarray(ra_deg_per_triplet[i], dtype=np.float64)
-        dec = np.ascontiguousarray(dec_deg_per_triplet[i], dtype=np.float64)
+        coords = np.column_stack(
+            [
+                ra_deg_per_triplet[i],
+                dec_deg_per_triplet[i],
+            ]
+        ).astype(np.float64)
         ts = np.ascontiguousarray(times_per_triplet[i], dtype=np.float64)
         obs = np.ascontiguousarray(obs_pos_per_triplet[i], dtype=np.float64)
-        result = _rust_api.gauss_iod_fused_numpy(ra, dec, ts, obs, "gibbs", True, mu, c)
-        if result is None:
-            raise RuntimeError("rust gauss_iod_fused unavailable")
-        eps, orbs = result
-        if orbs.shape[0] == 0:
+        result = gaussIOD(
+            coords,
+            ts,
+            obs,
+            velocity_method="gibbs",
+            light_time=True,
+            mu=mu,
+            max_iter=10,
+            tol=1e-15,
+        )
+        cart = result.coordinates
+        if len(cart.x) == 0:
             continue
+        orbs = np.column_stack(
+            [
+                cart.x.to_numpy(zero_copy_only=False),
+                cart.y.to_numpy(zero_copy_only=False),
+                cart.z.to_numpy(zero_copy_only=False),
+                cart.vx.to_numpy(zero_copy_only=False),
+                cart.vy.to_numpy(zero_copy_only=False),
+                cart.vz.to_numpy(zero_copy_only=False),
+            ]
+        )
+        eps = cart.time.mjd().to_numpy(zero_copy_only=False)
         r2_mag = np.linalg.norm(orbs[:, :3], axis=1)
         # Drop the near-observer trivial root (|r2| < 1.5 AU) — it's a
         # degenerate solution that rust's Laguerre keeps but legacy's

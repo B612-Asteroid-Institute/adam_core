@@ -90,6 +90,7 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "benchmark_generate_ephemeris_arrow",
     "calculate_perturber_moids_arrow",
     "generate_porkchop_data_arrow",
+    "gauss_iod_orbits_arrow",
     "predict_magnitudes_bandpass_numpy",
     "propagate_2body_along_arc_numpy",
     "propagate_2body_arc_batch_numpy",
@@ -366,6 +367,29 @@ def generate_ephemeris_arrow(
         predict_phase_angle,
         chunk_size,
         thread_limit,
+    )
+
+
+def gauss_iod_orbits_arrow(
+    ra_deg: np.ndarray,
+    dec_deg: np.ndarray,
+    obs_times_mjd: np.ndarray,
+    coords_obs: np.ndarray,
+    velocity_method: str = "gibbs",
+    light_time: bool = True,
+    mu: float = 0.00029591220828559115,
+    c: float = 173.14463267424034,
+) -> pa.RecordBatch:
+    """Return the finished Gauss-IOD Orbits RecordBatch entirely from Rust."""
+    return _native.gauss_iod_orbits_arrow(
+        ra_deg,
+        dec_deg,
+        obs_times_mjd,
+        coords_obs,
+        velocity_method,
+        light_time,
+        mu,
+        c,
     )
 
 

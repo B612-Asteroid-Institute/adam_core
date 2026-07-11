@@ -370,6 +370,50 @@ def _generate_porkchop_data(
     )
 
 
+def _gauss_iod(
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    ra_deg_per_triplet: Any,
+    dec_deg_per_triplet: Any,
+    times_per_triplet: Any,
+    obs_pos_per_triplet: Any,
+    mu: float,
+    c: float,
+    **_unused: Any,
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    obs = np.ascontiguousarray(
+        np.asarray(obs_pos_per_triplet, dtype=np.float64).reshape(-1, 3)
+    )
+    samples = _rust_native.benchmark_gauss_iod_orbits_arrow(
+        np.ascontiguousarray(np.asarray(ra_deg_per_triplet, dtype=np.float64)),
+        np.ascontiguousarray(np.asarray(dec_deg_per_triplet, dtype=np.float64)),
+        np.ascontiguousarray(np.asarray(times_per_triplet, dtype=np.float64)),
+        obs,
+        reps,
+        trials,
+        warmup,
+        "gibbs",
+        True,
+        float(mu),
+        float(c),
+    )
+    return NativeRustTiming(
+        status="measured",
+        sample_trials_s=[[float(value) for value in trial] for trial in samples],
+        entrypoint="adam_core_py::orbit_determination::gauss_iod_orbits_record_batch",
+        timing_boundary=(
+            "Rust std::time::Instant around the per-triplet fused Gauss-IOD "
+            "kernel, non-finite filtering, orbit-id generation, and Orbits "
+            "RecordBatch assembly; outer Python/PyO3 launch and PyArrow "
+            "conversion excluded"
+        ),
+    )
+
+
 def _observers_from_codes(
     *,
     codes: Any,
@@ -414,6 +458,7 @@ _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
     "dynamics.generate_ephemeris_2body_with_covariance": _generate_ephemeris_2body,
     "dynamics.calculate_perturber_moids": _calculate_perturber_moids,
     "dynamics.generate_porkchop_data": _generate_porkchop_data,
+    "orbit_determination.gaussIOD": _gauss_iod,
     "observers.Observers.from_codes": _observers_from_codes,
 }
 
@@ -447,7 +492,10 @@ def _todo_for(api_id: str) -> str:
         # native columns route to the catch-all adapter bead.
         return "personal-98v.1"
     if api_id.startswith("orbit_determination"):
-        return "personal-cmy.36.7"
+        # calcGibbs / calcHerrickGibbs / calcGauss stay scalar numpy vector
+        # kernels by classification (bead personal-cmy.36.7); their native
+        # columns route to the catch-all adapter bead.
+        return "personal-98v.1"
     if api_id.startswith("photometry"):
         return "personal-cmy.36.8"
     if (

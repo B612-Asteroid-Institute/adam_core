@@ -13,11 +13,10 @@ classical Gauss f/g approximation, computed in Rust.
 
 import numpy as np
 
-from adam_core._rust import calc_gauss_numpy, gauss_iod_fused_numpy
+from adam_core._rust import calc_gauss_numpy, gauss_iod_orbits_arrow
+from adam_core._rust.arrow import table_from_record_batch
 from adam_core.constants import Constants as c
-from adam_core.coordinates import CartesianCoordinates, Origin
 from adam_core.orbits import Orbits
-from adam_core.time import Timestamp
 
 __all__ = [
     "calcGauss",
@@ -103,7 +102,9 @@ def gaussIOD(
     orbits : `~adam_core.orbits.Orbits`
         Up to three preliminary orbits (zero rows if no real-positive root).
     """
-    fused_out = gauss_iod_fused_numpy(
+    # One crossing: the fused kernel, non-finite filtering, orbit-id
+    # generation, and finished Orbits table assembly all run in Rust.
+    result = gauss_iod_orbits_arrow(
         np.ascontiguousarray(coords[:, 0], dtype=np.float64),
         np.ascontiguousarray(coords[:, 1], dtype=np.float64),
         np.ascontiguousarray(np.asarray(observation_times, dtype=np.float64)),
@@ -113,24 +114,6 @@ def gaussIOD(
         float(mu),
         float(C),
     )
-    epochs, orbits = fused_out
-    if len(orbits) == 0:
+    if result.num_rows == 0:
         return Orbits.empty()
-    finite_mask = ~np.isnan(orbits).any(axis=1)
-    epochs = epochs[finite_mask]
-    orbits = orbits[finite_mask]
-    if len(orbits) == 0:
-        return Orbits.empty()
-    return Orbits.from_kwargs(
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=orbits[:, 0],
-            y=orbits[:, 1],
-            z=orbits[:, 2],
-            vx=orbits[:, 3],
-            vy=orbits[:, 4],
-            vz=orbits[:, 5],
-            time=Timestamp.from_mjd(epochs, scale="utc"),
-            origin=Origin.from_kwargs(code=np.full(len(orbits), "SUN", dtype="object")),
-            frame="ecliptic",
-        )
-    )
+    return table_from_record_batch(Orbits, result)

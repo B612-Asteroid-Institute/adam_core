@@ -595,6 +595,11 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         default="rust",
         rust_module="adam_core._rust_native.calc_gibbs_numpy",
         parity_coverage="random-fuzz",
+        coverage_note=(
+            "Classified numpy-flat (bead personal-cmy.36.7): scalar (3,)-vector "
+            "velocity helper with no table identity; the Arrow-native "
+            "single-crossing bar does not apply."
+        ),
         latency_gate=True,
     ),
     ApiMigration(
@@ -604,6 +609,11 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         default="rust",
         rust_module="adam_core._rust_native.calc_herrick_gibbs_numpy",
         parity_coverage="random-fuzz",
+        coverage_note=(
+            "Classified numpy-flat (bead personal-cmy.36.7): scalar (3,)-vector "
+            "velocity helper with no table identity; the Arrow-native "
+            "single-crossing bar does not apply."
+        ),
         latency_gate=True,
     ),
     ApiMigration(
@@ -613,14 +623,19 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         default="rust",
         rust_module="adam_core._rust_native.calc_gauss_numpy",
         parity_coverage="random-fuzz",
+        coverage_note=(
+            "Classified numpy-flat (bead personal-cmy.36.7): scalar (3,)-vector "
+            "velocity helper with no table identity; the Arrow-native "
+            "single-crossing bar does not apply."
+        ),
         latency_gate=True,
     ),
     ApiMigration(
         api_id="orbit_determination.gaussIOD",
         status=PUBLIC_RUST_DEFAULT,
-        boundary="numpy",
+        boundary="arrow",
         default="rust",
-        rust_module="adam_core._rust_native.gauss_iod_fused_numpy",
+        rust_module="adam_core._rust_native.gauss_iod_orbits_arrow",
         parity_coverage="random-fuzz",
         coverage_note=(
             "Random fuzz is constrained to well-conditioned low-e, "
