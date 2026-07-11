@@ -254,86 +254,44 @@ class LambertSolutions(qv.Table):
     origin = Origin.as_column()
 
     def departure_body_orbit(self) -> Orbits:
-        """
-        Return the departure body orbit.
-        """
-        return Orbits.from_kwargs(
-            orbit_id=self.departure_body_id,
-            coordinates=CartesianCoordinates.from_kwargs(
-                time=self.departure_time,
-                x=self.departure_body_x,
-                y=self.departure_body_y,
-                z=self.departure_body_z,
-                vx=self.departure_body_vx,
-                vy=self.departure_body_vy,
-                vz=self.departure_body_vz,
-                origin=self.origin,
-                frame=self.frame,
-            ),
-        )
+        """Return the departure body orbit."""
+        return self._orbit_accessor("departure_body")
 
     def arrival_body_orbit(self) -> Orbits:
-        """
-        Return the arrival body orbit.
-        """
-        return Orbits.from_kwargs(
-            orbit_id=self.arrival_body_id,
-            coordinates=CartesianCoordinates.from_kwargs(
-                time=self.arrival_time,
-                x=self.arrival_body_x,
-                y=self.arrival_body_y,
-                z=self.arrival_body_z,
-                vx=self.arrival_body_vx,
-                vy=self.arrival_body_vy,
-                vz=self.arrival_body_vz,
-                origin=self.origin,
-                frame=self.frame,
-            ),
-        )
+        """Return the arrival body orbit."""
+        return self._orbit_accessor("arrival_body")
 
     def solution_departure_orbit(self) -> Orbits:
-        """
-        Return the solution departure orbit.
-        """
-        solution_departure_orbit_id = [
-            f"solution_departure_orbit_{i}"
-            for i in range(len(self.solution_departure_vx))
-        ]
-        return Orbits.from_kwargs(
-            orbit_id=solution_departure_orbit_id,
-            coordinates=CartesianCoordinates.from_kwargs(
-                time=self.departure_time,
-                x=self.departure_body_x,
-                y=self.departure_body_y,
-                z=self.departure_body_z,
-                vx=self.solution_departure_vx,
-                vy=self.solution_departure_vy,
-                vz=self.solution_departure_vz,
-                origin=self.origin,
-                frame=self.frame,
-            ),
-        )
+        """Return the solution departure orbit."""
+        return self._orbit_accessor("solution_departure")
 
     def solution_arrival_orbit(self) -> Orbits:
-        """
-        Return the solution arrival orbit.
-        """
-        solution_arrival_orbit_id = [
-            f"solution_arrival_orbit_{i}" for i in range(len(self.solution_arrival_vx))
-        ]
-        return Orbits.from_kwargs(
-            orbit_id=solution_arrival_orbit_id,
-            coordinates=CartesianCoordinates.from_kwargs(
-                time=self.arrival_time,
-                x=self.arrival_body_x,
-                y=self.arrival_body_y,
-                z=self.arrival_body_z,
-                vx=self.solution_arrival_vx,
-                vy=self.solution_arrival_vy,
-                vz=self.solution_arrival_vz,
-                origin=self.origin,
-                frame=self.frame,
-            ),
+        """Return the solution arrival orbit."""
+        return self._orbit_accessor("solution_arrival")
+
+    def _record_batch(self) -> pa.RecordBatch:
+        """Prepare the canonical Arrow input; conversion stays outside timing."""
+        metadata = dict(self.table.schema.metadata or {})
+        metadata.update(
+            {
+                b"adam_core_frame": self.frame.encode(),
+                b"adam_core_departure_time_scale": self.departure_time.scale.encode(),
+                b"adam_core_arrival_time_scale": self.arrival_time.scale.encode(),
+            }
+        )
+        table = self.table.combine_chunks().replace_schema_metadata(metadata)
+        return pa.RecordBatch.from_arrays(
+            [column.chunk(0) for column in table.columns], schema=table.schema
+        )
+
+    def _orbit_accessor(self, accessor: str) -> Orbits:
+        """One Arrow crossing for the four orbit-producing accessors."""
+        from adam_core import _rust_native
+        from adam_core._rust.arrow import table_from_record_batch
+
+        return table_from_record_batch(
+            Orbits,
+            _rust_native.lambert_solution_orbit_arrow(self._record_batch(), accessor),
         )
 
     def c3_departure(self) -> npt.NDArray[np.float64]:

@@ -2,9 +2,11 @@
 //! outlier policy, worst-observation selection, IOD observation selection,
 //! and linkage/member sorting.
 
+use adam_core_rs_coords::{Epoch, TimeArray, TimeScale};
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 use std::collections::HashMap;
 use std::hint::black_box;
 use std::time::Instant;
@@ -76,6 +78,23 @@ fn calculate_c3_numpy<'py>(
         return Err(PyValueError::new_err("v1 and body_v must have equal shape"));
     }
     Ok(c3_values(&v1, &body_v).into_pyarray(py))
+}
+
+#[pyfunction]
+#[pyo3(signature = (v1, body_v, reps, trials, warmup_reps=1))]
+fn benchmark_vinf_numpy(
+    v1: PyReadonlyArray2<'_, f64>,
+    body_v: PyReadonlyArray2<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let v1 = rows3(&v1, "v1")?;
+    let body_v = rows3(&body_v, "body_v")?;
+    if v1.len() != body_v.len() {
+        return Err(PyValueError::new_err("v1 and body_v must have equal shape"));
+    }
+    bench(reps, trials, warmup_reps, || vinf_values(&v1, &body_v))
 }
 
 #[pyfunction]
@@ -413,6 +432,159 @@ fn sort_linkages_by_id_and_time_numpy<'py>(
     ))
 }
 
+/// Grouped impact probability statistics. One row is emitted for every
+/// first-appearance orbit id crossed with every condition id. Grouping,
+/// counts, probability, and impact-time reductions all execute in Rust.
+#[pyfunction]
+fn impact_probability_stats_numpy<'py>(
+    py: Python<'py>,
+    variant_orbit_ids: Vec<String>,
+    collision_orbit_ids: Vec<String>,
+    collision_condition_ids: Vec<String>,
+    collision_days: PyReadonlyArray1<'py, i64>,
+    collision_nanos: PyReadonlyArray1<'py, i64>,
+    collision_scale: &str,
+    condition_ids: Vec<String>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let days = collision_days.as_slice()?.to_vec();
+    let nanos = collision_nanos.as_slice()?.to_vec();
+    if collision_orbit_ids.len() != days.len()
+        || collision_condition_ids.len() != days.len()
+        || nanos.len() != days.len()
+    {
+        return Err(PyValueError::new_err("collision columns must align"));
+    }
+    let scale =
+        TimeScale::parse(collision_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let collision_times = TimeArray::new(
+        scale,
+        days.iter()
+            .zip(nanos.iter())
+            .map(|(&day, &nano)| Epoch::new(day, nano))
+            .collect(),
+    )
+    .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let collision_mjds = collision_times.mjd_values();
+
+    let mut orbit_order: Vec<&str> = Vec::new();
+    let mut variant_counts: HashMap<&str, i64> = HashMap::new();
+    for orbit_id in &variant_orbit_ids {
+        let entry = variant_counts.entry(orbit_id.as_str()).or_insert(0);
+        if *entry == 0 {
+            orbit_order.push(orbit_id.as_str());
+        }
+        *entry += 1;
+    }
+    let mut collision_groups: HashMap<(&str, &str), Vec<usize>> = HashMap::new();
+    for row in 0..collision_orbit_ids.len() {
+        collision_groups
+            .entry((
+                collision_orbit_ids[row].as_str(),
+                collision_condition_ids[row].as_str(),
+            ))
+            .or_default()
+            .push(row);
+    }
+
+    let capacity = orbit_order.len() * condition_ids.len();
+    let mut out_orbits = Vec::with_capacity(capacity);
+    let mut out_conditions = Vec::with_capacity(capacity);
+    let mut out_impacts = Vec::with_capacity(capacity);
+    let mut out_variants = Vec::with_capacity(capacity);
+    let mut out_probability = Vec::with_capacity(capacity);
+    let mut mean_days: Vec<Option<i64>> = Vec::with_capacity(capacity);
+    let mut mean_nanos: Vec<Option<i64>> = Vec::with_capacity(capacity);
+    let mut out_stddev: Vec<Option<f64>> = Vec::with_capacity(capacity);
+    let mut min_days: Vec<Option<i64>> = Vec::with_capacity(capacity);
+    let mut min_nanos: Vec<Option<i64>> = Vec::with_capacity(capacity);
+    let mut max_days: Vec<Option<i64>> = Vec::with_capacity(capacity);
+    let mut max_nanos: Vec<Option<i64>> = Vec::with_capacity(capacity);
+
+    for orbit_id in orbit_order {
+        let variant_count = variant_counts[orbit_id];
+        for condition_id in &condition_ids {
+            let rows = collision_groups
+                .get(&(orbit_id, condition_id.as_str()))
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            let impact_count = rows.len() as i64;
+            out_orbits.push(orbit_id.to_string());
+            out_conditions.push(condition_id.clone());
+            out_impacts.push(impact_count);
+            out_variants.push(variant_count);
+            out_probability.push(impact_count as f64 / variant_count as f64);
+            if rows.is_empty() {
+                mean_days.push(None);
+                mean_nanos.push(None);
+                out_stddev.push(None);
+                min_days.push(None);
+                min_nanos.push(None);
+                max_days.push(None);
+                max_nanos.push(None);
+                continue;
+            }
+
+            let count = rows.len() as f64;
+            let mean = rows.iter().map(|&row| collision_mjds[row]).sum::<f64>() / count;
+            let variance = rows
+                .iter()
+                .map(|&row| {
+                    let delta = collision_mjds[row] - mean;
+                    delta * delta
+                })
+                .sum::<f64>()
+                / count;
+            let mean_epoch = TimeArray::from_mjd(scale, &[mean])
+                .map_err(|err| PyValueError::new_err(err.to_string()))?
+                .epochs[0];
+            let min_row = *rows
+                .iter()
+                .min_by_key(|&&row| (days[row], nanos[row]))
+                .expect("non-empty group");
+            let max_row = *rows
+                .iter()
+                .max_by_key(|&&row| (days[row], nanos[row]))
+                .expect("non-empty group");
+            mean_days.push(Some(mean_epoch.days));
+            mean_nanos.push(Some(mean_epoch.nanos));
+            out_stddev.push(Some(variance.sqrt()));
+            min_days.push(Some(days[min_row]));
+            min_nanos.push(Some(nanos[min_row]));
+            max_days.push(Some(days[max_row]));
+            max_nanos.push(Some(nanos[max_row]));
+        }
+    }
+
+    let out = PyDict::new(py);
+    out.set_item("orbit_id", out_orbits)?;
+    out.set_item("condition_id", out_conditions)?;
+    out.set_item("impacts", out_impacts)?;
+    out.set_item("variants", out_variants)?;
+    out.set_item("cumulative_probability", out_probability)?;
+    out.set_item("mean_days", mean_days)?;
+    out.set_item("mean_nanos", mean_nanos)?;
+    out.set_item("stddev_impact_time", out_stddev)?;
+    out.set_item("minimum_days", min_days)?;
+    out.set_item("minimum_nanos", min_nanos)?;
+    out.set_item("maximum_days", max_days)?;
+    out.set_item("maximum_nanos", max_nanos)?;
+    Ok(out)
+}
+
+/// Elementwise square root used by the Mahalanobis-distance veneer.
+#[pyfunction]
+fn sqrt_values_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let values = scalars(&values, "values")?;
+    Ok(values
+        .into_iter()
+        .map(f64::sqrt)
+        .collect::<Vec<_>>()
+        .into_pyarray(py))
+}
+
 fn bench<F, T>(
     reps: usize,
     trials: usize,
@@ -444,6 +616,7 @@ where
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calculate_c3_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(vinf_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_vinf_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_calculate_c3_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_max_outliers_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(
@@ -453,5 +626,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(select_observation_triplets_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(sort_linkages_by_id_and_time_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(assign_duplicate_observations_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(impact_probability_stats_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(sqrt_values_numpy, m)?)?;
     Ok(())
 }

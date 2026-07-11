@@ -779,6 +779,24 @@ def test_lambert_solution_orbits():
     # Verify we have some results to test with
     assert len(lambert_results) > 0, "Should have Lambert solutions for testing"
 
+    # Each accessor has direct Rust-owned Instant timing; Arrow/PyO3 input
+    # conversion is prepared before samples begin.
+    from adam_core import _rust_native
+
+    batch = lambert_results._record_batch()
+    for accessor in (
+        "departure_body",
+        "arrival_body",
+        "solution_departure",
+        "solution_arrival",
+    ):
+        samples = _rust_native.benchmark_lambert_solution_orbit_arrow(
+            batch, accessor, 2, 2, 1
+        )
+        assert len(samples) == 2
+        assert all(len(trial) == 2 for trial in samples)
+        assert all(sample > 0.0 for trial in samples for sample in trial)
+
     # Test departure orbit construction
     departure_orbits = lambert_results.solution_departure_orbit()
 
@@ -1140,7 +1158,7 @@ def _stacked_columns(solutions, columns):
 def test_lambert_solution_scalar_accessors_match_legacy_expressions():
     """vinf/c3/time_of_flight are Rust one-crossings; pin bit parity with the
     legacy NumPy expressions they replaced."""
-    from adam_core.orbits import Orbits  # noqa: F401  (keep import surface warm)
+    from adam_core import _rust_native
 
     departure = prepare_and_propagate_orbits(
         body=OriginCodes.EARTH,
@@ -1173,8 +1191,28 @@ def test_lambert_solution_scalar_accessors_match_legacy_expressions():
         np.testing.assert_array_equal(
             getattr(solutions, f"c3_{prefix}")(), expected_vinf**2
         )
+        samples = _rust_native.benchmark_vinf_numpy(
+            np.ascontiguousarray(solution_v),
+            np.ascontiguousarray(body_v),
+            2,
+            2,
+            1,
+        )
+        assert all(sample > 0.0 for trial in samples for sample in trial)
 
     expected_tof = solutions.arrival_time.mjd().to_numpy(
         zero_copy_only=False
     ) - solutions.departure_time.mjd().to_numpy(zero_copy_only=False)
     np.testing.assert_array_equal(solutions.time_of_flight(), expected_tof)
+    samples = _rust_native.benchmark_timestamp_mjd_difference_numpy(
+        solutions.arrival_time.days.to_numpy(zero_copy_only=False),
+        solutions.arrival_time.nanos.to_numpy(zero_copy_only=False),
+        solutions.arrival_time.scale,
+        solutions.departure_time.days.to_numpy(zero_copy_only=False),
+        solutions.departure_time.nanos.to_numpy(zero_copy_only=False),
+        solutions.departure_time.scale,
+        2,
+        2,
+        1,
+    )
+    assert all(sample > 0.0 for trial in samples for sample in trial)

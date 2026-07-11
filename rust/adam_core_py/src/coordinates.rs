@@ -23,7 +23,9 @@ use adam_core_rs_coords::{
 };
 use adam_core_rs_spice::global_backend;
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
-use arrow_array::{Array, Int64Array, RecordBatch, UInt32Array};
+use arrow_array::{
+    Array, Float64Array, Int64Array, LargeStringArray, RecordBatch, StructArray, UInt32Array,
+};
 use arrow_ipc::reader::StreamReader;
 use arrow_ipc::writer::StreamWriter;
 use numpy::{
@@ -3738,6 +3740,229 @@ fn porkchop_record_batch(
     .map_err(|err| format!("failed to build LambertSolutions RecordBatch: {err}"))
 }
 
+fn lambert_float_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<&'a Float64Array, String> {
+    batch
+        .column_by_name(name)
+        .ok_or_else(|| format!("LambertSolutions is missing {name}"))?
+        .as_any()
+        .downcast_ref::<Float64Array>()
+        .ok_or_else(|| format!("LambertSolutions {name} must be Float64"))
+}
+
+fn lambert_string_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<&'a LargeStringArray, String> {
+    batch
+        .column_by_name(name)
+        .ok_or_else(|| format!("LambertSolutions is missing {name}"))?
+        .as_any()
+        .downcast_ref::<LargeStringArray>()
+        .ok_or_else(|| format!("LambertSolutions {name} must be LargeUtf8"))
+}
+
+fn lambert_time_column(
+    batch: &RecordBatch,
+    name: &str,
+    scale: TimeScale,
+) -> Result<TimeArray, String> {
+    let values = batch
+        .column_by_name(name)
+        .ok_or_else(|| format!("LambertSolutions is missing {name}"))?
+        .as_any()
+        .downcast_ref::<StructArray>()
+        .ok_or_else(|| format!("LambertSolutions {name} must be a StructArray"))?;
+    let days = values
+        .column_by_name("days")
+        .ok_or_else(|| format!("LambertSolutions {name} is missing days"))?
+        .as_any()
+        .downcast_ref::<Int64Array>()
+        .ok_or_else(|| format!("LambertSolutions {name}.days must be Int64"))?;
+    let nanos = values
+        .column_by_name("nanos")
+        .ok_or_else(|| format!("LambertSolutions {name} is missing nanos"))?
+        .as_any()
+        .downcast_ref::<Int64Array>()
+        .ok_or_else(|| format!("LambertSolutions {name}.nanos must be Int64"))?;
+    TimeArray::from_parts(
+        scale,
+        (0..days.len()).map(|row| days.value(row)).collect(),
+        (0..nanos.len()).map(|row| nanos.value(row)).collect(),
+    )
+    .map_err(|err| err.to_string())
+}
+
+fn lambert_origin_codes(batch: &RecordBatch) -> Result<Vec<OriginId>, String> {
+    let origin = batch
+        .column_by_name("origin")
+        .ok_or_else(|| "LambertSolutions is missing origin".to_string())?
+        .as_any()
+        .downcast_ref::<StructArray>()
+        .ok_or_else(|| "LambertSolutions origin must be a StructArray".to_string())?;
+    let codes = origin
+        .column_by_name("code")
+        .ok_or_else(|| "LambertSolutions origin is missing code".to_string())?
+        .as_any()
+        .downcast_ref::<LargeStringArray>()
+        .ok_or_else(|| "LambertSolutions origin.code must be LargeUtf8".to_string())?;
+    Ok((0..codes.len())
+        .map(|row| OriginId::from_code(codes.value(row)))
+        .collect())
+}
+
+/// Build one canonical nested OrbitBatch from a LambertSolutions batch.
+fn lambert_solution_orbit_record_batch(
+    batch: &RecordBatch,
+    accessor: &str,
+) -> Result<RecordBatch, String> {
+    let schema = batch.schema();
+    let metadata = schema.metadata();
+    let frame = match metadata
+        .get("adam_core_frame")
+        .map(String::as_str)
+        .unwrap_or("unspecified")
+    {
+        "ecliptic" => DataFrame::Ecliptic,
+        "equatorial" => DataFrame::Equatorial,
+        "itrf93" => DataFrame::Itrf93,
+        "unspecified" => DataFrame::Unspecified,
+        other => return Err(format!("unsupported LambertSolutions frame: {other}")),
+    };
+    let (time_name, scale_key, id_name, position_prefix, velocity_prefix, generated_prefix) =
+        match accessor {
+            "departure_body" => (
+                "departure_time",
+                "adam_core_departure_time_scale",
+                Some("departure_body_id"),
+                "departure_body_",
+                "departure_body_",
+                None,
+            ),
+            "arrival_body" => (
+                "arrival_time",
+                "adam_core_arrival_time_scale",
+                Some("arrival_body_id"),
+                "arrival_body_",
+                "arrival_body_",
+                None,
+            ),
+            "solution_departure" => (
+                "departure_time",
+                "adam_core_departure_time_scale",
+                None,
+                "departure_body_",
+                "solution_departure_",
+                Some("solution_departure_orbit_"),
+            ),
+            "solution_arrival" => (
+                "arrival_time",
+                "adam_core_arrival_time_scale",
+                None,
+                "arrival_body_",
+                "solution_arrival_",
+                Some("solution_arrival_orbit_"),
+            ),
+            other => return Err(format!("unknown LambertSolutions orbit accessor: {other}")),
+        };
+    let scale_name = metadata.get(scale_key).map(String::as_str).unwrap_or("tdb");
+    let scale = TimeScale::parse(scale_name).map_err(|err| err.to_string())?;
+    let times = lambert_time_column(batch, time_name, scale)?;
+    let rows = batch.num_rows();
+    let component =
+        |prefix: &str, suffix: &str| lambert_float_column(batch, &format!("{prefix}{suffix}"));
+    let x = component(position_prefix, "x")?;
+    let y = component(position_prefix, "y")?;
+    let z = component(position_prefix, "z")?;
+    let vx = component(velocity_prefix, "vx")?;
+    let vy = component(velocity_prefix, "vy")?;
+    let vz = component(velocity_prefix, "vz")?;
+    let values = (0..rows)
+        .map(|row| {
+            [
+                x.value(row),
+                y.value(row),
+                z.value(row),
+                vx.value(row),
+                vy.value(row),
+                vz.value(row),
+            ]
+        })
+        .collect();
+    let orbit_ids = match (id_name, generated_prefix) {
+        (Some(name), None) => {
+            let ids = lambert_string_column(batch, name)?;
+            (0..rows)
+                .map(|row| adam_core_rs_coords::OrbitId(ids.value(row).to_string()))
+                .collect()
+        }
+        (None, Some(prefix)) => (0..rows)
+            .map(|row| adam_core_rs_coords::OrbitId(format!("{prefix}{row}")))
+            .collect(),
+        _ => return Err("invalid LambertSolutions accessor configuration".to_string()),
+    };
+    let coordinates = DataCoordinateBatch::cartesian(
+        values,
+        frame,
+        OriginArray::new(lambert_origin_codes(batch)?),
+        Some(times),
+        None,
+    )
+    .map_err(|err| err.to_string())?;
+    DataOrbitBatch::new(orbit_ids, vec![None; rows], coordinates)
+        .map_err(|err| err.to_string())?
+        .into_nested_record_batch()
+        .map_err(|err| err.to_string())
+}
+
+#[pyfunction]
+fn lambert_solution_orbit_arrow<'py>(
+    py: Python<'py>,
+    batch: &Bound<'py, PyAny>,
+    accessor: &str,
+) -> PyResult<PyObject> {
+    let batch = RecordBatch::from_pyarrow_bound(batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid LambertSolutions batch: {err}")))?;
+    py.allow_threads(|| lambert_solution_orbit_record_batch(&batch, accessor))
+        .map_err(PyValueError::new_err)?
+        .to_pyarrow(py)
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to export OrbitBatch: {err}")))
+}
+
+#[pyfunction]
+#[pyo3(signature = (batch, accessor, reps, trials, warmup_reps=1))]
+fn benchmark_lambert_solution_orbit_arrow(
+    batch: &Bound<'_, PyAny>,
+    accessor: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let batch = RecordBatch::from_pyarrow_bound(batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid LambertSolutions batch: {err}")))?;
+    let run_once =
+        || lambert_solution_orbit_record_batch(&batch, accessor).map_err(PyValueError::new_err);
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            black_box(run_once()?);
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            black_box(run_once()?);
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
+}
+
 /// Arrow-native public porkchop surface.
 #[pyfunction]
 #[pyo3(signature = (departure_batch, arrival_batch, propagation_origin, prograde=true, max_iter=35, tol=1e-10))]
@@ -4580,6 +4805,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sample_orbit_variants_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_sample_orbit_variants_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(generate_porkchop_data_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(lambert_solution_orbit_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_lambert_solution_orbit_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_generate_porkchop_data_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(cartesian_to_spherical_numpy, m)?)?;

@@ -181,6 +181,41 @@ fn timestamp_mjd_difference_numpy<'py>(
         .into_pyarray(py))
 }
 
+#[pyfunction]
+#[pyo3(signature = (minuend_days, minuend_nanos, minuend_scale, subtrahend_days, subtrahend_nanos, subtrahend_scale, reps, trials, warmup_reps=1))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_timestamp_mjd_difference_numpy(
+    minuend_days: PyReadonlyArray1<'_, i64>,
+    minuend_nanos: PyReadonlyArray1<'_, i64>,
+    minuend_scale: &str,
+    subtrahend_days: PyReadonlyArray1<'_, i64>,
+    subtrahend_nanos: PyReadonlyArray1<'_, i64>,
+    subtrahend_scale: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let minuend_days = int_column(&minuend_days, "minuend_days")?;
+    let minuend_nanos = int_column(&minuend_nanos, "minuend_nanos")?;
+    let subtrahend_days = int_column(&subtrahend_days, "subtrahend_days")?;
+    let subtrahend_nanos = int_column(&subtrahend_nanos, "subtrahend_nanos")?;
+    let minuend = time_array(&minuend_days, &minuend_nanos, minuend_scale)?;
+    let subtrahend = time_array(&subtrahend_days, &subtrahend_nanos, subtrahend_scale)?;
+    if minuend.len() != subtrahend.len() {
+        return Err(PyValueError::new_err(
+            "minuend and subtrahend must have equal length",
+        ));
+    }
+    bench(reps, trials, warmup_reps, || {
+        minuend
+            .mjd_values()
+            .into_iter()
+            .zip(subtrahend.mjd_values())
+            .map(|(a, b)| a - b)
+            .collect::<Vec<_>>()
+    })
+}
+
 /// Fused `Timestamp.et`: rescale to TDB and convert MJD to ET seconds in one
 /// crossing.
 #[pyfunction]
@@ -379,6 +414,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(timestamp_fractional_days_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_jd_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_mjd_difference_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_timestamp_mjd_difference_numpy,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(timestamp_et_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_key_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_signature_numpy, m)?)?;
