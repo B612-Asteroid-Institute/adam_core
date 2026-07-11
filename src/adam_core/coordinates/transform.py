@@ -17,7 +17,6 @@ from .._rust import (
     cartesian_to_spherical_numpy,
     cometary_to_cartesian_numpy,
     keplerian_to_cartesian_numpy,
-    rotate_cartesian_time_varying_numpy,
     spherical_to_cartesian_numpy,
 )
 from ..constants import Constants as c
@@ -28,9 +27,8 @@ from .._rust.arrow import (
     table_from_record_batch,
 )
 from . import types
-from .cartesian import COVARIANCE_ROTATION_TOLERANCE, CartesianCoordinates
+from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
-from .covariances import CoordinateCovariances
 from .geodetics import WGS84, GeodeticCoordinates
 from .keplerian import KeplerianCoordinates
 from .origin import OriginCodes
@@ -680,6 +678,20 @@ def cartesian_to_origin(
         If origin is not a `~adam_core.coordinates.origin.OriginCodes` object or
         a str of an observatory code.
     """
+    # One Rust crossing owns origin resolution (perturber spkez / ground
+    # observer states) and the translation for every backend-supported
+    # origin. The legacy Python composition remains only as an explicit
+    # fallback for origin codes the Rust backend cannot resolve (space/custom
+    # observatories; see personal-cmy.37.2.16 for the dispatch boundary).
+    try:
+        native = _transform_coordinates_native(
+            coords, CartesianCoordinates, coords.frame, origin
+        )
+    except Exception:
+        native = None
+    if native is not None:
+        return native
+
     vectors = _resolve_origin_translation_vectors(coords, origin)
     return coords.translate(vectors, origin.name)
 
@@ -718,100 +730,23 @@ def apply_time_varying_rotation(
 
     assert len(pc.unique(coords.origin.code)) == 1
 
-    # Transform to geocentric coordinates in the input frame
-    if frame_out == "itrf93":
-        frame_spice_out = "ITRF93"
-    elif frame_out == "ecliptic":
-        frame_spice_out = "ECLIPJ2000"
-    elif frame_out == "equatorial":
-        frame_spice_out = "J2000"
-    else:
+    # Preserve the legacy frame validation errors before crossing.
+    if frame_out not in ("itrf93", "ecliptic", "equatorial"):
         raise ValueError("Unsupported frame: {}".format(frame_out))
+    if coords.frame not in ("itrf93", "ecliptic", "equatorial"):
+        raise ValueError("Unsupported frame: {}".format(coords.frame))
 
-    frame_in = coords.frame
-    if frame_in == "itrf93":
-        frame_spice_in = "ITRF93"
-    elif frame_in == "ecliptic":
-        frame_spice_in = "ECLIPJ2000"
-    elif frame_in == "equatorial":
-        frame_spice_in = "J2000"
-    else:
-        raise ValueError("Unsupported frame: {}".format(frame_in))
-
-    from ..constants import KM_P_AU, S_P_DAY
-    from ..utils.spice import _query_sxform_itrf93_batch
-
-    # Dedup epochs then query sxforms in one batched call. Fewer unique
-    # epochs than rows is the common case (e.g. many objects at a few
-    # shared times), so paying O(U) sxform computations over an O(N)
-    # per-row apply is the right trade.
-    unique_times = coords.time.unique()
-    unique_ets = unique_times.et().to_numpy(zero_copy_only=False).astype(np.float64)
-    batched_kms = _query_sxform_itrf93_batch(
-        frame_spice_in, frame_spice_out, unique_ets
+    # One Rust crossing owns SPICE sxform lookup, epoch deduplication, unit
+    # conversion, the per-row rotation, covariance transport with the NaN
+    # policy, near-zero cleanup, and output table assembly.
+    rotated = _transform_coordinates_native(
+        coords, CartesianCoordinates, frame_out, None
     )
-
-    # Unit conversion: sxform is km / km-s, our states are AU / AU-d.
-    # Fold the scaling into the matrix table once so the Rust apply
-    # kernel stays a pure (matrix @ state, matrix @ cov @ matrix^T).
-    rotation_unit_conversion = np.zeros((6, 6))
-    rotation_unit_conversion[:3, :3] = np.identity(3) * KM_P_AU
-    rotation_unit_conversion[3:, 3:] = np.identity(3) * KM_P_AU / S_P_DAY
-    inv_unit_conversion = np.linalg.inv(rotation_unit_conversion)
-    matrices_aud = np.einsum(
-        "ij,ujk,kl->uil", inv_unit_conversion, batched_kms, rotation_unit_conversion
-    )
-
-    # Build per-row time index into unique_times by matching on the
-    # (days, nanos) pair packed into a single int64 key.
-    def _time_keys(time_like) -> np.ndarray:
-        days = time_like.days.to_numpy(zero_copy_only=False).astype(np.int64)
-        nanos = time_like.nanos.to_numpy(zero_copy_only=False).astype(np.int64)
-        return days * 86_400_000_000_000 + nanos
-
-    keys_all = _time_keys(coords.time)
-    keys_u = _time_keys(unique_times)
-    order = np.argsort(keys_u)
-    positions = np.searchsorted(keys_u[order], keys_all)
-    time_index = order[positions]
-
-    # Single Rust crossing does per-row M @ state and M @ Σ @ M^T
-    # across all N rows in parallel. Covariance NaN handling matches
-    # CartesianCoordinates.rotate exactly (NaN cells pass through).
-    states = coords.values
-    cov_matrix = coords.covariance.to_matrix()
-    cov_flat = cov_matrix.reshape(cov_matrix.shape[0], 36)
-    rotated_states, rotated_cov_flat = rotate_cartesian_time_varying_numpy(
-        states,
-        time_index,
-        matrices_aud,
-        cov_flat,
-    )
-    rotated_cov = rotated_cov_flat.reshape(cov_matrix.shape)
-
-    # Preserve the existing near-zero cleanup so downstream covariance
-    # consumers see the same small-element behaviour as the legacy path.
-    near_zero_mask = np.abs(rotated_cov) < COVARIANCE_ROTATION_TOLERANCE
-    if near_zero_mask.any():
-        logger.debug(
-            f"{int(near_zero_mask.sum())} covariance elements are within "
-            f"{COVARIANCE_ROTATION_TOLERANCE:.0e} of zero after rotation, "
-            "setting these elements to 0."
+    if rotated is None:
+        raise ValueError(
+            "Unsupported time-varying rotation: " f"{coords.frame} -> {frame_out}"
         )
-        rotated_cov = np.where(near_zero_mask, 0.0, rotated_cov)
-
-    return CartesianCoordinates.from_kwargs(
-        x=rotated_states[:, 0],
-        y=rotated_states[:, 1],
-        z=rotated_states[:, 2],
-        vx=rotated_states[:, 3],
-        vy=rotated_states[:, 4],
-        vz=rotated_states[:, 5],
-        time=coords.time,
-        covariance=CoordinateCovariances.from_matrix(rotated_cov),
-        origin=coords.origin,
-        frame=frame_out,
-    )
+    return rotated
 
 
 def cartesian_to_frame(
@@ -832,19 +767,22 @@ def cartesian_to_frame(
     CartesianCoordinates : `~adam_core.coordinates.cartesian.CartesianCoordinates`
         Rotated Cartesian coordinates and their covariances.
     """
-    if frame == "ecliptic" and coords.frame == "equatorial":
-        return coords.rotate(TRANSFORM_EQ2EC, "ecliptic")
-    elif frame == "equatorial" and coords.frame == "ecliptic":
-        return coords.rotate(TRANSFORM_EC2EQ, "equatorial")
-    elif frame == "itrf93" and coords.frame != "itrf93":
-        return apply_time_varying_rotation(coords, frame)
-    elif frame != "itrf93" and coords.frame == "itrf93":
-        return apply_time_varying_rotation(coords, frame)
-    elif frame == coords.frame:
+    if frame == coords.frame:
         return coords
-    else:
+    if frame not in ("ecliptic", "equatorial", "itrf93"):
         err = "frame should be one of {'ecliptic', 'equatorial', 'itrf93'}"
         raise ValueError(err)
+
+    # Time-varying rotations preserve the legacy SPICE setup and warning
+    # semantics; all rotations execute as one Rust crossing.
+    if "itrf93" in (frame, coords.frame):
+        return apply_time_varying_rotation(coords, frame)
+
+    rotated = _transform_coordinates_native(coords, CartesianCoordinates, frame, None)
+    if rotated is None:
+        err = "frame should be one of {'ecliptic', 'equatorial', 'itrf93'}"
+        raise ValueError(err)
+    return rotated
 
 
 def transform_coordinates(
