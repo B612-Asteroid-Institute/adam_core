@@ -1,9 +1,23 @@
 """Backend/transport implementation candidates for parity/perf diagnostics.
 
-These entries are *not* public API migration rows. They identify temporary
-implementation candidates (for example Arrow IPC workflow wrappers) that are
-worth parity/speed tracking while we decide whether to promote them behind a
-canonical public API name.
+Retired (bead personal-cmy.36.10): the temporary ``bridge.*`` Arrow-IPC
+workflow candidates were removed once their coverage was absorbed by
+canonical public-API lanes:
+
+* ``bridge.propagate_orbits_2body`` -> ``dynamics.propagate_2body``
+  (Arrow-native public facade, bead personal-cmy.36.4).
+* ``bridge.rotate_orbits_frame`` -> ``coordinates.transform_coordinates``
+  (Arrow-native public facade, bead personal-cmy.36.3).
+* ``bridge.sample_orbit_variants`` -> ``orbits.VariantOrbits.create``
+  (promoted to a canonical public lane; the Rust sampler is the public
+  backend).
+* ``bridge.evaluate_residuals_2body`` -> canonical residual/OD coverage
+  (``coordinates.residuals.Residuals.calculate``, bead personal-cmy.36.9,
+  plus ``dynamics.generate_ephemeris_2body``, bead personal-cmy.36.5).
+
+Historical parity artifacts before process version
+``rm-p1-023-canonical-variant-create-v1`` still contain ``bridge.*`` rows;
+this module retains the machinery so those artifacts remain interpretable.
 """
 
 from __future__ import annotations
@@ -38,77 +52,7 @@ class BackendCandidate:
         }
 
 
-BACKEND_CANDIDATES: Final[tuple[BackendCandidate, ...]] = (
-    BackendCandidate(
-        candidate_id="bridge.propagate_orbits_2body",
-        canonical_api_id="dynamics.propagate_2body",
-        canonical_name="dynamics.propagate_2body",
-        implementation_label="Arrow IPC OrbitBatch workflow",
-        boundary="python+quivr+arrow-ipc",
-        rust_module="adam_core.orbits.arrow_bridge._propagate_orbits_2body_ipc_candidate",
-        legacy_comparator="adam_core.dynamics.propagate_2body",
-        note=(
-            "Diagnostic candidate for replacing/augmenting the canonical public "
-            "propagate_2body path. It is not a separate public API identity."
-        ),
-    ),
-    BackendCandidate(
-        candidate_id="bridge.rotate_orbits_frame",
-        canonical_api_id="coordinates.transform_coordinates",
-        canonical_name="coordinates.transform_coordinates",
-        implementation_label="Arrow IPC Orbits frame-rotation workflow",
-        boundary="python+quivr+arrow-ipc",
-        rust_module="adam_core.orbits.arrow_bridge._rotate_orbits_frame_ipc_candidate",
-        legacy_comparator=(
-            "adam_core.coordinates.transform.transform_coordinates(..., frame_out=...)"
-        ),
-        note=(
-            "Diagnostic candidate only: this remains a private implementation "
-            "detail benchmarked against transform_coordinates semantics, not a "
-            "standalone public rotate_orbits_frame API."
-        ),
-    ),
-    BackendCandidate(
-        candidate_id="bridge.sample_orbit_variants",
-        canonical_api_id=None,
-        canonical_name="orbits.VariantOrbits.create",
-        implementation_label="Arrow IPC covariance-variant sampler workflow",
-        boundary="python+quivr+arrow-ipc",
-        rust_module="adam_core.orbits.arrow_bridge._sample_orbit_variants_ipc_candidate",
-        legacy_comparator="adam_core.orbits.variants.VariantOrbits.create",
-        note=(
-            "Diagnostic candidate for the private Rust backend behind "
-            "VariantOrbits.create (all methods). Sigma-point is gated "
-            "elementwise here; Monte Carlo / auto-fallback draws use the "
-            "Rust-native RNG (statistically equivalent, not bit-identical; "
-            "decision 2026-07-03) and are covered by statistical unit tests."
-        ),
-    ),
-    BackendCandidate(
-        candidate_id="bridge.evaluate_residuals_2body",
-        canonical_api_id=None,
-        canonical_name=(
-            "coordinates.residuals.Residuals.calculate + "
-            "orbit_determination.evaluate_orbits"
-        ),
-        implementation_label="Arrow IPC 2-body ephemeris+residual workflow",
-        boundary="python+quivr+arrow-ipc",
-        rust_module=(
-            "adam_core.orbits.arrow_bridge._evaluate_residuals_2body_ipc_candidate"
-        ),
-        legacy_comparator=(
-            "adam_core.dynamics.generate_ephemeris_2body + "
-            "adam_core.coordinates.residuals.Residuals.calculate"
-        ),
-        note=(
-            "Diagnostic OD inner-loop candidate. Canonical OD APIs resolved "
-            "under personal-cmy.7: residual evaluation stays behind "
-            "Residuals.calculate / evaluate_orbits, and least-squares fitting "
-            "is the backend-generic Rust Gauss-Newton driver dispatched from "
-            "orbit_determination.fit_least_squares."
-        ),
-    ),
-)
+BACKEND_CANDIDATES: Final[tuple[BackendCandidate, ...]] = ()
 
 
 BACKEND_CANDIDATES_BY_ID: Final[dict[str, BackendCandidate]] = {

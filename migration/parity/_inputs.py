@@ -1796,49 +1796,14 @@ def make_predict_magnitudes_shape(
 # fit_least_squares, so there is no apples-to-apples 2-body legacy reference.
 # It is covered by the truth-recovery test in
 # src/adam_core/orbits/tests/test_orbit_arrow_bridge.py. A future "same-minimum"
-# comparison against scipy.optimize.least_squares over the (now-gated)
-# bridge.evaluate_residuals_2body cost would be the honest rust-vs-legacy bar.
+# comparison against scipy.optimize.least_squares over the canonical residual
+# cost (Residuals.calculate) would be the honest rust-vs-legacy bar.
 # ---------------------------------------------------------------------------
 
 
-def make_bridge_propagate_orbits_2body(rng: np.random.Generator, n: int) -> Sample:
-    """Bridge ``propagate_orbits_2body`` (Orbits -> Orbits, one Rust crossing)
-    vs baseline-main public ``dynamics.propagate_2body``. Bound heliocentric
-    orbits with per-orbit TDB epochs propagated to one shared TDB target."""
-    coords = _kep_to_cart(_sample_keplerian_elements(rng, n))
-    epoch_mjd = 59800.0 + rng.uniform(0.0, 200.0, size=n)
-    kw = {
-        "coords": np.ascontiguousarray(coords, dtype=np.float64),
-        "epoch_mjd": np.ascontiguousarray(epoch_mjd, dtype=np.float64),
-        "target_mjd": 60400.0,
-        "origin": "SUN",
-        "frame": "ecliptic",
-    }
-    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
-
-
-def make_bridge_rotate_orbits_frame(rng: np.random.Generator, n: int) -> Sample:
-    """Bridge ``rotate_orbits_frame`` (Orbits -> Orbits, state + covariance, one
-    Rust crossing) vs baseline-main ``transform_coordinates`` rotating ecliptic
-    Cartesian into equatorial."""
-    coords = _kep_to_cart(_sample_keplerian_elements(rng, n))
-    epoch_mjd = 59800.0 + rng.uniform(0.0, 200.0, size=n)
-    base = np.diag([1e-6, 1e-6, 1e-6, 1e-9, 1e-9, 1e-9])
-    cov = np.stack([base * (i + 1) for i in range(n)])
-    kw = {
-        "coords": np.ascontiguousarray(coords, dtype=np.float64),
-        "epoch_mjd": np.ascontiguousarray(epoch_mjd, dtype=np.float64),
-        "covariance": np.ascontiguousarray(cov, dtype=np.float64),
-        "origin": "SUN",
-        "frame_in": "ecliptic",
-        "frame_out": "equatorial",
-    }
-    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
-
-
-def make_bridge_sample_orbit_variants(rng: np.random.Generator, n: int) -> Sample:
-    """Bridge ``sample_orbit_variants`` (sigma-point unscented transform,
-    deterministic) vs baseline-main ``VariantOrbits.create``. PSD covariance."""
+def make_variant_orbits_create(rng: np.random.Generator, n: int) -> Sample:
+    """Public ``VariantOrbits.create`` sigma-point sampling (deterministic
+    unscented transform) with PSD covariance, runtime-neutral array inputs."""
     coords = _kep_to_cart(_sample_keplerian_elements(rng, n))
     epoch_mjd = 59800.0 + rng.uniform(0.0, 200.0, size=n)
     base = np.diag([1e-6, 1e-6, 1e-6, 1e-9, 1e-9, 1e-9])
@@ -1849,98 +1814,6 @@ def make_bridge_sample_orbit_variants(rng: np.random.Generator, n: int) -> Sampl
         "covariance": np.ascontiguousarray(cov, dtype=np.float64),
         "origin": "SUN",
         "frame": "ecliptic",
-    }
-    return Sample(rust_kwargs=kw, legacy_kwargs=kw)
-
-
-def make_bridge_evaluate_residuals_2body(rng: np.random.Generator, n: int) -> Sample:
-    """Bridge ``evaluate_residuals_2body`` (the OD inner loop: 2-body ephemeris
-    + chi2, one Rust crossing, 1:1 orbit/observer/observation) vs baseline-main
-    ``generate_ephemeris_2body`` + ``Residuals.calculate``. Observed astrometry
-    is a fixed perturbation of a baseline-main predicted ephemeris so each side
-    differences identical observations against its own predicted angles."""
-    from adam_core.coordinates.cartesian import CartesianCoordinates
-    from adam_core.coordinates.origin import Origin
-    from adam_core.dynamics.ephemeris import generate_ephemeris_2body
-    from adam_core.observers import Observers
-    from adam_core.orbits import Orbits
-    from adam_core.time import Timestamp
-
-    mjd = np.sort(59900.0 + rng.uniform(0.0, 200.0, size=n)).astype(np.float64)
-    times = Timestamp.from_mjd(mjd, scale="tdb")
-    orbit_coords = _kep_to_cart(_sample_keplerian_elements(rng, n))
-    ssb = Origin.from_kwargs(code=np.full(n, "SOLAR_SYSTEM_BARYCENTER", dtype="object"))
-    orbits = Orbits.from_kwargs(
-        orbit_id=[str(i) for i in range(n)],
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=orbit_coords[:, 0],
-            y=orbit_coords[:, 1],
-            z=orbit_coords[:, 2],
-            vx=orbit_coords[:, 3],
-            vy=orbit_coords[:, 4],
-            vz=orbit_coords[:, 5],
-            time=times,
-            origin=ssb,
-            frame="ecliptic",
-        ),
-    )
-    phi = rng.uniform(0.0, 2.0 * np.pi, size=n)
-    k = MU_SUN**0.5
-    observer_coords = np.column_stack(
-        [
-            np.cos(phi),
-            np.sin(phi),
-            np.zeros(n),
-            -k * np.sin(phi),
-            k * np.cos(phi),
-            np.zeros(n),
-        ]
-    ).astype(np.float64)
-    observers = Observers.from_kwargs(
-        code=["500"] * n,
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=observer_coords[:, 0],
-            y=observer_coords[:, 1],
-            z=observer_coords[:, 2],
-            vx=observer_coords[:, 3],
-            vy=observer_coords[:, 4],
-            vz=observer_coords[:, 5],
-            time=times,
-            origin=Origin.from_kwargs(
-                code=np.full(n, "SOLAR_SYSTEM_BARYCENTER", dtype="object")
-            ),
-            frame="ecliptic",
-        ),
-    )
-    pred = generate_ephemeris_2body(orbits, observers).coordinates
-    observed_sph = np.column_stack(
-        [
-            pred.rho.to_numpy(zero_copy_only=False),
-            pred.lon.to_numpy(zero_copy_only=False) + 1e-2,
-            pred.lat.to_numpy(zero_copy_only=False) - 1e-2,
-            pred.vrho.to_numpy(zero_copy_only=False),
-            pred.vlon.to_numpy(zero_copy_only=False),
-            pred.vlat.to_numpy(zero_copy_only=False),
-        ]
-    ).astype(np.float64)
-    cov_row = np.diag([1.0, (1.0 / 3600.0) ** 2, (1.0 / 3600.0) ** 2, 1.0, 1.0, 1.0])
-    observed_cov = np.tile(cov_row, (n, 1, 1)).astype(np.float64)
-    # generate_ephemeris_2body returns observer-centric astrometry; the observed
-    # coordinates must carry the same origin/frame (Residuals.calculate enforces
-    # matching origin), so capture them from the predicted ephemeris.
-    observed_origin = list(pred.origin.code.to_pylist())
-    observed_frame = str(pred.frame)
-    kw = {
-        "orbit_coords": np.ascontiguousarray(orbit_coords, dtype=np.float64),
-        "observer_coords": np.ascontiguousarray(observer_coords, dtype=np.float64),
-        "observed_sph": np.ascontiguousarray(observed_sph, dtype=np.float64),
-        "observed_cov": np.ascontiguousarray(observed_cov, dtype=np.float64),
-        "epoch_mjd": np.ascontiguousarray(mjd, dtype=np.float64),
-        "origin": "SOLAR_SYSTEM_BARYCENTER",
-        "frame": "ecliptic",
-        "observer_code": "500",
-        "observed_origin": observed_origin,
-        "observed_frame": observed_frame,
     }
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
@@ -2000,11 +1873,8 @@ GENERATORS = {
     "orbit_determination.calcHerrickGibbs": make_calc_herrick_gibbs,
     "orbit_determination.calcGauss": make_calc_gauss,
     "orbit_determination.gaussIOD": make_gauss_iod,
-    "bridge.propagate_orbits_2body": make_bridge_propagate_orbits_2body,
-    "bridge.rotate_orbits_frame": make_bridge_rotate_orbits_frame,
-    "bridge.sample_orbit_variants": make_bridge_sample_orbit_variants,
+    "orbits.VariantOrbits.create": make_variant_orbits_create,
     "observers.Observers.from_codes": make_observers_from_codes,
-    "bridge.evaluate_residuals_2body": make_bridge_evaluate_residuals_2body,
 }
 
 
@@ -2165,10 +2035,7 @@ LARGE_WORKLOADS: dict[str, WorkloadShape] = {
     ),
     "orbit_determination.calcGauss": WorkloadShape(5_000, extra={"triplets": 5_000}),
     "orbit_determination.gaussIOD": WorkloadShape(128, extra={"triplets": 128}),
-    "bridge.propagate_orbits_2body": WorkloadShape(20_000),
-    "bridge.rotate_orbits_frame": WorkloadShape(20_000),
-    "bridge.sample_orbit_variants": WorkloadShape(5_000),
-    "bridge.evaluate_residuals_2body": WorkloadShape(5_000),
+    "orbits.VariantOrbits.create": WorkloadShape(5_000),
 }
 
 

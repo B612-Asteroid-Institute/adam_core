@@ -97,7 +97,7 @@ class VariantOrbits(qv.Table):
         # scipy path; sigma-point output is deterministic and matches legacy.
         # One intentional improvement over legacy: ``seed`` now also applies
         # to the auto-mode Monte Carlo fallback (legacy ignored it there).
-        from .arrow_bridge import _sample_orbit_variants_ipc_candidate
+        from .arrow_bridge import _sample_orbit_variants_arrow
 
         if seed is None and method in ("auto", "monte-carlo"):
             # The Rust sampler is deterministic given a seed; draw a fresh one
@@ -105,7 +105,7 @@ class VariantOrbits(qv.Table):
             # the legacy contract.
             seed = int(np.random.default_rng().integers(0, 2**63, dtype=np.int64))
 
-        return _sample_orbit_variants_ipc_candidate(
+        return _sample_orbit_variants_arrow(
             orbits,
             method=method,
             num_samples=num_samples,

@@ -365,7 +365,7 @@ def _rotate_orbits_frame_ipc_candidate(orbits: Orbits, frame: str) -> Orbits:
     return orbits_from_ipc(_rn.orbits_rotate_frame_ipc(orbits_to_ipc(orbits), frame))
 
 
-def _sample_orbit_variants_ipc_candidate(
+def _sample_orbit_variants_arrow(
     orbits: Orbits,
     method: str = "sigma-point",
     num_samples: int = 10000,
@@ -374,22 +374,21 @@ def _sample_orbit_variants_ipc_candidate(
     beta: float = 0.0,
     kappa: float = 0.0,
 ) -> VariantOrbits:
-    """Private Rust Arrow-IPC backend for ``VariantOrbits.create``.
+    """Private Arrow-native Rust backend for ``VariantOrbits.create``.
 
     All three methods (``sigma-point``, ``auto``, ``monte-carlo``) run
-    Rust-side in one crossing. Monte Carlo draws (including the auto-mode
-    fallback) use the Rust-native RNG: statistically equivalent to, but not
-    bit-identical with, the legacy scipy path (decision 2026-07-03: exact
-    scipy RNG parity is not required). Per-orbit physical parameters are
-    carried by the canonical Rust variant schema itself (bead
-    personal-cmy.13.2): the sampler gathers them per source orbit Rust-side
-    and they arrive in the IPC payload, so no Python reattachment is needed
-    even for variable-count auto-mode outputs.
+    Rust-side in one Arrow C Data Interface crossing. Monte Carlo draws
+    (including the auto-mode fallback) use the Rust-native RNG:
+    statistically equivalent to, but not bit-identical with, the legacy
+    scipy path (decision 2026-07-03: exact scipy RNG parity is not
+    required). Per-orbit physical parameters are carried by the canonical
+    Rust variant schema itself (bead personal-cmy.13.2), so no Python
+    reattachment is needed even for variable-count auto-mode outputs.
     """
-    raw, _source_indices = _rn.orbits_sample_variants_ipc(
-        orbits_to_ipc(orbits), method, num_samples, seed, alpha, beta, kappa
+    out = _rn.sample_orbit_variants_arrow(
+        orbits_to_record_batch(orbits), method, num_samples, seed, alpha, beta, kappa
     )
-    return variants_from_ipc(raw)
+    return variants_from_record_batch(out)
 
 
 def _propagate_orbits_typed_arrow(

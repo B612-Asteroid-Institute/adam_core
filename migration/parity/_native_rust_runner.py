@@ -473,6 +473,66 @@ def _gauss_iod(
     )
 
 
+def _variant_orbits_create(
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    coords: Any,
+    epoch_mjd: Any,
+    covariance: Any,
+    origin: str,
+    frame: str,
+    **_unused: Any,
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+    from adam_core.coordinates.cartesian import CartesianCoordinates
+    from adam_core.coordinates.covariances import CoordinateCovariances
+    from adam_core.coordinates.origin import Origin
+    from adam_core.orbits import Orbits
+    from adam_core.orbits.arrow_bridge import orbits_to_record_batch
+    from adam_core.time import Timestamp
+
+    values = np.asarray(coords, dtype=np.float64)
+    rows = values.shape[0]
+    orbits = Orbits.from_kwargs(
+        orbit_id=[str(index) for index in range(rows)],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=values[:, 0],
+            y=values[:, 1],
+            z=values[:, 2],
+            vx=values[:, 3],
+            vy=values[:, 4],
+            vz=values[:, 5],
+            time=Timestamp.from_mjd(
+                np.asarray(epoch_mjd, dtype=np.float64), scale="tdb"
+            ),
+            origin=Origin.from_kwargs(code=np.full(rows, str(origin), dtype="object")),
+            frame=str(frame),
+            covariance=CoordinateCovariances.from_matrix(
+                np.asarray(covariance, dtype=np.float64)
+            ),
+        ),
+    )
+    samples = _rust_native.benchmark_sample_orbit_variants_arrow(
+        orbits_to_record_batch(orbits),
+        "sigma-point",
+        reps,
+        trials,
+        warmup,
+    )
+    return NativeRustTiming(
+        status="measured",
+        sample_trials_s=[[float(value) for value in trial] for trial in samples],
+        entrypoint="adam_core_py::coordinates::sample_orbit_variants_record_batch",
+        timing_boundary=(
+            "Rust std::time::Instant around direct Orbits RecordBatch decode, "
+            "sigma-point unscented sampling, and VariantOrbits RecordBatch "
+            "assembly; outer Python/PyO3 launch and PyArrow conversion excluded"
+        ),
+    )
+
+
 def _observers_from_codes(
     *,
     codes: Any,
@@ -519,6 +579,7 @@ _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
     "dynamics.generate_porkchop_data": _generate_porkchop_data,
     "orbit_determination.gaussIOD": _gauss_iod,
     "coordinates.residuals.Residuals.calculate": _residuals_calculate,
+    "orbits.VariantOrbits.create": _variant_orbits_create,
     "observers.Observers.from_codes": _observers_from_codes,
 }
 
@@ -526,8 +587,6 @@ _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
 def _todo_for(api_id: str) -> str:
     if api_id == "observers.Observers.from_codes":
         return "personal-3gg"
-    if api_id == "bridge.rotate_orbits_frame":
-        return "personal-cmy.36.10"
     if (
         api_id.startswith("coordinates.transform")
         or api_id.startswith("coordinates.cartesian")
@@ -537,8 +596,6 @@ def _todo_for(api_id: str) -> str:
         or api_id == "coordinates.rotate_cartesian_time_varying"
     ):
         return "personal-98v.1"
-    if api_id == "bridge.propagate_orbits_2body":
-        return "personal-cmy.36.10"
     if api_id.startswith("dynamics.propagate_2body"):
         return "personal-98v.1"
     if (
@@ -564,7 +621,6 @@ def _todo_for(api_id: str) -> str:
     if (
         api_id.startswith(("coordinates.residuals", "statistics."))
         or api_id == "orbits.classify_orbits"
-        or api_id == "bridge.evaluate_residuals_2body"
     ):
         # The remaining residuals/statistics helpers are classified numpy-flat
         # array kernels (bead personal-cmy.36.9); native columns route to the

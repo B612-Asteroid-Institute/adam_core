@@ -706,6 +706,25 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         ),
     ),
     ApiMigration(
+        api_id="orbits.VariantOrbits.create",
+        status=PUBLIC_RUST_DEFAULT,
+        boundary="arrow",
+        default="rust",
+        rust_module="adam_core._rust_native.sample_orbit_variants_arrow",
+        parity_coverage="random-fuzz",
+        coverage_note=(
+            "Public covariance-variant sampler crosses once as an Orbits "
+            "RecordBatch; Rust owns sigma-point/Monte-Carlo/auto sampling and "
+            "finished VariantOrbits RecordBatch assembly. Sigma-point output "
+            "is deterministic and gated elementwise against pinned legacy; "
+            "Monte Carlo and the auto fallback use the Rust-native RNG "
+            "(statistically equivalent, not bit-identical; decision "
+            "2026-07-03) and are covered by statistical unit tests. Replaces "
+            "the retired bridge.sample_orbit_variants candidate lane (bead "
+            "personal-cmy.36.10)."
+        ),
+    ),
+    ApiMigration(
         api_id="statistics.weighted_mean",
         status=RAW_KERNEL_ONLY,
         boundary="numpy",

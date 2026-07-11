@@ -31,7 +31,7 @@ from adam_core.orbits.arrow_bridge import (
     _fit_orbit_least_squares_2body_candidate,
     _propagate_orbits_2body_ipc_candidate,
     _rotate_orbits_frame_ipc_candidate,
-    _sample_orbit_variants_ipc_candidate,
+    _sample_orbit_variants_arrow,
     orbits_to_ipc,
     round_trip_observers,
     round_trip_orbits,
@@ -214,7 +214,7 @@ def _assert_sigma_point_variants_match(
 
 def test_sample_orbit_variants_sigma_point_candidate_matches_legacy_sampler():
     orbits = _orbits_with_psd_covariance()
-    bridge = _sample_orbit_variants_ipc_candidate(orbits, method="sigma-point")
+    bridge = _sample_orbit_variants_arrow(orbits, method="sigma-point")
     reference = _legacy_sigma_point_variants(orbits)
     _assert_sigma_point_variants_match(bridge, reference)
 

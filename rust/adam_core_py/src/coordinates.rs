@@ -1185,6 +1185,121 @@ fn orbits_sample_variants_ipc<'py>(
     Ok((PyBytes::new(py, &bytes), source_indices.into_pyarray(py)))
 }
 
+/// Arrow-native covariance-variant sampler behind `VariantOrbits.create`:
+/// one Orbits RecordBatch enters Rust; the finished VariantOrbits nested
+/// RecordBatch leaves Rust (sigma-point deterministic; Monte Carlo/auto use
+/// the Rust-native RNG per decision 2026-07-03).
+fn sample_orbit_variants_record_batch(
+    orbit_batch: &RecordBatch,
+    method: &str,
+    num_samples: usize,
+    seed: Option<u64>,
+    alpha: f64,
+    beta: f64,
+    kappa: f64,
+) -> Result<RecordBatch, String> {
+    let orbits = DataOrbitBatch::try_from_nested_record_batch(orbit_batch)
+        .map_err(|err| format!("failed to decode OrbitBatch: {err}"))?;
+    let samples = create_sampled_orbit_variants(
+        &orbits,
+        parse_variant_method(method).map_err(|err| err.to_string())?,
+        num_samples,
+        seed,
+        alpha,
+        beta,
+        kappa,
+    )
+    .map_err(|err| format!("failed to sample variants: {err}"))?;
+    samples
+        .variants
+        .into_nested_record_batch()
+        .map_err(|err| format!("failed to encode variants: {err}"))
+}
+
+/// Arrow-native public `VariantOrbits.create` surface.
+#[pyfunction]
+#[pyo3(signature = (orbit_batch, method, num_samples=10000, seed=None, alpha=1.0, beta=0.0, kappa=0.0))]
+fn sample_orbit_variants_arrow<'py>(
+    py: Python<'py>,
+    orbit_batch: &Bound<'py, PyAny>,
+    method: &str,
+    num_samples: usize,
+    seed: Option<u64>,
+    alpha: f64,
+    beta: f64,
+    kappa: f64,
+) -> PyResult<PyObject> {
+    let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    let output = py
+        .allow_threads(|| {
+            sample_orbit_variants_record_batch(
+                &orbits,
+                method,
+                num_samples,
+                seed,
+                alpha,
+                beta,
+                kappa,
+            )
+        })
+        .map_err(PyValueError::new_err)?;
+    output
+        .to_pyarrow(py)
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to export RecordBatch: {err}")))
+}
+
+/// Rust-owned Instant timer for the Arrow-native variant sampler.
+#[pyfunction]
+#[pyo3(signature = (orbit_batch, method, reps, trials, warmup_reps=1, num_samples=10000, seed=None, alpha=1.0, beta=0.0, kappa=0.0))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_sample_orbit_variants_arrow(
+    orbit_batch: &Bound<'_, PyAny>,
+    method: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    num_samples: usize,
+    seed: Option<u64>,
+    alpha: f64,
+    beta: f64,
+    kappa: f64,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    let run_once = || -> PyResult<()> {
+        let output = sample_orbit_variants_record_batch(
+            &orbits,
+            method,
+            num_samples,
+            seed,
+            alpha,
+            beta,
+            kappa,
+        )
+        .map_err(PyRuntimeError::new_err)?;
+        black_box(output);
+        Ok(())
+    };
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            run_once()?;
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            run_once()?;
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
+}
+
 /// W1 data-model workflow (bead personal-cmy.13): propagate a quivr `Orbits`
 /// table (Arrow IPC) to a shared `target` epoch with 2-body dynamics entirely
 /// Rust-side in a single crossing -- decode to `OrbitBatch`, propagate, re-encode.
@@ -3762,6 +3877,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(residuals_calculate_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_residuals_calculate_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(sample_orbit_variants_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_sample_orbit_variants_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(generate_porkchop_data_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_generate_porkchop_data_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;

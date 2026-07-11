@@ -891,102 +891,19 @@ def _orbit_determination_gauss_iod(
 # ---------------------------------------------------------------------------
 
 
-def _bridge_propagate_orbits_2body(
-    coords: Any,
-    epoch_mjd: Any,
-    target_mjd: float,
-    origin: str,
-    frame: str,
-) -> dict[str, np.ndarray]:
-    """Bridge ``propagate_orbits_2body`` (Orbits -> Orbits) on the migration checkout."""
-    from adam_core.coordinates.cartesian import CartesianCoordinates
-    from adam_core.coordinates.origin import Origin
-    from adam_core.orbits import Orbits
-    from adam_core.dynamics import propagate_2body
-    from adam_core.time import Timestamp
-
-    coords = np.asarray(coords, dtype=np.float64)
-    n = coords.shape[0]
-    cart = CartesianCoordinates.from_kwargs(
-        x=coords[:, 0],
-        y=coords[:, 1],
-        z=coords[:, 2],
-        vx=coords[:, 3],
-        vy=coords[:, 4],
-        vz=coords[:, 5],
-        time=Timestamp.from_mjd(np.asarray(epoch_mjd, dtype=np.float64), scale="tdb"),
-        origin=Origin.from_kwargs(code=np.full(n, str(origin), dtype="object")),
-        frame=str(frame),
-    )
-    orbits = Orbits.from_kwargs(
-        orbit_id=[str(i) for i in range(n)],
-        coordinates=cart,
-    )
-    target = Timestamp.from_mjd(
-        np.asarray([float(target_mjd)], dtype=np.float64), scale="tdb"
-    )
-    out = propagate_2body(orbits, target, max_processes=1)
-    return {"out": _ensure(out.coordinates.values, "bridge.propagate_orbits_2body")}
-
-
-def _bridge_rotate_orbits_frame(
-    coords: Any,
-    epoch_mjd: Any,
-    covariance: Any,
-    origin: str,
-    frame_in: str,
-    frame_out: str,
-) -> dict[str, np.ndarray]:
-    """Diagnostic Arrow-IPC frame-rotation candidate on the migration checkout."""
-    from adam_core.coordinates.cartesian import CartesianCoordinates
-    from adam_core.coordinates.covariances import CoordinateCovariances
-    from adam_core.coordinates.origin import Origin
-    from adam_core.orbits import Orbits
-    from adam_core.orbits.arrow_bridge import _rotate_orbits_frame_ipc_candidate
-    from adam_core.time import Timestamp
-
-    coords = np.asarray(coords, dtype=np.float64)
-    n = coords.shape[0]
-    cart = CartesianCoordinates.from_kwargs(
-        x=coords[:, 0],
-        y=coords[:, 1],
-        z=coords[:, 2],
-        vx=coords[:, 3],
-        vy=coords[:, 4],
-        vz=coords[:, 5],
-        time=Timestamp.from_mjd(np.asarray(epoch_mjd, dtype=np.float64), scale="tdb"),
-        origin=Origin.from_kwargs(code=np.full(n, str(origin), dtype="object")),
-        frame=str(frame_in),
-        covariance=CoordinateCovariances.from_matrix(
-            np.asarray(covariance, dtype=np.float64)
-        ),
-    )
-    orbits = Orbits.from_kwargs(
-        orbit_id=[str(i) for i in range(n)],
-        coordinates=cart,
-    )
-    out = _rotate_orbits_frame_ipc_candidate(orbits, str(frame_out))
-    return {
-        "values": _ensure(out.coordinates.values, "bridge.rotate_orbits_frame"),
-        "covariance": _ensure(
-            out.coordinates.covariance.to_matrix(), "bridge.rotate_orbits_frame.cov"
-        ),
-    }
-
-
-def _bridge_sample_orbit_variants(
+def _orbits_variant_orbits_create(
     coords: Any,
     epoch_mjd: Any,
     covariance: Any,
     origin: str,
     frame: str,
 ) -> dict[str, np.ndarray]:
-    """Bridge candidate for ``VariantOrbits.create`` sigma-point sampling."""
+    """Current public ``VariantOrbits.create`` sigma-point facade."""
     from adam_core.coordinates.cartesian import CartesianCoordinates
     from adam_core.coordinates.covariances import CoordinateCovariances
     from adam_core.coordinates.origin import Origin
     from adam_core.orbits import Orbits
-    from adam_core.orbits.arrow_bridge import _sample_orbit_variants_ipc_candidate
+    from adam_core.orbits.variants import VariantOrbits
     from adam_core.time import Timestamp
 
     coords = np.asarray(coords, dtype=np.float64)
@@ -1009,98 +926,18 @@ def _bridge_sample_orbit_variants(
         orbit_id=[str(i) for i in range(n)],
         coordinates=cart,
     )
-    out = _sample_orbit_variants_ipc_candidate(orbits, method="sigma-point")
+    out = VariantOrbits.create(orbits, method="sigma-point")
     return {
-        "coordinates": _ensure(out.coordinates.values, "bridge.sample_orbit_variants"),
+        "coordinates": _ensure(out.coordinates.values, "orbits.VariantOrbits.create"),
         "weights": _ensure(
             out.weights.to_numpy(zero_copy_only=False),
-            "bridge.sample_orbit_variants.weights",
+            "orbits.VariantOrbits.create.weights",
         ),
         "weights_cov": _ensure(
             out.weights_cov.to_numpy(zero_copy_only=False),
-            "bridge.sample_orbit_variants.weights_cov",
+            "orbits.VariantOrbits.create.weights_cov",
         ),
     }
-
-
-def _bridge_evaluate_residuals_2body(
-    orbit_coords: Any,
-    observer_coords: Any,
-    observed_sph: Any,
-    observed_cov: Any,
-    epoch_mjd: Any,
-    origin: str,
-    frame: str,
-    observer_code: str,
-    observed_origin: Any,
-    observed_frame: str,
-) -> dict[str, np.ndarray]:
-    """Bridge ``evaluate_residuals_2body`` (OD inner loop) on the migration checkout."""
-    from adam_core.coordinates.cartesian import CartesianCoordinates
-    from adam_core.coordinates.covariances import CoordinateCovariances
-    from adam_core.coordinates.origin import Origin
-    from adam_core.coordinates.spherical import SphericalCoordinates
-    from adam_core.observers import Observers
-    from adam_core.orbits import Orbits
-    from adam_core.orbits.arrow_bridge import (
-        _evaluate_residuals_2body_ipc_candidate,
-    )
-    from adam_core.time import Timestamp
-
-    orbit_coords = np.asarray(orbit_coords, dtype=np.float64)
-    n = orbit_coords.shape[0]
-    times = Timestamp.from_mjd(np.asarray(epoch_mjd, dtype=np.float64), scale="tdb")
-    ssb = Origin.from_kwargs(code=np.full(n, str(origin), dtype="object"))
-    orbits = Orbits.from_kwargs(
-        orbit_id=[str(i) for i in range(n)],
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=orbit_coords[:, 0],
-            y=orbit_coords[:, 1],
-            z=orbit_coords[:, 2],
-            vx=orbit_coords[:, 3],
-            vy=orbit_coords[:, 4],
-            vz=orbit_coords[:, 5],
-            time=times,
-            origin=ssb,
-            frame=str(frame),
-        ),
-    )
-    observer_coords = np.asarray(observer_coords, dtype=np.float64)
-    observers = Observers.from_kwargs(
-        code=[str(observer_code)] * n,
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=observer_coords[:, 0],
-            y=observer_coords[:, 1],
-            z=observer_coords[:, 2],
-            vx=observer_coords[:, 3],
-            vy=observer_coords[:, 4],
-            vz=observer_coords[:, 5],
-            time=times,
-            origin=Origin.from_kwargs(code=np.full(n, str(origin), dtype="object")),
-            frame=str(frame),
-        ),
-    )
-    observed_sph = np.asarray(observed_sph, dtype=np.float64)
-    observed = SphericalCoordinates.from_kwargs(
-        rho=observed_sph[:, 0],
-        lon=observed_sph[:, 1],
-        lat=observed_sph[:, 2],
-        vrho=observed_sph[:, 3],
-        vlon=observed_sph[:, 4],
-        vlat=observed_sph[:, 5],
-        time=times,
-        origin=Origin.from_kwargs(
-            code=np.asarray(list(observed_origin), dtype="object")
-        ),
-        frame=str(observed_frame),
-        covariance=CoordinateCovariances.from_matrix(
-            np.asarray(observed_cov, dtype=np.float64)
-        ),
-    )
-    chi2, _residuals = _evaluate_residuals_2body_ipc_candidate(
-        orbits, observed, observers
-    )
-    return {"chi2": _ensure(chi2, "bridge.evaluate_residuals_2body")}
 
 
 DISPATCH = {
@@ -1159,10 +996,7 @@ DISPATCH = {
     "orbit_determination.calcHerrickGibbs": _orbit_determination_calc_herrick_gibbs,
     "orbit_determination.calcGauss": _orbit_determination_calc_gauss,
     "orbit_determination.gaussIOD": _orbit_determination_gauss_iod,
-    "bridge.propagate_orbits_2body": _bridge_propagate_orbits_2body,
-    "bridge.rotate_orbits_frame": _bridge_rotate_orbits_frame,
-    "bridge.sample_orbit_variants": _bridge_sample_orbit_variants,
-    "bridge.evaluate_residuals_2body": _bridge_evaluate_residuals_2body,
+    "orbits.VariantOrbits.create": _orbits_variant_orbits_create,
 }
 
 

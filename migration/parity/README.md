@@ -442,3 +442,17 @@ added; it is no longer a transform dispatcher branch-coverage gap.
 | `parity_fixed.py` | deterministic fixed-fixture parity gate |
 | `parity_speed.py` | 1.2× speedup gate against baseline-main timing |
 | `parity_main.py` | orchestrator running parity + speed gates → JSON artifact |
+
+## Retired `bridge.*` candidate lanes (2026-07-11, bead personal-cmy.36.10)
+
+Historical artifacts before process version
+`rm-p1-023-canonical-variant-create-v1` contain four temporary `bridge.*`
+backend-candidate lanes. They were retired once canonical public lanes
+absorbed their coverage:
+
+| Retired lane | Canonical replacement |
+| --- | --- |
+| `bridge.propagate_orbits_2body` | `dynamics.propagate_2body` (Arrow-native facade) |
+| `bridge.rotate_orbits_frame` | `coordinates.transform_coordinates` (Arrow-native facade) |
+| `bridge.sample_orbit_variants` | `orbits.VariantOrbits.create` (promoted canonical lane) |
+| `bridge.evaluate_residuals_2body` | `coordinates.residuals.Residuals.calculate` + `dynamics.generate_ephemeris_2body` |

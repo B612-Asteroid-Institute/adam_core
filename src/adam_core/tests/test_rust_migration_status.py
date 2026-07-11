@@ -211,10 +211,10 @@ def test_comparison_mode_metadata_labels() -> None:
     assert kernel["comparison_mode"] == comparison_metadata.RAW_RUST_PYO3_KERNEL
     assert kernel["speed_gate_scope"] == "diagnostic_raw_kernel"
 
-    candidate = comparison_metadata.for_api("bridge.rotate_orbits_frame")
-    assert candidate["comparison_mode"] == comparison_metadata.BACKEND_CANDIDATE
-    assert candidate["speed_gate_scope"] == "diagnostic_backend_candidate"
-    assert candidate["rust_native_top_level"] is False
+    # bridge.* candidate lanes were retired under bead personal-cmy.36.10;
+    # retired ids now resolve like any unknown id.
+    retired = comparison_metadata.for_api("bridge.rotate_orbits_frame")
+    assert retired["comparison_mode"] == comparison_metadata.UNKNOWN
 
     unknown = comparison_metadata.for_api("nonexistent.api")
     assert unknown["comparison_mode"] == comparison_metadata.UNKNOWN
@@ -598,7 +598,7 @@ def test_simple_timing_renderer_uses_canonical_candidate_names_and_blank_native(
 ):
     rows = [
         {
-            "api_id": "bridge.sample_orbit_variants",
+            "api_id": "orbits.VariantOrbits.create",
             "lane": "tiny-n",
             "legacy_p50_s": 2.0,
             "legacy_p95_s": 2.5,
@@ -621,11 +621,7 @@ def test_simple_timing_renderer_uses_canonical_candidate_names_and_blank_native(
 
     rendered = parity_table._format_simple_speed_timing_tables(rows)
 
-    assert "bridge.sample_orbit_variants" not in rendered
-    assert (
-        "`orbits.VariantOrbits.create — Arrow IPC covariance-variant sampler workflow`"
-        in rendered
-    )
+    assert "orbits.VariantOrbits.create" in rendered
     assert "| 2.000s / 2.500s | 1.000s / 1.500s |  |" in rendered
     assert "| 6.00ms / 7.00ms | 200.0µs / 300.0µs | 10.0µs / 20.0µs |" in rendered
     assert (
@@ -851,19 +847,17 @@ def test_every_parity_api_has_an_intentional_native_rust_todo_bucket() -> None:
         "personal-cmy.36.9",
         "personal-cmy.36.10",
     }
-    # Scalar/variant and already-promoted raw coordinate helpers use the
-    # dedicated native-benchmark catch-all bead. The temporary frame-rotation
-    # candidate is retired separately once canonical coverage absorbs it.
+    # Scalar helpers and classified numpy-flat kernels use the dedicated
+    # native-benchmark catch-all bead; bridge.* candidate lanes were retired
+    # under bead personal-cmy.36.10.
     catch_all = {api_id for api_id, todo in todos.items() if todo == "personal-98v.1"}
     assert {
         "dynamics.calc_mean_motion",
         "dynamics.tisserand_parameter",
-        "bridge.sample_orbit_variants",
         "coordinates.transform_coordinates_with_covariance",
         "coordinates.rotate_cartesian_time_varying",
     } <= catch_all
-    assert todos["bridge.rotate_orbits_frame"] == "personal-cmy.36.10"
-    assert todos["bridge.propagate_orbits_2body"] == "personal-cmy.36.10"
+    assert not any(api_id.startswith("bridge.") for api_id in todos)
 
 
 def test_assist_payload_does_not_treat_pyo3_as_native_rust() -> None:
@@ -959,7 +953,7 @@ def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> 
     cache_path.write_text("""
         {
           "schema_version": 1,
-          "process_version": "rm-p1-022-arrow-public-ephemeris-v1",
+          "process_version": "rm-p1-023-canonical-variant-create-v1",
           "created_at": "2026-05-05T00:00:00+00:00",
           "updated_at": "2026-05-05T00:00:00+00:00",
           "legacy_identity": {
