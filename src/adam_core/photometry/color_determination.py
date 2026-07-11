@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Literal, Optional
 
 import numpy as np
@@ -12,7 +13,9 @@ import scipy.optimize
 from ..dynamics.propagation import propagate_2body
 from ..observers.observers import Observers
 from .hg12star import hg12star_correction
+from .lightcurve import reduced_magnitude
 from .magnitude import calculate_phase_angle
+from .magnitude_common import hg_phase_correction
 
 if TYPE_CHECKING:
     # mpcq is an optional dependency (install via `adam_core[mpc]`); it is only
@@ -22,12 +25,46 @@ if TYPE_CHECKING:
     from mpcq import MPCObservations
     from mpcq.orbits import MPCOrbits
 
+logger = logging.getLogger(__name__)
+
 _BANDS = ("g", "i", "r", "u")
 _PHI_TYPES = ("HG12star", "HG", "c1c2")
 # If fewer than this fraction of an object's observations survive validity
 # filtering, band-recognition filtering, and outlier rejection, the fit is
 # not trustworthy enough to report silently.
 _MIN_RETAINED_FRACTION = 0.5
+# Physically meaningful range of the H-G / HG12* slope parameter.  Both G
+# (Bowell et al. 1989) and G12* (Penttilä 2016) are defined on [0, 1].
+_G_BOUNDS = (0.0, 1.0)
+_G_LABELS = {"HG12star": "G12*", "HG": "G"}
+
+
+def _validate_g_bounds(
+    G: float,
+    phi_type: str,
+    obj_id: str,
+    force_g_bounds: bool,
+) -> None:
+    """
+    Check that a fitted slope parameter lies within its physical range.
+
+    "c1c2" has no slope parameter (``G`` is NaN) and is skipped.  When ``G`` is
+    out of range: raise ``ValueError`` if ``force_g_bounds`` is True, otherwise
+    log a warning and keep the fit.
+    """
+    if phi_type == "c1c2" or not np.isfinite(G):
+        return
+    lo, hi = _G_BOUNDS
+    if lo <= G <= hi:
+        return
+    label = _G_LABELS[phi_type]
+    msg = (
+        f"Fitted {label} = {G:.4f} for {obj_id} is outside the physical "
+        f"[{lo:g}, {hi:g}] range"
+    )
+    if force_g_bounds:
+        raise ValueError(msg)
+    logger.warning("%s; keeping it because force_g_bounds=False", msg)
 
 
 class ColorFit(qv.Table):
@@ -97,24 +134,6 @@ def _band_selector_matrix(bands: np.ndarray) -> np.ndarray:
     return np.column_stack([(bands == b).astype(float) for b in _BANDS])
 
 
-def _hg_correction(alpha_deg: np.ndarray, G: float) -> np.ndarray:
-    """
-    Standard Bowell et al. (1989) H-G phase function correction, using
-    tan(alpha/2) basis functions (the model already used elsewhere in
-    `photometry.magnitude` for predicting apparent magnitudes).
-
-    Returns -2.5*log10((1-G)*phi1 + G*phi2).
-    """
-    alpha_rad = np.deg2rad(np.asarray(alpha_deg, dtype=float))
-    cos_alpha = np.cos(alpha_rad)
-    tan_half = np.sqrt((1.0 - cos_alpha) / (1.0 + cos_alpha))
-    phi1 = np.exp(-3.33 * tan_half**0.63)
-    phi2 = np.exp(-1.87 * tan_half**1.22)
-    phase_function = (1.0 - G) * phi1 + G * phi2
-    phase_function = np.maximum(phase_function, 1e-10)
-    return -2.5 * np.log10(phase_function)
-
-
 def _fit_per_band_h(
     m_red: np.ndarray,
     alpha_deg: np.ndarray,
@@ -139,7 +158,9 @@ def _fit_per_band_h(
 
     In all cases the fit is solved with iterative 3-sigma outlier rejection.
 
-    Returns dict with keys "H_g", "H_i", "H_r", "H_u", "num_obs", "num_outliers".
+    Returns dict with keys "H_g", "H_i", "H_r", "H_u", "G", "num_obs",
+    "num_outliers". "G" is the fitted slope parameter (G for "HG", G12* for
+    "HG12star"); it is NaN for "c1c2", which has no such parameter.
     """
     n = len(m_red)
     H_sel = _band_selector_matrix(bands)
@@ -148,9 +169,10 @@ def _fit_per_band_h(
     known_band_mask = np.isin(bands, _BANDS)
     if not np.all(known_band_mask):
         unknown_bands = sorted(set(bands[~known_band_mask].tolist()))
-        print(
-            f"Excluding {int(np.sum(~known_band_mask))} observations with "
-            f"unrecognized band codes: {unknown_bands}"
+        logger.warning(
+            "Excluding %d observations with unrecognized band codes: %s",
+            int(np.sum(~known_band_mask)),
+            unknown_bands,
         )
     included = known_band_mask.copy()
 
@@ -161,7 +183,7 @@ def _fit_per_band_h(
     else:
         A = H_sel
         correction_fn = (
-            hg12star_correction if phi_type == "HG12star" else _hg_correction
+            hg12star_correction if phi_type == "HG12star" else hg_phase_correction
         )
         H_init = np.array(
             [
@@ -224,11 +246,14 @@ def _fit_per_band_h(
         if not np.any(bands[known_band_mask] == b):
             H_values[i] = float("nan")
 
+    G_fit = float(values[0]) if phi_type != "c1c2" else float("nan")
+
     return {
         "H_g": H_values[0],
         "H_i": H_values[1],
         "H_r": H_values[2],
         "H_u": H_values[3],
+        "G": G_fit,
         "num_obs": n,
         "num_outliers": num_outliers,
     }
@@ -238,6 +263,7 @@ def estimate_colors(
     observations: MPCObservations,
     orbits: MPCOrbits,
     phi_type: Literal["HG12star", "HG", "c1c2"],
+    force_g_bounds: bool = True,
 ) -> ColorFit:
     """
     Estimate per-band absolute magnitudes and colors for each object.
@@ -256,6 +282,13 @@ def estimate_colors(
     phi_type
         Phase function type: "HG12star" (Penttilä 2016), "HG" (standard H-G),
         or "c1c2" (polynomial).
+    force_g_bounds
+        Whether to enforce the physical [0, 1] range on the fitted slope
+        parameter (G for "HG", G12* for "HG12star"; ignored for "c1c2").  If
+        True (default), an out-of-range fit raises ``ValueError``.  If False, it
+        is logged as a warning and the out-of-range value is kept -- some
+        analyses (e.g. Greenstreet et al.) only reproduce when values outside
+        [0, 1] are allowed.
 
     Returns
     -------
@@ -271,7 +304,7 @@ def estimate_colors(
     observations = observations.apply_mask(pc.is_valid(observations.band))
     observations = observations.apply_mask(pc.is_valid(observations.mag))
     if len(observations) != len_before:
-        print(f"Removed {len_before - len(observations)} null bands")
+        logger.info("Removed %d null bands", len_before - len(observations))
     unique_ids = [
         x for x in pc.unique(observations.requested_provid).to_pylist() if x is not None
     ]
@@ -311,6 +344,7 @@ def estimate_colors(
         r_i: Optional[float] = None
         num_obs: int = len(obs)
         num_outliers: Optional[int] = None
+        G_fit: float = float("nan")
 
         try:
             mag, rmsmag, bands, r, delta, alpha_deg, valid = _prepare_geometry(
@@ -318,7 +352,7 @@ def estimate_colors(
             )
             n_invalid = len(obs) - int(np.sum(valid))
             if np.any(valid):
-                m_red = mag[valid] - 5.0 * np.log10(r[valid] * delta[valid])
+                m_red = reduced_magnitude(mag[valid], r[valid], delta[valid])
                 root_weights = 1.0 / rmsmag[valid]
                 fit = _fit_per_band_h(
                     m_red, alpha_deg[valid], bands[valid], root_weights, phi_type
@@ -328,14 +362,17 @@ def estimate_colors(
                 H_r = fit["H_r"]
                 H_u = fit["H_u"]
                 num_outliers = n_invalid + int(fit["num_outliers"])
+                G_fit = fit["G"]
                 g_r = H_g - H_r
                 g_i = H_g - H_i
                 r_i = H_r - H_i
             else:
                 num_outliers = n_invalid
         except Exception:
-            print(f"Problem when fitting colors for {obj_id}")
+            logger.exception("Problem when fitting colors for %s", obj_id)
             raise
+
+        _validate_g_bounds(G_fit, phi_type, obj_id, force_g_bounds)
 
         out_ids.append(obj_id)
         out_g_mag.append(H_g)
