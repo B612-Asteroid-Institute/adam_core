@@ -2065,6 +2065,134 @@ fn observations_nested_ipc_round_trip<'py>(
     Ok(PyBytes::new(py, &bytes))
 }
 
+fn exposure_midpoint_core(
+    exposures: &adam_core_rs_coords::observations::ExposureBatch,
+) -> PyResult<(Vec<i64>, Vec<i64>)> {
+    let time = TimeArray::from_parts(
+        exposures.start_time.scale,
+        exposures.start_time.days.clone(),
+        exposures.start_time.nanos.clone(),
+    )
+    .map_err(ades_error)?;
+    let delta = exposures
+        .duration
+        .iter()
+        .map(|seconds| (seconds * 500_000_000.0).round_ties_even() as i64)
+        .collect::<Vec<_>>();
+    let midpoint = time.add_nanos_checked(&delta, true).map_err(ades_error)?;
+    Ok((
+        midpoint.epochs.iter().map(|epoch| epoch.days).collect(),
+        midpoint.epochs.iter().map(|epoch| epoch.nanos).collect(),
+    ))
+}
+
+fn decode_exposures(
+    ipc_bytes: &Bound<'_, PyBytes>,
+) -> PyResult<adam_core_rs_coords::observations::ExposureBatch> {
+    let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
+    adam_core_rs_coords::observations::ExposureBatch::try_from_nested_record_batch(&batch)
+        .map_err(ades_error)
+}
+
+#[pyfunction]
+fn exposure_midpoint_ipc(ipc_bytes: &Bound<'_, PyBytes>) -> PyResult<(Vec<i64>, Vec<i64>)> {
+    exposure_midpoint_core(&decode_exposures(ipc_bytes)?)
+}
+
+#[pyfunction]
+#[pyo3(signature = (ipc_bytes, reps, trials, warmup_reps=1))]
+fn benchmark_exposure_midpoint_ipc(
+    ipc_bytes: &Bound<'_, PyBytes>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let exposures = decode_exposures(ipc_bytes)?;
+    benchmark_trials(reps, trials, warmup_reps, || {
+        exposure_midpoint_core(&exposures)
+    })
+}
+
+fn exposure_groups_core(
+    exposures: &adam_core_rs_coords::observations::ExposureBatch,
+) -> PyResult<Vec<(String, Vec<u8>)>> {
+    use adam_core_rs_coords::observations::{ExposureBatch, TimeColumn};
+    let mut order = Vec::<String>::new();
+    let mut groups = std::collections::HashMap::<&str, Vec<usize>>::new();
+    for (index, code) in exposures.observatory_code.iter().enumerate() {
+        if !groups.contains_key(code.as_str()) {
+            order.push(code.clone());
+        }
+        groups.entry(code).or_default().push(index);
+    }
+    order
+        .into_iter()
+        .map(|code| {
+            let indices = &groups[code.as_str()];
+            let subset = ExposureBatch {
+                id: indices.iter().map(|&i| exposures.id[i].clone()).collect(),
+                start_time: TimeColumn {
+                    days: indices
+                        .iter()
+                        .map(|&i| exposures.start_time.days[i])
+                        .collect(),
+                    nanos: indices
+                        .iter()
+                        .map(|&i| exposures.start_time.nanos[i])
+                        .collect(),
+                    scale: exposures.start_time.scale,
+                    validity: exposures
+                        .start_time
+                        .validity
+                        .as_ref()
+                        .map(|validity| indices.iter().map(|&i| validity[i]).collect()),
+                },
+                duration: indices.iter().map(|&i| exposures.duration[i]).collect(),
+                filter: indices
+                    .iter()
+                    .map(|&i| exposures.filter[i].clone())
+                    .collect(),
+                observatory_code: indices
+                    .iter()
+                    .map(|&i| exposures.observatory_code[i].clone())
+                    .collect(),
+                seeing: indices.iter().map(|&i| exposures.seeing[i]).collect(),
+                depth_5sigma: indices.iter().map(|&i| exposures.depth_5sigma[i]).collect(),
+            };
+            let batch = subset.into_nested_record_batch().map_err(ades_error)?;
+            Ok((code, write_orbit_ipc(&batch)?))
+        })
+        .collect()
+}
+
+#[pyfunction]
+fn exposure_groups_ipc<'py>(
+    py: Python<'py>,
+    ipc_bytes: &Bound<'py, PyBytes>,
+) -> PyResult<Vec<(String, Bound<'py, PyBytes>)>> {
+    let exposures = decode_exposures(ipc_bytes)?;
+    exposure_groups_core(&exposures).map(|groups| {
+        groups
+            .into_iter()
+            .map(|(code, bytes)| (code, PyBytes::new(py, &bytes)))
+            .collect()
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (ipc_bytes, reps, trials, warmup_reps=1))]
+fn benchmark_exposure_groups_ipc(
+    ipc_bytes: &Bound<'_, PyBytes>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let exposures = decode_exposures(ipc_bytes)?;
+    benchmark_trials(reps, trials, warmup_reps, || {
+        exposure_groups_core(&exposures)
+    })
+}
+
 /// ADES writer (bead personal-cmy.20 slice B): render a quivr
 /// `ADESObservations` table (Arrow IPC, nested layout, obsTime already in utc)
 /// to the ADES submission format byte-identically to the legacy Python
@@ -5270,6 +5398,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(orbits_nested_round_trip_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(observers_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(observations_nested_ipc_round_trip, m)?)?;
+    m.add_function(wrap_pyfunction!(exposure_midpoint_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_exposure_midpoint_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(exposure_groups_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_exposure_groups_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(ades_to_string_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(ades_string_to_observations_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(pack_numbered_designation, m)?)?;

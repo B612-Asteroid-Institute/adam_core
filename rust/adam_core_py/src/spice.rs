@@ -13,7 +13,7 @@ use adam_core_rs_spice::{
     SpkWriter, SpkWriterError, Type3Record, Type3Segment, Type9Segment,
 };
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
-use arrow_array::{Array, Int64Array, LargeStringArray, RecordBatch};
+use arrow_array::{Array, Float64Array, Int64Array, LargeStringArray, RecordBatch};
 use numpy::{IntoPyArray, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -48,6 +48,8 @@ impl PyAdamCoreSpiceBackend {
         &self,
         record_batch: &RecordBatch,
         scale: TimeScale,
+        frame: DataFrame,
+        origin: OriginId,
     ) -> PyResult<RecordBatch> {
         let rows = record_batch.num_rows();
         let code_array = record_batch
@@ -90,10 +92,25 @@ impl PyAdamCoreSpiceBackend {
 
         let days: Vec<i64> = (0..rows).map(|row| days_array.value(row)).collect();
         let nanos: Vec<i64> = (0..rows).map(|row| nanos_array.value(row)).collect();
+        // Exposure requests provide duration in seconds; midpoint epoch
+        // construction is fused into this crossing and preserves Arrow's
+        // half-to-even rounding used by Timestamp.add_seconds.
+        let mut output_times = TimeArray::from_parts(scale, days, nanos)
+            .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
+        if let Some(duration) = record_batch.column_by_name("duration") {
+            let duration = duration
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .ok_or_else(|| PyValueError::new_err("'duration' column must be float64"))?;
+            let delta = (0..rows)
+                .map(|row| (duration.value(row) * 500_000_000.0).round_ties_even() as i64)
+                .collect::<Vec<_>>();
+            output_times = output_times
+                .add_nanos_checked(&delta, true)
+                .map_err(|err| PyValueError::new_err(err.to_string()))?;
+        }
         // Output coordinates keep the caller's input time scale; SPICE lookups
         // use a TDB rescale internally.
-        let output_times = TimeArray::from_parts(scale, days, nanos)
-            .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
         let tdb_times = output_times
             .clone()
             .rescale(TimeScale::Tdb)
@@ -101,16 +118,9 @@ impl PyAdamCoreSpiceBackend {
                 PyValueError::new_err(format!("cannot rescale observer times to TDB: {err}"))
             })?;
 
-        let origin = OriginId::from_code("SUN");
         let flat = self
             .lock()?
-            .observer_states_from_codes(
-                &unique_codes,
-                &slots,
-                &tdb_times,
-                DataFrame::Ecliptic,
-                &origin,
-            )
+            .observer_states_from_codes(&unique_codes, &slots, &tdb_times, frame, &origin)
             .map_err(spice_err_to_py)?;
         let states: Vec<[f64; 6]> = flat
             .chunks_exact(6)
@@ -118,7 +128,7 @@ impl PyAdamCoreSpiceBackend {
             .collect();
         let coordinates = CoordinateBatch::cartesian(
             states,
-            DataFrame::Ecliptic,
+            frame,
             OriginArray::repeat(origin, rows),
             Some(output_times),
             None,
@@ -253,8 +263,13 @@ impl PyAdamCoreSpiceBackend {
             .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
         let scale =
             TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
-        self.observer_states_from_codes_record_batch(&record_batch, scale)?
-            .to_pyarrow(py)
+        self.observer_states_from_codes_record_batch(
+            &record_batch,
+            scale,
+            DataFrame::Ecliptic,
+            OriginId::from_code("SUN"),
+        )?
+        .to_pyarrow(py)
     }
 
     /// Benchmark the underlying observers implementation directly in Rust.
@@ -281,18 +296,107 @@ impl PyAdamCoreSpiceBackend {
         let mut sample_trials = Vec::with_capacity(trials);
         for _ in 0..trials {
             for _ in 0..warmup {
-                black_box(self.observer_states_from_codes_record_batch(&record_batch, scale)?);
+                black_box(self.observer_states_from_codes_record_batch(
+                    &record_batch,
+                    scale,
+                    DataFrame::Ecliptic,
+                    OriginId::from_code("SUN"),
+                )?);
             }
             let mut samples = Vec::with_capacity(reps);
             for _ in 0..reps {
                 let started = Instant::now();
-                let output = self.observer_states_from_codes_record_batch(&record_batch, scale)?;
+                let output = self.observer_states_from_codes_record_batch(
+                    &record_batch,
+                    scale,
+                    DataFrame::Ecliptic,
+                    OriginId::from_code("SUN"),
+                )?;
                 black_box(&output);
                 samples.push(started.elapsed().as_secs_f64());
             }
             sample_trials.push(samples);
         }
         Ok(sample_trials)
+    }
+
+    fn observer_states_from_exposures_arrow<'py>(
+        &self,
+        py: Python<'py>,
+        batch: &Bound<'py, PyAny>,
+        time_scale: &str,
+        frame: &str,
+        origin_code: &str,
+    ) -> PyResult<PyObject> {
+        let record_batch = RecordBatch::from_pyarrow_bound(batch)
+            .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
+        let scale =
+            TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let frame = match frame {
+            "ecliptic" => DataFrame::Ecliptic,
+            "equatorial" => DataFrame::Equatorial,
+            "itrf93" => DataFrame::Itrf93,
+            other => return Err(PyValueError::new_err(format!("Unknown frame: {other}"))),
+        };
+        self.observer_states_from_codes_record_batch(
+            &record_batch,
+            scale,
+            frame,
+            OriginId::from_code(origin_code),
+        )?
+        .to_pyarrow(py)
+    }
+
+    #[pyo3(signature = (batch, time_scale, frame, origin_code, reps, trials, warmup_reps=1))]
+    #[allow(clippy::too_many_arguments)]
+    fn benchmark_observer_states_from_exposures_arrow_rust(
+        &self,
+        batch: &Bound<'_, PyAny>,
+        time_scale: &str,
+        frame: &str,
+        origin_code: &str,
+        reps: usize,
+        trials: usize,
+        warmup_reps: usize,
+    ) -> PyResult<Vec<Vec<f64>>> {
+        if reps == 0 || trials == 0 {
+            return Err(PyValueError::new_err("reps and trials must be >= 1"));
+        }
+        let record_batch = RecordBatch::from_pyarrow_bound(batch)
+            .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
+        let scale =
+            TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let frame = match frame {
+            "ecliptic" => DataFrame::Ecliptic,
+            "equatorial" => DataFrame::Equatorial,
+            "itrf93" => DataFrame::Itrf93,
+            other => return Err(PyValueError::new_err(format!("Unknown frame: {other}"))),
+        };
+        let origin = OriginId::from_code(origin_code);
+        let mut trials_out = Vec::with_capacity(trials);
+        for _ in 0..trials {
+            for _ in 0..warmup_reps {
+                black_box(self.observer_states_from_codes_record_batch(
+                    &record_batch,
+                    scale,
+                    frame,
+                    origin.clone(),
+                )?);
+            }
+            let mut samples = Vec::with_capacity(reps);
+            for _ in 0..reps {
+                let started = Instant::now();
+                black_box(self.observer_states_from_codes_record_batch(
+                    &record_batch,
+                    scale,
+                    frame,
+                    origin.clone(),
+                )?);
+                samples.push(started.elapsed().as_secs_f64());
+            }
+            trials_out.push(samples);
+        }
+        Ok(trials_out)
     }
 
     fn furnsh(&self, path: &str) -> PyResult<()> {

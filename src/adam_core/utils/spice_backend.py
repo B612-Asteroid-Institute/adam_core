@@ -198,6 +198,36 @@ class RustBackend:
                 batch, time_scale, reps, warmup, trials
             )
 
+    def observer_states_from_exposures_arrow(
+        self, batch, time_scale: str, frame: str, origin_code: str
+    ):
+        """Fused exposure midpoint and observer-state dispatch."""
+        with self._lock:
+            return self._inner.observer_states_from_exposures_arrow(
+                batch, time_scale, frame, origin_code
+            )
+
+    def benchmark_observer_states_from_exposures_arrow_rust(
+        self,
+        batch,
+        time_scale: str,
+        frame: str,
+        origin_code: str,
+        reps: int,
+        trials: int,
+        warmup_reps: int = 1,
+    ) -> list[list[float]]:
+        with self._lock:
+            return self._inner.benchmark_observer_states_from_exposures_arrow_rust(
+                batch,
+                time_scale,
+                frame,
+                origin_code,
+                reps,
+                trials,
+                warmup_reps,
+            )
+
     def bodn2c(self, name: str) -> int:
         with self._lock:
             try:

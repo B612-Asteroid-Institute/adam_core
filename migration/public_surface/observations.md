@@ -17,8 +17,8 @@ Only plotting/display may remain Python. Unchanged quivr constructors, descripto
 | Public API | Current ownership | Parity/timing | Disposition |
 |---|---|---|---|
 | `ObsContext.to_string` | one Rust string-rendering crossing after Python dataclass assembly | frozen fixture coverage; formatting timing N/Q | Compatible veneer |
-| `ADES_to_string` | **mixed/multi-crossing**: Python UTC rescale, per-context rendering, IPC conversion, then Rust writer | frozen writer fixture; no complete native timer | Gap: `personal-cmy.37.4.3` |
-| `ADES_string_to_tables` | **mixed/multi-crossing**: Rust observations parse, Python warning/table wrapping, separate Rust context parse, Python dataclass construction | frozen parser fixture; no complete native timer | Gap: `personal-cmy.37.4.3` |
+| `ADES_to_string` | one fused Rust crossing owns UTC rescale, all context/observation rendering, validation, and final assembly | frozen writer fixture plus Rust-Instant fused timing | Compatible veneer |
+| `ADES_string_to_tables` | one fused Rust crossing owns observation/context parsing, warning inputs, and nested Arrow encoding; Python reconstructs declared compatibility objects | frozen parser fixture plus Rust-Instant fused timing | Compatible veneer |
 | `observations_to_ipc`, `observations_from_ipc`, `round_trip_observations` | migration transport/codec diagnostics | exact round trips; native timing N/Q | Keep classified, not domain migration credit |
 
 ## Associations, detections, and exposures
@@ -31,9 +31,9 @@ Only plotting/display may remain Python. Unchanged quivr constructors, descripto
 | `PointSourceDetections.healpixels` | Python call into healpy | unit-only; native missing | Rust-owned replacement required |
 | `PointSourceDetections.group_by_healpixel` | Python NumPy/PyArrow grouping around healpy | unit-only; native missing | Rust gap |
 | `PointSourceDetections.link_to_exposures` | Python quivr linkage assembly | unit-only; native missing | Rust gap |
-| `Exposures.group_by_observatory_code` | Python/PyArrow grouping | unit-only; native missing | Rust gap |
-| `Exposures.midpoint` | Python composition over timestamp arithmetic | indirect tests; native missing | Rust one-crossing gap |
-| `Exposures.observers` | **mixed/multi-crossing** per-code grouping, observer-state dispatch, concatenation, and reorder | indirect observer tests; no facade parity/timing | Rust orchestration gap |
+| `Exposures.group_by_observatory_code` | one Rust typed grouping/IPC crossing; Python yields compatibility tables | ordering/schema unit parity plus Rust-Instant timing | Compatible veneer |
+| `Exposures.midpoint` | one Rust crossing owns half-even nanosecond conversion and epoch carry | exact midpoint unit parity plus Rust-Instant timing | Compatible veneer |
+| `Exposures.observers` | one Arrow crossing owns midpoint epochs, code grouping, SPICE state dispatch, frame/origin handling, and nested observer assembly | observer fixture ULP parity plus Rust-Instant fused timing | Compatible veneer |
 
 These gaps are covered by children of `personal-cmy.37.7` for observation grouping/linkage/HEALPix and exposure-derived workflows.
 
