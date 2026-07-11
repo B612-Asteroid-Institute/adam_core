@@ -160,7 +160,9 @@ def test_estimate_colors_from_fixture(
     observations = _load_fixture_observations(fx)
     orbits = _load_fixture_orbits(fx)
 
-    result = estimate_colors(observations, orbits, phi_type)
+    # Greenstreet et al. is only reproduced when slope parameters outside the
+    # physical [0, 1] range are allowed, so relax the bound here.
+    result = estimate_colors(observations, orbits, phi_type, force_g_bounds=False)
 
     assert isinstance(result, ColorFit)
     assert len(result) >= 1
@@ -192,7 +194,7 @@ def test_estimate_colors_missing_band_is_nan(fixture_name: str) -> None:
 
     observations = _load_fixture_observations(fx)
     orbits = _load_fixture_orbits(fx)
-    result = estimate_colors(observations, orbits, "HG12star")
+    result = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
     row = result.apply_mask(pc.equal(result.object_id, object_id))
     assert len(row) == 1
 
@@ -225,7 +227,7 @@ def test_estimate_colors_multi_object() -> None:
     observations = qv.concatenate([_load_fixture_observations(fx) for fx in fixtures])
     orbits = qv.concatenate([_load_fixture_orbits(fx) for fx in fixtures])
 
-    result = estimate_colors(observations, orbits, "HG12star")
+    result = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
 
     assert isinstance(result, ColorFit)
     assert len(result) == len(object_ids)
@@ -233,3 +235,49 @@ def test_estimate_colors_multi_object() -> None:
 
     for fx, object_id in zip(fixtures, object_ids):
         _assert_colors_close(result, object_id, _paper_colors(fx), HG12STAR_TOLERANCE)
+
+
+# 2025 MN25 fits G12* well below 0 with the HG12* model, so it exercises the
+# out-of-range slope-parameter handling.
+_OUT_OF_BOUNDS_FIXTURE = "color_fixture_2025_MN25.npz"
+
+
+def _load_out_of_bounds_case() -> tuple[MPCObservations, MPCOrbits, str]:
+    fixture_path = DATA_DIR / _OUT_OF_BOUNDS_FIXTURE
+    if not fixture_path.exists():
+        pytest.skip(f"Missing fixture {_OUT_OF_BOUNDS_FIXTURE}")
+    fx = np.load(fixture_path, allow_pickle=True)
+    return (
+        _load_fixture_observations(fx),
+        _load_fixture_orbits(fx),
+        str(fx["object_id"][0]),
+    )
+
+
+def test_force_g_bounds_true_raises_on_out_of_range() -> None:
+    """With force_g_bounds=True (default), an out-of-[0,1] slope fit raises."""
+    observations, orbits, _ = _load_out_of_bounds_case()
+
+    with pytest.raises(ValueError, match=r"G12\*.*outside the physical"):
+        estimate_colors(observations, orbits, "HG12star")
+
+
+def test_force_g_bounds_false_warns_and_returns(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """With force_g_bounds=False, the out-of-range fit is kept and a warning logged."""
+    observations, orbits, object_id = _load_out_of_bounds_case()
+
+    with caplog.at_level("WARNING", logger="adam_core.photometry.color_determination"):
+        result = estimate_colors(
+            observations, orbits, "HG12star", force_g_bounds=False
+        )
+
+    assert isinstance(result, ColorFit)
+    row = result.apply_mask(pc.equal(result.object_id, object_id))
+    assert len(row) == 1
+    assert any(
+        "outside the physical" in record.message
+        and "force_g_bounds=False" in record.message
+        for record in caplog.records
+    ), "Expected an out-of-range warning mentioning force_g_bounds=False"
