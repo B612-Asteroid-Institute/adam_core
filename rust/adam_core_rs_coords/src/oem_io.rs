@@ -18,7 +18,11 @@
 //! integer split; lower-triangle covariance reconstruction to a symmetric
 //! 6x6; `COMMENT` lines skipped; multiple segments supported.
 
-use crate::types::{SchemaError, SchemaResult, TimeScale};
+use crate::types::{
+    CoordinateBatch, CoordinateRepresentation, CovarianceBatch, CovarianceUnits, Frame, ObjectId,
+    OrbitBatch, OrbitId, OriginArray, OriginId, SchemaError, SchemaResult, TimeArray, TimeScale,
+    Validity, KM_PER_AU, SECONDS_PER_DAY,
+};
 use std::fmt::Write as _;
 use std::path::Path;
 
@@ -82,8 +86,10 @@ fn mjd_to_jd_pair(days: i64, nanos: i64) -> (f64, f64) {
 /// astropy's strftime renders `%f` with `Time.precision` digits, and
 /// `Timestamp.to_astropy` leaves the default precision of 3, so legacy OEM
 /// epochs carry milliseconds. Civil time goes through ERFA `d2dtf`
-/// (leap-second aware for UTC).
-fn format_epoch(days: i64, nanos: i64, scale: TimeScale) -> SchemaResult<String> {
+/// (leap-second aware for UTC). This is also byte-identical to the legacy
+/// `Timestamp.to_iso8601` (astropy `isot`, default precision 3), which the
+/// fused reader uses for the legacy per-state `orbit_id` strings.
+pub fn format_epoch(days: i64, nanos: i64, scale: TimeScale) -> SchemaResult<String> {
     let (jd1, jd2) = mjd_to_jd_pair(days, nanos);
     let ((iy, im, id, ih, imin, isec, ifrac), _warning) =
         erfars::timescales::D2dtf(scale == TimeScale::Utc, 3, jd1, jd2)
@@ -293,25 +299,83 @@ pub fn oem_write_kvn(
 
 // --- parser -----------------------------------------------------------------------
 
+/// One parsed OEM covariance block: symmetric 6x6 matrix (row-major, 36
+/// values, km/km-s units) plus its epoch and reference frame (defaulted to
+/// the segment `REF_FRAME` when `COV_REF_FRAME` is absent).
+#[derive(Debug, Clone, PartialEq)]
+pub struct OemParsedCovariance {
+    pub days: i64,
+    pub nanos: i64,
+    pub frame: Option<String>,
+    pub matrix: Vec<f64>,
+}
+
+/// One parsed OEM segment: metadata `KEY -> value` strings in file order
+/// plus per-state epoch integers and km/km-s state vectors.
+#[derive(Debug, Clone, Default)]
+pub struct OemSegment {
+    pub metadata: serde_json::Map<String, serde_json::Value>,
+    pub days: Vec<i64>,
+    pub nanos: Vec<i64>,
+    pub values_km: Vec<Vec<f64>>,
+    pub covariances: Vec<OemParsedCovariance>,
+}
+
+/// A parsed OEM document.
+#[derive(Debug, Clone, Default)]
+pub struct OemDocument {
+    pub header: serde_json::Map<String, serde_json::Value>,
+    pub segments: Vec<OemSegment>,
+}
+
 /// Parse a KVN OEM file into a JSON payload:
 /// `{header: {...}, segments: [{metadata: {...}, states: {days, nanos,
 /// values_km}, covariances: [{days, nanos, frame, matrix (36, symmetric,
 /// km)}]}]}`. Epoch integers use the exact legacy `Timestamp.from_astropy`
 /// split in the segment's TIME_SYSTEM scale.
 pub fn oem_parse_kvn(path: &Path) -> SchemaResult<String> {
-    use serde_json::{json, Map, Value};
+    use serde_json::json;
+
+    let document = oem_parse_kvn_structured(path)?;
+    let payload = json!({
+        "header": document.header,
+        "segments": document.segments
+            .into_iter()
+            .map(|segment| {
+                json!({
+                    "metadata": segment.metadata,
+                    "states": {
+                        "days": segment.days,
+                        "nanos": segment.nanos,
+                        "values_km": segment.values_km,
+                    },
+                    "covariances": segment.covariances
+                        .into_iter()
+                        .map(|covariance| {
+                            json!({
+                                "days": covariance.days,
+                                "nanos": covariance.nanos,
+                                "frame": covariance.frame,
+                                "matrix": covariance.matrix,
+                            })
+                        })
+                        .collect::<Vec<_>>(),
+                })
+            })
+            .collect::<Vec<_>>(),
+    });
+    serde_json::to_string(&payload).map_err(|err| invalid(format!("encode failed: {err}")))
+}
+
+/// Structured form of [`oem_parse_kvn`] for Rust consumers (the fused
+/// orbit-product reader).
+pub fn oem_parse_kvn_structured(path: &Path) -> SchemaResult<OemDocument> {
+    use serde_json::{Map, Value};
 
     let text = std::fs::read_to_string(path)
         .map_err(|err| invalid(format!("failed to read {}: {err}", path.display())))?;
 
-    #[derive(Default)]
-    struct Segment {
-        metadata: Map<String, Value>,
-        days: Vec<i64>,
-        nanos: Vec<i64>,
-        values_km: Vec<Vec<f64>>,
-        covariances: Vec<Value>,
-    }
+    type Segment = OemSegment;
 
     let mut header: Map<String, Value> = Map::new();
     let mut segments: Vec<Segment> = Vec::new();
@@ -345,29 +409,6 @@ pub fn oem_parse_kvn(path: &Path) -> SchemaResult<String> {
             }
             // Symmetric 6x6 reconstruction (row-major, matching the oem
             // package's Covariance.matrix).
-            const LOWER_TRIANGLE_INDICES: [(usize, usize); 21] = [
-                (0, 0),
-                (1, 0),
-                (1, 1),
-                (2, 0),
-                (2, 1),
-                (2, 2),
-                (3, 0),
-                (3, 1),
-                (3, 2),
-                (3, 3),
-                (4, 0),
-                (4, 1),
-                (4, 2),
-                (4, 3),
-                (4, 4),
-                (5, 0),
-                (5, 1),
-                (5, 2),
-                (5, 3),
-                (5, 4),
-                (5, 5),
-            ];
             let mut matrix = vec![0.0f64; 36];
             for (index, &(row, col)) in LOWER_TRIANGLE_INDICES.iter().enumerate() {
                 let value = cov_values[index];
@@ -381,12 +422,12 @@ pub fn oem_parse_kvn(path: &Path) -> SchemaResult<String> {
                     .and_then(Value::as_str)
                     .map(str::to_string)
             });
-            segment.covariances.push(json!({
-                "days": days,
-                "nanos": nanos,
-                "frame": frame,
-                "matrix": matrix,
-            }));
+            segment.covariances.push(OemParsedCovariance {
+                days,
+                nanos,
+                frame,
+                matrix,
+            });
             cov_values.clear();
         }
         Ok(())
@@ -514,24 +555,427 @@ pub fn oem_parse_kvn(path: &Path) -> SchemaResult<String> {
         segments.push(segment);
     }
 
-    let payload = json!({
-        "header": header,
-        "segments": segments
-            .into_iter()
-            .map(|segment| {
-                json!({
-                    "metadata": segment.metadata,
-                    "states": {
-                        "days": segment.days,
-                        "nanos": segment.nanos,
-                        "values_km": segment.values_km,
-                    },
-                    "covariances": segment.covariances,
-                })
-            })
-            .collect::<Vec<_>>(),
-    });
-    serde_json::to_string(&payload).map_err(|err| invalid(format!("encode failed: {err}")))
+    Ok(OemDocument { header, segments })
+}
+
+// --- fused orbit products (bead personal-cmy.37.4.4) -------------------------------
+
+/// `np.tril_indices(6)` order (row sweep of the lower triangle), shared by
+/// the parser's symmetric reconstruction and the writer's extraction.
+const LOWER_TRIANGLE_INDICES: [(usize, usize); 21] = [
+    (0, 0),
+    (1, 0),
+    (1, 1),
+    (2, 0),
+    (2, 1),
+    (2, 2),
+    (3, 0),
+    (3, 1),
+    (3, 2),
+    (3, 3),
+    (4, 0),
+    (4, 1),
+    (4, 2),
+    (4, 3),
+    (4, 4),
+    (5, 0),
+    (5, 1),
+    (5, 2),
+    (5, 3),
+    (5, 4),
+    (5, 5),
+];
+
+/// CCSDS OEM version written by the fused product writer; mirrors the
+/// public `adam_core.orbits.oem_io.OEM_VERSION` compatibility constant.
+const OEM_VERSION: &str = "2.0";
+
+/// Legacy `_adam_to_oem_center` (exact error message).
+fn adam_to_oem_center(code: &str) -> SchemaResult<&'static str> {
+    match code {
+        "SOLAR_SYSTEM_BARYCENTER" => Ok("SOLAR SYSTEM BARYCENTER"),
+        "MERCURY_BARYCENTER" => Ok("MERCURY BARYCENTER"),
+        "VENUS_BARYCENTER" => Ok("VENUS BARYCENTER"),
+        "EARTH_MOON_BARYCENTER" => Ok("EARTH BARYCENTER"),
+        "MARS_BARYCENTER" => Ok("MARS BARYCENTER"),
+        "JUPITER_BARYCENTER" => Ok("JUPITER BARYCENTER"),
+        "SATURN_BARYCENTER" => Ok("SATURN BARYCENTER"),
+        "URANUS_BARYCENTER" => Ok("URANUS BARYCENTER"),
+        "NEPTUNE_BARYCENTER" => Ok("NEPTUNE BARYCENTER"),
+        "SUN" => Ok("SUN"),
+        "MERCURY" => Ok("MERCURY"),
+        "VENUS" => Ok("VENUS"),
+        "EARTH" => Ok("EARTH"),
+        "MOON" => Ok("MOON"),
+        "MARS" => Ok("MARS"),
+        "JUPITER" => Ok("JUPITER"),
+        "SATURN" => Ok("SATURN"),
+        "URANUS" => Ok("URANUS"),
+        "NEPTUNE" => Ok("NEPTUNE"),
+        other => Err(invalid(format!(
+            "Unsupported origin code for OEM conversion: {other}"
+        ))),
+    }
+}
+
+/// Legacy `_oem_to_adam_center` map in dict insertion order (the error
+/// message renders the key list exactly like Python).
+const OEM_TO_ADAM_CENTERS: [(&str, &str); 19] = [
+    ("SOLAR SYSTEM BARYCENTER", "SOLAR_SYSTEM_BARYCENTER"),
+    ("MERCURY BARYCENTER", "MERCURY_BARYCENTER"),
+    ("VENUS BARYCENTER", "VENUS_BARYCENTER"),
+    ("EARTH BARYCENTER", "EARTH_MOON_BARYCENTER"),
+    ("MARS BARYCENTER", "MARS_BARYCENTER"),
+    ("JUPITER BARYCENTER", "JUPITER_BARYCENTER"),
+    ("SATURN BARYCENTER", "SATURN_BARYCENTER"),
+    ("URANUS BARYCENTER", "URANUS_BARYCENTER"),
+    ("NEPTUNE BARYCENTER", "NEPTUNE_BARYCENTER"),
+    ("SUN", "SUN"),
+    ("MERCURY", "MERCURY"),
+    ("VENUS", "VENUS"),
+    ("EARTH", "EARTH"),
+    ("MOON", "MOON"),
+    ("MARS", "MARS"),
+    ("JUPITER", "JUPITER"),
+    ("SATURN", "SATURN"),
+    ("URANUS", "URANUS"),
+    ("NEPTUNE", "NEPTUNE"),
+];
+
+fn oem_to_adam_center(center: &str) -> SchemaResult<&'static str> {
+    let upper = center.to_uppercase();
+    for (oem, adam) in OEM_TO_ADAM_CENTERS {
+        if oem == upper {
+            return Ok(adam);
+        }
+    }
+    let keys = OEM_TO_ADAM_CENTERS
+        .iter()
+        .map(|(key, _)| format!("'{key}'"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    Err(invalid(format!(
+        "Unsupported OEM center name: {center}. Supported centers are [{keys}]."
+    )))
+}
+
+/// Legacy `_oem_to_adam_frame` (exact error message).
+fn oem_to_adam_frame(frame: &str) -> SchemaResult<Frame> {
+    match frame {
+        "EME2000" => Ok(Frame::Equatorial),
+        "ITRF-93" => Ok(Frame::Itrf93),
+        other => Err(invalid(format!(
+            "Unsupported OEM frame: {other}. Supported frames are ['EME2000', 'ITRF-93']."
+        ))),
+    }
+}
+
+/// Legacy `convert_cartesian_values_au_to_km` row operation order.
+fn values_au_to_km(row: &[f64; 6]) -> [f64; 6] {
+    [
+        row[0] * KM_PER_AU,
+        row[1] * KM_PER_AU,
+        row[2] * KM_PER_AU,
+        row[3] * KM_PER_AU / SECONDS_PER_DAY,
+        row[4] * KM_PER_AU / SECONDS_PER_DAY,
+        row[5] * KM_PER_AU / SECONDS_PER_DAY,
+    ]
+}
+
+/// Legacy covariance unit conversion (outer-product factors, exact order).
+fn convert_covariance_matrix(matrix: &[f64], au_to_km: bool) -> Vec<f64> {
+    let unit = if au_to_km {
+        [
+            KM_PER_AU,
+            KM_PER_AU,
+            KM_PER_AU,
+            KM_PER_AU / SECONDS_PER_DAY,
+            KM_PER_AU / SECONDS_PER_DAY,
+            KM_PER_AU / SECONDS_PER_DAY,
+        ]
+    } else {
+        [
+            1.0 / KM_PER_AU,
+            1.0 / KM_PER_AU,
+            1.0 / KM_PER_AU,
+            SECONDS_PER_DAY / KM_PER_AU,
+            SECONDS_PER_DAY / KM_PER_AU,
+            SECONDS_PER_DAY / KM_PER_AU,
+        ]
+    };
+    let mut out = vec![0.0_f64; 36];
+    for j in 0..6 {
+        for k in 0..6 {
+            out[j * 6 + k] = matrix[j * 6 + k] * (unit[j] * unit[k]);
+        }
+    }
+    out
+}
+
+fn time_system_upper(scale: TimeScale) -> String {
+    scale.as_str().to_uppercase()
+}
+
+/// Fused legacy `orbit_to_oem` tail: equatorial rotation (ecliptic input),
+/// stable time sort, metadata assembly, AU->km conversion, covariance
+/// extraction, and KVN rendering, all in Rust. The caller performs the
+/// legacy Python-side assertions and the SPICE-dependent ITRF93 transform.
+pub fn oem_render_orbits_kvn(
+    orbits: &OrbitBatch,
+    originator: &str,
+    creation_date: &str,
+) -> SchemaResult<String> {
+    use serde_json::{Map, Value};
+
+    let orbits = match orbits.coordinates.frame {
+        Frame::Equatorial => orbits.clone(),
+        Frame::Ecliptic => orbits.rotate_frame(Frame::Equatorial)?,
+        other => {
+            return Err(invalid(format!(
+                "OEM writer requires equatorial or ecliptic coordinates, got {other:?}; \
+                 transform first"
+            )))
+        }
+    };
+    let times = orbits
+        .coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| invalid("OEM writer requires coordinate times".to_string()))?;
+    let values = orbits
+        .coordinates
+        .values
+        .cartesian()
+        .ok_or_else(|| invalid("OEM writer requires Cartesian coordinates".to_string()))?;
+    let n = values.len();
+    if n == 0 {
+        return Err(invalid(
+            "OEM writer requires at least one state".to_string(),
+        ));
+    }
+
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by_key(|&i| (times.epochs[i].days, times.epochs[i].nanos));
+    let scale = times.scale;
+
+    let object_id = orbits
+        .object_id
+        .first()
+        .and_then(|id| id.as_ref())
+        .map(|id| id.0.clone())
+        .ok_or_else(|| invalid("OEM writer requires a non-null object_id".to_string()))?;
+    let center = adam_to_oem_center(&orbits.coordinates.origins.origins[0].code())?;
+    let oem_frame = "EME2000";
+    let first = *order.first().expect("non-empty");
+    let last = *order.last().expect("non-empty");
+    let start = format_epoch(times.epochs[first].days, times.epochs[first].nanos, scale)?;
+    let stop = format_epoch(times.epochs[last].days, times.epochs[last].nanos, scale)?;
+
+    let mut header = Map::new();
+    header.insert(
+        "CCSDS_OEM_VERS".to_string(),
+        Value::String(OEM_VERSION.to_string()),
+    );
+    header.insert(
+        "CREATION_DATE".to_string(),
+        Value::String(creation_date.to_string()),
+    );
+    header.insert(
+        "ORIGINATOR".to_string(),
+        Value::String(originator.to_string()),
+    );
+
+    let mut metadata = Map::new();
+    metadata.insert("OBJECT_NAME".to_string(), Value::String(object_id.clone()));
+    metadata.insert("OBJECT_ID".to_string(), Value::String(object_id));
+    metadata.insert("CENTER_NAME".to_string(), Value::String(center.to_string()));
+    metadata.insert(
+        "REF_FRAME".to_string(),
+        Value::String(oem_frame.to_string()),
+    );
+    metadata.insert(
+        "TIME_SYSTEM".to_string(),
+        Value::String(time_system_upper(scale)),
+    );
+    metadata.insert("START_TIME".to_string(), Value::String(start));
+    metadata.insert("STOP_TIME".to_string(), Value::String(stop));
+
+    let header_json =
+        serde_json::to_string(&header).map_err(|err| invalid(format!("encode failed: {err}")))?;
+    let metadata_json =
+        serde_json::to_string(&metadata).map_err(|err| invalid(format!("encode failed: {err}")))?;
+
+    let mut days = Vec::with_capacity(n);
+    let mut nanos = Vec::with_capacity(n);
+    let mut states_km = Vec::with_capacity(n * 6);
+    let mut covariances = Vec::new();
+    let covariance = orbits.coordinates.covariance.as_ref();
+    for &i in &order {
+        days.push(times.epochs[i].days);
+        nanos.push(times.epochs[i].nanos);
+        states_km.extend_from_slice(&values_au_to_km(&values[i]));
+        if let Some(covariance) = covariance {
+            if covariance.dimension != 6 {
+                continue;
+            }
+            let valid = covariance
+                .row_validity
+                .as_ref()
+                .is_none_or(|validity| validity.is_valid(i));
+            if !valid {
+                continue;
+            }
+            let matrix = &covariance.values_row_major[i * 36..(i + 1) * 36];
+            if matrix.iter().all(|value| value.is_nan()) {
+                continue;
+            }
+            let matrix_km = convert_covariance_matrix(matrix, true);
+            let mut lower_triangle = [0.0_f64; 21];
+            for (index, &(row, col)) in LOWER_TRIANGLE_INDICES.iter().enumerate() {
+                lower_triangle[index] = matrix_km[row * 6 + col];
+            }
+            covariances.push(OemCovarianceRecord {
+                days: times.epochs[i].days,
+                nanos: times.epochs[i].nanos,
+                frame: oem_frame.to_string(),
+                lower_triangle,
+            });
+        }
+    }
+
+    oem_to_kvn(
+        &header_json,
+        &metadata_json,
+        scale,
+        &days,
+        &nanos,
+        &states_km,
+        &covariances,
+    )
+}
+
+/// Render and write the fused OEM product (see [`oem_render_orbits_kvn`]).
+pub fn oem_write_orbits_kvn(
+    path: &Path,
+    orbits: &OrbitBatch,
+    originator: &str,
+    creation_date: &str,
+) -> SchemaResult<()> {
+    let text = oem_render_orbits_kvn(orbits, originator, creation_date)?;
+    std::fs::write(path, text)
+        .map_err(|err| invalid(format!("failed to write {}: {err}", path.display())))
+}
+
+/// Fused legacy `orbit_from_oem`: parse the KVN file and assemble the
+/// complete `OrbitBatch` (frame/center mapping with exact legacy errors,
+/// km->AU conversion, epoch-and-frame covariance matching with last-match
+/// precedence, legacy per-state orbit ids). Returns `None` for files with
+/// no segments (the caller returns `Orbits.empty()`), and a dedicated
+/// "mixed" error when segments disagree on frame or time system (the
+/// caller falls back to the legacy per-state composition).
+pub fn oem_read_orbits(path: &Path) -> SchemaResult<Option<OrbitBatch>> {
+    use serde_json::Value;
+
+    let document = oem_parse_kvn_structured(path)?;
+    if document.segments.is_empty() {
+        return Ok(None);
+    }
+
+    let mut orbit_ids: Vec<OrbitId> = Vec::new();
+    let mut object_ids: Vec<Option<ObjectId>> = Vec::new();
+    let mut rows: Vec<[f64; 6]> = Vec::new();
+    let mut days: Vec<i64> = Vec::new();
+    let mut nanos: Vec<i64> = Vec::new();
+    let mut origins: Vec<OriginId> = Vec::new();
+    let mut covariance_values: Vec<f64> = Vec::new();
+    let mut covariance_validity: Vec<bool> = Vec::new();
+    let mut frame_out: Option<Frame> = None;
+    let mut scale_out: Option<TimeScale> = None;
+
+    for (segment_index, segment) in document.segments.iter().enumerate() {
+        let meta = |key: &str| -> SchemaResult<&str> {
+            segment
+                .metadata
+                .get(key)
+                .and_then(Value::as_str)
+                .ok_or_else(|| invalid(format!("OEM segment missing {key}")))
+        };
+        let object_id = meta("OBJECT_ID")?;
+        let ref_frame = meta("REF_FRAME")?;
+        let frame = oem_to_adam_frame(ref_frame)?;
+        let origin_code = oem_to_adam_center(meta("CENTER_NAME")?)?;
+        let scale = TimeScale::parse(&meta("TIME_SYSTEM")?.to_lowercase())?;
+        if *frame_out.get_or_insert(frame) != frame || *scale_out.get_or_insert(scale) != scale {
+            return Err(invalid(
+                "OEM segments have mixed reference frames or time systems".to_string(),
+            ));
+        }
+
+        for j in 0..segment.days.len() {
+            let state_days = segment.days[j];
+            let state_nanos = segment.nanos[j];
+            let value = &segment.values_km[j];
+            rows.push([
+                value[0] / KM_PER_AU,
+                value[1] / KM_PER_AU,
+                value[2] / KM_PER_AU,
+                value[3] / KM_PER_AU * SECONDS_PER_DAY,
+                value[4] / KM_PER_AU * SECONDS_PER_DAY,
+                value[5] / KM_PER_AU * SECONDS_PER_DAY,
+            ]);
+            days.push(state_days);
+            nanos.push(state_nanos);
+            origins.push(OriginId::from_code(origin_code));
+
+            // Legacy last-match-wins epoch+frame covariance join.
+            let mut matched: Option<Vec<f64>> = None;
+            for covariance in &segment.covariances {
+                if covariance.days == state_days
+                    && covariance.nanos == state_nanos
+                    && covariance.frame.as_deref() == Some(ref_frame)
+                {
+                    matched = Some(convert_covariance_matrix(&covariance.matrix, false));
+                }
+            }
+            match matched {
+                Some(matrix) => {
+                    covariance_values.extend(matrix);
+                    covariance_validity.push(true);
+                }
+                None => {
+                    covariance_values.extend([f64::NAN; 36]);
+                    covariance_validity.push(false);
+                }
+            }
+
+            orbit_ids.push(OrbitId(format!(
+                "{object_id}_seg_{segment_index}_{}",
+                format_epoch(state_days, state_nanos, scale)?
+            )));
+            object_ids.push(Some(ObjectId(object_id.to_string())));
+        }
+    }
+
+    let n = rows.len();
+    let covariance = CovarianceBatch::new(
+        n,
+        6,
+        covariance_values,
+        CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+    )?
+    .with_row_validity(Validity::from_bools(&covariance_validity))?;
+    let coordinates = CoordinateBatch::cartesian(
+        rows,
+        frame_out.expect("at least one segment"),
+        OriginArray::new(origins),
+        Some(TimeArray::from_parts(
+            scale_out.expect("at least one segment"),
+            days,
+            nanos,
+        )?),
+        Some(covariance),
+    )?;
+    Ok(Some(OrbitBatch::new(orbit_ids, object_ids, coordinates)?))
 }
 
 #[cfg(test)]

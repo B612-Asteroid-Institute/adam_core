@@ -120,6 +120,32 @@ def test_round_trip_write_parse(fixture, tmp_path):
         assert_flat_equal(parsed, panel["parsed"], panel["name"])
 
 
+def test_fused_oem_native_timing(fixture, tmp_path):
+    from adam_core import _rust_native
+
+    from ..arrow_bridge import orbits_to_ipc
+
+    panel = next(
+        panel
+        for panel in fixture["panels"]
+        if panel["orbits"]["frame"] in ("ecliptic", "equatorial")
+    )
+    orbits = orbits_from_flat(panel["orbits"])
+    path = tmp_path / "timing.oem"
+    write_samples = _rust_native.benchmark_oem_write_orbits_kvn(
+        str(path),
+        orbits_to_ipc(orbits),
+        fixture["originator"],
+        "2026-01-01T00:00:00",
+        2,
+        2,
+        1,
+    )
+    read_samples = _rust_native.benchmark_oem_read_orbits(str(path), 2, 2, 1)
+    assert all(sample > 0.0 for trial in write_samples for sample in trial)
+    assert all(sample > 0.0 for trial in read_samples for sample in trial)
+
+
 def test_math_isfinite_guard():
     # Guard against silent NaN acceptance in the fixture reconstruction.
     assert math.isfinite(1.0)

@@ -334,73 +334,37 @@ def orbit_to_oem(
             "WARNING: Orbit has only one time, you probably wanted to use orbit_to_oem_propagated instead."
         )
 
-    # Of the default OEM frames, we only support EME2000 (equatorial).
-    # So let's transform to that frame.
-    object_states = orbits.set_column(
-        "coordinates",
-        transform_coordinates(orbits.coordinates, frame_out="equatorial"),
-    )
-    object_states = object_states.sort_by("coordinates.time")
-
-    _write_oem_kvn(object_states, output_file, originator)
+    _write_oem_fused(orbits, output_file, originator)
 
     return output_file
 
 
-def _write_oem_kvn(object_states: Orbits, output_file: str, originator: str) -> None:
-    """Render + write the single-segment KVN file through the Rust OEM engine
-    (bead personal-cmy.28), byte-identical to the legacy `oem`-package writer."""
+def _write_oem_fused(orbits: Orbits, output_file: str, originator: str) -> None:
+    """One fused Rust crossing owns the equatorial rotation (ecliptic input),
+    stable time sort, metadata assembly, AU->km conversion, covariance
+    extraction, KVN rendering, and file write (bead personal-cmy.37.4.4).
+    The SPICE/time-dependent ITRF93 transform stays on the Rust-owned
+    ``transform_coordinates`` crossing; the nondeterministic CREATION_DATE
+    stays a Python input like other nondeterministic inputs."""
     from adam_core import _rust_native as _rn
 
-    object_id = object_states.object_id[0].as_py()
+    from .arrow_bridge import orbits_to_ipc
 
-    oem_header = {
-        "CCSDS_OEM_VERS": OEM_VERSION,
-        "CREATION_DATE": datetime.datetime.now().isoformat(),
-        "ORIGINATOR": originator,
-    }
+    frame = orbits.coordinates.frame
+    if frame not in ("ecliptic", "equatorial", "itrf93"):
+        # Exact legacy error from transform_coordinates(frame_out="equatorial").
+        raise ValueError("frame should be one of {'ecliptic', 'equatorial', 'itrf93'}")
+    if frame == "itrf93":
+        orbits = orbits.set_column(
+            "coordinates",
+            transform_coordinates(orbits.coordinates, frame_out="equatorial"),
+        )
 
-    oem_frame = _adam_to_oem_frame(object_states.coordinates.frame)
-
-    # Convert origin from ADAM Core format to OEM format
-    oem_center = _adam_to_oem_center(object_states.coordinates.origin.code[0].as_py())
-
-    segment_metadata = {
-        "OBJECT_NAME": object_id,
-        "OBJECT_ID": object_id,
-        "CENTER_NAME": oem_center,
-        "REF_FRAME": oem_frame,
-        "TIME_SYSTEM": object_states.coordinates.time.scale.upper(),
-        "START_TIME": object_states.coordinates.time.min().to_iso8601()[0].as_py(),
-        "STOP_TIME": object_states.coordinates.time.max().to_iso8601()[0].as_py(),
-    }
-
-    time = object_states.coordinates.time
-    days = time.days.to_numpy(zero_copy_only=False)
-    nanos = time.nanos.to_numpy(zero_copy_only=False)
-    values_km = np.ascontiguousarray(
-        object_states.coordinates.values_km, dtype=np.float64
-    )
-
-    covariances = []
-    tril = np.tril_indices(6)
-    coordinates = object_states.coordinates
-    for i in range(len(object_states)):
-        if not coordinates.covariance[i].is_all_nan():
-            matrix_km = coordinates[i : i + 1].covariance_km()[0]
-            covariances.append(
-                (int(days[i]), int(nanos[i]), oem_frame, matrix_km[tril].tolist())
-            )
-
-    _rn.oem_write_kvn(
+    _rn.oem_write_orbits_kvn(
         str(output_file),
-        json.dumps(oem_header),
-        json.dumps(segment_metadata),
-        time.scale,
-        days,
-        nanos,
-        values_km.reshape(-1),
-        covariances,
+        orbits_to_ipc(orbits),
+        originator,
+        datetime.datetime.now().isoformat(),
     )
 
 
@@ -444,15 +408,7 @@ def orbit_to_oem_propagated(
 
     object_states = propagator.propagate_orbits(orbits, times, covariance=True)
 
-    # Of the default OEM frames, we only support EME2000 (equatorial).
-    # So let's transform to that frame.
-    object_states = object_states.set_column(
-        "coordinates",
-        transform_coordinates(object_states.coordinates, frame_out="equatorial"),
-    )
-    object_states = object_states.sort_by("coordinates.time")
-
-    _write_oem_kvn(object_states, output_file, originator)
+    _write_oem_fused(object_states, output_file, originator)
 
     return output_file
 
@@ -477,6 +433,32 @@ def orbit_from_oem(
     Orbit
         The Orbit object
     """
+    from adam_core import _rust_native as _rn
+
+    from .arrow_bridge import orbits_from_ipc
+
+    # One fused Rust crossing owns parsing, frame/center mapping (exact
+    # legacy errors), km->AU conversion, covariance matching, legacy per
+    # state orbit ids, and nested Orbits assembly. Files whose segments
+    # disagree on frame or time system fall back to the legacy per-state
+    # composition so quivr surfaces its own concatenation behavior.
+    try:
+        raw = _rn.oem_read_orbits_ipc(str(input_file))
+    except ValueError as exc:
+        if "mixed reference frames or time systems" in str(exc):
+            return _orbit_from_oem_legacy(input_file)
+        raise
+    if raw is None:
+        return Orbits.empty()
+    return orbits_from_ipc(raw)
+
+
+def _orbit_from_oem_legacy(
+    input_file: str,
+) -> Orbits:
+    """Legacy per-state composition, retained only for multi-segment files
+    with mixed frames/time systems (rare; preserves exact legacy quivr
+    concatenation behavior for that edge)."""
     from adam_core import _rust_native as _rn
 
     payload = json.loads(_rn.oem_parse_kvn(str(input_file)))

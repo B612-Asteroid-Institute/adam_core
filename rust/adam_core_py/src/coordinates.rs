@@ -2797,6 +2797,84 @@ fn oem_parse_kvn(path: &str) -> PyResult<String> {
     adam_core_rs_coords::oem_parse_kvn(std::path::Path::new(path)).map_err(time_value_error)
 }
 
+/// Fused OEM product writer (bead personal-cmy.37.4.4): one crossing owns
+/// the ecliptic->equatorial rotation, stable time sort, metadata assembly,
+/// AU->km conversion, covariance extraction, KVN rendering, and file write.
+/// The Python veneer keeps the legacy assertions, the single-time warning,
+/// the nondeterministic CREATION_DATE input, and the SPICE-dependent ITRF93
+/// pre-transform.
+#[pyfunction]
+fn oem_write_orbits_kvn(
+    path: &str,
+    orbits_ipc: &Bound<'_, PyBytes>,
+    originator: &str,
+    creation_date: &str,
+) -> PyResult<()> {
+    let orbits =
+        DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbits_ipc.as_bytes())?)
+            .map_err(ades_error)?;
+    adam_core_rs_coords::oem_io::oem_write_orbits_kvn(
+        std::path::Path::new(path),
+        &orbits,
+        originator,
+        creation_date,
+    )
+    .map_err(ades_error)
+}
+
+#[pyfunction]
+#[pyo3(signature = (path, orbits_ipc, originator, creation_date, reps, trials, warmup_reps=1))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_oem_write_orbits_kvn(
+    path: &str,
+    orbits_ipc: &Bound<'_, PyBytes>,
+    originator: &str,
+    creation_date: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let orbits =
+        DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbits_ipc.as_bytes())?)
+            .map_err(ades_error)?;
+    let path = std::path::Path::new(path);
+    benchmark_trials(reps, trials, warmup_reps, || {
+        adam_core_rs_coords::oem_io::oem_write_orbits_kvn(path, &orbits, originator, creation_date)
+            .map_err(ades_error)
+    })
+}
+
+/// Fused OEM product reader (bead personal-cmy.37.4.4): one crossing owns
+/// parsing, frame/center mapping (exact legacy errors), km->AU conversion,
+/// covariance matching, legacy orbit-id construction, and nested Orbits
+/// assembly. Returns None for files without segments.
+#[pyfunction]
+fn oem_read_orbits_ipc<'py>(py: Python<'py>, path: &str) -> PyResult<Option<Bound<'py, PyBytes>>> {
+    match adam_core_rs_coords::oem_io::oem_read_orbits(std::path::Path::new(path))
+        .map_err(ades_error)?
+    {
+        None => Ok(None),
+        Some(orbits) => {
+            let batch = orbits.into_nested_record_batch().map_err(ades_error)?;
+            Ok(Some(PyBytes::new(py, &write_orbit_ipc(&batch)?)))
+        }
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (path, reps, trials, warmup_reps=1))]
+fn benchmark_oem_read_orbits(
+    path: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let path = std::path::Path::new(path);
+    benchmark_trials(reps, trials, warmup_reps, || {
+        adam_core_rs_coords::oem_io::oem_read_orbits(path).map_err(ades_error)
+    })
+}
+
 /// OpenSpace Lua/dataclass renderer (bead personal-cmy.28): render a JSON
 /// payload built by the thin Python dataclass wrappers byte-identically to the
 /// legacy LuaDict implementation.
@@ -5810,6 +5888,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(exposure_groups_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_exposure_groups_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(oem_write_orbits_kvn, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_oem_write_orbits_kvn, m)?)?;
+    m.add_function(wrap_pyfunction!(oem_read_orbits_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_oem_read_orbits, m)?)?;
     m.add_function(wrap_pyfunction!(exposures_drop_duplicate_ids_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(
         benchmark_exposures_drop_duplicate_ids_ipc,

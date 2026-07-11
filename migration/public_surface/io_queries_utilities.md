@@ -68,7 +68,7 @@ query paths depend on them, but they are not counted as public API commitments.
 | Scout | orbit-row normalization only | **Gap:** both HTTP entrypoints, summary parsing, table construction, per-object loop, conversion, and concatenation are Python |
 | SBDB | direct-payload normalization only | **Gap:** legacy astroquery client is Python; new client owns sessions, retries, backoff, concurrency/fair-use, filtering, JSON crossings, and table construction in Python |
 | ADES PSV | fused Rust writer/parser plus observation/context kernels | Public writer/parser each satisfy one crossing; Python only reconstructs compatibility dataclasses/quivr objects |
-| OEM | KVN parser/writer and file read/write | **Gap:** validation, transforms, metadata, unit/covariance conversion, row loops, and Orbits reconstruction remain Python; propagated writer also invokes Python propagation |
+| OEM | fused Rust product writer/reader plus KVN engine | Writer and reader each satisfy one crossing (ecliptic rotation, sort, metadata, unit/covariance conversion, orbit-id and table assembly in Rust); ITRF93 pre-transform stays on the Rust `transform_coordinates` crossing; propagated writer remains a declared propagator-provider boundary |
 | OpenSpace | Lua node and initialization text rendering | **Gap:** orbit transform, model graph, CSV generation, loops, path handling, and all asset file orchestration remain Python |
 | SPK | low-level Rust DAF writer | **Gap:** propagation dispatch, transform, grouping, Chebyshev fit/windows, segment preparation, and final orchestration remain Python |
 | MPC | eight scalar pack/unpack functions and batched packed-date decode | Designation APIs and `convert_mpc_packed_dates` satisfy one Rust crossing; Astropy `Time` construction is the external compatibility boundary |
@@ -163,15 +163,24 @@ Public module functions:
 - `orbit_to_oem_propagated`
 - `orbit_from_oem`
 
-Rust already writes and reads KVN files. `orbit_to_oem` still validates and
-transforms the orbit, builds metadata, converts units/covariances row by row,
-and only then calls Rust. `orbit_from_oem` calls the Rust parser once but loops
-through segments/states/covariances and reconstructs the complete table in
-Python. Both are real product-level gaps.
+`orbit_to_oem` keeps the legacy Python assertions, single-time warning, and
+nondeterministic CREATION_DATE input, then performs everything else in one
+`oem_write_orbits_kvn` crossing: ecliptic->equatorial rotation, stable time
+sort, metadata/frame/center mapping with exact legacy errors, AU->km state
+and covariance conversion in legacy IEEE order, `np.tril_indices` extraction,
+KVN rendering, and the file write. ITRF93 input pre-transforms on the
+Rust-owned `transform_coordinates` crossing (SPICE/time-dependent), then
+writes through the same fused crossing. `orbit_from_oem` is one
+`oem_read_orbits_ipc` crossing owning parsing, frame/center mapping with
+exact legacy errors, km->AU conversion, last-match-wins covariance joins,
+legacy per-state orbit ids, and nested Orbits assembly; empty files return
+`Orbits.empty()`, and the rare mixed-frame/scale multi-segment case falls
+back to the retained legacy composition so quivr surfaces its own behavior.
+Frozen legacy fixtures cover writer bytes and full parsed-table equality;
+both fused operations have Rust-Instant timing.
 
-`orbit_to_oem_propagated` additionally calls a propagator. Product closure must
-not hide that Python call: either use a Rust propagator endpoint in one Rust
-workflow or remain explicitly blocked on the propagator-domain bead.
+`orbit_to_oem_propagated` calls the propagator (declared provider boundary)
+and then uses the same fused writer crossing.
 
 ### OpenSpace products
 
