@@ -1,7 +1,12 @@
+import pyarrow as pa
+
+from adam_core import _rust_native
+
 from ...coordinates import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...time import Timestamp
 from ...utils.helpers import orbits as orbits_helpers
+from ..arrow_bridge import orbits_to_record_batch
 from ..orbits import Orbits
 
 
@@ -39,3 +44,27 @@ def test_orbit_iteration():
     orbits = orbits_helpers.make_simple_orbits(num_orbits=10)
     for o in orbits:
         assert len(o) == 1
+
+
+def test_group_by_orbit_id_is_stable_and_rust_timed() -> None:
+    orbits = orbits_helpers.make_simple_orbits(num_orbits=4).set_column(
+        "orbit_id", pa.array(["b", "a", "b", "c"], type=pa.large_string())
+    )
+
+    groups = list(orbits.group_by_orbit_id())
+    assert [orbit_id for orbit_id, _ in groups] == ["b", "a", "c"]
+    assert [group.orbit_id.to_pylist() for _, group in groups] == [
+        ["b", "b"],
+        ["a"],
+        ["c"],
+    ]
+    for _, group in groups:
+        assert group.coordinates.frame == orbits.coordinates.frame
+        assert group.coordinates.time.scale == orbits.coordinates.time.scale
+
+    samples = _rust_native.benchmark_group_by_orbit_id_arrow(
+        orbits_to_record_batch(orbits), 2, 2, 1
+    )
+    assert len(samples) == 2
+    assert all(len(trial) == 2 for trial in samples)
+    assert all(value > 0.0 for trial in samples for value in trial)

@@ -23,7 +23,7 @@ use adam_core_rs_coords::{
 };
 use adam_core_rs_spice::global_backend;
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
-use arrow_array::{Array, Int64Array, RecordBatch};
+use arrow_array::{Array, Int64Array, RecordBatch, UInt32Array};
 use arrow_ipc::reader::StreamReader;
 use arrow_ipc::writer::StreamWriter;
 use numpy::{
@@ -3902,8 +3902,193 @@ fn calculate_perturber_moids_native<'py>(
     Ok((moids.into_pyarray(py), dt_mins.into_pyarray(py)))
 }
 
+fn group_by_orbit_id_record_batch(
+    batch: &RecordBatch,
+) -> Result<Vec<(String, RecordBatch)>, String> {
+    let orbits = DataOrbitBatch::try_from_nested_record_batch(batch)
+        .map_err(|err| format!("failed to decode OrbitBatch: {err}"))?;
+    let mut group_lookup = HashMap::<String, usize>::new();
+    let mut groups = Vec::<(String, Vec<u32>)>::new();
+    for (row, orbit_id) in orbits.orbit_id.iter().enumerate() {
+        let id = orbit_id.0.clone();
+        let group = match group_lookup.get(&id) {
+            Some(group) => *group,
+            None => {
+                let group = groups.len();
+                group_lookup.insert(id.clone(), group);
+                groups.push((id, Vec::new()));
+                group
+            }
+        };
+        groups[group]
+            .1
+            .push(u32::try_from(row).map_err(|_| "orbit row index exceeds UInt32".to_string())?);
+    }
+    groups
+        .into_iter()
+        .map(|(id, rows)| {
+            let indices = UInt32Array::from(rows);
+            let columns = batch
+                .columns()
+                .iter()
+                .map(|column| {
+                    arrow::compute::take(column.as_ref(), &indices, None)
+                        .map_err(|err| format!("failed to group orbit column: {err}"))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let grouped = RecordBatch::try_new(batch.schema(), columns)
+                .map_err(|err| format!("failed to assemble grouped OrbitBatch: {err}"))?;
+            Ok((id, grouped))
+        })
+        .collect()
+}
+
+const ORBIT_CLASS_NAMES: [&str; 14] = [
+    "AST", "AMO", "APO", "ATE", "CEN", "IEO", "IMB", "MBA", "MCA", "OMB", "TJN", "TNO", "PAA",
+    "HYA",
+];
+
+fn dynamical_class_record_batch(batch: &RecordBatch) -> Result<Vec<String>, String> {
+    let orbits = DataOrbitBatch::try_from_nested_record_batch(batch)
+        .map_err(|err| format!("failed to decode OrbitBatch: {err}"))?;
+    let times =
+        orbits.coordinates.times.as_ref().ok_or_else(|| {
+            "orbit dynamical classification requires coordinate times".to_string()
+        })?;
+    let t0 = times.mjd_values();
+    let mu = orbits
+        .coordinates
+        .origins
+        .origins
+        .iter()
+        .map(origin_mu_au3_day2)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| format!("failed to resolve origin mu: {err}"))?;
+    let values = orbits
+        .coordinates
+        .values
+        .cartesian()
+        .ok_or_else(|| "OrbitBatch coordinates must be Cartesian".to_string())?;
+    let flat = values.iter().flatten().copied().collect::<Vec<_>>();
+    let keplerian = cartesian_to_keplerian_flat6(&flat, &t0, &mu);
+    let mut a = Vec::with_capacity(values.len());
+    let mut e = Vec::with_capacity(values.len());
+    let mut q = Vec::with_capacity(values.len());
+    let mut q_apo = Vec::with_capacity(values.len());
+    for row in keplerian.chunks_exact(13) {
+        let semi_major_axis = row[0];
+        let eccentricity = row[4];
+        a.push(semi_major_axis);
+        e.push(eccentricity);
+        q.push(semi_major_axis * (1.0 - eccentricity));
+        q_apo.push(semi_major_axis * (1.0 + eccentricity));
+    }
+    classify_orbits_flat(&a, &e, &q, &q_apo)
+        .into_iter()
+        .map(|code| {
+            usize::try_from(code)
+                .ok()
+                .and_then(|index| ORBIT_CLASS_NAMES.get(index))
+                .map(|name| (*name).to_string())
+                .ok_or_else(|| format!("unknown orbit class code: {code}"))
+        })
+        .collect()
+}
+
+#[pyfunction]
+fn group_by_orbit_id_arrow<'py>(
+    py: Python<'py>,
+    orbit_batch: &Bound<'py, PyAny>,
+) -> PyResult<Vec<(String, PyObject)>> {
+    let batch = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    py.allow_threads(|| group_by_orbit_id_record_batch(&batch))
+        .map_err(PyValueError::new_err)?
+        .into_iter()
+        .map(|(id, grouped)| {
+            grouped
+                .to_pyarrow(py)
+                .map(|value| (id, value))
+                .map_err(|err| {
+                    PyRuntimeError::new_err(format!("failed to export grouped OrbitBatch: {err}"))
+                })
+        })
+        .collect()
+}
+
+#[pyfunction]
+fn dynamical_class_arrow(orbit_batch: &Bound<'_, PyAny>) -> PyResult<Vec<String>> {
+    let batch = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    dynamical_class_record_batch(&batch).map_err(PyValueError::new_err)
+}
+
+fn benchmark_orbit_surface<F>(
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    mut run_once: F,
+) -> PyResult<Vec<Vec<f64>>>
+where
+    F: FnMut() -> Result<(), String>,
+{
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let mut trial_samples = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            run_once().map_err(PyValueError::new_err)?;
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            run_once().map_err(PyValueError::new_err)?;
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        trial_samples.push(samples);
+    }
+    Ok(trial_samples)
+}
+
+#[pyfunction]
+#[pyo3(signature = (orbit_batch, reps, trials, warmup_reps=1))]
+fn benchmark_group_by_orbit_id_arrow(
+    orbit_batch: &Bound<'_, PyAny>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let batch = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    benchmark_orbit_surface(reps, trials, warmup_reps, || {
+        black_box(group_by_orbit_id_record_batch(&batch)?);
+        Ok(())
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (orbit_batch, reps, trials, warmup_reps=1))]
+fn benchmark_dynamical_class_arrow(
+    orbit_batch: &Bound<'_, PyAny>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let batch = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    benchmark_orbit_surface(reps, trials, warmup_reps, || {
+        black_box(dynamical_class_record_batch(&batch)?);
+        Ok(())
+    })
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cartesian_coordinate_schema_metadata, m)?)?;
+    m.add_function(wrap_pyfunction!(group_by_orbit_id_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(dynamical_class_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_group_by_orbit_id_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_dynamical_class_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(transform_coordinates_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_transform_coordinates_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_perturber_moids_native, m)?)?;

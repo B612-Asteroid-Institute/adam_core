@@ -4,10 +4,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from adam_core import _rust_native
+
 from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.keplerian import KeplerianCoordinates
 from ...coordinates.origin import Origin
 from ...time.time import Timestamp
+from ..arrow_bridge import orbits_to_record_batch
 from ..classification import calc_orbit_class
 from ..orbits import Orbits
 
@@ -198,3 +201,13 @@ def test_calc_orbit_class_orbits(sample):
     orbits, _, _, expected_classes = sample
     classes = orbits.dynamical_class()
     np.testing.assert_array_equal(classes, expected_classes)
+
+
+def test_orbits_dynamical_class_has_rust_owned_timing() -> None:
+    orbits, _, _, _ = mba_sample()
+    samples = _rust_native.benchmark_dynamical_class_arrow(
+        orbits_to_record_batch(orbits), 2, 2, 1
+    )
+    assert len(samples) == 2
+    assert all(len(trial) == 2 for trial in samples)
+    assert all(value > 0.0 for trial in samples for value in trial)
