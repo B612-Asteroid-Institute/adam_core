@@ -269,9 +269,7 @@ def test_force_g_bounds_false_warns_and_returns(
     observations, orbits, object_id = _load_out_of_bounds_case()
 
     with caplog.at_level("WARNING", logger="adam_core.photometry.color_determination"):
-        result = estimate_colors(
-            observations, orbits, "HG12star", force_g_bounds=False
-        )
+        result = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
 
     assert isinstance(result, ColorFit)
     row = result.apply_mask(pc.equal(result.object_id, object_id))
