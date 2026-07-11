@@ -12,7 +12,7 @@ from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..time import Timestamp
-from ..utils.bounded_lru import bounded_lru_get, bounded_lru_put
+from ..utils.bounded_lru import _bounded_lru_get, _bounded_lru_put
 from ..utils.spice import (
     _query_pxform_itrf93_batch,
     get_perturber_state,
@@ -47,7 +47,7 @@ _OBSERVER_STATE_CACHE: "OrderedDict[_ObserverStateCacheKey, CartesianCoordinates
 
 
 def _observer_cache_get(key: _ObserverStateCacheKey) -> CartesianCoordinates | None:
-    return bounded_lru_get(
+    return _bounded_lru_get(
         _OBSERVER_STATE_CACHE, key, maxsize=_OBSERVER_STATE_CACHE_MAXSIZE
     )
 
@@ -55,7 +55,7 @@ def _observer_cache_get(key: _ObserverStateCacheKey) -> CartesianCoordinates | N
 def _observer_cache_put(
     key: _ObserverStateCacheKey, coords: CartesianCoordinates
 ) -> None:
-    bounded_lru_put(
+    _bounded_lru_put(
         _OBSERVER_STATE_CACHE, key, coords, maxsize=_OBSERVER_STATE_CACHE_MAXSIZE
     )
 

@@ -34,11 +34,12 @@ def convert_mpc_packed_dates(pf_tt: npt.ArrayLike) -> Time:
     mjd_tt : `~astropy.time.core.Time` (N)
         Epochs in TT MJDs.
     """
-    isot_tt = []
-    for epoch in pf_tt:
-        isot_tt.append(_unpack_mpc_date(epoch))
+    from adam_core import _rust_native as _rn
 
-    return Time(isot_tt)
+    # One Rust crossing decodes the complete input batch; Astropy remains the
+    # external time-object compatibility boundary.
+    isot_tt = _rn.unpack_mpc_dates_isot([str(epoch) for epoch in pf_tt])
+    return Time(isot_tt, format="isot", scale="tt")
 
 
 def pack_numbered_designation(designation: str) -> str:

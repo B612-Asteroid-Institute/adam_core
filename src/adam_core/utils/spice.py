@@ -16,7 +16,7 @@ from ..constants import KM_P_AU, S_P_DAY
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..time import Timestamp
-from .bounded_lru import bounded_lru_get, bounded_lru_put
+from .bounded_lru import _bounded_lru_get, _bounded_lru_put
 from .spice_backend import get_backend
 
 DEFAULT_KERNELS = [
@@ -78,11 +78,11 @@ def _query_states_km_kms_batch(
 
 
 def _spkez_cache_get(key: _SpkezCacheKey) -> np.ndarray | None:
-    return bounded_lru_get(_SPKEZ_CACHE, key, maxsize=_SPKEZ_CACHE_MAXSIZE)
+    return _bounded_lru_get(_SPKEZ_CACHE, key, maxsize=_SPKEZ_CACHE_MAXSIZE)
 
 
 def _spkez_cache_put(key: _SpkezCacheKey, state_au_aud: np.ndarray) -> None:
-    bounded_lru_put(_SPKEZ_CACHE, key, state_au_aud, maxsize=_SPKEZ_CACHE_MAXSIZE)
+    _bounded_lru_put(_SPKEZ_CACHE, key, state_au_aud, maxsize=_SPKEZ_CACHE_MAXSIZE)
 
 
 def clear_spkez_cache() -> None:

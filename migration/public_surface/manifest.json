@@ -12,13 +12,13 @@
     "plotting_policy": "plotting/display may remain Python; all other symbols require review"
   },
   "summary": {
-    "symbols": 563,
+    "symbols": 559,
     "by_kind": {
       "class": 77,
       "classmethod": 29,
       "constant": 54,
       "constructor": 4,
-      "function": 199,
+      "function": 195,
       "method": 133,
       "property": 67
     },
@@ -36,14 +36,14 @@
       "propagator": 6,
       "ray_cluster": 1,
       "time": 38,
-      "utils": 50
+      "utils": 46
     },
     "by_implementation_class": {
       "compatibility_data_or_external_generic": 129,
-      "mixed_rust_python_gap": 54,
+      "mixed_rust_python_gap": 61,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 287,
-      "rust_veneer_candidate_see_domain_audit": 77
+      "python_gap_or_external_boundary": 268,
+      "rust_veneer_candidate_see_domain_audit": 85
     },
     "plotting_exemption_candidates": 16,
     "unreviewed": 0
@@ -5071,7 +5071,7 @@
       "kind": "constant",
       "domain": "dynamics",
       "source": "src/adam_core/dynamics/impacts.py",
-      "line": 24,
+      "line": 23,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -5099,12 +5099,12 @@
       "kind": "class",
       "domain": "dynamics",
       "source": "src/adam_core/dynamics/impacts.py",
-      "line": 43,
+      "line": 42,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": false,
         "pyarrow_reference": false,
@@ -5127,12 +5127,12 @@
       "kind": "classmethod",
       "domain": "dynamics",
       "source": "src/adam_core/dynamics/impacts.py",
-      "line": 54,
+      "line": 53,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": false,
         "numpy_reference": false,
         "pyarrow_reference": false,
@@ -5140,10 +5140,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -5155,7 +5155,7 @@
       "kind": "class",
       "domain": "dynamics",
       "source": "src/adam_core/dynamics/impacts.py",
-      "line": 63,
+      "line": 67,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -5183,7 +5183,7 @@
       "kind": "method",
       "domain": "dynamics",
       "source": "src/adam_core/dynamics/impacts.py",
-      "line": 80,
+      "line": 84,
       "explicit_export": null,
       "plotting_exemption_candidate": true,
       "signals": {
@@ -5211,7 +5211,7 @@
       "kind": "constant",
       "domain": "dynamics",
       "source": "src/adam_core/dynamics/impacts.py",
-      "line": 28,
+      "line": 27,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -5239,7 +5239,7 @@
       "kind": "class",
       "domain": "dynamics",
       "source": "src/adam_core/dynamics/impacts.py",
-      "line": 90,
+      "line": 94,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -5267,7 +5267,7 @@
       "kind": "method",
       "domain": "dynamics",
       "source": "src/adam_core/dynamics/impacts.py",
-      "line": 100,
+      "line": 104,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -5295,7 +5295,7 @@
       "kind": "class",
       "domain": "dynamics",
       "source": "src/adam_core/dynamics/impacts.py",
-      "line": 31,
+      "line": 30,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -5323,23 +5323,23 @@
       "kind": "function",
       "domain": "dynamics",
       "source": "src/adam_core/dynamics/impacts.py",
-      "line": 202,
+      "line": 201,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
-        "pyarrow_reference": true,
-        "quivr_reference": true,
+        "pyarrow_reference": false,
+        "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -5351,7 +5351,7 @@
       "kind": "function",
       "domain": "dynamics",
       "source": "src/adam_core/dynamics/impacts.py",
-      "line": 146,
+      "line": 150,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -5379,12 +5379,12 @@
       "kind": "function",
       "domain": "dynamics",
       "source": "src/adam_core/dynamics/impacts.py",
-      "line": 313,
+      "line": 305,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": false,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -5392,10 +5392,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -5407,7 +5407,7 @@
       "kind": "function",
       "domain": "dynamics",
       "source": "src/adam_core/dynamics/impacts.py",
-      "line": 286,
+      "line": 278,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -5804,7 +5804,7 @@
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": false,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -5812,10 +5812,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -6336,10 +6336,10 @@
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
-        "pyarrow_reference": false,
+        "pyarrow_reference": true,
         "quivr_reference": true,
         "external_io_reference": false
       },
@@ -6359,7 +6359,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 275,
+      "line": 260,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6387,7 +6387,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 360,
+      "line": 318,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6415,7 +6415,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 339,
+      "line": 297,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6471,13 +6471,13 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 317,
+      "line": 268,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
         "rust_reference": false,
-        "python_loop": true,
+        "python_loop": false,
         "numpy_reference": false,
         "pyarrow_reference": false,
         "quivr_reference": false,
@@ -6499,13 +6499,13 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 294,
+      "line": 264,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
         "rust_reference": false,
-        "python_loop": true,
+        "python_loop": false,
         "numpy_reference": false,
         "pyarrow_reference": false,
         "quivr_reference": false,
@@ -6527,12 +6527,12 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 425,
+      "line": 407,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": false,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -6540,10 +6540,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -6555,12 +6555,12 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 403,
+      "line": 375,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": false,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -6568,10 +6568,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -6583,12 +6583,12 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 381,
+      "line": 339,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": false,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -6596,10 +6596,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -6611,12 +6611,12 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 434,
+      "line": 439,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -6624,10 +6624,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -6667,7 +6667,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 578,
+      "line": 599,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6723,7 +6723,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 641,
+      "line": 662,
       "explicit_export": null,
       "plotting_exemption_candidate": true,
       "signals": {
@@ -6751,7 +6751,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 504,
+      "line": 525,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8431,7 +8431,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/fitted_orbits.py",
-      "line": 158,
+      "line": 137,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8459,7 +8459,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/fitted_orbits.py",
-      "line": 128,
+      "line": 107,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8487,7 +8487,7 @@
       "kind": "method",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/fitted_orbits.py",
-      "line": 141,
+      "line": 120,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8520,18 +8520,18 @@
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
-        "python_loop": true,
-        "numpy_reference": false,
+        "rust_reference": true,
+        "python_loop": false,
+        "numpy_reference": true,
         "pyarrow_reference": true,
         "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -8543,7 +8543,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/fitted_orbits.py",
-      "line": 80,
+      "line": 59,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8795,7 +8795,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 585,
+      "line": 535,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8823,7 +8823,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 314,
+      "line": 264,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8851,7 +8851,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 185,
+      "line": 135,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8879,12 +8879,12 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 99,
+      "line": 82,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -8892,10 +8892,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -8907,12 +8907,12 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 30,
+      "line": 29,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
         "pyarrow_reference": true,
@@ -8920,10 +8920,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -9159,23 +9159,23 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/outliers.py",
-      "line": 24,
+      "line": 26,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
-        "numpy_reference": false,
+        "numpy_reference": true,
         "pyarrow_reference": false,
         "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -9187,7 +9187,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/outliers.py",
-      "line": 59,
+      "line": 66,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12239,7 +12239,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/api.py",
-      "line": 137,
+      "line": 140,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12267,7 +12267,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/api.py",
-      "line": 230,
+      "line": 233,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12295,7 +12295,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/api.py",
-      "line": 201,
+      "line": 204,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12323,7 +12323,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/api.py",
-      "line": 168,
+      "line": 171,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12351,7 +12351,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/api.py",
-      "line": 148,
+      "line": 151,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12379,7 +12379,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/api.py",
-      "line": 77,
+      "line": 82,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12389,7 +12389,7 @@
         "numpy_reference": false,
         "pyarrow_reference": false,
         "quivr_reference": false,
-        "external_io_reference": true
+        "external_io_reference": false
       },
       "review_status": "domain_audited",
       "implementation_class": "python_gap_or_external_boundary",
@@ -12407,7 +12407,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/api.py",
-      "line": 65,
+      "line": 72,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12417,7 +12417,7 @@
         "numpy_reference": false,
         "pyarrow_reference": false,
         "quivr_reference": false,
-        "external_io_reference": true
+        "external_io_reference": false
       },
       "review_status": "domain_audited",
       "implementation_class": "python_gap_or_external_boundary",
@@ -12435,7 +12435,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/api.py",
-      "line": 71,
+      "line": 77,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12445,7 +12445,7 @@
         "numpy_reference": false,
         "pyarrow_reference": false,
         "quivr_reference": false,
-        "external_io_reference": true
+        "external_io_reference": false
       },
       "review_status": "domain_audited",
       "implementation_class": "python_gap_or_external_boundary",
@@ -12463,7 +12463,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/api.py",
-      "line": 83,
+      "line": 87,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12473,7 +12473,7 @@
         "numpy_reference": false,
         "pyarrow_reference": false,
         "quivr_reference": false,
-        "external_io_reference": true
+        "external_io_reference": false
       },
       "review_status": "domain_audited",
       "implementation_class": "python_gap_or_external_boundary",
@@ -12491,7 +12491,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/api.py",
-      "line": 88,
+      "line": 91,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12519,7 +12519,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/api.py",
-      "line": 258,
+      "line": 261,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12883,7 +12883,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude.py",
-      "line": 233,
+      "line": 209,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12911,7 +12911,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude.py",
-      "line": 282,
+      "line": 258,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12939,7 +12939,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude.py",
-      "line": 67,
+      "line": 61,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12967,23 +12967,23 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude.py",
-      "line": 159,
+      "line": 153,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
-        "pyarrow_reference": true,
+        "pyarrow_reference": false,
         "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.6",
       "audit_document": "migration/public_surface/photometry_constants.md"
     },
@@ -12995,7 +12995,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude.py",
-      "line": 331,
+      "line": 307,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13028,18 +13028,18 @@
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": false,
-        "numpy_reference": true,
+        "numpy_reference": false,
         "pyarrow_reference": false,
         "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.6",
       "audit_document": "migration/public_surface/photometry_constants.md"
     },
@@ -13051,7 +13051,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 102,
+      "line": 97,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13079,7 +13079,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 83,
+      "line": 78,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14472,118 +14472,6 @@
       "audit_document": "migration/public_surface/io_queries_utilities.md"
     },
     {
-      "id": "adam_core.utils.bounded_lru:bounded_lru_get",
-      "module": "adam_core.utils.bounded_lru",
-      "qualname": "bounded_lru_get",
-      "name": "bounded_lru_get",
-      "kind": "function",
-      "domain": "utils",
-      "source": "src/adam_core/utils/bounded_lru.py",
-      "line": 11,
-      "explicit_export": null,
-      "plotting_exemption_candidate": false,
-      "signals": {
-        "plotting": false,
-        "rust_reference": false,
-        "python_loop": false,
-        "numpy_reference": false,
-        "pyarrow_reference": false,
-        "quivr_reference": false,
-        "external_io_reference": false
-      },
-      "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
-      "rust_entrypoint": null,
-      "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
-      "tracking_issue": "personal-cmy.37.4",
-      "audit_document": "migration/public_surface/io_queries_utilities.md"
-    },
-    {
-      "id": "adam_core.utils.bounded_lru:bounded_lru_put",
-      "module": "adam_core.utils.bounded_lru",
-      "qualname": "bounded_lru_put",
-      "name": "bounded_lru_put",
-      "kind": "function",
-      "domain": "utils",
-      "source": "src/adam_core/utils/bounded_lru.py",
-      "line": 27,
-      "explicit_export": null,
-      "plotting_exemption_candidate": false,
-      "signals": {
-        "plotting": false,
-        "rust_reference": false,
-        "python_loop": true,
-        "numpy_reference": false,
-        "pyarrow_reference": false,
-        "quivr_reference": false,
-        "external_io_reference": false
-      },
-      "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
-      "rust_entrypoint": null,
-      "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
-      "tracking_issue": "personal-cmy.37.4",
-      "audit_document": "migration/public_surface/io_queries_utilities.md"
-    },
-    {
-      "id": "adam_core.utils.chunking:pad_to_fixed_size",
-      "module": "adam_core.utils.chunking",
-      "qualname": "pad_to_fixed_size",
-      "name": "pad_to_fixed_size",
-      "kind": "function",
-      "domain": "utils",
-      "source": "src/adam_core/utils/chunking.py",
-      "line": 4,
-      "explicit_export": null,
-      "plotting_exemption_candidate": false,
-      "signals": {
-        "plotting": false,
-        "rust_reference": false,
-        "python_loop": true,
-        "numpy_reference": true,
-        "pyarrow_reference": false,
-        "quivr_reference": false,
-        "external_io_reference": false
-      },
-      "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
-      "rust_entrypoint": null,
-      "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
-      "tracking_issue": "personal-cmy.37.4",
-      "audit_document": "migration/public_surface/io_queries_utilities.md"
-    },
-    {
-      "id": "adam_core.utils.chunking:process_in_chunks",
-      "module": "adam_core.utils.chunking",
-      "qualname": "process_in_chunks",
-      "name": "process_in_chunks",
-      "kind": "function",
-      "domain": "utils",
-      "source": "src/adam_core/utils/chunking.py",
-      "line": 26,
-      "explicit_export": null,
-      "plotting_exemption_candidate": false,
-      "signals": {
-        "plotting": false,
-        "rust_reference": false,
-        "python_loop": true,
-        "numpy_reference": false,
-        "pyarrow_reference": false,
-        "quivr_reference": false,
-        "external_io_reference": false
-      },
-      "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
-      "rust_entrypoint": null,
-      "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
-      "tracking_issue": "personal-cmy.37.4",
-      "audit_document": "migration/public_surface/io_queries_utilities.md"
-    },
-    {
       "id": "adam_core.utils.helpers.observations:make_observations",
       "module": "adam_core.utils.helpers.observations",
       "qualname": "make_observations",
@@ -14736,7 +14624,7 @@
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -14744,10 +14632,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.4",
       "audit_document": "migration/public_surface/io_queries_utilities.md"
     },
@@ -14759,7 +14647,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 157,
+      "line": 158,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14787,7 +14675,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 44,
+      "line": 45,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14815,7 +14703,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 82,
+      "line": 83,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14843,7 +14731,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 124,
+      "line": 125,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14871,7 +14759,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 295,
+      "line": 296,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14899,7 +14787,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 186,
+      "line": 187,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14927,7 +14815,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 223,
+      "line": 224,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14955,7 +14843,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 262,
+      "line": 263,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

@@ -20,7 +20,7 @@ from .._rust import (
     spherical_to_cartesian_numpy,
 )
 from ..constants import Constants as c
-from ..utils.bounded_lru import bounded_lru_get, bounded_lru_put
+from ..utils.bounded_lru import _bounded_lru_get, _bounded_lru_put
 from .._rust.arrow import (
     ensure_spice_backend,
     stamp_adam_core_metadata,
@@ -71,11 +71,11 @@ _TRANSLATION_CACHE_ALLOWED = {
 
 
 def _translation_cache_get(key: _TranslationCacheKey) -> np.ndarray | None:
-    return bounded_lru_get(_TRANSLATION_CACHE, key, maxsize=_TRANSLATION_CACHE_MAXSIZE)
+    return _bounded_lru_get(_TRANSLATION_CACHE, key, maxsize=_TRANSLATION_CACHE_MAXSIZE)
 
 
 def _translation_cache_put(key: _TranslationCacheKey, vectors: np.ndarray) -> None:
-    bounded_lru_put(
+    _bounded_lru_put(
         _TRANSLATION_CACHE, key, vectors, maxsize=_TRANSLATION_CACHE_MAXSIZE
     )
 

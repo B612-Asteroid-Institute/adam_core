@@ -8,7 +8,7 @@ K = TypeVar("K", bound=Hashable)
 V = TypeVar("V")
 
 
-def bounded_lru_get(cache: "OrderedDict[K, V]", key: K, *, maxsize: int) -> V | None:
+def _bounded_lru_get(cache: "OrderedDict[K, V]", key: K, *, maxsize: int) -> V | None:
     """
     Get a value from a bounded LRU cache.
 
@@ -24,7 +24,7 @@ def bounded_lru_get(cache: "OrderedDict[K, V]", key: K, *, maxsize: int) -> V | 
     return v
 
 
-def bounded_lru_put(
+def _bounded_lru_put(
     cache: "OrderedDict[K, V]", key: K, value: V, *, maxsize: int
 ) -> None:
     """

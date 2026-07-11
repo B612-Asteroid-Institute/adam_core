@@ -71,9 +71,9 @@ query paths depend on them, but they are not counted as public API commitments.
 | OEM | KVN parser/writer and file read/write | **Gap:** validation, transforms, metadata, unit/covariance conversion, row loops, and Orbits reconstruction remain Python; propagated writer also invokes Python propagation |
 | OpenSpace | Lua node and initialization text rendering | **Gap:** orbit transform, model graph, CSV generation, loops, path handling, and all asset file orchestration remain Python |
 | SPK | low-level Rust DAF writer | **Gap:** propagation dispatch, transform, grouping, Chebyshev fit/windows, segment preparation, and final orchestration remain Python |
-| MPC | eight scalar pack/unpack functions and scalar packed-date decode | Scalar designation APIs satisfy one crossing; **gap:** `convert_mpc_packed_dates` loops through Rust and wraps Astropy in Python |
+| MPC | eight scalar pack/unpack functions and batched packed-date decode | Designation APIs and `convert_mpc_packed_dates` satisfy one Rust crossing; Astropy `Time` construction is the external compatibility boundary |
 | SPICE backend | kernel readers/writers and low-level backend methods | Low-level methods are thin; **gap:** high-level setup/data discovery, obscodes file read, Python cache/dedup, time/frame/unit conversion, and typed table assembly |
-| Chunk/LRU helpers | none | **Gap if retained:** Python implementations; otherwise retire from public-ish surface and remove adam-core runtime dependency |
+| Chunk/LRU helpers | retired public-ish names | Unused numeric chunking module removed; LRU functions renamed private and retained only as the documented Python container cache-policy boundary around Rust semantic calls; private OD/query iterators remain tracked by their fused-workflow beads |
 | Parallel/Ray | none | **Gap:** arbitrary Python callable/ObjectRef orchestration cannot be treated as a permanent exception; migrate callers to fused Rayon operations and retire, or define a Rust-owned replacement |
 
 The previous fixture files for ADES, OEM, OpenSpace, and MPC are useful parity
@@ -224,9 +224,10 @@ The scalar designation operations are direct one-call veneers over Rust:
 - `unpack_survey_designation`
 - `unpack_mpc_designation`
 
-`convert_mpc_packed_dates` is not: Python loops over `_unpack_mpc_date`, making
-one crossing per element, and builds an Astropy `Time`. It needs a batched Rust
-time result and one compatibility adaptation.
+`convert_mpc_packed_dates` now decodes the complete input batch through
+`unpack_mpc_dates_isot` in one Rust crossing and constructs the externally owned
+Astropy `Time` compatibility object once. Rust-Instant timing covers the shared
+batched decoder with Astropy/PyO3 conversion excluded.
 
 ### SPICE utility APIs
 
@@ -247,13 +248,13 @@ breadth to spicekit.
 
 ### Generic utilities and execution
 
-`bounded_lru_get`/`bounded_lru_put`, `pad_to_fixed_size`, and
-`process_in_chunks` are Python-only public-ish definitions. The iter helpers are
-private. Porting a cache of arbitrary Python objects is not automatically the
-right architecture, but “Python-specific” is not a waiver: either eliminate the
-helper by moving its adam-core-owned consumer state into Rust, or deprecate and
-retire the surface. Retained numeric chunk/pad behavior should be a batched Rust
-operation with parity tests.
+The public-ish `bounded_lru_get`/`bounded_lru_put` names and unused
+`pad_to_fixed_size`/`process_in_chunks` module have been retired. One shared
+underscore-private bounded-LRU helper remains solely as the explicit Python
+container cache-policy boundary around Rust semantic state calls; it is not an
+adam-core public API. `_iterate_chunks` and `_iterate_chunk_indices` remain
+private implementation details of OD/IOD and Horizons and are eliminated with
+their fused workflow beads rather than promoted as standalone public APIs.
 
 `adam_core.parallel` publicly names `ParallelBackend`, `SequentialBackend`,
 `RayBackend`, `get_backend`, and `resolve_max_processes`; their methods expose

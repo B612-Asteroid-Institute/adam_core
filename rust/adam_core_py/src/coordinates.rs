@@ -2216,6 +2216,48 @@ fn unpack_mpc_date_isot(epoch_pf: &str) -> PyResult<String> {
         .map_err(mpc_designation_error)
 }
 
+fn unpack_mpc_dates(
+    values: &[String],
+) -> Result<Vec<String>, adam_core_rs_coords::MpcDesignationError> {
+    values
+        .iter()
+        .map(|value| adam_core_rs_coords::mpc_designations::unpack_mpc_date_isot(value))
+        .collect()
+}
+
+#[pyfunction]
+fn unpack_mpc_dates_isot(values: Vec<String>) -> PyResult<Vec<String>> {
+    unpack_mpc_dates(&values).map_err(mpc_designation_error)
+}
+
+#[pyfunction]
+#[pyo3(signature = (values, reps, trials, warmup_reps=1))]
+fn benchmark_unpack_mpc_dates_isot(
+    values: Vec<String>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let run_once = || unpack_mpc_dates(&values).map_err(mpc_designation_error);
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            black_box(run_once()?);
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            black_box(run_once()?);
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
+}
+
 /// ADES parser (bead personal-cmy.20 slice C): parse the observation blocks
 /// of an ADES string into a quivr-compatible `ADESObservations` IPC payload
 /// plus the list of unknown column names (for the caller to log). Context
@@ -5108,6 +5150,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ades_obs_context_to_string, m)?)?;
     m.add_function(wrap_pyfunction!(ades_parse_obs_contexts, m)?)?;
     m.add_function(wrap_pyfunction!(unpack_mpc_date_isot, m)?)?;
+    m.add_function(wrap_pyfunction!(unpack_mpc_dates_isot, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_unpack_mpc_dates_isot, m)?)?;
     m.add_function(wrap_pyfunction!(oem_write_kvn, m)?)?;
     m.add_function(wrap_pyfunction!(oem_parse_kvn, m)?)?;
     m.add_function(wrap_pyfunction!(openspace_lua_to_string, m)?)?;
