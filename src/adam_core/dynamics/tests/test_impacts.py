@@ -108,6 +108,14 @@ class MockImpactPropagator(Propagator, ImpactMixin):
         return propagated, impact
 
 
+def test_default_collision_conditions_match_legacy_constants():
+    conditions = CollisionConditions.default()
+    assert conditions.condition_id.to_pylist() == ["Default"]
+    assert conditions.collision_object.code.to_pylist() == ["EARTH"]
+    assert conditions.collision_distance.to_pylist() == [EARTH_RADIUS_KM]
+    assert conditions.stopping_condition.to_pylist() == [True]
+
+
 def test_calculate_impacts():
     """
     Tests the i/o of calculate_impacts
@@ -218,6 +226,30 @@ def test_calculate_impact_probabilities():
     )
 
     ip = calculate_impact_probabilities(variants, impacts, conditions=impact_conditions)
+
+    # Native samples contain only the pure Rust grouped reduction. PyArrow,
+    # NumPy, PyO3, and typed-table assembly stay outside the timed region.
+    from adam_core import _rust_native
+
+    samples = _rust_native.benchmark_impact_probability_stats_numpy(
+        variants.orbit_id.to_pylist(),
+        impacts.orbit_id.to_pylist(),
+        impacts.condition_id.to_pylist(),
+        np.ascontiguousarray(
+            impacts.coordinates.time.days.to_numpy(zero_copy_only=False),
+            dtype=np.int64,
+        ),
+        np.ascontiguousarray(
+            impacts.coordinates.time.nanos.to_numpy(zero_copy_only=False),
+            dtype=np.int64,
+        ),
+        impacts.coordinates.time.scale,
+        impact_conditions.condition_id.to_pylist(),
+        2,
+        2,
+        1,
+    )
+    assert all(sample > 0.0 for trial in samples for sample in trial)
 
     desired = ImpactProbabilities.from_kwargs(
         condition_id=["1", "1", "1"],

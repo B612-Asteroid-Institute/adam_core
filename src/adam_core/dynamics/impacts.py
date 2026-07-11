@@ -51,11 +51,16 @@ class CollisionConditions(qv.Table):
 
     @classmethod
     def default(cls) -> "CollisionConditions":
+        from adam_core import _rust_native
+
+        condition_id, object_code, distance, stopping = (
+            _rust_native.default_collision_condition_values()
+        )
         return cls.from_kwargs(
-            condition_id=["Default"],
-            collision_object=Origin.from_kwargs(code=["EARTH"]),
-            collision_distance=[EARTH_RADIUS_KM],
-            stopping_condition=[True],
+            condition_id=[condition_id],
+            collision_object=Origin.from_kwargs(code=[object_code]),
+            collision_distance=[distance],
+            stopping_condition=[stopping],
         )
 
 
