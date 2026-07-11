@@ -56,10 +56,12 @@ def bandpass_integrals_for_composition(
 
 
 def bandpass_composition_key(composition: BandpassComposition) -> BandpassComposition:
+    from adam_core import _rust_native as _rn
+
     if isinstance(composition, str):
-        if not composition:
-            raise ValueError("composition template_id must be non-empty")
-        return composition
+        template_id, mix = _rn.bandpasses_composition_key(composition, None)
+        assert mix is None
+        return str(template_id)
     try:
         w_c, w_s = composition
     except Exception as e:
@@ -67,16 +69,9 @@ def bandpass_composition_key(composition: BandpassComposition) -> BandpassCompos
             "composition must be either a template_id string (e.g. 'C') "
             "or a (weight_C, weight_S) tuple"
         ) from e
-    w_c = float(w_c)
-    w_s = float(w_s)
-    if not np.isfinite(w_c) or not np.isfinite(w_s):
-        raise ValueError("composition weights must be finite")
-    if w_c < 0.0 or w_s < 0.0:
-        raise ValueError("composition weights must be non-negative")
-    s = w_c + w_s
-    if s <= 0.0:
-        raise ValueError("at least one composition weight must be > 0")
-    return (w_c / s, w_s / s)
+    template_id, mix = _rn.bandpasses_composition_key(None, (float(w_c), float(w_s)))
+    assert template_id is None
+    return (float(mix[0]), float(mix[1]))
 
 
 @lru_cache(maxsize=None)

@@ -77,7 +77,7 @@ fn trapezoid(y: &[f64], x: &[f64]) -> f64 {
 
 // --- parquet loading ---------------------------------------------------------------
 
-fn read_parquet_batches(path: &Path) -> SchemaResult<Vec<arrow_array::RecordBatch>> {
+pub fn read_bandpass_parquet_batches(path: &Path) -> SchemaResult<Vec<arrow_array::RecordBatch>> {
     let file = File::open(path)
         .map_err(|err| invalid(format!("failed to open {}: {err}", path.display())))?;
     let reader = ParquetRecordBatchReaderBuilder::try_new(file)
@@ -175,13 +175,15 @@ pub struct BandpassData {
 
 impl BandpassData {
     pub fn load(data_dir: &Path) -> SchemaResult<Self> {
-        let curves_batches = read_parquet_batches(&data_dir.join("bandpass_curves.parquet"))?;
+        let curves_batches =
+            read_bandpass_parquet_batches(&data_dir.join("bandpass_curves.parquet"))?;
         let filter_ids = string_column(&curves_batches, "filter_id")?;
         let wavelengths = f64_list_column(&curves_batches, "wavelength_nm")?;
         let throughputs = f64_list_column(&curves_batches, "throughput")?;
         let curves: Vec<(Vec<f64>, Vec<f64>)> = wavelengths.into_iter().zip(throughputs).collect();
 
-        let map_batches = read_parquet_batches(&data_dir.join("observatory_band_map.parquet"))?;
+        let map_batches =
+            read_bandpass_parquet_batches(&data_dir.join("observatory_band_map.parquet"))?;
         let map_keys = string_column(&map_batches, "key")?;
         let map_filters = string_column(&map_batches, "filter_id")?;
         // pc.index_in returns the FIRST match; keep the first mapping per key.
@@ -191,7 +193,7 @@ impl BandpassData {
         }
 
         let integral_batches =
-            read_parquet_batches(&data_dir.join("template_bandpass_integrals.parquet"))?;
+            read_bandpass_parquet_batches(&data_dir.join("template_bandpass_integrals.parquet"))?;
         let template_ids = string_column(&integral_batches, "template_id")?;
         let integral_filters = string_column(&integral_batches, "filter_id")?;
         let integral_values = f64_column(&integral_batches, "integral_photon")?;
@@ -206,7 +208,8 @@ impl BandpassData {
                 .or_insert(value);
         }
 
-        let solar_batches = read_parquet_batches(&data_dir.join("solar_spectrum.parquet"))?;
+        let solar_batches =
+            read_bandpass_parquet_batches(&data_dir.join("solar_spectrum.parquet"))?;
         let solar_wl = f64_column(&solar_batches, "wavelength_nm")?;
         let solar_flux = f64_column(&solar_batches, "flux")?;
 

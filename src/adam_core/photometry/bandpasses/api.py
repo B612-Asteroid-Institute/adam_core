@@ -61,28 +61,31 @@ def _to_string_list(
     return [str(value) for value in _to_string_array(values).to_pylist()]
 
 
+def _load_table(cls, filename: str):
+    from adam_core import _rust_native as _rn
+
+    batches = _rn.bandpasses_load_table(_data_dir_str(), filename)
+    return cls.from_pyarrow(pa.Table.from_batches(batches))
+
+
 @lru_cache(maxsize=1)
 def load_bandpass_curves() -> BandpassCurves:
-    path = _DATA_DIR.joinpath(_BANDPASS_CURVES_FILE)
-    return BandpassCurves.from_parquet(path)
+    return _load_table(BandpassCurves, _BANDPASS_CURVES_FILE)
 
 
 @lru_cache(maxsize=1)
 def load_observatory_band_map() -> ObservatoryBandMap:
-    path = _DATA_DIR.joinpath(_OBS_BAND_MAP_FILE)
-    return ObservatoryBandMap.from_parquet(path)
+    return _load_table(ObservatoryBandMap, _OBS_BAND_MAP_FILE)
 
 
 @lru_cache(maxsize=1)
 def load_asteroid_templates() -> AsteroidTemplates:
-    path = _DATA_DIR.joinpath(_TEMPLATES_FILE)
-    return AsteroidTemplates.from_parquet(path)
+    return _load_table(AsteroidTemplates, _TEMPLATES_FILE)
 
 
 @lru_cache(maxsize=1)
 def load_template_integrals() -> TemplateBandpassIntegrals:
-    path = _DATA_DIR.joinpath(_INTEGRALS_FILE)
-    return TemplateBandpassIntegrals.from_parquet(path)
+    return _load_table(TemplateBandpassIntegrals, _INTEGRALS_FILE)
 
 
 def map_to_canonical_filter_bands(

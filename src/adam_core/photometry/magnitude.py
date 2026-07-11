@@ -2,7 +2,6 @@ from typing import Union
 
 import numpy as np
 import numpy.typing as npt
-import pyarrow as pa
 import pyarrow.compute as pc
 
 from .._rust.api import (
@@ -19,14 +18,9 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import OriginCodes
 from ..observations.exposures import Exposures
 from ..observers.observers import Observers
-from .magnitude_common import (
-    BandpassComposition,
-    assert_filter_ids_have_curves,
-)
+from .bandpasses.api import _composition_args, _data_dir_str
+from .magnitude_common import BandpassComposition, assert_filter_ids_have_curves
 from .magnitude_common import bandpass_composition_key as _bandpass_composition_key
-from .magnitude_common import (
-    bandpass_delta_table_for_composition as _bandpass_delta_table_for_composition,
-)
 from .magnitude_common import (
     bandpass_delta_table_for_composition_cached as _bandpass_delta_table_for_composition_cached,
 )
@@ -196,38 +190,20 @@ def convert_magnitude(
             "source_filter_id/target_filter_id must match magnitude length"
         )
 
-    # Contract: these are canonical vendored filter IDs (call find_suggested_filter_bands first).
-    assert_filter_ids_have_curves(src)
-    assert_filter_ids_have_curves(tgt)
+    from adam_core import _rust_native as _rn
 
-    filter_ids, filter_ids_arrow, _, _ = _bandpass_filter_id_table()
-    delta_table = _bandpass_delta_table_for_composition(composition)
-    if int(delta_table.shape[0]) != len(filter_ids):
-        raise ValueError("Bandpass delta table length mismatch.")
-
-    # Fast Arrow mapping: filter_id strings -> integer IDs.
-    src_arr = pa.array(src, type=pa.large_string())
-    tgt_arr = pa.array(tgt, type=pa.large_string())
-    src_ids_arr = pc.fill_null(pc.index_in(src_arr, value_set=filter_ids_arrow), -1)
-    tgt_ids_arr = pc.fill_null(pc.index_in(tgt_arr, value_set=filter_ids_arrow), -1)
-    src_ids = np.asarray(src_ids_arr.to_numpy(zero_copy_only=False), dtype=np.int32)
-    tgt_ids = np.asarray(tgt_ids_arr.to_numpy(zero_copy_only=False), dtype=np.int32)
-    if np.any(src_ids < 0) or np.any(tgt_ids < 0):
-        missing_src = np.unique(
-            np.asarray(src, dtype=object)[src_ids < 0].astype(str)
-        ).tolist()
-        missing_tgt = np.unique(
-            np.asarray(tgt, dtype=object)[tgt_ids < 0].astype(str)
-        ).tolist()
-        raise ValueError(
-            f"Unknown canonical filter_ids for bandpass conversion. "
-            f"missing source={missing_src}, missing target={missing_tgt}. "
-            "Run find_suggested_filter_bands() first to map observatory bands to canonical filter_ids."
-        )
-
-    delta_src = delta_table[src_ids]
-    delta_tgt = delta_table[tgt_ids]
-    return mags + (delta_tgt - delta_src)
+    template_id, mix = _composition_args(composition)
+    return np.asarray(
+        _rn.bandpasses_convert_magnitude(
+            _data_dir_str(),
+            np.ascontiguousarray(mags),
+            [str(value) for value in src.tolist()],
+            [str(value) for value in tgt.tolist()],
+            template_id,
+            mix,
+        ),
+        dtype=np.float64,
+    )
 
 
 def calculate_apparent_magnitude_v(

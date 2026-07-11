@@ -2382,6 +2382,69 @@ fn bandpass_data_for(
     adam_core_rs_coords::bandpass_data(std::path::Path::new(data_dir)).map_err(bandpass_value_error)
 }
 
+/// Rust-owned public table loader. Python receives Arrow batches and wraps
+/// them directly as the declared quivr table; no Python file I/O occurs.
+#[pyfunction]
+fn bandpasses_load_table<'py>(
+    py: Python<'py>,
+    data_dir: &str,
+    filename: &str,
+) -> PyResult<Vec<PyObject>> {
+    let allowed = [
+        "bandpass_curves.parquet",
+        "observatory_band_map.parquet",
+        "asteroid_templates.parquet",
+        "template_bandpass_integrals.parquet",
+    ];
+    if !allowed.contains(&filename) {
+        return Err(PyValueError::new_err(format!(
+            "unsupported bandpass table: {filename}"
+        )));
+    }
+    adam_core_rs_coords::read_bandpass_parquet_batches(
+        &std::path::Path::new(data_dir).join(filename),
+    )
+    .map_err(bandpass_value_error)?
+    .into_iter()
+    .map(|batch| {
+        batch.to_pyarrow(py).map_err(|err| {
+            PyRuntimeError::new_err(format!("failed to export bandpass RecordBatch: {err}"))
+        })
+    })
+    .collect()
+}
+
+#[pyfunction]
+#[pyo3(signature = (data_dir, filename, reps, trials, warmup_reps=1))]
+fn benchmark_bandpasses_load_table(
+    data_dir: &str,
+    filename: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let path = std::path::Path::new(data_dir).join(filename);
+    let run_once =
+        || adam_core_rs_coords::read_bandpass_parquet_batches(&path).map_err(bandpass_value_error);
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            black_box(run_once()?);
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            black_box(run_once()?);
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
+}
+
 /// Bandpass photometry runtime (bead personal-cmy.24): thin bindings over the
 /// Rust-native vendored-data load + compute in adam_core_rs_coords::bandpasses.
 #[pyfunction]
@@ -2489,6 +2552,168 @@ fn bandpasses_register_custom_template(
 ) -> PyResult<()> {
     adam_core_rs_coords::register_custom_template(template_id, &wavelength_nm, &reflectance)
         .map_err(bandpass_value_error)
+}
+
+#[derive(Clone)]
+struct NormalizedComposition {
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+}
+
+fn normalize_bandpass_composition(
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+) -> PyResult<NormalizedComposition> {
+    match (template_id, mix) {
+        (Some(template_id), None) => {
+            if template_id.is_empty() {
+                return Err(PyValueError::new_err(
+                    "composition template_id must be non-empty",
+                ));
+            }
+            Ok(NormalizedComposition {
+                template_id: Some(template_id),
+                mix: None,
+            })
+        }
+        (None, Some((weight_c, weight_s))) => {
+            if !weight_c.is_finite() || !weight_s.is_finite() {
+                return Err(PyValueError::new_err("composition weights must be finite"));
+            }
+            if weight_c < 0.0 || weight_s < 0.0 {
+                return Err(PyValueError::new_err(
+                    "composition weights must be non-negative",
+                ));
+            }
+            let total = weight_c + weight_s;
+            if total <= 0.0 {
+                return Err(PyValueError::new_err(
+                    "at least one composition weight must be > 0",
+                ));
+            }
+            Ok(NormalizedComposition {
+                template_id: None,
+                mix: Some((weight_c / total, weight_s / total)),
+            })
+        }
+        _ => Err(PyValueError::new_err(
+            "exactly one of template_id or mix weights is required",
+        )),
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (template_id=None, mix=None))]
+fn bandpasses_composition_key(
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+) -> PyResult<(Option<String>, Option<(f64, f64)>)> {
+    let normalized = normalize_bandpass_composition(template_id, mix)?;
+    Ok((normalized.template_id, normalized.mix))
+}
+
+fn convert_magnitudes_for_bandpasses(
+    data: &adam_core_rs_coords::BandpassData,
+    magnitudes: &[f64],
+    source_filter_ids: &[String],
+    target_filter_ids: &[String],
+    composition: &NormalizedComposition,
+) -> PyResult<Vec<f64>> {
+    if source_filter_ids.len() != magnitudes.len() || target_filter_ids.len() != magnitudes.len() {
+        return Err(PyValueError::new_err(
+            "source_filter_id/target_filter_id must match magnitude length",
+        ));
+    }
+    data.assert_filter_ids_have_curves(source_filter_ids)
+        .map_err(bandpass_value_error)?;
+    data.assert_filter_ids_have_curves(target_filter_ids)
+        .map_err(bandpass_value_error)?;
+    let deltas = data
+        .delta_table(composition.template_id.as_deref(), composition.mix)
+        .map_err(bandpass_value_error)?;
+    let filter_index: HashMap<&str, usize> = data
+        .filter_ids
+        .iter()
+        .enumerate()
+        .map(|(index, filter_id)| (filter_id.as_str(), index))
+        .collect();
+    Ok(magnitudes
+        .iter()
+        .zip(source_filter_ids)
+        .zip(target_filter_ids)
+        .map(|((&magnitude, source), target)| {
+            magnitude
+                + (deltas[filter_index[target.as_str()]] - deltas[filter_index[source.as_str()]])
+        })
+        .collect())
+}
+
+#[pyfunction]
+#[pyo3(signature = (data_dir, magnitudes, source_filter_ids, target_filter_ids, template_id=None, mix=None))]
+fn bandpasses_convert_magnitude<'py>(
+    py: Python<'py>,
+    data_dir: &str,
+    magnitudes: PyReadonlyArray1<'py, f64>,
+    source_filter_ids: Vec<String>,
+    target_filter_ids: Vec<String>,
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let composition = normalize_bandpass_composition(template_id, mix)?;
+    let data = bandpass_data_for(data_dir)?;
+    let output = convert_magnitudes_for_bandpasses(
+        data.as_ref(),
+        magnitudes.as_slice()?,
+        &source_filter_ids,
+        &target_filter_ids,
+        &composition,
+    )?;
+    Ok(output.into_pyarray(py))
+}
+
+#[pyfunction]
+#[pyo3(signature = (data_dir, magnitudes, source_filter_ids, target_filter_ids, template_id, mix, reps, trials, warmup_reps=1))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_bandpasses_convert_magnitude(
+    data_dir: &str,
+    magnitudes: PyReadonlyArray1<'_, f64>,
+    source_filter_ids: Vec<String>,
+    target_filter_ids: Vec<String>,
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let data = bandpass_data_for(data_dir)?;
+    let magnitudes = magnitudes.as_slice()?.to_vec();
+    let composition = normalize_bandpass_composition(template_id, mix)?;
+    let run_once = || {
+        convert_magnitudes_for_bandpasses(
+            &data,
+            &magnitudes,
+            &source_filter_ids,
+            &target_filter_ids,
+            &composition,
+        )
+    };
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            black_box(run_once()?);
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            black_box(run_once()?);
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
 }
 
 #[pyfunction]
@@ -4858,10 +5083,15 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(unpack_provisional_designation, m)?)?;
     m.add_function(wrap_pyfunction!(unpack_survey_designation, m)?)?;
     m.add_function(wrap_pyfunction!(unpack_mpc_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_load_table, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_bandpasses_load_table, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_filter_ids, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_get_integrals, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_compute_mix_integrals, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_delta_table, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_composition_key, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_convert_magnitude, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_bandpasses_convert_magnitude, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_delta_mag, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_color_terms, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_map_to_canonical, m)?)?;
