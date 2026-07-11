@@ -1,4 +1,6 @@
-# Complete legacy-relative performance table
+# Complete registered-parity performance table
+
+> **Scope warning:** this is complete only for the 44 APIs explicitly registered in the parity harness plus 26 adam-assist benchmark lanes. It is **not** an inventory of the complete adam-core public Python surface; class methods such as `Orbits.group_by_orbit_id`, `VariantOrbits.collapse`, and `Ephemeris.link_to_observers` were not registered and therefore do not appear below. That broader audit is tracked by `personal-cmy.37`.
 
 Generated from the canonical `rm-p1-023-canonical-variant-create-v1` artifacts. Ratios are **legacy / implementation**, so larger is faster. p50/p95 are shown together. “—” means no qualifying Rust-owned `Instant` adapter exists; a PyO3 call is not mislabeled as native Rust.
 

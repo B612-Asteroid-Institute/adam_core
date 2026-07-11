@@ -6,15 +6,36 @@ instrumentation: a blank native timing is not a runtime support failure.
 
 ## Runtime support summary
 
-- **Canonical adam-core parity registry:** 44/44 surfaces have a Rust-backed
-  compatible Python path (34 public Rust defaults, 9 Rust raw kernels, and
-  `Observers.from_codes` with a Rust default plus fallback).
+- **Selected adam-core parity registry only:** 44/44 registered surfaces have a
+  Rust-backed compatible Python path (34 public Rust defaults, 9 Rust raw
+  kernels, and `Observers.from_codes` with a Rust default plus fallback). This
+  is not the complete public API; `personal-cmy.37` is auditing exported class
+  methods, constructors, inherited table operations, I/O helpers, and other
+  functions omitted from the benchmark registry.
 - **Typed-table Arrow audit:** complete; every audited typed-table surface is a
   one-crossing Arrow facade or explicitly classified as a NumPy-flat numeric
   kernel.
 - **adam-assist package semantics:** Rust-backed propagation, sampled covariance,
   ephemeris, collision/impact workflows, and per-orbit least-squares are
   available through `adam_assist.ASSISTPropagator`.
+
+## Known Python/mixed class methods omitted from the 44-API registry
+
+The complete audit is in progress, but the orbit-table surface alone already
+contains material omissions:
+
+- `Orbits.group_by_orbit_id`: Python/PyArrow grouping loop.
+- `Orbits.dynamical_class`: Python orchestration across coordinate conversion
+  and the Rust classification kernel; not one Rust method crossing.
+- `Orbits.preview`: intentional Python/Plotly UI path.
+- `VariantOrbits.link_to_orbits`: Python/quivr linkage construction.
+- `VariantOrbits.collapse` and `collapse_by_object_id`: Python grouping/loops,
+  repeated Rust weighted-covariance calls, and Python table reconstruction.
+- `VariantEphemeris.link_to_ephemeris`, `collapse`, `collapse_by_object_id`, and
+  `collapse_sigma_points_orbit_major`: Python or mixed Python/Rust composition.
+- `Ephemeris.link_to_observers`: Python time coercion/linkage orchestration.
+- Inherited quivr table methods are Python/PyArrow infrastructure and were not
+  counted as Rust-owned adam-core methods.
 
 ## Supported only as Python + Rust composition (not yet Rust-only)
 
