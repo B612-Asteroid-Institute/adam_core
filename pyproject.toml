@@ -159,6 +159,7 @@ adam-core = { workspace = true }
 [tool.pdm.scripts]
 check = { composite = ["lint", "typecheck", "test"] }
 script-preflight = "python migration/scripts/check_pdm_ci_scripts.py"
+public-surface-check = "python migration/scripts/audit_public_surface.py --check"
 wheel-version = "python migration/scripts/write_maturin_version.py"
 wheel-build = { composite = [
   "pdm run wheel-version",
@@ -222,6 +223,7 @@ rust-quality = { composite = [
 ] }
 dev-loop = { composite = [
   "pdm run script-preflight",
+  "pdm run public-surface-check",
   "pdm run lint",
   "pdm run rust-quality",
   "pdm run rust-smoke",
