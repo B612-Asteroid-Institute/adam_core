@@ -720,8 +720,9 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
             "Monte Carlo and the auto fallback use the Rust-native RNG "
             "(statistically equivalent, not bit-identical; decision "
             "2026-07-03) and are covered by statistical unit tests. Replaces "
-            "the retired bridge.sample_orbit_variants candidate lane (bead "
-            "personal-cmy.36.10)."
+            "the retired temporary variant-sampler candidate lane (bead "
+            "personal-cmy.36.10); historical IDs remain documented only in "
+            "migration/parity/README.md."
         ),
     ),
     ApiMigration(

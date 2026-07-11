@@ -222,10 +222,10 @@ def _propagate_2body_stiff_covariance_reference(
 
     def state_map(row: np.ndarray) -> np.ndarray:
         output = _rust_runner.run(
-            "dynamics.propagate_2body",
-            orbits=row[None, :],
-            dts=dts,
-            mus=mus,
+            "dynamics.propagate_2body_arc_batch",
+            orbits=np.ascontiguousarray(row[None, :], dtype=np.float64),
+            dts=np.ascontiguousarray(dts.reshape(1, -1), dtype=np.float64),
+            mus=np.ascontiguousarray(mus, dtype=np.float64),
             max_iter=max_iter,
             tol=tol,
         )

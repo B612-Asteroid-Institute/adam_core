@@ -27,7 +27,8 @@ use arrow_array::{Array, Int64Array, RecordBatch};
 use arrow_ipc::reader::StreamReader;
 use arrow_ipc::writer::StreamWriter;
 use numpy::{
-    IntoPyArray, PyArray1, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
+    IntoPyArray, PyArray1, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2,
+    PyReadonlyArray3, PyReadwriteArray2,
 };
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
@@ -760,6 +761,42 @@ fn bound_longitude_residual_column_numpy<'py>(
         .map(|(&lon_obs, &lon_resid)| bound_longitude_value(lon_obs, lon_resid))
         .collect();
     Ok(out.into_pyarray(py))
+}
+
+/// In-place longitude wrap used by the public compatibility helper.
+///
+/// Mutating the caller-owned residual buffer preserves the legacy aliasing
+/// contract while avoiding both an output allocation and a second strided
+/// Python/NumPy assignment over the longitude column.
+#[pyfunction]
+fn bound_longitude_residual_column_in_place_numpy(
+    observed: PyReadonlyArray2<'_, f64>,
+    mut residuals: PyReadwriteArray2<'_, f64>,
+) -> PyResult<()> {
+    let obs = observed.as_array();
+    let mut res = residuals.as_array_mut();
+    if res.shape() != obs.shape() {
+        return Err(PyValueError::new_err("residuals must match observed shape"));
+    }
+    if obs.ncols() < 2 {
+        return Err(PyValueError::new_err(
+            "spherical residuals require at least 2 dimensions",
+        ));
+    }
+    let dimensions = obs.ncols();
+    if let (Some(obs_slice), Some(res_slice)) = (obs.as_slice(), res.as_slice_mut()) {
+        for (obs_row, res_row) in obs_slice
+            .chunks_exact(dimensions)
+            .zip(res_slice.chunks_exact_mut(dimensions))
+        {
+            res_row[1] = bound_longitude_value(obs_row[1], res_row[1]);
+        }
+    } else {
+        for row in 0..obs.nrows() {
+            res[[row, 1]] = bound_longitude_value(obs[[row, 1]], res[[row, 1]]);
+        }
+    }
+    Ok(())
 }
 
 #[pyfunction]
@@ -3897,6 +3934,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(rotate_cartesian_time_varying_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(bound_longitude_residuals_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(bound_longitude_residual_column_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        bound_longitude_residual_column_in_place_numpy,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(apply_cosine_latitude_correction_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_chi2_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(compute_residuals_chi2_numpy, m)?)?;

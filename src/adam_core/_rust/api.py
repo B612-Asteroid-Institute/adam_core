@@ -38,6 +38,7 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "add_stellar_aberration_numpy",
     "apply_cosine_latitude_correction_numpy",
     "apply_lagrange_coefficients_numpy",
+    "bound_longitude_residual_column_in_place_numpy",
     "bound_longitude_residual_column_numpy",
     "bound_longitude_residuals_numpy",
     "calc_apoapsis_distance_numpy",
@@ -678,6 +679,17 @@ def bound_longitude_residual_column_numpy(
     buffers across the boundary (strided column reads Rust-side).
     """
     return _native.bound_longitude_residual_column_numpy(
+        np.asarray(observed, dtype=np.float64),
+        np.asarray(residuals, dtype=np.float64),
+    )
+
+
+def bound_longitude_residual_column_in_place_numpy(
+    observed: np.ndarray,
+    residuals: np.ndarray,
+) -> None:
+    """Wrap ``residuals[:, 1]`` in place without allocating an output column."""
+    _native.bound_longitude_residual_column_in_place_numpy(
         np.asarray(observed, dtype=np.float64),
         np.asarray(residuals, dtype=np.float64),
     )
