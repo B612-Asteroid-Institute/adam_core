@@ -4,6 +4,7 @@ from .absolute_magnitude import (
     estimate_absolute_magnitude_v_from_detections,
     estimate_absolute_magnitude_v_from_detections_grouped,
 )
+from .color_determination import ColorFit, estimate_colors
 from .lightcurve import reduced_magnitude
 from .magnitude import (
     calculate_apparent_magnitude_v,
@@ -22,7 +23,6 @@ from .rotation import (
     estimate_rotation_period_from_detections,
     estimate_rotation_period_from_detections_grouped,
 )
-from .color_determination import ColorFit, estimate_colors
 
 __all__ = [
     # Simple magnitude system
