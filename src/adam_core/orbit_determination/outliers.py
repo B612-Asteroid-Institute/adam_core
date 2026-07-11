@@ -8,17 +8,19 @@ from .fitted_orbits import FittedOrbitMembers
 
 
 def _lowest_probability_observation_index(orbit_members: FittedOrbitMembers) -> int:
-    min_probability = pc.min(orbit_members.residuals.probability).as_py()
-    probabilities = orbit_members.residuals.probability.to_numpy(zero_copy_only=False)
-    candidate_indices = np.flatnonzero(probabilities == min_probability)
-    if len(candidate_indices) == 1:
-        return int(candidate_indices[0])
-    if len(candidate_indices) == 0:
-        raise ValueError("Could not identify a lowest-probability observation.")
+    from adam_core import _rust_native
 
-    residual_values = orbit_members.residuals.to_array()[candidate_indices]
-    residual_norms = np.nansum(residual_values * residual_values, axis=1)
-    return int(candidate_indices[residual_norms.argmax()])
+    # One Rust crossing owns the minimum-probability selection and the
+    # squared-residual tie break (NaN probabilities raise the legacy error).
+    return int(
+        _rust_native.lowest_probability_observation_index_numpy(
+            np.ascontiguousarray(
+                orbit_members.residuals.probability.to_numpy(zero_copy_only=False),
+                dtype=np.float64,
+            ),
+            np.ascontiguousarray(orbit_members.residuals.to_array(), dtype=np.float64),
+        )
+    )
 
 
 def calculate_max_outliers(
@@ -52,8 +54,13 @@ def calculate_max_outliers(
         contamination_percentage >= 0 and contamination_percentage <= 100
     ), "Contamination percentage must be between 0 and 100."
 
-    max_outliers = num_obs * (contamination_percentage / 100)
-    return int(min(max_outliers, num_obs - min_obs))
+    from adam_core import _rust_native
+
+    return int(
+        _rust_native.calculate_max_outliers_numpy(
+            int(num_obs), int(min_obs), float(contamination_percentage)
+        )
+    )
 
 
 def remove_lowest_probability_observation(

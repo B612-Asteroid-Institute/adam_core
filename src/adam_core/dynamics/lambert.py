@@ -95,5 +95,12 @@ def calculate_c3(v1: np.ndarray, body_v: np.ndarray) -> npt.NDArray[np.float64]:
     c3 : array_like (N)
         C3 of the spacecraft in au²/d².
     """
-    v_infinity = np.asarray(v1) - np.asarray(body_v)
-    return np.linalg.norm(v_infinity, axis=1) ** 2
+    from adam_core import _rust_native
+
+    return np.asarray(
+        _rust_native.calculate_c3_numpy(
+            np.ascontiguousarray(np.asarray(v1, dtype=np.float64)),
+            np.ascontiguousarray(np.asarray(body_v, dtype=np.float64)),
+        ),
+        dtype=np.float64,
+    )

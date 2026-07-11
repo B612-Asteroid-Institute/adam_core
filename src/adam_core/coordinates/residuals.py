@@ -370,7 +370,8 @@ def calculate_reduced_chi2(residuals: Residuals, parameters: int) -> float:
     """
     from adam_core import _rust_native
 
-    return float(
+    # np.float64 preserves the legacy return type (callers use .item()).
+    return np.float64(
         _rust_native.reduced_chi2_numpy(
             np.ascontiguousarray(residuals.chi2.to_numpy(), dtype=np.float64),
             np.ascontiguousarray(residuals.dof.to_numpy(), dtype=np.int64),

@@ -10,6 +10,7 @@ mod coordinate_ops;
 mod coordinates;
 mod dynamics;
 mod native_benchmarks;
+mod od_ops;
 mod orbit_determination;
 mod photometry;
 mod spice;
@@ -22,6 +23,7 @@ fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     coordinates::register(m)?;
     dynamics::register(m)?;
     native_benchmarks::register(m)?;
+    od_ops::register(m)?;
     photometry::register(m)?;
     orbit_determination::register(m)?;
     spice::register(m)?;

@@ -1111,6 +1111,185 @@ fn porkchop_grid_numpy<'py>(
     ))
 }
 
+/// Rust-owned `Instant` timing for the public scalar dynamics helpers.
+/// Inputs are packed column-wise into one (N, K) array per kernel so a single
+/// dispatcher covers every scalar surface; extraction happens before warmup.
+#[pyfunction]
+#[pyo3(signature = (kernel, packed, reps, trials, warmup_reps=1))]
+fn benchmark_scalar_dynamics_kernel_numpy(
+    kernel: &str,
+    packed: PyReadonlyArray2<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let packed_arr = packed.as_array();
+    let n = packed_arr.nrows();
+    let cols = packed_arr.ncols();
+    let data = packed_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("packed must be contiguous"))?
+        .to_vec();
+    let column =
+        |index: usize| -> Vec<f64> { (0..n).map(|row| data[row * cols + index]).collect() };
+    let require_cols = |expected: usize| -> PyResult<()> {
+        if cols == expected {
+            Ok(())
+        } else {
+            Err(PyValueError::new_err(format!(
+                "kernel {kernel} expects {expected} packed columns, got {cols}"
+            )))
+        }
+    };
+    let row3 = |base: usize, row: usize| -> [f64; 3] {
+        [
+            data[row * cols + base],
+            data[row * cols + base + 1],
+            data[row * cols + base + 2],
+        ]
+    };
+
+    let samples = match kernel {
+        "calc_period"
+        | "calc_mean_motion"
+        | "calc_periapsis_distance"
+        | "calc_apoapsis_distance"
+        | "calc_semi_latus_rectum"
+        | "calc_semi_major_axis"
+        | "calc_mean_anomaly"
+        | "solve_kepler" => {
+            require_cols(2)?;
+            let first = column(0);
+            let second = column(1);
+            let op: fn(f64, f64) -> f64 = match kernel {
+                "calc_period" => calc_period,
+                "calc_mean_motion" => |a, mu| calc_mean_motion_batch(&[a], &[mu])[0],
+                "calc_periapsis_distance" => calc_periapsis_distance,
+                "calc_apoapsis_distance" => calc_apoapsis_distance,
+                "calc_semi_latus_rectum" => calc_semi_latus_rectum,
+                "calc_semi_major_axis" => calc_semi_major_axis,
+                "calc_mean_anomaly" => calc_mean_anomaly,
+                _ => |e, m| solve_kepler_true_anomaly(e, m, 100, 1e-15),
+            };
+            benchmark_samples(reps, trials, warmup_reps, || -> Vec<f64> {
+                first
+                    .iter()
+                    .zip(second.iter())
+                    .map(|(&a, &b)| op(a, b))
+                    .collect()
+            })
+        }
+        "solve_barker" => {
+            require_cols(1)?;
+            let m = column(0);
+            benchmark_samples(reps, trials, warmup_reps, || -> Vec<f64> {
+                m.iter().map(|&mi| solve_barker(mi)).collect()
+            })
+        }
+        "calc_stumpff" => {
+            require_cols(1)?;
+            let psi = column(0);
+            benchmark_samples(reps, trials, warmup_reps, || -> Vec<f64> {
+                let mut out = Vec::with_capacity(psi.len() * 6);
+                for &psi_i in &psi {
+                    out.extend_from_slice(&calc_stumpff::<f64>(psi_i));
+                }
+                out
+            })
+        }
+        "calc_chi" => {
+            require_cols(8)?;
+            benchmark_samples(reps, trials, warmup_reps, || -> Vec<f64> {
+                let mut out = Vec::with_capacity(n * 7);
+                for row in 0..n {
+                    let (chi, stumpff) = calc_chi::<f64>(
+                        row3(0, row),
+                        row3(3, row),
+                        data[row * cols + 6],
+                        data[row * cols + 7],
+                        100,
+                        1e-15,
+                    );
+                    out.push(chi);
+                    out.extend_from_slice(&stumpff);
+                }
+                out
+            })
+        }
+        "calc_lagrange_coefficients" => {
+            require_cols(8)?;
+            benchmark_samples(reps, trials, warmup_reps, || -> Vec<f64> {
+                let mut out = Vec::with_capacity(n * 11);
+                for row in 0..n {
+                    let (coeffs, stumpff, chi) = calc_lagrange_coefficients::<f64>(
+                        row3(0, row),
+                        row3(3, row),
+                        data[row * cols + 6],
+                        data[row * cols + 7],
+                        100,
+                        1e-15,
+                    );
+                    out.extend_from_slice(&coeffs);
+                    out.extend_from_slice(&stumpff);
+                    out.push(chi);
+                }
+                out
+            })
+        }
+        "apply_lagrange_coefficients" => {
+            require_cols(10)?;
+            benchmark_samples(reps, trials, warmup_reps, || -> Vec<f64> {
+                let mut out = Vec::with_capacity(n * 6);
+                for row in 0..n {
+                    let base = row * cols;
+                    let (r_new, v_new) = apply_lagrange_coefficients::<f64>(
+                        row3(0, row),
+                        row3(3, row),
+                        [
+                            data[base + 6],
+                            data[base + 7],
+                            data[base + 8],
+                            data[base + 9],
+                        ],
+                    );
+                    out.extend_from_slice(&r_new);
+                    out.extend_from_slice(&v_new);
+                }
+                out
+            })
+        }
+        "add_stellar_aberration" => {
+            require_cols(12)?;
+            benchmark_samples(reps, trials, warmup_reps, || -> Vec<f64> {
+                let mut out = Vec::with_capacity(n * 3);
+                for row in 0..n {
+                    let base = row * cols;
+                    let orbit: [f64; 6] = data[base..base + 6].try_into().expect("six columns");
+                    let observer: [f64; 6] =
+                        data[base + 6..base + 12].try_into().expect("six columns");
+                    let topo = [
+                        orbit[0] - observer[0],
+                        orbit[1] - observer[1],
+                        orbit[2] - observer[2],
+                        orbit[3] - observer[3],
+                        orbit[4] - observer[4],
+                        orbit[5] - observer[5],
+                    ];
+                    let aberrated = apply_stellar_aberration_row(topo, observer);
+                    out.extend_from_slice(&aberrated[..3]);
+                }
+                out
+            })
+        }
+        _ => {
+            return Err(PyValueError::new_err(format!(
+                "unknown scalar dynamics kernel: {kernel}"
+            )))
+        }
+    };
+    Ok(samples)
+}
+
 /// Rust-owned timers for canonical parity dynamics/mission kernels. Every
 /// NumPy/PyO3 extraction and owned-input preparation happens before the first
 /// warmup; recorded samples contain only direct Rust calls and `Instant`.
@@ -1454,6 +1633,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calculate_moid_batch_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(izzo_lambert_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(porkchop_grid_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_scalar_dynamics_kernel_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_calc_mean_motion_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_tisserand_parameter_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_calculate_moid_numpy, m)?)?;

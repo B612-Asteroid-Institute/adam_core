@@ -1,6 +1,5 @@
 import logging
 import time
-from itertools import combinations
 from typing import Literal, Optional, Tuple, Type, Union
 
 import numpy as np
@@ -56,38 +55,22 @@ def sort_by_id_and_time(
     members : qv.AnyTable
         Sorted linkage members.
     """
-    # Grab the linkage ID column from the linkages table and add an index column
-    linkage_table = linkages.table.select([linkage_column])
-    linkage_table = linkage_table.add_column(
-        0, "index", pa.array(np.arange(0, len(linkage_table)))
+    from adam_core import _rust_native
+
+    # One Rust crossing owns the observation-time join and the stable
+    # (linkage id, observation time) ordering.
+    time_table = observations.coordinates.time.table.combine_chunks()
+    linkage_order, member_order = _rust_native.sort_linkages_by_id_and_time_numpy(
+        linkages.table.column(linkage_column).to_pylist(),
+        members.table.column(linkage_column).to_pylist(),
+        members.table.column("obs_id").to_pylist(),
+        observations.id.to_pylist(),
+        time_table.column("days").chunk(0).to_numpy(zero_copy_only=False),
+        time_table.column("nanos").chunk(0).to_numpy(zero_copy_only=False),
     )
 
-    # Grab the linkage ID and observation ID columns from the linkage members table and add an index column
-    members_table = members.table.select([linkage_column, "obs_id"])
-    members_table = members_table.add_column(
-        0, "index", pa.array(np.arange(0, len(members_table)))
-    )
-
-    # Grab the observation ID, observation time columns and join with the linkage members table on the observation ID
-    observation_times = observations.flattened_table().select(
-        ["id", "coordinates.time.days", "coordinates.time.nanos"]
-    )
-    member_times = members_table.join(
-        observation_times, keys=["obs_id"], right_keys=["id"]
-    )
-
-    # Sort the reduced linkages table by linkage ID and the linkage member times table by linkage ID and observation time
-    linkage_table = linkage_table.sort_by([(linkage_column, "ascending")])
-    member_times = member_times.sort_by(
-        [
-            (linkage_column, "ascending"),
-            ("coordinates.time.days", "ascending"),
-            ("coordinates.time.nanos", "ascending"),
-        ]
-    )
-
-    linkages = linkages.take(linkage_table["index"])
-    members = members.take(member_times["index"])
+    linkages = linkages.take(pa.array(linkage_order, type=pa.int64()))
+    members = members.take(pa.array(member_order, type=pa.int64()))
 
     if linkages.fragmented():
         linkages = qv.defragment(linkages)
@@ -128,56 +111,23 @@ def select_observations(
     if len(obs_ids) < 3:
         return np.array([])
 
-    indexes = np.arange(0, len(obs_ids))
     times = observations.coordinates.time.mjd().to_numpy(zero_copy_only=False)
 
-    if method == "first+middle+last":
-        selected_times = np.percentile(times, [0, 50, 100], interpolation="nearest")
-        selected_index = np.intersect1d(times, selected_times, return_indices=True)[1]
-        selected_index = np.array([selected_index])
+    from adam_core import _rust_native
 
-    elif method == "thirds":
-        selected_times = np.percentile(
-            times, [1 / 6 * 100, 50, 5 / 6 * 100], interpolation="nearest"
-        )
-        selected_index = np.intersect1d(times, selected_times, return_indices=True)[1]
-        selected_index = np.array([selected_index])
-
-    elif method == "combinations":
-        # Make all possible combinations of 3 observations
-        selected_index = np.array(
-            [np.array(index) for index in combinations(indexes, 3)]
-        )
-
-        # Calculate arc length
-        arc_length = times[selected_index][:, 2] - times[selected_index][:, 0]
-
-        # Calculate distance of second observation from middle point (last + first) / 2
-        time_from_mid = np.abs(
-            (times[selected_index][:, 2] + times[selected_index][:, 0]) / 2
-            - times[selected_index][:, 1]
-        )
-
-        # Sort by descending arc length and ascending time from midpoint
-        sort = np.lexsort((time_from_mid, -arc_length))
-        selected_index = selected_index[sort]
-
-    else:
-        raise ValueError("method should be one of {'first+middle+last', 'thirds'}")
-
-    # Make sure each returned combination of observation ids have at least 3 unique
-    # times
-    keep = []
-    for i, comb in enumerate(times[selected_index]):
-        if len(np.unique(comb)) == 3:
-            keep.append(i)
-    keep = np.array(keep)
+    # One Rust crossing owns percentile/combination selection, arc-length and
+    # midpoint ordering, and the unique-time filter; the legacy ValueError
+    # message for unknown methods is preserved by the kernel.
+    selected_index = np.asarray(
+        _rust_native.select_observation_triplets_numpy(
+            np.ascontiguousarray(times, dtype=np.float64), method
+        ),
+        dtype=np.int64,
+    )
 
     # Return an empty array if no observations satisfy the criteria
-    if len(keep) == 0:
+    if selected_index.shape[0] == 0:
         return np.array([])
-    else:
-        selected_index = selected_index[keep, :]
 
     return obs_ids[selected_index]
 
