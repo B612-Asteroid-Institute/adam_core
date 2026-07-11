@@ -453,16 +453,17 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
     ),
     ApiMigration(
         api_id="dynamics.calculate_perturber_moids",
-        status=ORCHESTRATION_RUST_DEFAULT,
-        boundary="python+quivr",
+        status=PUBLIC_RUST_DEFAULT,
+        boundary="arrow",
         default="rust",
-        rust_module="adam_core._rust_native.calculate_moid_batch_numpy",
+        rust_module="adam_core._rust_native.calculate_perturber_moids_arrow",
         parity_coverage="random-fuzz",
         coverage_note=(
-            "Public quivr orchestration over the Rust MOID batch kernel is "
-            "fuzzed end-to-end against the baseline-main oracle, including "
-            "Orbits construction, SPICE perturber-state lookup, batched MOID "
-            "dispatch, and PerturberMOIDs table assembly."
+            "Public facade crosses once as an Orbits RecordBatch; Rust owns "
+            "the perturber loop, SPICE perturber-state lookup, batched MOID "
+            "dispatch, and finished PerturberMOIDs RecordBatch assembly. "
+            "Randomized parity fuzzes the facade end-to-end against the "
+            "baseline-main oracle."
         ),
     ),
     ApiMigration(
@@ -511,16 +512,18 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
     ),
     ApiMigration(
         api_id="dynamics.generate_porkchop_data",
-        status=ORCHESTRATION_RUST_DEFAULT,
-        boundary="python+quivr",
+        status=PUBLIC_RUST_DEFAULT,
+        boundary="arrow",
         default="rust",
-        rust_module="adam_core._rust_native.porkchop_grid_numpy",
+        rust_module="adam_core._rust_native.generate_porkchop_data_arrow",
         parity_coverage="random-fuzz",
         coverage_note=(
-            "Public quivr orchestration over Rust Lambert/grid kernels is "
-            "fuzzed end-to-end against the baseline-main oracle, including "
-            "Orbits construction, time-order filtering, Rust porkchop grid "
-            "dispatch, and LambertSolutions table assembly."
+            "Public facade crosses once as departure/arrival Orbits "
+            "RecordBatches; Rust owns chronological sorting, frame/origin "
+            "contract validation, meshgrid time filtering, rayon-batched "
+            "Lambert, and finished LambertSolutions RecordBatch assembly. "
+            "Randomized parity fuzzes the facade end-to-end against the "
+            "baseline-main oracle."
         ),
     ),
     ApiMigration(

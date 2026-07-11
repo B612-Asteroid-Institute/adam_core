@@ -88,6 +88,8 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "benchmark_propagate_orbits_arrow",
     "generate_ephemeris_arrow",
     "benchmark_generate_ephemeris_arrow",
+    "calculate_perturber_moids_arrow",
+    "generate_porkchop_data_arrow",
     "predict_magnitudes_bandpass_numpy",
     "propagate_2body_along_arc_numpy",
     "propagate_2body_arc_batch_numpy",
@@ -364,6 +366,40 @@ def generate_ephemeris_arrow(
         predict_phase_angle,
         chunk_size,
         thread_limit,
+    )
+
+
+def calculate_perturber_moids_arrow(
+    orbit_batch: pa.RecordBatch,
+    perturber_codes: list[str],
+    max_iter: int = 100,
+    xtol: float = 1e-10,
+) -> pa.RecordBatch:
+    """Return the finished PerturberMOIDs RecordBatch entirely from Rust."""
+    return _native.calculate_perturber_moids_arrow(
+        orbit_batch,
+        list(perturber_codes),
+        max_iter,
+        xtol,
+    )
+
+
+def generate_porkchop_data_arrow(
+    departure_batch: pa.RecordBatch,
+    arrival_batch: pa.RecordBatch,
+    propagation_origin: str,
+    prograde: bool = True,
+    max_iter: int = 35,
+    tol: float = 1e-10,
+) -> pa.RecordBatch:
+    """Return the finished LambertSolutions RecordBatch entirely from Rust."""
+    return _native.generate_porkchop_data_arrow(
+        departure_batch,
+        arrival_batch,
+        propagation_origin,
+        prograde,
+        max_iter,
+        tol,
     )
 
 

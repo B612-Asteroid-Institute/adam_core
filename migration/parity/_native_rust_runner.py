@@ -236,6 +236,140 @@ def _generate_ephemeris_2body(
     )
 
 
+def _build_orbits_table(
+    coords: Any,
+    time_mjd: Any,
+    orbit_ids: Any,
+    origin_code: str,
+    frame: str,
+) -> Any:
+    from adam_core.coordinates.cartesian import CartesianCoordinates
+    from adam_core.coordinates.origin import Origin
+    from adam_core.orbits import Orbits
+    from adam_core.time import Timestamp
+
+    values = np.asarray(coords, dtype=np.float64)
+    rows = values.shape[0]
+    return Orbits.from_kwargs(
+        orbit_id=[str(orbit_id) for orbit_id in orbit_ids],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=values[:, 0],
+            y=values[:, 1],
+            z=values[:, 2],
+            vx=values[:, 3],
+            vy=values[:, 4],
+            vz=values[:, 5],
+            time=Timestamp.from_mjd(
+                np.asarray(time_mjd, dtype=np.float64), scale="tdb"
+            ),
+            origin=Origin.from_kwargs(
+                code=np.full(rows, str(origin_code), dtype="object")
+            ),
+            frame=str(frame),
+        ),
+    )
+
+
+def _calculate_perturber_moids(
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    coords: Any,
+    time_mjd: Any,
+    orbit_ids: Any,
+    perturber_codes: Any,
+    origin_code: str,
+    frame: str,
+    **_unused: Any,
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+    from adam_core._rust.arrow import ensure_spice_backend
+    from adam_core.orbits.arrow_bridge import orbits_to_record_batch
+
+    orbits = _build_orbits_table(coords, time_mjd, orbit_ids, origin_code, frame)
+    ensure_spice_backend()
+    samples = _rust_native.benchmark_calculate_perturber_moids_arrow(
+        orbits_to_record_batch(orbits),
+        [str(code) for code in perturber_codes],
+        reps,
+        trials,
+        warmup,
+        100,
+        1e-10,
+    )
+    return NativeRustTiming(
+        status="measured",
+        sample_trials_s=[[float(value) for value in trial] for trial in samples],
+        entrypoint="adam_core_py::coordinates::perturber_moids_record_batch",
+        timing_boundary=(
+            "Rust std::time::Instant around direct Orbits RecordBatch decode, "
+            "SPICE perturber-state lookup, batched MOID kernel, and "
+            "PerturberMOIDs RecordBatch assembly; outer Python/PyO3 launch and "
+            "PyArrow conversion excluded"
+        ),
+    )
+
+
+def _generate_porkchop_data(
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    departure_coords: Any,
+    arrival_coords: Any,
+    departure_time_mjd: Any,
+    arrival_time_mjd: Any,
+    departure_orbit_ids: Any,
+    arrival_orbit_ids: Any,
+    propagation_origin: str,
+    frame: str,
+    prograde: bool,
+    max_iter: int,
+    tol: float,
+    **_unused: Any,
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+    from adam_core.orbits.arrow_bridge import orbits_to_record_batch
+
+    departure = _build_orbits_table(
+        departure_coords,
+        departure_time_mjd,
+        departure_orbit_ids,
+        propagation_origin,
+        frame,
+    )
+    arrival = _build_orbits_table(
+        arrival_coords,
+        arrival_time_mjd,
+        arrival_orbit_ids,
+        propagation_origin,
+        frame,
+    )
+    samples = _rust_native.benchmark_generate_porkchop_data_arrow(
+        orbits_to_record_batch(departure),
+        orbits_to_record_batch(arrival),
+        str(propagation_origin),
+        reps,
+        trials,
+        warmup,
+        prograde,
+        max_iter,
+        tol,
+    )
+    return NativeRustTiming(
+        status="measured",
+        sample_trials_s=[[float(value) for value in trial] for trial in samples],
+        entrypoint="adam_core_py::coordinates::porkchop_record_batch",
+        timing_boundary=(
+            "Rust std::time::Instant around direct departure/arrival Orbits "
+            "RecordBatch decode, chronological sorting, meshgrid time filter, "
+            "rayon-batched Lambert, and LambertSolutions RecordBatch assembly; "
+            "outer Python/PyO3 launch and PyArrow conversion excluded"
+        ),
+    )
+
+
 def _observers_from_codes(
     *,
     codes: Any,
@@ -278,6 +412,8 @@ _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
     "dynamics.propagate_2body": _propagate_2body,
     "dynamics.generate_ephemeris_2body": _generate_ephemeris_2body,
     "dynamics.generate_ephemeris_2body_with_covariance": _generate_ephemeris_2body,
+    "dynamics.calculate_perturber_moids": _calculate_perturber_moids,
+    "dynamics.generate_porkchop_data": _generate_porkchop_data,
     "observers.Observers.from_codes": _observers_from_codes,
 }
 
@@ -306,7 +442,10 @@ def _todo_for(api_id: str) -> str:
     ):
         return "personal-cmy.36.5"
     if "moid" in api_id or "porkchop" in api_id or api_id == "dynamics.solve_lambert":
-        return "personal-cmy.36.6"
+        # calculate_moid / calculate_moid_batch / porkchop_grid stay raw
+        # numpy kernels by classification (bead personal-cmy.36.6); their
+        # native columns route to the catch-all adapter bead.
+        return "personal-98v.1"
     if api_id.startswith("orbit_determination"):
         return "personal-cmy.36.7"
     if api_id.startswith("photometry"):

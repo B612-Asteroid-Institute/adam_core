@@ -266,3 +266,65 @@ def test_calculate_perturber_moids(max_processes):
         len(moids.select("orbit_id", "input_MARS").select("perturber.code", "MERCURY"))
         == 1
     )
+
+
+def test_calculate_perturber_moids_uses_record_batch_and_direct_wrap(monkeypatch):
+    """The public facade must cross once as a RecordBatch and wrap directly."""
+    import numpy as np
+    import pyarrow as pa
+
+    from adam_core.coordinates import CartesianCoordinates, Origin, OriginCodes
+    from adam_core.dynamics.moid import PerturberMOIDs, calculate_perturber_moids
+    from adam_core.orbits import Orbits
+    from adam_core.time import Timestamp
+
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1", "o2"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.2, 2.1],
+            y=[0.1, -0.4],
+            z=[0.02, 0.05],
+            vx=[-0.002, 0.001],
+            vy=[0.012, 0.009],
+            vz=[0.0004, -0.0008],
+            time=Timestamp.from_mjd([60000.0, 60001.0], scale="tdb"),
+            origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    from adam_core._rust import api as rust_api
+
+    native = rust_api.calculate_perturber_moids_arrow
+    called = {"value": False}
+
+    def _checked(orbit_batch, perturber_codes, *args, **kwargs):
+        assert isinstance(orbit_batch, pa.RecordBatch)
+        called["value"] = True
+        return native(orbit_batch, perturber_codes, *args, **kwargs)
+
+    def _forbid_from_kwargs(*args, **kwargs):
+        raise AssertionError("PerturberMOIDs.from_kwargs must not rebuild Rust output")
+
+    monkeypatch.setattr(
+        "adam_core.dynamics.moid.calculate_perturber_moids_arrow",
+        _checked,
+        raising=False,
+    )
+    monkeypatch.setattr(rust_api, "calculate_perturber_moids_arrow", _checked)
+    monkeypatch.setattr(PerturberMOIDs, "from_kwargs", _forbid_from_kwargs)
+
+    result = calculate_perturber_moids(
+        orbits, [OriginCodes.EARTH, OriginCodes.MARS_BARYCENTER]
+    )
+    assert called["value"]
+    assert len(result) == 4
+    assert result.orbit_id.to_pylist() == ["o1", "o2", "o1", "o2"]
+    assert result.perturber.code.to_pylist() == [
+        "EARTH",
+        "EARTH",
+        "MARS_BARYCENTER",
+        "MARS_BARYCENTER",
+    ]
+    assert result.time.scale == "tdb"
+    assert np.all(np.isfinite(result.moid.to_numpy(zero_copy_only=False)))

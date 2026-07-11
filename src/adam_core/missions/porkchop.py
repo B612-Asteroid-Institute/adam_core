@@ -8,7 +8,9 @@ import plotly.graph_objects as go
 import quivr as qv
 from astropy.time import Time
 
-from adam_core._rust import porkchop_grid_numpy
+import pyarrow as pa
+
+from adam_core._rust import generate_porkchop_data_arrow
 from adam_core.coordinates import CartesianCoordinates, transform_coordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.spherical import SphericalCoordinates
@@ -586,94 +588,54 @@ def generate_porkchop_data(
     Generate data for a porkchop plot by solving Lambert's problem for a grid of
     departure and arrival times.
 
-    Implementation: a single Rust call covers meshgrid + time-order filter +
-    batched Lambert with rayon-internal parallelism. No Ray dispatch.
+    Implementation: one Arrow crossing. Rust decodes both Orbits
+    RecordBatches, sorts each side chronologically, validates the shared
+    frame/origin contract, runs meshgrid + time-order filter + rayon-batched
+    Lambert, and returns the finished LambertSolutions RecordBatch.
 
     `max_processes` is accepted for API compatibility; the Rust kernel
     auto-detects available cores via rayon's default thread pool.
     """
     del max_processes  # API compat — rayon auto-detects
 
+    from adam_core.orbits.arrow_bridge import orbits_to_record_batch
+
     assert (
         departure_orbits.coordinates.frame == arrival_orbits.coordinates.frame
     ), "Departure and arrival frames must be the same"
     assert len(departure_orbits.coordinates.origin.code.unique()) == 1
     assert len(arrival_orbits.coordinates.origin.code.unique()) == 1
-
     assert (
         departure_orbits.coordinates.origin.code[0]
         == arrival_orbits.coordinates.origin.code[0]
     ), "Departure and arrival origins must be the same"
 
-    departure_orbits = _sort_orbits_by_time_if_needed(departure_orbits)
-    arrival_orbits = _sort_orbits_by_time_if_needed(arrival_orbits)
-
-    n_dep = len(departure_orbits)
-    n_arr = len(arrival_orbits)
-    if n_dep == 0 or n_arr == 0:
+    if len(departure_orbits) == 0 or len(arrival_orbits) == 0:
         return LambertSolutions.empty()
 
-    dep_times_mjd = departure_orbits.coordinates.time.mjd().to_numpy(
-        zero_copy_only=False
-    )
-    arr_times_mjd = arrival_orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
-    dep_states = np.ascontiguousarray(
-        departure_orbits.coordinates.values, dtype=np.float64
-    )
-    arr_states = np.ascontiguousarray(
-        arrival_orbits.coordinates.values, dtype=np.float64
-    )
-
-    mu_arr = Origin.from_OriginCodes(propagation_origin, size=1).mu()
-    mu = float(mu_arr[0])
-
-    rust_out = porkchop_grid_numpy(
-        dep_states,
-        dep_times_mjd,
-        arr_states,
-        arr_times_mjd,
-        mu,
+    result = generate_porkchop_data_arrow(
+        orbits_to_record_batch(departure_orbits),
+        orbits_to_record_batch(arrival_orbits),
+        propagation_origin.name,
         prograde,
         max_iter,
         tol,
-        tol,
     )
-    dep_idx, arr_idx, v1, v2 = rust_out
-    if len(dep_idx) == 0:
+    if result.num_rows == 0:
         return LambertSolutions.empty()
-
-    dep_idx_i64 = np.asarray(dep_idx, dtype=np.int64)
-    arr_idx_i64 = np.asarray(arr_idx, dtype=np.int64)
-    departure_coordinates = departure_orbits.coordinates.take(dep_idx_i64)
-    arrival_coordinates = arrival_orbits.coordinates.take(arr_idx_i64)
-    origins = Origin.from_OriginCodes(propagation_origin, size=len(dep_idx))
-
-    return LambertSolutions.from_kwargs(
-        departure_body_id=departure_orbits.orbit_id.take(dep_idx_i64),
-        departure_time=departure_coordinates.time,
-        departure_body_x=departure_coordinates.x,
-        departure_body_y=departure_coordinates.y,
-        departure_body_z=departure_coordinates.z,
-        departure_body_vx=departure_coordinates.vx,
-        departure_body_vy=departure_coordinates.vy,
-        departure_body_vz=departure_coordinates.vz,
-        arrival_body_id=arrival_orbits.orbit_id.take(arr_idx_i64),
-        arrival_time=arrival_coordinates.time,
-        arrival_body_x=arrival_coordinates.x,
-        arrival_body_y=arrival_coordinates.y,
-        arrival_body_z=arrival_coordinates.z,
-        arrival_body_vx=arrival_coordinates.vx,
-        arrival_body_vy=arrival_coordinates.vy,
-        arrival_body_vz=arrival_coordinates.vz,
-        solution_departure_vx=v1[:, 0],
-        solution_departure_vy=v1[:, 1],
-        solution_departure_vz=v1[:, 2],
-        solution_arrival_vx=v2[:, 0],
-        solution_arrival_vy=v2[:, 1],
-        solution_arrival_vz=v2[:, 2],
-        frame=departure_coordinates.frame,
-        origin=origins,
+    metadata = dict(result.schema.metadata or {})
+    table = pa.Table.from_batches([result]).replace_schema_metadata(
+        {
+            b"frame": metadata.get(b"adam_core_frame", b"unspecified"),
+            b"departure_time.scale": metadata.get(
+                b"adam_core_departure_time_scale", b"tdb"
+            ),
+            b"arrival_time.scale": metadata.get(
+                b"adam_core_arrival_time_scale", b"tdb"
+            ),
+        }
     )
+    return LambertSolutions.from_pyarrow(table)
 
 
 def plot_porkchop_plotly(

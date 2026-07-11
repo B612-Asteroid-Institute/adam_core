@@ -9,16 +9,16 @@ use adam_core_rs_coords::{
     cartesian_to_keplerian_flat6, cartesian_to_spherical_flat6, cartesian_to_spherical_row,
     classify_orbits_flat, cometary_to_cartesian_flat6, create_sampled_orbit_variants,
     fit_orbit_2body_least_squares, generate_ephemeris_2body_flat6, keplerian_to_cartesian_flat6,
-    origin_mu_au3_day2, rotate_cartesian_time_varying_flat6, rotate_coordinates_to_frame,
-    spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
-    transform_values_flat6, transform_with_covariance_flat6, weighted_covariance_flat,
-    weighted_mean_flat, ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch,
-    CoordinateRepresentation as DataRepresentation, CoordinateValues, CovarianceBatch,
-    CovarianceUnits, DataFrame, Epoch, Frame, IntoNestedRecordBatch, LeastSquaresConfig,
-    ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch,
-    OrbitVariantBatch as DataOrbitVariantBatch, OrbitVariantSamplingMethod, OriginArray, OriginId,
-    Representation as CoordsRepresentation, TimeArray, TimeScale, TimeScaleProvider,
-    TryFromNestedRecordBatch,
+    origin_mu_au3_day2, porkchop_grid_flat, rotate_cartesian_time_varying_flat6,
+    rotate_coordinates_to_frame, spherical_to_cartesian_flat6, spherical_to_cartesian_row,
+    tisserand_parameter_flat, transform_values_flat6, transform_with_covariance_flat6,
+    weighted_covariance_flat, weighted_mean_flat, ArrowSchemaExport,
+    CoordinateBatch as DataCoordinateBatch, CoordinateRepresentation as DataRepresentation,
+    CoordinateValues, CovarianceBatch, CovarianceUnits, DataFrame, Epoch, Frame,
+    IntoNestedRecordBatch, LeastSquaresConfig, ObserverBatch as DataObserverBatch,
+    OrbitBatch as DataOrbitBatch, OrbitVariantBatch as DataOrbitVariantBatch,
+    OrbitVariantSamplingMethod, OriginArray, OriginId, Representation as CoordsRepresentation,
+    TimeArray, TimeScale, TimeScaleProvider, TryFromNestedRecordBatch,
 };
 use adam_core_rs_spice::global_backend;
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
@@ -2926,6 +2926,545 @@ fn benchmark_transform_coordinates_arrow(
     Ok(sample_trials)
 }
 
+fn epoch_plus_fractional_days(days: i64, nanos: i64, delta_days: f64) -> Epoch {
+    let delta_nanos = (delta_days * 86_400_000_000_000.0_f64).round() as i64;
+    Epoch::new(days, nanos + delta_nanos)
+}
+
+fn nested_time_struct_from_epochs(epochs: &[Epoch]) -> Result<arrow_array::StructArray, String> {
+    arrow_array::StructArray::try_new(
+        arrow_schema::Fields::from(vec![
+            arrow_schema::Field::new("days", arrow_schema::DataType::Int64, true),
+            arrow_schema::Field::new("nanos", arrow_schema::DataType::Int64, true),
+        ]),
+        vec![
+            std::sync::Arc::new(Int64Array::from_iter_values(
+                epochs.iter().map(|epoch| epoch.days),
+            )) as arrow_array::ArrayRef,
+            std::sync::Arc::new(Int64Array::from_iter_values(
+                epochs.iter().map(|epoch| epoch.nanos),
+            )) as arrow_array::ArrayRef,
+        ],
+        None,
+    )
+    .map_err(|err| format!("failed to build time struct: {err}"))
+}
+
+fn nested_origin_struct_from_codes<'a, I>(codes: I) -> Result<arrow_array::StructArray, String>
+where
+    I: Iterator<Item = &'a str>,
+{
+    arrow_array::StructArray::try_new(
+        arrow_schema::Fields::from(vec![arrow_schema::Field::new(
+            "code",
+            arrow_schema::DataType::LargeUtf8,
+            true,
+        )]),
+        vec![
+            std::sync::Arc::new(arrow_array::LargeStringArray::from_iter_values(codes))
+                as arrow_array::ArrayRef,
+        ],
+        None,
+    )
+    .map_err(|err| format!("failed to build origin struct: {err}"))
+}
+
+/// Arrow-native perturber-MOID crossing: decode one Orbits RecordBatch, run
+/// the SPICE-backed perturber loop + batched MOID kernel in Rust, and return
+/// the finished PerturberMOIDs nested RecordBatch (perturber-major rows).
+fn perturber_moids_record_batch(
+    orbit_batch: &RecordBatch,
+    perturber_codes: &[String],
+    max_iter: usize,
+    xtol: f64,
+) -> Result<RecordBatch, String> {
+    if perturber_codes.is_empty() {
+        return Err("perturber MOIDs require at least one perturber".to_string());
+    }
+    let orbits = DataOrbitBatch::try_from_nested_record_batch(orbit_batch)
+        .map_err(|err| format!("failed to decode OrbitBatch: {err}"))?;
+    let rows = orbits.len();
+    if rows == 0 {
+        return Err("perturber MOIDs require at least one orbit".to_string());
+    }
+    let coordinates = &orbits.coordinates;
+    let times = coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| "orbit coordinates require times".to_string())?;
+    let origin = coordinates.origins.origins[0].clone();
+    if coordinates.origins.origins.iter().any(|o| o != &origin) {
+        return Err("perturber MOIDs require a single orbit origin".to_string());
+    }
+    let states = coordinates
+        .values
+        .cartesian()
+        .ok_or_else(|| "perturber MOIDs require Cartesian coordinates".to_string())?;
+    let states_flat: Vec<f64> = states.iter().flatten().copied().collect();
+    let mus = coordinates
+        .origins
+        .origins
+        .iter()
+        .map(origin_mu_au3_day2)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| format!("failed to resolve origin mu: {err}"))?;
+    let perturbers: Vec<OriginId> = perturber_codes
+        .iter()
+        .map(|code| OriginId::from_code(code.clone()))
+        .collect();
+
+    let backend = global_backend()
+        .lock()
+        .map_err(|_| "SPICE backend lock is poisoned".to_string())?;
+    let (moids, dt_mins) = backend
+        .calculate_perturber_moids(
+            &states_flat,
+            &mus,
+            times,
+            &perturbers,
+            coordinates.frame,
+            &origin,
+            max_iter,
+            xtol,
+        )
+        .map_err(|err| err.to_string())?;
+    drop(backend);
+
+    let output_rows = perturber_codes.len() * rows;
+    let mut moid_epochs = Vec::with_capacity(output_rows);
+    for chunk_start in (0..output_rows).step_by(rows) {
+        for row in 0..rows {
+            let epoch = times.epochs[row];
+            moid_epochs.push(epoch_plus_fractional_days(
+                epoch.days,
+                epoch.nanos,
+                dt_mins[chunk_start + row],
+            ));
+        }
+    }
+    let orbit_id_values: Vec<&str> = (0..perturber_codes.len())
+        .flat_map(|_| orbits.orbit_id.iter().map(|orbit_id| orbit_id.0.as_str()))
+        .collect();
+    let orbit_ids =
+        arrow_array::LargeStringArray::from_iter_values(orbit_id_values.iter().copied());
+    let perturber_code_values: Vec<&str> = perturber_codes
+        .iter()
+        .flat_map(|code| std::iter::repeat_n(code.as_str(), rows))
+        .collect();
+    let perturber = nested_origin_struct_from_codes(perturber_code_values.iter().copied())?;
+    let time = nested_time_struct_from_epochs(&moid_epochs)?;
+
+    let fields = vec![
+        arrow_schema::Field::new("orbit_id", arrow_schema::DataType::LargeUtf8, false),
+        arrow_schema::Field::new("perturber", perturber.data_type().clone(), true),
+        arrow_schema::Field::new("moid", arrow_schema::DataType::Float64, false),
+        arrow_schema::Field::new("time", time.data_type().clone(), true),
+    ];
+    let arrays: Vec<arrow_array::ArrayRef> = vec![
+        std::sync::Arc::new(orbit_ids),
+        std::sync::Arc::new(perturber),
+        std::sync::Arc::new(arrow_array::Float64Array::from(moids)),
+        std::sync::Arc::new(time),
+    ];
+    let mut metadata = HashMap::new();
+    metadata.insert(
+        "adam_core_schema".to_string(),
+        "PerturberMOIDs.nested.quivr.v1".to_string(),
+    );
+    metadata.insert(
+        "adam_core_time_scale".to_string(),
+        times.scale.as_str().to_string(),
+    );
+    RecordBatch::try_new(
+        std::sync::Arc::new(arrow_schema::Schema::new_with_metadata(fields, metadata)),
+        arrays,
+    )
+    .map_err(|err| format!("failed to build PerturberMOIDs RecordBatch: {err}"))
+}
+
+/// Arrow-native public perturber-MOID surface.
+#[pyfunction]
+#[pyo3(signature = (orbit_batch, perturber_codes, max_iter=100, xtol=1e-10))]
+fn calculate_perturber_moids_arrow<'py>(
+    py: Python<'py>,
+    orbit_batch: &Bound<'py, PyAny>,
+    perturber_codes: Vec<String>,
+    max_iter: usize,
+    xtol: f64,
+) -> PyResult<PyObject> {
+    let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    let output = py
+        .allow_threads(|| perturber_moids_record_batch(&orbits, &perturber_codes, max_iter, xtol))
+        .map_err(PyValueError::new_err)?;
+    output
+        .to_pyarrow(py)
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to export RecordBatch: {err}")))
+}
+
+/// Rust-owned Instant timer for the Arrow-native perturber-MOID surface.
+#[pyfunction]
+#[pyo3(signature = (orbit_batch, perturber_codes, reps, trials, warmup_reps=1, max_iter=100, xtol=1e-10))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_calculate_perturber_moids_arrow(
+    orbit_batch: &Bound<'_, PyAny>,
+    perturber_codes: Vec<String>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    max_iter: usize,
+    xtol: f64,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    let run_once = || -> PyResult<()> {
+        let output = perturber_moids_record_batch(&orbits, &perturber_codes, max_iter, xtol)
+            .map_err(PyRuntimeError::new_err)?;
+        black_box(output);
+        Ok(())
+    };
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            run_once()?;
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            run_once()?;
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
+}
+
+struct PorkchopSide {
+    orbit_ids: Vec<String>,
+    states_flat: Vec<f64>,
+    mjds: Vec<f64>,
+    epochs: Vec<Epoch>,
+    scale: TimeScale,
+}
+
+fn porkchop_side(batch: &RecordBatch, label: &str) -> Result<PorkchopSide, String> {
+    let orbits = DataOrbitBatch::try_from_nested_record_batch(batch)
+        .map_err(|err| format!("failed to decode {label} OrbitBatch: {err}"))?;
+    let coordinates = &orbits.coordinates;
+    let times = coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| format!("{label} orbit coordinates require times"))?;
+    let states = coordinates
+        .values
+        .cartesian()
+        .ok_or_else(|| format!("{label} orbits require Cartesian coordinates"))?;
+    let rows = orbits.len();
+    let mut order: Vec<usize> = (0..rows).collect();
+    order.sort_by_key(|&row| (times.epochs[row].days, times.epochs[row].nanos));
+    let mjd_values = times.mjd_values();
+    Ok(PorkchopSide {
+        orbit_ids: order
+            .iter()
+            .map(|&row| orbits.orbit_id[row].0.clone())
+            .collect(),
+        states_flat: order
+            .iter()
+            .flat_map(|&row| states[row].iter().copied())
+            .collect(),
+        mjds: order.iter().map(|&row| mjd_values[row]).collect(),
+        epochs: order.iter().map(|&row| times.epochs[row]).collect(),
+        scale: times.scale,
+    })
+}
+
+fn porkchop_frame_and_origin(
+    departure_batch: &RecordBatch,
+    arrival_batch: &RecordBatch,
+) -> Result<(DataFrame, OriginId), String> {
+    let departure = DataOrbitBatch::try_from_nested_record_batch(departure_batch)
+        .map_err(|err| format!("failed to decode departure OrbitBatch: {err}"))?;
+    let arrival = DataOrbitBatch::try_from_nested_record_batch(arrival_batch)
+        .map_err(|err| format!("failed to decode arrival OrbitBatch: {err}"))?;
+    if departure.coordinates.frame != arrival.coordinates.frame {
+        return Err("departure and arrival frames must be the same".to_string());
+    }
+    let origin = departure
+        .coordinates
+        .origins
+        .origins
+        .first()
+        .cloned()
+        .ok_or_else(|| "porkchop requires at least one departure orbit".to_string())?;
+    if departure
+        .coordinates
+        .origins
+        .origins
+        .iter()
+        .chain(arrival.coordinates.origins.origins.iter())
+        .any(|o| o != &origin)
+    {
+        return Err("departure and arrival origins must be the same".to_string());
+    }
+    Ok((departure.coordinates.frame, origin))
+}
+
+/// Arrow-native porkchop crossing: decode departure/arrival Orbits
+/// RecordBatches, run meshgrid + time filter + Rayon-batched Lambert in Rust,
+/// and return the finished LambertSolutions nested RecordBatch.
+#[allow(clippy::too_many_arguments)]
+fn porkchop_record_batch(
+    departure_batch: &RecordBatch,
+    arrival_batch: &RecordBatch,
+    propagation_origin: &str,
+    prograde: bool,
+    max_iter: u32,
+    tol: f64,
+) -> Result<RecordBatch, String> {
+    let (frame, _shared_origin) = porkchop_frame_and_origin(departure_batch, arrival_batch)?;
+    let departure = porkchop_side(departure_batch, "departure")?;
+    let arrival = porkchop_side(arrival_batch, "arrival")?;
+    let mu = origin_mu_au3_day2(&OriginId::from_code(propagation_origin))
+        .map_err(|err| format!("failed to resolve propagation-origin mu: {err}"))?;
+
+    let (dep_idx, arr_idx, v1_flat, v2_flat) = porkchop_grid_flat(
+        &departure.states_flat,
+        &departure.mjds,
+        &arrival.states_flat,
+        &arrival.mjds,
+        mu,
+        prograde,
+        max_iter,
+        tol,
+        tol,
+    );
+    let rows = dep_idx.len();
+
+    let state_column = |side: &PorkchopSide, indices: &[u32], component: usize| {
+        arrow_array::Float64Array::from_iter_values(
+            indices
+                .iter()
+                .map(|&index| side.states_flat[index as usize * 6 + component]),
+        )
+    };
+    let solution_column = |flat: &[f64], component: usize| {
+        arrow_array::Float64Array::from_iter_values((0..rows).map(|row| flat[row * 3 + component]))
+    };
+    let departure_epochs: Vec<Epoch> = dep_idx
+        .iter()
+        .map(|&index| departure.epochs[index as usize])
+        .collect();
+    let arrival_epochs: Vec<Epoch> = arr_idx
+        .iter()
+        .map(|&index| arrival.epochs[index as usize])
+        .collect();
+
+    let departure_time = nested_time_struct_from_epochs(&departure_epochs)?;
+    let arrival_time = nested_time_struct_from_epochs(&arrival_epochs)?;
+    let origin = nested_origin_struct_from_codes((0..rows).map(|_| propagation_origin))?;
+
+    let mut fields = vec![
+        arrow_schema::Field::new(
+            "departure_body_id",
+            arrow_schema::DataType::LargeUtf8,
+            false,
+        ),
+        arrow_schema::Field::new("departure_time", departure_time.data_type().clone(), true),
+    ];
+    let mut arrays: Vec<arrow_array::ArrayRef> = vec![
+        std::sync::Arc::new(arrow_array::LargeStringArray::from_iter_values(
+            dep_idx
+                .iter()
+                .map(|&index| departure.orbit_ids[index as usize].as_str()),
+        )),
+        std::sync::Arc::new(departure_time),
+    ];
+    for (name, component) in [
+        ("departure_body_x", 0),
+        ("departure_body_y", 1),
+        ("departure_body_z", 2),
+        ("departure_body_vx", 3),
+        ("departure_body_vy", 4),
+        ("departure_body_vz", 5),
+    ] {
+        fields.push(arrow_schema::Field::new(
+            name,
+            arrow_schema::DataType::Float64,
+            false,
+        ));
+        arrays.push(std::sync::Arc::new(state_column(
+            &departure, &dep_idx, component,
+        )));
+    }
+    fields.push(arrow_schema::Field::new(
+        "arrival_body_id",
+        arrow_schema::DataType::LargeUtf8,
+        false,
+    ));
+    arrays.push(std::sync::Arc::new(
+        arrow_array::LargeStringArray::from_iter_values(
+            arr_idx
+                .iter()
+                .map(|&index| arrival.orbit_ids[index as usize].as_str()),
+        ),
+    ));
+    fields.push(arrow_schema::Field::new(
+        "arrival_time",
+        arrival_time.data_type().clone(),
+        true,
+    ));
+    arrays.push(std::sync::Arc::new(arrival_time));
+    for (name, component) in [
+        ("arrival_body_x", 0),
+        ("arrival_body_y", 1),
+        ("arrival_body_z", 2),
+        ("arrival_body_vx", 3),
+        ("arrival_body_vy", 4),
+        ("arrival_body_vz", 5),
+    ] {
+        fields.push(arrow_schema::Field::new(
+            name,
+            arrow_schema::DataType::Float64,
+            false,
+        ));
+        arrays.push(std::sync::Arc::new(state_column(
+            &arrival, &arr_idx, component,
+        )));
+    }
+    for (name, flat, component) in [
+        ("solution_departure_vx", &v1_flat, 0),
+        ("solution_departure_vy", &v1_flat, 1),
+        ("solution_departure_vz", &v1_flat, 2),
+        ("solution_arrival_vx", &v2_flat, 0),
+        ("solution_arrival_vy", &v2_flat, 1),
+        ("solution_arrival_vz", &v2_flat, 2),
+    ] {
+        fields.push(arrow_schema::Field::new(
+            name,
+            arrow_schema::DataType::Float64,
+            false,
+        ));
+        arrays.push(std::sync::Arc::new(solution_column(flat, component)));
+    }
+    fields.push(arrow_schema::Field::new(
+        "origin",
+        origin.data_type().clone(),
+        true,
+    ));
+    arrays.push(std::sync::Arc::new(origin));
+
+    let mut metadata = HashMap::new();
+    metadata.insert(
+        "adam_core_schema".to_string(),
+        "LambertSolutions.nested.quivr.v1".to_string(),
+    );
+    metadata.insert("adam_core_frame".to_string(), frame.as_str().to_string());
+    metadata.insert(
+        "adam_core_departure_time_scale".to_string(),
+        departure.scale.as_str().to_string(),
+    );
+    metadata.insert(
+        "adam_core_arrival_time_scale".to_string(),
+        arrival.scale.as_str().to_string(),
+    );
+    RecordBatch::try_new(
+        std::sync::Arc::new(arrow_schema::Schema::new_with_metadata(fields, metadata)),
+        arrays,
+    )
+    .map_err(|err| format!("failed to build LambertSolutions RecordBatch: {err}"))
+}
+
+/// Arrow-native public porkchop surface.
+#[pyfunction]
+#[pyo3(signature = (departure_batch, arrival_batch, propagation_origin, prograde=true, max_iter=35, tol=1e-10))]
+fn generate_porkchop_data_arrow<'py>(
+    py: Python<'py>,
+    departure_batch: &Bound<'py, PyAny>,
+    arrival_batch: &Bound<'py, PyAny>,
+    propagation_origin: &str,
+    prograde: bool,
+    max_iter: u32,
+    tol: f64,
+) -> PyResult<PyObject> {
+    let departure = RecordBatch::from_pyarrow_bound(departure_batch).map_err(|err| {
+        PyValueError::new_err(format!("invalid departure Orbits RecordBatch: {err}"))
+    })?;
+    let arrival = RecordBatch::from_pyarrow_bound(arrival_batch).map_err(|err| {
+        PyValueError::new_err(format!("invalid arrival Orbits RecordBatch: {err}"))
+    })?;
+    let output = py
+        .allow_threads(|| {
+            porkchop_record_batch(
+                &departure,
+                &arrival,
+                propagation_origin,
+                prograde,
+                max_iter,
+                tol,
+            )
+        })
+        .map_err(PyValueError::new_err)?;
+    output
+        .to_pyarrow(py)
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to export RecordBatch: {err}")))
+}
+
+/// Rust-owned Instant timer for the Arrow-native porkchop surface.
+#[pyfunction]
+#[pyo3(signature = (departure_batch, arrival_batch, propagation_origin, reps, trials, warmup_reps=1, prograde=true, max_iter=35, tol=1e-10))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_generate_porkchop_data_arrow(
+    departure_batch: &Bound<'_, PyAny>,
+    arrival_batch: &Bound<'_, PyAny>,
+    propagation_origin: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    prograde: bool,
+    max_iter: u32,
+    tol: f64,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let departure = RecordBatch::from_pyarrow_bound(departure_batch).map_err(|err| {
+        PyValueError::new_err(format!("invalid departure Orbits RecordBatch: {err}"))
+    })?;
+    let arrival = RecordBatch::from_pyarrow_bound(arrival_batch).map_err(|err| {
+        PyValueError::new_err(format!("invalid arrival Orbits RecordBatch: {err}"))
+    })?;
+    let run_once = || -> PyResult<()> {
+        let output = porkchop_record_batch(
+            &departure,
+            &arrival,
+            propagation_origin,
+            prograde,
+            max_iter,
+            tol,
+        )
+        .map_err(PyRuntimeError::new_err)?;
+        black_box(output);
+        Ok(())
+    };
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            run_once()?;
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            run_once()?;
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
+}
+
 /// Single-crossing perturber-MOID orchestrator over the global SPICE backend:
 /// per perturber, spkez the perturber state relative to `origin_code` and run
 /// the batched Rust MOID kernel against the primary Cartesian orbits. Returns
@@ -3007,6 +3546,13 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(transform_coordinates_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_transform_coordinates_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_perturber_moids_native, m)?)?;
+    m.add_function(wrap_pyfunction!(calculate_perturber_moids_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_calculate_perturber_moids_arrow,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(generate_porkchop_data_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_generate_porkchop_data_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(orbit_schema_metadata, m)?)?;
     m.add_function(wrap_pyfunction!(cartesian_to_spherical_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(spherical_to_cartesian_numpy, m)?)?;

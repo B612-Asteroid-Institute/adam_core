@@ -1063,3 +1063,66 @@ def test_lambert_solution_orbits_keplerian_consistency():
     print(
         f"  Inclination range: {np.min(departure_i)*180/np.pi:.3f} - {np.max(departure_i)*180/np.pi:.3f} degrees"
     )
+
+
+def test_generate_porkchop_data_uses_record_batches_and_direct_wrap(monkeypatch):
+    """The public facade must cross once as RecordBatches and wrap directly."""
+    import numpy as np
+    import pyarrow as pa
+
+    from adam_core.coordinates import CartesianCoordinates, Origin
+    from adam_core.coordinates.origin import OriginCodes
+    from adam_core.missions import porkchop as porkchop_module
+    from adam_core.missions.porkchop import LambertSolutions, generate_porkchop_data
+    from adam_core.orbits import Orbits
+    from adam_core.time import Timestamp
+
+    def _orbits(prefix, mjds, radius):
+        n = len(mjds)
+        theta = np.linspace(0.0, 0.8, n)
+        return Orbits.from_kwargs(
+            orbit_id=[f"{prefix}{i}" for i in range(n)],
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=radius * np.cos(theta),
+                y=radius * np.sin(theta),
+                z=np.zeros(n),
+                vx=-0.017 * np.sin(theta) / np.sqrt(radius),
+                vy=0.017 * np.cos(theta) / np.sqrt(radius),
+                vz=np.zeros(n),
+                time=Timestamp.from_mjd(mjds, scale="tdb"),
+                origin=Origin.from_kwargs(code=["SUN"] * n),
+                frame="ecliptic",
+            ),
+        )
+
+    departure = _orbits("d", np.array([60000.0, 60004.0, 60008.0]), 1.0)
+    arrival = _orbits("a", np.array([60120.0, 60140.0]), 1.5)
+
+    native = porkchop_module.generate_porkchop_data_arrow
+    called = {"value": False}
+
+    def _checked(dep_batch, arr_batch, *args, **kwargs):
+        assert isinstance(dep_batch, pa.RecordBatch)
+        assert isinstance(arr_batch, pa.RecordBatch)
+        called["value"] = True
+        return native(dep_batch, arr_batch, *args, **kwargs)
+
+    def _forbid_from_kwargs(*args, **kwargs):
+        raise AssertionError(
+            "LambertSolutions.from_kwargs must not rebuild Rust output"
+        )
+
+    monkeypatch.setattr(porkchop_module, "generate_porkchop_data_arrow", _checked)
+    monkeypatch.setattr(LambertSolutions, "from_kwargs", _forbid_from_kwargs)
+
+    result = generate_porkchop_data(
+        departure, arrival, propagation_origin=OriginCodes.SUN
+    )
+    assert called["value"]
+    assert len(result) == 6
+    assert result.frame == "ecliptic"
+    assert set(result.origin.code.to_pylist()) == {"SUN"}
+    assert result.departure_time.scale == "tdb"
+    assert result.arrival_time.scale == "tdb"
+    tof = result.time_of_flight()
+    assert np.all(tof > 0.0)

@@ -24,6 +24,7 @@ search for the overall minimum.
 from typing import List, Optional, Union
 
 import numpy as np
+import pyarrow as pa
 import quivr as qv
 
 from ..coordinates import Origin, OriginCodes
@@ -99,7 +100,8 @@ def calculate_perturber_moids(
         A table containing the MOID and time for each orbit with respect to
         the perturbing body or bodies.
     """
-    from .._rust.api import calculate_perturber_moids_native
+    from .._rust.api import calculate_perturber_moids_arrow
+    from ..orbits.arrow_bridge import orbits_to_record_batch
     from ..utils.spice import setup_SPICE
 
     del chunk_size  # API compat
@@ -113,49 +115,21 @@ def calculate_perturber_moids(
     else:
         perturbers = perturber
 
-    n = len(orbits)
-    if n == 0:
+    if len(orbits) == 0:
         return PerturberMOIDs.empty()
 
     # The native orchestrator reads the process-global SPICE backend directly
     # (perturber spkez), so ensure the default kernels are furnsh-ed.
     setup_SPICE()
 
-    primary_states = np.ascontiguousarray(orbits.coordinates.values, dtype=np.float64)
-    primary_mus = np.ascontiguousarray(
-        np.asarray(orbits.coordinates.origin.mu(), dtype=np.float64)
-    )
-    primary_mjds = orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
-    time_scale = orbits.coordinates.time.scale
-    orbit_ids_np = orbits.orbit_id.to_numpy(zero_copy_only=False)
-
-    # Single Python->Rust crossing: the perturber loop + per-perturber spkez +
-    # batched MOID kernel all run in Rust. Results are perturber-major
-    # (p * n + i), so slice per perturber to assemble the quivr table.
-    moids, dt_mins = calculate_perturber_moids_native(
-        primary_states,
-        primary_mus,
-        time_scale,
-        orbits.coordinates.time.days.to_numpy(zero_copy_only=False),
-        orbits.coordinates.time.nanos.to_numpy(zero_copy_only=False),
+    # Single Arrow crossing: Rust decodes the Orbits RecordBatch, runs the
+    # perturber loop + per-perturber spkez + batched MOID kernel, and returns
+    # the finished perturber-major PerturberMOIDs RecordBatch.
+    result = calculate_perturber_moids_arrow(
+        orbits_to_record_batch(orbits),
         [perturber_i.name for perturber_i in perturbers],
-        orbits.coordinates.frame,
-        orbits.coordinates.origin[0].as_OriginCodes().name,
     )
-
-    moids_list: List[PerturberMOIDs] = []
-    for perturber_index, perturber_i in enumerate(perturbers):
-        rows = slice(perturber_index * n, (perturber_index + 1) * n)
-        moid_mjds = primary_mjds + dt_mins[rows]
-        moids_list.append(
-            PerturberMOIDs.from_kwargs(
-                orbit_id=orbit_ids_np,
-                perturber=Origin.from_kwargs(
-                    code=np.full(n, perturber_i.name, dtype=object)
-                ),
-                moid=moids[rows],
-                time=Timestamp.from_mjd(moid_mjds, scale=time_scale),
-            )
-        )
-
-    return qv.concatenate(moids_list) if len(moids_list) > 1 else moids_list[0]
+    table = pa.Table.from_batches([result]).replace_schema_metadata(
+        {b"time.scale": orbits.coordinates.time.scale.encode()}
+    )
+    return PerturberMOIDs.from_pyarrow(table)
