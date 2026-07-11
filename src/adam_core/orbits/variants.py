@@ -9,7 +9,7 @@ import quivr as qv
 from .._rust.api import add_light_time_numpy
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
-from ..coordinates.covariances import CoordinateCovariances, weighted_covariance
+from ..coordinates.covariances import CoordinateCovariances
 from ..coordinates.origin import Origin, OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
@@ -285,52 +285,54 @@ class VariantEphemeris(qv.Table):
             The collapsed ephemeris (with covariance matrices calculated based
             on the samples).
         """
-        link = self.link_to_ephemeris(ephemeris)
+        from adam_core import _rust_native
 
-        # Iterate over the variants and calculate the mean state and covariance matrix
-        # for each orbit at each epoch then create a new orbit with the calculated covariance matrix
-        ephemeris_list = []
-        for ephemeris_i in ephemeris:
-            assert len(ephemeris_i) == 1
+        # Legacy linkage asserted matching time scales before collapsing.
+        assert ephemeris.coordinates.time.scale == self.coordinates.time.scale
 
-            key = link.key(
-                orbit_id=ephemeris_i.orbit_id[0].as_py(),
-                day=ephemeris_i.coordinates.time.days[0].as_py(),
-                millis=ephemeris_i.coordinates.time.millis()[0].as_py(),
+        # Legacy collapsed aberrated covariances whenever any variant carried
+        # aberrated coordinates; preserve that global switch.
+        has_aberrated = not pc.all(pc.is_null(self.aberrated_coordinates.x)).as_py()
+        aberrated_kwargs = {}
+        if has_aberrated:
+            aberrated_kwargs = {
+                "orbit_aberrated_means": np.ascontiguousarray(
+                    ephemeris.aberrated_coordinates.values, dtype=np.float64
+                ),
+                "variant_aberrated": np.ascontiguousarray(
+                    self.aberrated_coordinates.values, dtype=np.float64
+                ),
+            }
+
+        # One Rust crossing owns the linkage grouping and every weighted
+        # covariance; the mean states stay the ephemeris row states.
+        covariance_spherical, covariance_aberrated = (
+            _rust_native.collapse_variant_ephemeris_covariances_numpy(
+                ephemeris.orbit_id.to_pylist(),
+                ephemeris.coordinates.time.days.to_numpy(zero_copy_only=False),
+                ephemeris.coordinates.time.millis().to_numpy(zero_copy_only=False),
+                np.ascontiguousarray(ephemeris.coordinates.values, dtype=np.float64),
+                self.orbit_id.to_pylist(),
+                self.coordinates.time.days.to_numpy(zero_copy_only=False),
+                self.coordinates.time.millis().to_numpy(zero_copy_only=False),
+                np.ascontiguousarray(self.coordinates.values, dtype=np.float64),
+                self.weights_cov.to_numpy(zero_copy_only=False),
+                **aberrated_kwargs,
             )
-            variants = link.select_right(key)
+        )
 
-            # Collapse topocentric spherical coordinate covariances
-            samples_spherical = variants.coordinates.values
-            mean_spherical = ephemeris_i.coordinates.values[0]
-            covariance_spherical = weighted_covariance(
-                mean_spherical,
-                samples_spherical,
-                variants.weights_cov.to_numpy(zero_copy_only=False),
-            ).reshape(1, 6, 6)
-
-            ephemeris_collapsed = ephemeris_i.set_column(
-                "coordinates.covariance",
-                CoordinateCovariances.from_matrix(covariance_spherical),
+        collapsed = ephemeris.set_column(
+            "coordinates.covariance",
+            CoordinateCovariances.from_matrix(covariance_spherical.reshape(-1, 6, 6)),
+        )
+        if covariance_aberrated is not None:
+            collapsed = collapsed.set_column(
+                "aberrated_coordinates.covariance",
+                CoordinateCovariances.from_matrix(
+                    covariance_aberrated.reshape(-1, 6, 6)
+                ),
             )
-
-            # If aberrated coordinates were provided, also collapse their covariances
-            if not pc.all(pc.is_null(variants.aberrated_coordinates.x)).as_py():
-                samples_aberrated = variants.aberrated_coordinates.values
-                mean_aberrated = ephemeris_i.aberrated_coordinates.values[0]
-                covariance_aberrated = weighted_covariance(
-                    mean_aberrated,
-                    samples_aberrated,
-                    variants.weights_cov.to_numpy(zero_copy_only=False),
-                ).reshape(1, 6, 6)
-                ephemeris_collapsed = ephemeris_collapsed.set_column(
-                    "aberrated_coordinates.covariance",
-                    CoordinateCovariances.from_matrix(covariance_aberrated),
-                )
-
-            ephemeris_list.append(ephemeris_collapsed)
-
-        return qv.concatenate(ephemeris_list)
+        return collapsed
 
     def collapse_by_object_id(
         self,
@@ -360,188 +362,74 @@ class VariantEphemeris(qv.Table):
         if group_chunk_size <= 0:
             raise ValueError("group_chunk_size must be > 0")
 
-        variants = self.sort_by(
-            [
-                "object_id",
-                "coordinates.time.days",
-                "coordinates.time.nanos",
-                "coordinates.origin.code",
-            ]
+        from adam_core import _rust_native
+
+        # Legacy behavior: aberrated collapse required constant group sizes.
+        # Detect that before the crossing so mode='collapse' can degrade the
+        # same way, and pass aberrated inputs only when they can be used.
+        try:
+            has_ab = not pc.all(pc.is_null(self.aberrated_coordinates.x)).as_py()
+            has_lt = not pc.all(pc.is_null(self.light_time)).as_py()
+        except Exception:
+            has_ab = False
+            has_lt = False
+        collapse_aberrated = aberration_mode == "collapse" and has_ab and has_lt
+        aberrated_kwargs = {}
+        if collapse_aberrated:
+            aberrated_kwargs = {
+                "aberrated_values": np.ascontiguousarray(
+                    self.aberrated_coordinates.values, dtype=np.float64
+                ),
+                "light_times": pc.fill_null(self.light_time, np.nan).to_numpy(
+                    zero_copy_only=False
+                ),
+            }
+
+        # One Rust crossing owns the stable sort, grouping, circular longitude
+        # statistics, weighted means/covariances, and magnitude reductions.
+        (
+            sorted_indices,
+            group_starts,
+            means_sph,
+            cov_flat,
+            mags_out,
+            aberrated_out,
+        ) = _rust_native.collapse_variant_ephemeris_by_object_numpy(
+            self.object_id.to_pylist(),
+            self.coordinates.time.days.to_numpy(zero_copy_only=False),
+            self.coordinates.time.nanos.to_numpy(zero_copy_only=False),
+            self.coordinates.origin.code.to_pylist(),
+            np.ascontiguousarray(self.coordinates.values, dtype=np.float64),
+            pc.fill_null(self.weights, np.nan).to_numpy(zero_copy_only=False),
+            pc.fill_null(self.weights_cov, np.nan).to_numpy(zero_copy_only=False),
+            pc.fill_null(self.predicted_magnitude_v, np.nan).to_numpy(
+                zero_copy_only=False
+            ),
+            **aberrated_kwargs,
         )
 
-        object_ids = variants.object_id.to_numpy(zero_copy_only=False)
-        days = variants.coordinates.time.days.to_numpy(zero_copy_only=False)
-        nanos = variants.coordinates.time.nanos.to_numpy(zero_copy_only=False)
-        origin_codes = variants.coordinates.origin.code.to_numpy(zero_copy_only=False)
-
-        key_change = (
-            (object_ids[1:] != object_ids[:-1])
-            | (days[1:] != days[:-1])
-            | (nanos[1:] != nanos[:-1])
-            | (origin_codes[1:] != origin_codes[:-1])
+        n_groups = int(len(group_starts))
+        start_rows = sorted_indices[group_starts].tolist()
+        counts = np.diff(np.concatenate([group_starts, [len(self)]])).astype(
+            np.int64, copy=False
         )
-        bounds = np.concatenate(([0], np.nonzero(key_change)[0] + 1, [len(variants)]))
-        if len(bounds) <= 2:
-            starts = np.array([0], dtype=np.int64)
-        else:
-            starts = bounds[:-1]
-
-        n_groups = len(bounds) - 1
-        # Preserve orbit_id (critical for downstream pipelines that key on orbit_id).
-        orbit_id = pc.take(variants.orbit_id, starts.tolist())
-        object_id = pc.take(variants.object_id, starts.tolist())
-        out_time = Timestamp.from_kwargs(
-            days=pc.take(variants.coordinates.time.days, starts.tolist()),
-            nanos=pc.take(variants.coordinates.time.nanos, starts.tolist()),
-            scale=variants.coordinates.time.scale,
-        )
-        out_origin = Origin.from_kwargs(
-            code=pc.take(variants.coordinates.origin.code, starts.tolist())
-        )
-
-        mags = pc.fill_null(variants.predicted_magnitude_v, np.nan).to_numpy(
-            zero_copy_only=False
-        )
-
-        spherical_values = variants.coordinates.values
-        means_sph = np.empty((n_groups, 6), dtype=np.float64)
-        cov_sph = np.empty((n_groups, 6, 6), dtype=np.float64)
-        predicted_magnitude_v: list[float | None] = [None] * n_groups
-
-        # Weights (nullable). If present, use UT weights for mean and weights_cov for covariance.
-        w_mean_all = pc.fill_null(variants.weights, np.nan).to_numpy(
-            zero_copy_only=False
-        )
-        w_cov_all = pc.fill_null(variants.weights_cov, np.nan).to_numpy(
-            zero_copy_only=False
-        )
-
-        counts = np.diff(bounds).astype(np.int64, copy=False)
         uniform_group_size = bool(counts.size > 0 and np.all(counts == counts[0]))
         K = int(counts[0]) if uniform_group_size else -1
 
-        def _normalize_rows(w: np.ndarray) -> np.ndarray:
-            s = np.sum(w, axis=1, keepdims=True)
-            ok = np.isfinite(s) & (s != 0.0)
-            return np.where(ok, w / s, 1.0 / float(w.shape[1]))
-
-        if uniform_group_size and K > 0:
-            # Fast path: constant group size (common for sigma points and MC sampling).
-            for g0 in range(0, int(n_groups), int(group_chunk_size)):
-                g1 = int(min(int(n_groups), int(g0) + int(group_chunk_size)))
-                r0 = int(bounds[g0])
-                r1 = int(bounds[g1])
-                n_g = int(g1 - g0)
-                if n_g <= 0:
-                    continue
-
-                samp = np.asarray(spherical_values[r0:r1], dtype=np.float64).reshape(
-                    n_g, K, 6
-                )
-
-                w_mean = np.asarray(w_mean_all[r0:r1], dtype=np.float64).reshape(n_g, K)
-                w_cov = np.asarray(w_cov_all[r0:r1], dtype=np.float64).reshape(n_g, K)
-
-                valid_mean = np.all(np.isfinite(w_mean), axis=1)
-                valid_cov = np.all(np.isfinite(w_cov), axis=1)
-                # Default to uniform weights when missing.
-                w_mean = np.where(valid_mean[:, None], w_mean, 1.0 / float(K))
-                # If covariance weights missing, fall back to mean weights.
-                w_cov = np.where(valid_cov[:, None], w_cov, w_mean)
-
-                w_mean = _normalize_rows(w_mean)
-                w_cov = _normalize_rows(w_cov)
-
-                # Circular weighted mean for longitude (degrees).
-                lon = samp[:, :, 1]
-                lon_rad = np.deg2rad(lon)
-                s_sin = np.sum(w_mean * np.sin(lon_rad), axis=1)
-                s_cos = np.sum(w_mean * np.cos(lon_rad), axis=1)
-                lon_mean = (np.degrees(np.arctan2(s_sin, s_cos)) + 360.0) % 360.0
-
-                # Wrap longitude samples around the circular mean for covariance.
-                lon_wrapped = lon_mean[:, None] + (
-                    ((lon - lon_mean[:, None] + 180.0) % 360.0) - 180.0
-                )
-                samp2 = samp.copy()
-                samp2[:, :, 1] = lon_wrapped
-
-                mean = np.sum(w_mean[:, :, None] * samp2, axis=1)
-                mean[:, 1] = lon_mean
-                means_sph[g0:g1] = mean
-
-                resid = samp2 - mean[:, None, :]
-                cov = np.einsum("gk,gki,gkj->gij", w_cov, resid, resid, optimize=True)
-                cov_sph[g0:g1] = cov
-
-                # Weighted mean of predicted_magnitude_v (ignore NaNs).
-                mags_chunk = np.asarray(mags[r0:r1], dtype=np.float64).reshape(n_g, K)
-                is_ok = np.isfinite(mags_chunk)
-                w_m = np.where(is_ok, w_mean, 0.0)
-                denom = np.sum(w_m, axis=1)
-                num = np.sum(w_m * np.where(is_ok, mags_chunk, 0.0), axis=1)
-                out = np.full_like(num, np.nan, dtype=np.float64)
-                np.divide(num, denom, out=out, where=(denom > 0))
-                for i, v in enumerate(out.tolist()):
-                    if np.isfinite(v):
-                        predicted_magnitude_v[g0 + i] = float(v)
-        else:
-            # Fallback: variable group sizes (rare). Still uses weights when present.
-            for i, (start, end) in enumerate(zip(bounds[:-1], bounds[1:])):
-                n = int(end - start)
-                if n <= 0:
-                    continue
-                samples = np.asarray(
-                    spherical_values[start:end], dtype=np.float64
-                ).copy()
-
-                w_mean = np.asarray(w_mean_all[start:end], dtype=np.float64)
-                w_cov = np.asarray(w_cov_all[start:end], dtype=np.float64)
-                if not np.all(np.isfinite(w_mean)):
-                    w_mean = np.full(n, 1.0 / float(n), dtype=np.float64)
-                else:
-                    s = float(np.sum(w_mean))
-                    w_mean = (
-                        w_mean / s
-                        if s != 0.0
-                        else np.full(n, 1.0 / float(n), dtype=np.float64)
-                    )
-                if not np.all(np.isfinite(w_cov)):
-                    w_cov = w_mean
-                else:
-                    s = float(np.sum(w_cov))
-                    w_cov = w_cov / s if s != 0.0 else w_mean
-
-                lon = samples[:, 1]
-                lon_rad = np.deg2rad(lon)
-                lon_mean = float(
-                    (
-                        np.degrees(
-                            np.arctan2(
-                                np.sum(w_mean * np.sin(lon_rad)),
-                                np.sum(w_mean * np.cos(lon_rad)),
-                            )
-                        )
-                        + 360.0
-                    )
-                    % 360.0
-                )
-                samples[:, 1] = lon_mean + (((lon - lon_mean + 180.0) % 360.0) - 180.0)
-
-                mean = np.dot(w_mean, samples)
-                mean[1] = lon_mean
-                means_sph[i] = mean
-                cov_sph[i] = weighted_covariance(mean, samples, w_cov).reshape(6, 6)
-
-                mags_i = mags[start:end]
-                if not np.all(np.isnan(mags_i)):
-                    ok = np.isfinite(mags_i)
-                    denom = float(np.sum(w_mean[ok]))
-                    predicted_magnitude_v[i] = (
-                        None
-                        if denom <= 0
-                        else float(np.sum(w_mean[ok] * mags_i[ok]) / denom)
-                    )
+        # Preserve orbit_id (critical for downstream pipelines that key on orbit_id).
+        orbit_id = pc.take(self.orbit_id, start_rows)
+        object_id = pc.take(self.object_id, start_rows)
+        out_time = Timestamp.from_kwargs(
+            days=pc.take(self.coordinates.time.days, start_rows),
+            nanos=pc.take(self.coordinates.time.nanos, start_rows),
+            scale=self.coordinates.time.scale,
+        )
+        out_origin = Origin.from_kwargs(
+            code=pc.take(self.coordinates.origin.code, start_rows)
+        )
+        predicted_magnitude_v: list[float | None] = [
+            float(value) if np.isfinite(value) else None for value in mags_out.tolist()
+        ]
 
         collapsed_coordinates = SphericalCoordinates.from_kwargs(
             rho=means_sph[:, 0],
@@ -550,10 +438,12 @@ class VariantEphemeris(qv.Table):
             vrho=means_sph[:, 3],
             vlon=means_sph[:, 4],
             vlat=means_sph[:, 5],
-            covariance=CoordinateCovariances.from_matrix(cov_sph),
+            covariance=CoordinateCovariances.from_matrix(
+                cov_flat.reshape(n_groups, 6, 6)
+            ),
             time=out_time,
             origin=out_origin,
-            frame=variants.coordinates.frame,
+            frame=self.coordinates.frame,
         )
 
         # The collapsed mean ephemeris (UT mean + covariance).
@@ -569,47 +459,9 @@ class VariantEphemeris(qv.Table):
 
         if aberration_mode == "collapse":
             # If the variants already contain aberrated coordinates + light_time, avoid any
-            # regeneration and just collapse those too (weighted).
-            try:
-                has_ab = not pc.all(
-                    pc.is_null(variants.aberrated_coordinates.x)
-                ).as_py()
-                has_lt = not pc.all(pc.is_null(variants.light_time)).as_py()
-            except Exception:
-                has_ab = False
-                has_lt = False
-            if has_ab and has_lt and uniform_group_size and K > 0:
-                ab_vals = np.asarray(
-                    variants.aberrated_coordinates.values, dtype=np.float64
-                )
-                lt_vals = pc.fill_null(variants.light_time, np.nan).to_numpy(
-                    zero_copy_only=False
-                )
-                out_ab = np.empty((n_groups, 6), dtype=np.float64)
-                out_lt = np.empty((n_groups,), dtype=np.float64)
-                for g0 in range(0, int(n_groups), int(group_chunk_size)):
-                    g1 = int(min(int(n_groups), int(g0) + int(group_chunk_size)))
-                    r0 = int(bounds[g0])
-                    r1 = int(bounds[g1])
-                    n_g = int(g1 - g0)
-                    if n_g <= 0:
-                        continue
-                    w_mean = np.asarray(w_mean_all[r0:r1], dtype=np.float64).reshape(
-                        n_g, K
-                    )
-                    valid_mean = np.all(np.isfinite(w_mean), axis=1)
-                    w_mean = np.where(valid_mean[:, None], w_mean, 1.0 / float(K))
-                    w_mean = _normalize_rows(w_mean)
-                    ab = np.asarray(ab_vals[r0:r1], dtype=np.float64).reshape(n_g, K, 6)
-                    lt = np.asarray(lt_vals[r0:r1], dtype=np.float64).reshape(n_g, K)
-                    # Weighted mean; ignore non-finite lt.
-                    out_ab[g0:g1] = np.sum(w_mean[:, :, None] * ab, axis=1)
-                    ok = np.isfinite(lt)
-                    w2 = np.where(ok, w_mean, 0.0)
-                    denom = np.sum(w2, axis=1)
-                    num = np.sum(w2 * np.where(ok, lt, 0.0), axis=1)
-                    out_lt[g0:g1] = np.where(denom > 0, num / denom, np.nan)
-
+            # regeneration and just collapse those too (weighted, in the same crossing).
+            if aberrated_out is not None and uniform_group_size and K > 0:
+                out_ab, out_lt = aberrated_out
                 if np.all(np.isfinite(out_ab)) and np.any(np.isfinite(out_lt)):
                     light_time = np.where(
                         np.isfinite(out_lt),
@@ -750,7 +602,6 @@ class VariantEphemeris(qv.Table):
                 f"len={total} n_times={n_times} n_variants={n_variants}"
             )
         n_orbits = int(total // denom)
-        n_base = int(n_orbits * n_variants)  # base variants (orbit, variant_id)
 
         # Validate that base variants are orbit-major (n_variants consecutive base variants per orbit).
         base0 = np.arange(0, total, n_times, dtype=np.int64)  # (n_base,)
@@ -819,66 +670,56 @@ class VariantEphemeris(qv.Table):
             code=pa.array(out_origin, type=pa.large_string())
         )
 
-        # UT weights per (orbit, variant) (constant across times).
-        w_mean_base = (
+        from adam_core import _rust_native
+
+        # UT weights per (orbit, variant) (constant across times); legacy
+        # applies the base-variant weight to every epoch of that variant.
+        w_mean_rows = np.repeat(
             pc.take(self.weights, base0.tolist())
             .cast(pa.float64())
             .fill_null(pa.scalar(np.nan, type=pa.float64()))
             .to_numpy(zero_copy_only=False)
-            .astype(np.float64, copy=False)
-            .reshape(n_orbits, n_variants)
+            .astype(np.float64, copy=False),
+            n_times,
         )
-        w_cov_base = (
+        w_cov_rows = np.repeat(
             pc.take(self.weights_cov, base0.tolist())
             .cast(pa.float64())
             .fill_null(pa.scalar(np.nan, type=pa.float64()))
             .to_numpy(zero_copy_only=False)
-            .astype(np.float64, copy=False)
-            .reshape(n_orbits, n_variants)
+            .astype(np.float64, copy=False),
+            n_times,
         )
 
-        def _normalize_rows(w: np.ndarray) -> np.ndarray:
-            s = np.sum(w, axis=1, keepdims=True)
-            ok = np.isfinite(s) & (s != 0.0)
-            return np.where(ok, w / s, 1.0 / float(w.shape[1]))
-
-        valid_mean = np.all(np.isfinite(w_mean_base), axis=1)
-        w_mean = np.where(valid_mean[:, None], w_mean_base, 1.0 / float(n_variants))
-        valid_cov = np.all(np.isfinite(w_cov_base), axis=1)
-        w_cov = np.where(valid_cov[:, None], w_cov_base, w_mean)
-        w_mean = _normalize_rows(w_mean)
-        w_cov = _normalize_rows(w_cov)
-
-        # Values: reshape to (orbit, variant, time, dim).
-        vals = np.asarray(self.coordinates.values, dtype=np.float64).reshape(
-            n_base, n_times, 6
+        # Synthesized orbit-major keys: sorting by (orbit, time) recovers the
+        # output layout while the Rust core owns circular statistics, weight
+        # normalization, and weighted covariance per (orbit, time) group.
+        row_orbit = np.arange(total, dtype=np.int64) // denom
+        row_time = np.arange(total, dtype=np.int64) % n_times
+        synthetic_ids = [f"{orbit:012d}" for orbit in row_orbit.tolist()]
+        (
+            _sorted_indices,
+            group_starts,
+            mean_flat,
+            cov_groups,
+            _mags_out,
+            _aberrated_out,
+        ) = _rust_native.collapse_variant_ephemeris_by_object_numpy(
+            synthetic_ids,
+            row_time,
+            np.zeros(total, dtype=np.int64),
+            [""] * total,
+            np.ascontiguousarray(self.coordinates.values, dtype=np.float64),
+            w_mean_rows,
+            w_cov_rows,
+            np.full(total, np.nan, dtype=np.float64),
         )
-        vals = vals.reshape(n_orbits, n_variants, n_times, 6)
-
-        # Circular weighted mean for longitude (deg).
-        lon = vals[:, :, :, 1]  # (O,K,N)
-        lon_rad = np.deg2rad(lon)
-        w_mean3 = w_mean[:, :, None]  # (O,K,1)
-        s_sin = np.sum(w_mean3 * np.sin(lon_rad), axis=1)  # (O,N)
-        s_cos = np.sum(w_mean3 * np.cos(lon_rad), axis=1)
-        lon_mean = (np.degrees(np.arctan2(s_sin, s_cos)) + 360.0) % 360.0  # (O,N)
-
-        lon_wrapped = lon_mean[:, None, :] + (
-            ((lon - lon_mean[:, None, :] + 180.0) % 360.0) - 180.0
-        )
-        vals2 = vals.copy()
-        vals2[:, :, :, 1] = lon_wrapped
-
-        mean = np.sum(w_mean[:, :, None, None] * vals2, axis=1)  # (O,N,6)
-        mean[:, :, 1] = lon_mean
-
-        resid = vals2 - mean[:, None, :, :]  # (O,K,N,6)
-        cov = np.einsum(
-            "ok,okni,oknj->onij", w_cov, resid, resid, optimize=True
-        )  # (O,N,6,6)
-
-        mean_flat = mean.reshape(n_orbits * n_times, 6)
-        cov_flat = cov.reshape(n_orbits * n_times, 6, 6)
+        if len(group_starts) != n_orbits * n_times:
+            raise ValueError(
+                "sigma-point collapse produced an unexpected group count: "
+                f"{len(group_starts)} != {n_orbits * n_times}"
+            )
+        cov_flat = cov_groups.reshape(n_orbits * n_times, 6, 6)
 
         collapsed_coordinates = SphericalCoordinates.from_kwargs(
             rho=mean_flat[:, 0],
