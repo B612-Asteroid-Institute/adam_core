@@ -6,11 +6,40 @@ use adam_core_rs_coords::{
     generate_ephemeris_2body_flat6, generate_ephemeris_2body_with_covariance_flat6,
     izzo_lambert_batch_flat, porkchop_grid_flat, propagate_2body_along_arc,
     propagate_2body_arc_batch_flat6, propagate_2body_flat6, propagate_2body_with_covariance_flat6,
-    solve_barker, solve_kepler_true_anomaly,
+    solve_barker, solve_kepler_true_anomaly, tisserand_parameter_flat,
 };
-use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2};
+use numpy::{
+    IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2, PyUntypedArrayMethods,
+};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use std::hint::black_box;
+use std::time::Instant;
+
+fn benchmark_samples<T, F>(
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    mut run_once: F,
+) -> Vec<Vec<f64>>
+where
+    F: FnMut() -> T,
+{
+    let mut trial_samples = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            black_box(run_once());
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            black_box(run_once());
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        trial_samples.push(samples);
+    }
+    trial_samples
+}
 
 #[pyfunction]
 fn calc_mean_motion_numpy<'py>(
@@ -1082,6 +1111,320 @@ fn porkchop_grid_numpy<'py>(
     ))
 }
 
+/// Rust-owned timers for canonical parity dynamics/mission kernels. Every
+/// NumPy/PyO3 extraction and owned-input preparation happens before the first
+/// warmup; recorded samples contain only direct Rust calls and `Instant`.
+#[pyfunction]
+#[pyo3(signature = (a, mu, reps, trials, warmup_reps=1))]
+fn benchmark_calc_mean_motion_numpy(
+    a: PyReadonlyArray1<'_, f64>,
+    mu: PyReadonlyArray1<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let a = a.as_slice()?.to_vec();
+    let mu = mu.as_slice()?.to_vec();
+    if a.len() != mu.len() {
+        return Err(PyValueError::new_err("a and mu must have the same length"));
+    }
+    Ok(benchmark_samples(reps, trials, warmup_reps, || {
+        calc_mean_motion_batch(&a, &mu)
+    }))
+}
+
+#[pyfunction]
+#[pyo3(signature = (a, e, i_deg, ap, reps, trials, warmup_reps=1))]
+fn benchmark_tisserand_parameter_numpy(
+    a: PyReadonlyArray1<'_, f64>,
+    e: PyReadonlyArray1<'_, f64>,
+    i_deg: PyReadonlyArray1<'_, f64>,
+    ap: f64,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let a = a.as_slice()?.to_vec();
+    let e = e.as_slice()?.to_vec();
+    let i_deg = i_deg.as_slice()?.to_vec();
+    if a.len() != e.len() || a.len() != i_deg.len() {
+        return Err(PyValueError::new_err("a, e, i_deg must have equal length"));
+    }
+    Ok(benchmark_samples(reps, trials, warmup_reps, || {
+        tisserand_parameter_flat(&a, &e, &i_deg, ap)
+    }))
+}
+
+#[pyfunction]
+#[pyo3(signature = (primary_orbits, secondary_orbits, mus, reps, trials, warmup_reps=1, max_iter=100, xtol=1e-10))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_calculate_moid_numpy(
+    primary_orbits: PyReadonlyArray2<'_, f64>,
+    secondary_orbits: PyReadonlyArray2<'_, f64>,
+    mus: PyReadonlyArray1<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    max_iter: usize,
+    xtol: f64,
+) -> PyResult<Vec<Vec<f64>>> {
+    let p_shape = primary_orbits.shape();
+    let s_shape = secondary_orbits.shape();
+    if p_shape.len() != 2 || s_shape.len() != 2 || p_shape[1] != 6 || s_shape != p_shape {
+        return Err(PyValueError::new_err(
+            "orbit inputs must have matching shape (N, 6)",
+        ));
+    }
+    let p = primary_orbits.as_slice()?.to_vec();
+    let s = secondary_orbits.as_slice()?.to_vec();
+    let mus = mus.as_slice()?.to_vec();
+    if mus.len() != p_shape[0] {
+        return Err(PyValueError::new_err("mus must have length N"));
+    }
+    Ok(benchmark_samples(reps, trials, warmup_reps, || {
+        (0..mus.len())
+            .map(|row| {
+                let base = row * 6;
+                let primary: [f64; 6] = p[base..base + 6].try_into().unwrap();
+                let secondary: [f64; 6] = s[base..base + 6].try_into().unwrap();
+                calculate_moid(primary, secondary, mus[row], max_iter, xtol)
+            })
+            .collect::<Vec<_>>()
+    }))
+}
+
+#[pyfunction]
+#[pyo3(signature = (primary_orbits, secondary_orbits, mus, reps, trials, warmup_reps=1, max_iter=100, xtol=1e-10))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_calculate_moid_batch_numpy(
+    primary_orbits: PyReadonlyArray2<'_, f64>,
+    secondary_orbits: PyReadonlyArray2<'_, f64>,
+    mus: PyReadonlyArray1<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    max_iter: usize,
+    xtol: f64,
+) -> PyResult<Vec<Vec<f64>>> {
+    let p_shape = primary_orbits.shape();
+    let s_shape = secondary_orbits.shape();
+    if p_shape.len() != 2 || s_shape.len() != 2 || p_shape[1] != 6 || s_shape != p_shape {
+        return Err(PyValueError::new_err(
+            "orbit inputs must have matching shape (N, 6)",
+        ));
+    }
+    let p = primary_orbits.as_slice()?.to_vec();
+    let s = secondary_orbits.as_slice()?.to_vec();
+    let mus = mus.as_slice()?.to_vec();
+    if mus.len() != p_shape[0] {
+        return Err(PyValueError::new_err("mus must have length N"));
+    }
+    Ok(benchmark_samples(reps, trials, warmup_reps, || {
+        calculate_moid_batch(&p, &s, &mus, max_iter, xtol)
+    }))
+}
+
+#[pyfunction]
+#[pyo3(signature = (orbit, dts, mu, reps, trials, warmup_reps=1, max_iter=100, tol=1e-15))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_propagate_2body_along_arc_numpy(
+    orbit: PyReadonlyArray1<'_, f64>,
+    dts: PyReadonlyArray1<'_, f64>,
+    mu: f64,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    max_iter: usize,
+    tol: f64,
+) -> PyResult<Vec<Vec<f64>>> {
+    let orbit: [f64; 6] = orbit
+        .as_slice()?
+        .try_into()
+        .map_err(|_| PyValueError::new_err("orbit must have shape (6,)"))?;
+    let dts = dts.as_slice()?.to_vec();
+    Ok(benchmark_samples(reps, trials, warmup_reps, || {
+        propagate_2body_along_arc(orbit, &dts, mu, max_iter, tol)
+    }))
+}
+
+#[pyfunction]
+#[pyo3(signature = (orbits, dts, mus, reps, trials, warmup_reps=1, max_iter=100, tol=1e-15))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_propagate_2body_arc_batch_numpy(
+    orbits: PyReadonlyArray2<'_, f64>,
+    dts: PyReadonlyArray2<'_, f64>,
+    mus: PyReadonlyArray1<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    max_iter: usize,
+    tol: f64,
+) -> PyResult<Vec<Vec<f64>>> {
+    let orbit_shape = orbits.shape();
+    let dt_shape = dts.shape();
+    if orbit_shape[1] != 6 || dt_shape[0] != orbit_shape[0] {
+        return Err(PyValueError::new_err("orbits/dts row counts must match"));
+    }
+    let orbits = orbits.as_slice()?.to_vec();
+    let dts = dts.as_slice()?.to_vec();
+    let mus = mus.as_slice()?.to_vec();
+    if mus.len() != orbit_shape[0] {
+        return Err(PyValueError::new_err("mus must have length N"));
+    }
+    let epochs = dt_shape[1];
+    Ok(benchmark_samples(reps, trials, warmup_reps, || {
+        propagate_2body_arc_batch_flat6(&orbits, &dts, &mus, epochs, max_iter, tol)
+    }))
+}
+
+#[pyfunction]
+#[pyo3(signature = (orbits, covariances, dts, mus, reps, trials, warmup_reps=1, max_iter=100, tol=1e-15))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_propagate_2body_with_covariance_numpy(
+    orbits: PyReadonlyArray2<'_, f64>,
+    covariances: PyReadonlyArray2<'_, f64>,
+    dts: PyReadonlyArray1<'_, f64>,
+    mus: PyReadonlyArray1<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    max_iter: usize,
+    tol: f64,
+) -> PyResult<Vec<Vec<f64>>> {
+    let shape = orbits.shape();
+    if shape[1] != 6 || covariances.shape() != [shape[0], 36] {
+        return Err(PyValueError::new_err(
+            "orbits/covariances must have shapes (N,6)/(N,36)",
+        ));
+    }
+    let orbits = orbits.as_slice()?.to_vec();
+    let covariances = covariances.as_slice()?.to_vec();
+    let dts = dts.as_slice()?.to_vec();
+    let mus = mus.as_slice()?.to_vec();
+    if dts.len() != shape[0] || mus.len() != shape[0] {
+        return Err(PyValueError::new_err("dts and mus must have length N"));
+    }
+    Ok(benchmark_samples(reps, trials, warmup_reps, || {
+        propagate_2body_with_covariance_flat6(&orbits, &covariances, &dts, &mus, max_iter, tol)
+    }))
+}
+
+#[pyfunction]
+#[pyo3(signature = (r1, r2, tof, mu, m, prograde, low_path, reps, trials, warmup_reps=1, maxiter=35, atol=1e-10, rtol=1e-10))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_izzo_lambert_numpy(
+    r1: PyReadonlyArray2<'_, f64>,
+    r2: PyReadonlyArray2<'_, f64>,
+    tof: PyReadonlyArray1<'_, f64>,
+    mu: f64,
+    m: u32,
+    prograde: bool,
+    low_path: bool,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    maxiter: u32,
+    atol: f64,
+    rtol: f64,
+) -> PyResult<Vec<Vec<f64>>> {
+    let shape = r1.shape();
+    if shape[1] != 3 || r2.shape() != shape || tof.len() != shape[0] {
+        return Err(PyValueError::new_err(
+            "r1/r2/tof shapes must be (N,3)/(N,3)/(N,)",
+        ));
+    }
+    let r1 = r1.as_slice()?.to_vec();
+    let r2 = r2.as_slice()?.to_vec();
+    let tof = tof.as_slice()?.to_vec();
+    Ok(benchmark_samples(reps, trials, warmup_reps, || {
+        izzo_lambert_batch_flat(
+            &r1, &r2, &tof, mu, m, prograde, low_path, maxiter, atol, rtol,
+        )
+    }))
+}
+
+#[pyfunction]
+#[pyo3(signature = (orbits, observer_positions, mus, reps, trials, warmup_reps=1, lt_tol=1e-10, max_iter=1000, tol=1e-15, max_lt_iter=10))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_add_light_time_numpy(
+    orbits: PyReadonlyArray2<'_, f64>,
+    observer_positions: PyReadonlyArray2<'_, f64>,
+    mus: PyReadonlyArray1<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    lt_tol: f64,
+    max_iter: usize,
+    tol: f64,
+    max_lt_iter: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let shape = orbits.shape();
+    if shape[1] != 6 || observer_positions.shape() != [shape[0], 3] || mus.len() != shape[0] {
+        return Err(PyValueError::new_err(
+            "orbits/observers/mus shapes must be (N,6)/(N,3)/(N,)",
+        ));
+    }
+    let orbits = orbits.as_slice()?.to_vec();
+    let observers = observer_positions.as_slice()?.to_vec();
+    let mus = mus.as_slice()?.to_vec();
+    Ok(benchmark_samples(reps, trials, warmup_reps, || {
+        add_light_time_batch_flat(
+            &orbits,
+            &observers,
+            &mus,
+            lt_tol,
+            max_iter,
+            tol,
+            max_lt_iter,
+        )
+    }))
+}
+
+#[pyfunction]
+#[pyo3(signature = (dep_states, dep_mjds, arr_states, arr_mjds, mu, prograde, reps, trials, warmup_reps=1, maxiter=35, atol=1e-10, rtol=1e-10))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_porkchop_grid_numpy(
+    dep_states: PyReadonlyArray2<'_, f64>,
+    dep_mjds: PyReadonlyArray1<'_, f64>,
+    arr_states: PyReadonlyArray2<'_, f64>,
+    arr_mjds: PyReadonlyArray1<'_, f64>,
+    mu: f64,
+    prograde: bool,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    maxiter: u32,
+    atol: f64,
+    rtol: f64,
+) -> PyResult<Vec<Vec<f64>>> {
+    if dep_states.shape()[1] != 6
+        || arr_states.shape()[1] != 6
+        || dep_mjds.len() != dep_states.shape()[0]
+        || arr_mjds.len() != arr_states.shape()[0]
+    {
+        return Err(PyValueError::new_err(
+            "porkchop state/time shapes do not match",
+        ));
+    }
+    let dep_states = dep_states.as_slice()?.to_vec();
+    let dep_mjds = dep_mjds.as_slice()?.to_vec();
+    let arr_states = arr_states.as_slice()?.to_vec();
+    let arr_mjds = arr_mjds.as_slice()?.to_vec();
+    Ok(benchmark_samples(reps, trials, warmup_reps, || {
+        porkchop_grid_flat(
+            &dep_states,
+            &dep_mjds,
+            &arr_states,
+            &arr_mjds,
+            mu,
+            prograde,
+            maxiter,
+            atol,
+            rtol,
+        )
+    }))
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calc_mean_motion_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(calc_period_numpy, m)?)?;
@@ -1111,5 +1454,24 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calculate_moid_batch_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(izzo_lambert_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(porkchop_grid_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_calc_mean_motion_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_tisserand_parameter_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_calculate_moid_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_calculate_moid_batch_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_propagate_2body_along_arc_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_propagate_2body_arc_batch_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_propagate_2body_with_covariance_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(benchmark_izzo_lambert_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_add_light_time_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_porkchop_grid_numpy, m)?)?;
     Ok(())
 }

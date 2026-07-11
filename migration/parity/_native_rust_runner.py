@@ -236,6 +236,242 @@ def _generate_ephemeris_2body(
     )
 
 
+def _kernel_timing(
+    function: Callable[..., Any],
+    args: tuple[Any, ...],
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    entrypoint: str,
+    kernel: str,
+) -> NativeRustTiming:
+    """Launch one Rust-owned timer after all canonical input preparation."""
+    samples = function(*args, reps, trials, warmup)
+    return NativeRustTiming(
+        status="measured",
+        sample_trials_s=[[float(value) for value in trial] for trial in samples],
+        entrypoint=entrypoint,
+        timing_boundary=(
+            f"Rust std::time::Instant around direct {kernel} calls; canonical "
+            "NumPy input ownership, outer Python/PyO3 launch, and output conversion excluded"
+        ),
+    )
+
+
+def _f64(value: Any) -> np.ndarray:
+    return np.ascontiguousarray(np.asarray(value, dtype=np.float64))
+
+
+def _calc_mean_motion(
+    *, a: Any, mu: Any, reps: int, warmup: int, trials: int, **_unused: Any
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    return _kernel_timing(
+        _rust_native.benchmark_calc_mean_motion_numpy,
+        (_f64(a), _f64(mu)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::calc_mean_motion_batch",
+        kernel="calc_mean_motion_batch",
+    )
+
+
+def _tisserand_parameter(
+    *,
+    a: Any,
+    e: Any,
+    i: Any,
+    third_body: str,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+    from adam_core.dynamics.tisserand import MAJOR_BODIES
+
+    ap = float(MAJOR_BODIES[str(third_body)])
+    return _kernel_timing(
+        _rust_native.benchmark_tisserand_parameter_numpy,
+        (_f64(a), _f64(e), _f64(i), ap),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::tisserand_parameter_flat",
+        kernel="tisserand_parameter_flat",
+    )
+
+
+def _calculate_moid(
+    *,
+    primary_orbits: Any,
+    secondary_orbits: Any,
+    mus: Any,
+    max_iter: int,
+    xtol: float,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    return _kernel_timing(
+        _rust_native.benchmark_calculate_moid_numpy,
+        (
+            _f64(primary_orbits),
+            _f64(secondary_orbits),
+            _f64(mus),
+            int(max_iter),
+            float(xtol),
+        ),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::calculate_moid",
+        kernel="canonical per-pair calculate_moid loop",
+    )
+
+
+def _calculate_moid_batch(
+    *,
+    primary_orbits: Any,
+    secondary_orbits: Any,
+    mus: Any,
+    max_iter: int,
+    xtol: float,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    return _kernel_timing(
+        _rust_native.benchmark_calculate_moid_batch_numpy,
+        (
+            _f64(primary_orbits),
+            _f64(secondary_orbits),
+            _f64(mus),
+            int(max_iter),
+            float(xtol),
+        ),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::calculate_moid_batch",
+        kernel="calculate_moid_batch",
+    )
+
+
+def _propagate_2body_along_arc(
+    *, reps: int, warmup: int, trials: int, orbit: Any, dts: Any, mu: float,
+    max_iter: int, tol: float, **_unused: Any
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    return _kernel_timing(
+        _rust_native.benchmark_propagate_2body_along_arc_numpy,
+        (_f64(orbit), _f64(dts), float(mu), int(max_iter), float(tol)),
+        reps=reps, warmup=warmup, trials=trials,
+        entrypoint="adam_core_rs_coords::propagate_2body_along_arc",
+        kernel="propagate_2body_along_arc",
+    )
+
+
+def _propagate_2body_arc_batch(
+    *, reps: int, warmup: int, trials: int, orbits: Any, dts: Any, mus: Any,
+    max_iter: int, tol: float, **_unused: Any
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    return _kernel_timing(
+        _rust_native.benchmark_propagate_2body_arc_batch_numpy,
+        (_f64(orbits), _f64(dts), _f64(mus), int(max_iter), float(tol)),
+        reps=reps, warmup=warmup, trials=trials,
+        entrypoint="adam_core_rs_coords::propagate_2body_arc_batch_flat6",
+        kernel="propagate_2body_arc_batch_flat6",
+    )
+
+
+def _propagate_2body_with_covariance(
+    *, reps: int, warmup: int, trials: int, orbits: Any, covariances: Any,
+    dts: Any, mus: Any, max_iter: int, tol: float, **_unused: Any
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    return _kernel_timing(
+        _rust_native.benchmark_propagate_2body_with_covariance_numpy,
+        (
+            _f64(orbits), _f64(covariances), _f64(dts), _f64(mus),
+            int(max_iter), float(tol),
+        ),
+        reps=reps, warmup=warmup, trials=trials,
+        entrypoint="adam_core_rs_coords::propagate_2body_with_covariance_flat6",
+        kernel="state and covariance propagation",
+    )
+
+
+def _solve_lambert(
+    *, reps: int, warmup: int, trials: int, r1: Any, r2: Any, tof: Any,
+    mu: float, m: int, prograde: bool, low_path: bool, maxiter: int,
+    atol: float, rtol: float, **_unused: Any
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    return _kernel_timing(
+        _rust_native.benchmark_izzo_lambert_numpy,
+        (
+            _f64(r1), _f64(r2), _f64(tof), float(mu), int(m), bool(prograde),
+            bool(low_path), int(maxiter), float(atol), float(rtol),
+        ),
+        reps=reps, warmup=warmup, trials=trials,
+        entrypoint="adam_core_rs_coords::izzo_lambert_batch_flat",
+        kernel="izzo_lambert_batch_flat",
+    )
+
+
+def _add_light_time(
+    *, reps: int, warmup: int, trials: int, orbits: Any,
+    observer_positions: Any, mus: Any, lt_tol: float, max_iter: int,
+    tol: float, max_lt_iter: int, **_unused: Any
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    return _kernel_timing(
+        _rust_native.benchmark_add_light_time_numpy,
+        (
+            _f64(orbits), _f64(observer_positions), _f64(mus), float(lt_tol),
+            int(max_iter), float(tol), int(max_lt_iter),
+        ),
+        reps=reps, warmup=warmup, trials=trials,
+        entrypoint="adam_core_rs_coords::add_light_time_batch_flat",
+        kernel="add_light_time_batch_flat",
+    )
+
+
+def _porkchop_grid(
+    *, reps: int, warmup: int, trials: int, dep_states: Any, dep_mjds: Any,
+    arr_states: Any, arr_mjds: Any, mu: float, prograde: bool, maxiter: int,
+    atol: float, rtol: float, **_unused: Any
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    return _kernel_timing(
+        _rust_native.benchmark_porkchop_grid_numpy,
+        (
+            _f64(dep_states), _f64(dep_mjds), _f64(arr_states), _f64(arr_mjds),
+            float(mu), bool(prograde), int(maxiter), float(atol), float(rtol),
+        ),
+        reps=reps, warmup=warmup, trials=trials,
+        entrypoint="adam_core_rs_coords::porkchop_grid_flat",
+        kernel="porkchop_grid_flat",
+    )
+
+
 def _build_orbits_table(
     coords: Any,
     time_mjd: Any,
@@ -572,6 +808,16 @@ def _observers_from_codes(
 
 _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
     "coordinates.transform_coordinates": _transform_coordinates,
+    "dynamics.calc_mean_motion": _calc_mean_motion,
+    "dynamics.tisserand_parameter": _tisserand_parameter,
+    "dynamics.calculate_moid": _calculate_moid,
+    "dynamics.calculate_moid_batch": _calculate_moid_batch,
+    "missions.porkchop_grid": _porkchop_grid,
+    "dynamics.propagate_2body_along_arc": _propagate_2body_along_arc,
+    "dynamics.propagate_2body_arc_batch": _propagate_2body_arc_batch,
+    "dynamics.propagate_2body_with_covariance": _propagate_2body_with_covariance,
+    "dynamics.solve_lambert": _solve_lambert,
+    "dynamics.add_light_time": _add_light_time,
     "dynamics.propagate_2body": _propagate_2body,
     "dynamics.generate_ephemeris_2body": _generate_ephemeris_2body,
     "dynamics.generate_ephemeris_2body_with_covariance": _generate_ephemeris_2body,
