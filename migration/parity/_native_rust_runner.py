@@ -497,7 +497,10 @@ def _todo_for(api_id: str) -> str:
         # columns route to the catch-all adapter bead.
         return "personal-98v.1"
     if api_id.startswith("photometry"):
-        return "personal-cmy.36.8"
+        # All photometry surfaces are classified numpy-flat position/fitting
+        # kernels (bead personal-cmy.36.8); native columns route to the
+        # catch-all adapter bead.
+        return "personal-98v.1"
     if (
         api_id.startswith(("coordinates.residuals", "statistics."))
         or api_id == "orbits.classify_orbits"

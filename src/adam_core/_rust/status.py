@@ -533,6 +533,12 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         default="rust",
         rust_module="adam_core._rust_native.calculate_phase_angle_numpy",
         parity_coverage="random-fuzz",
+        coverage_note=(
+            "Classified numpy-flat (bead personal-cmy.36.8): coordinate tables "
+            "act only as position carriers and the output is a plain float "
+            "array with no table assembly; the Arrow-native single-crossing "
+            "bar does not apply."
+        ),
         latency_gate=True,
     ),
     ApiMigration(
@@ -542,6 +548,12 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         default="rust",
         rust_module="adam_core._rust_native.calculate_apparent_magnitude_v_numpy",
         parity_coverage="random-fuzz",
+        coverage_note=(
+            "Classified numpy-flat (bead personal-cmy.36.8): coordinate tables "
+            "act only as position carriers and the output is a plain float "
+            "array with no table assembly; the Arrow-native single-crossing "
+            "bar does not apply."
+        ),
         latency_gate=True,
     ),
     ApiMigration(
@@ -553,6 +565,12 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
             "adam_core._rust_native.calculate_apparent_magnitude_v_and_phase_angle_numpy"
         ),
         parity_coverage="random-fuzz",
+        coverage_note=(
+            "Classified numpy-flat (bead personal-cmy.36.8): coordinate tables "
+            "act only as position carriers and the output is a plain float "
+            "array with no table assembly; the Arrow-native single-crossing "
+            "bar does not apply."
+        ),
         latency_gate=True,
     ),
     ApiMigration(
@@ -562,6 +580,12 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         default="rust",
         rust_module="adam_core._rust_native.predict_magnitudes_bandpass_numpy",
         parity_coverage="random-fuzz",
+        coverage_note=(
+            "Classified numpy-flat (bead personal-cmy.36.8): coordinate and "
+            "exposure tables act only as position/filter carriers and the "
+            "output is a plain float array with no table assembly; the "
+            "Arrow-native single-crossing bar does not apply."
+        ),
         latency_gate=True,
     ),
     ApiMigration(
@@ -573,7 +597,9 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         parity_coverage="random-fuzz",
         coverage_note=(
             "Randomized parity covers single-group H-fit rows with finite-sigma "
-            "and missing-sigma branches; grouped production path is tracked separately."
+            "and missing-sigma branches; grouped production path is tracked "
+            "separately. Classified numpy-flat (bead personal-cmy.36.8): pure "
+            "numeric fitting rows with no table identity."
         ),
     ),
     ApiMigration(
@@ -585,7 +611,8 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         parity_coverage="random-fuzz",
         coverage_note=(
             "Randomized parity covers grouped H-fit offsets with mixed group sizes "
-            "and finite-/missing-sigma row groups."
+            "and finite-/missing-sigma row groups. Classified numpy-flat (bead "
+            "personal-cmy.36.8): pure numeric fitting rows with no table identity."
         ),
     ),
     ApiMigration(
