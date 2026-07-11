@@ -2193,6 +2193,287 @@ fn benchmark_exposure_groups_ipc(
     })
 }
 
+fn take_associations(
+    batch: &adam_core_rs_coords::observations::AssociationBatch,
+    indices: &[usize],
+) -> adam_core_rs_coords::observations::AssociationBatch {
+    adam_core_rs_coords::observations::AssociationBatch {
+        detection_id: indices
+            .iter()
+            .map(|&i| batch.detection_id[i].clone())
+            .collect(),
+        object_id: indices
+            .iter()
+            .map(|&i| batch.object_id[i].clone())
+            .collect(),
+    }
+}
+
+/// Legacy `Associations.group_by_object`: non-null object IDs in
+/// first-appearance order with original row order inside each group
+/// (pyarrow's stable sort + equality filter), then one null group last.
+fn association_object_groups_core(
+    batch: &adam_core_rs_coords::observations::AssociationBatch,
+) -> PyResult<Vec<Vec<u8>>> {
+    let mut order: Vec<&str> = Vec::new();
+    let mut groups: HashMap<&str, Vec<usize>> = HashMap::new();
+    let mut nulls: Vec<usize> = Vec::new();
+    for (index, object_id) in batch.object_id.iter().enumerate() {
+        match object_id {
+            Some(id) => {
+                if !groups.contains_key(id.as_str()) {
+                    order.push(id);
+                }
+                groups.entry(id.as_str()).or_default().push(index);
+            }
+            None => nulls.push(index),
+        }
+    }
+    let mut out = Vec::with_capacity(order.len() + 1);
+    for id in order {
+        let subset = take_associations(batch, &groups[id]);
+        out.push(write_orbit_ipc(
+            &subset.into_nested_record_batch().map_err(ades_error)?,
+        )?);
+    }
+    if !nulls.is_empty() {
+        let subset = take_associations(batch, &nulls);
+        out.push(write_orbit_ipc(
+            &subset.into_nested_record_batch().map_err(ades_error)?,
+        )?);
+    }
+    Ok(out)
+}
+
+fn decode_associations(
+    ipc_bytes: &Bound<'_, PyBytes>,
+) -> PyResult<adam_core_rs_coords::observations::AssociationBatch> {
+    let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
+    adam_core_rs_coords::observations::AssociationBatch::try_from_nested_record_batch(&batch)
+        .map_err(ades_error)
+}
+
+#[pyfunction]
+fn association_object_groups_ipc<'py>(
+    py: Python<'py>,
+    ipc_bytes: &Bound<'py, PyBytes>,
+) -> PyResult<Vec<Bound<'py, PyBytes>>> {
+    let groups = association_object_groups_core(&decode_associations(ipc_bytes)?)?;
+    Ok(groups
+        .into_iter()
+        .map(|bytes| PyBytes::new(py, &bytes))
+        .collect())
+}
+
+#[pyfunction]
+#[pyo3(signature = (ipc_bytes, reps, trials, warmup_reps=1))]
+fn benchmark_association_object_groups_ipc(
+    ipc_bytes: &Bound<'_, PyBytes>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let associations = decode_associations(ipc_bytes)?;
+    benchmark_trials(reps, trials, warmup_reps, || {
+        association_object_groups_core(&associations)
+    })
+}
+
+fn take_detections(
+    batch: &adam_core_rs_coords::observations::PointSourceDetectionBatch,
+    indices: &[usize],
+) -> adam_core_rs_coords::observations::PointSourceDetectionBatch {
+    use adam_core_rs_coords::observations::TimeColumn;
+    adam_core_rs_coords::observations::PointSourceDetectionBatch {
+        id: indices.iter().map(|&i| batch.id[i].clone()).collect(),
+        exposure_id: indices
+            .iter()
+            .map(|&i| batch.exposure_id[i].clone())
+            .collect(),
+        time: TimeColumn {
+            scale: batch.time.scale,
+            days: indices.iter().map(|&i| batch.time.days[i]).collect(),
+            nanos: indices.iter().map(|&i| batch.time.nanos[i]).collect(),
+            validity: batch
+                .time
+                .validity
+                .as_ref()
+                .map(|validity| indices.iter().map(|&i| validity[i]).collect()),
+        },
+        ra: indices.iter().map(|&i| batch.ra[i]).collect(),
+        ra_sigma: indices.iter().map(|&i| batch.ra_sigma[i]).collect(),
+        dec: indices.iter().map(|&i| batch.dec[i]).collect(),
+        dec_sigma: indices.iter().map(|&i| batch.dec_sigma[i]).collect(),
+        mag: indices.iter().map(|&i| batch.mag[i]).collect(),
+        mag_sigma: indices.iter().map(|&i| batch.mag_sigma[i]).collect(),
+    }
+}
+
+/// Legacy `PointSourceDetections.group_by_exposure`: unique exposure IDs in
+/// first-appearance order, original row order inside each group. A null
+/// unique ID yields an *empty* group because the legacy
+/// `pc.equal(column, null)` mask filters away every row.
+fn detection_exposure_groups_core(
+    batch: &adam_core_rs_coords::observations::PointSourceDetectionBatch,
+) -> PyResult<Vec<Vec<u8>>> {
+    let mut order: Vec<Option<&str>> = Vec::new();
+    let mut groups: HashMap<Option<&str>, Vec<usize>> = HashMap::new();
+    for (index, exposure_id) in batch.exposure_id.iter().enumerate() {
+        let key = exposure_id.as_deref();
+        if !groups.contains_key(&key) {
+            order.push(key);
+        }
+        groups.entry(key).or_default().push(index);
+    }
+    let empty: Vec<usize> = Vec::new();
+    order
+        .into_iter()
+        .map(|key| {
+            let indices = if key.is_some() { &groups[&key] } else { &empty };
+            let subset = take_detections(batch, indices);
+            write_orbit_ipc(&subset.into_nested_record_batch().map_err(ades_error)?)
+        })
+        .collect()
+}
+
+fn decode_detections(
+    ipc_bytes: &Bound<'_, PyBytes>,
+) -> PyResult<adam_core_rs_coords::observations::PointSourceDetectionBatch> {
+    let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
+    adam_core_rs_coords::observations::PointSourceDetectionBatch::try_from_nested_record_batch(
+        &batch,
+    )
+    .map_err(ades_error)
+}
+
+#[pyfunction]
+fn detection_exposure_groups_ipc<'py>(
+    py: Python<'py>,
+    ipc_bytes: &Bound<'py, PyBytes>,
+) -> PyResult<Vec<Bound<'py, PyBytes>>> {
+    let groups = detection_exposure_groups_core(&decode_detections(ipc_bytes)?)?;
+    Ok(groups
+        .into_iter()
+        .map(|bytes| PyBytes::new(py, &bytes))
+        .collect())
+}
+
+#[pyfunction]
+#[pyo3(signature = (ipc_bytes, reps, trials, warmup_reps=1))]
+fn benchmark_detection_exposure_groups_ipc(
+    ipc_bytes: &Bound<'_, PyBytes>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let detections = decode_detections(ipc_bytes)?;
+    benchmark_trials(reps, trials, warmup_reps, || {
+        detection_exposure_groups_core(&detections)
+    })
+}
+
+fn healpixels_core(ra: &[f64], dec: &[f64], nside: i64, nest: bool) -> PyResult<Vec<i64>> {
+    adam_core_rs_coords::healpix::check_nside(nside, nest).map_err(PyValueError::new_err)?;
+    ra.iter()
+        .zip(dec.iter())
+        .map(|(&lon, &lat)| {
+            adam_core_rs_coords::healpix::ang2pix_lonlat(nside, lon, lat, nest)
+                .map_err(PyValueError::new_err)
+        })
+        .collect()
+}
+
+/// Legacy `PointSourceDetections.healpixels`: `healpy.ang2pix(nside, ra,
+/// dec, nest=nest, lonlat=True)` on the Rust HEALPix port.
+#[pyfunction]
+fn detections_healpixels_numpy<'py>(
+    py: Python<'py>,
+    ra: PyReadonlyArray1<'py, f64>,
+    dec: PyReadonlyArray1<'py, f64>,
+    nside: i64,
+    nest: bool,
+) -> PyResult<Bound<'py, PyArray1<i64>>> {
+    let ra = ra.as_slice()?;
+    let dec = dec.as_slice()?;
+    if ra.len() != dec.len() {
+        return Err(PyValueError::new_err("ra and dec must have equal length"));
+    }
+    Ok(healpixels_core(ra, dec, nside, nest)?.into_pyarray(py))
+}
+
+#[pyfunction]
+#[pyo3(signature = (ra, dec, nside, nest, reps, trials, warmup_reps=1))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_detections_healpixels_numpy(
+    ra: PyReadonlyArray1<'_, f64>,
+    dec: PyReadonlyArray1<'_, f64>,
+    nside: i64,
+    nest: bool,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let ra = ra.as_slice()?.to_vec();
+    let dec = dec.as_slice()?.to_vec();
+    benchmark_trials(reps, trials, warmup_reps, || {
+        healpixels_core(&ra, &dec, nside, nest)
+    })
+}
+
+/// Legacy `PointSourceDetections.group_by_healpixel`: ascending unique
+/// pixel order (numpy `unique`), original row order inside each group.
+fn detection_healpixel_groups_core(
+    batch: &adam_core_rs_coords::observations::PointSourceDetectionBatch,
+    nside: i64,
+    nest: bool,
+) -> PyResult<Vec<(i64, Vec<u8>)>> {
+    let pixels = healpixels_core(&batch.ra, &batch.dec, nside, nest)?;
+    let mut groups: std::collections::BTreeMap<i64, Vec<usize>> = std::collections::BTreeMap::new();
+    for (index, &pixel) in pixels.iter().enumerate() {
+        groups.entry(pixel).or_default().push(index);
+    }
+    groups
+        .into_iter()
+        .map(|(pixel, indices)| {
+            let subset = take_detections(batch, &indices);
+            Ok((
+                pixel,
+                write_orbit_ipc(&subset.into_nested_record_batch().map_err(ades_error)?)?,
+            ))
+        })
+        .collect()
+}
+
+#[pyfunction]
+fn detection_healpixel_groups_ipc<'py>(
+    py: Python<'py>,
+    ipc_bytes: &Bound<'py, PyBytes>,
+    nside: i64,
+    nest: bool,
+) -> PyResult<Vec<(i64, Bound<'py, PyBytes>)>> {
+    let groups = detection_healpixel_groups_core(&decode_detections(ipc_bytes)?, nside, nest)?;
+    Ok(groups
+        .into_iter()
+        .map(|(pixel, bytes)| (pixel, PyBytes::new(py, &bytes)))
+        .collect())
+}
+
+#[pyfunction]
+#[pyo3(signature = (ipc_bytes, nside, nest, reps, trials, warmup_reps=1))]
+fn benchmark_detection_healpixel_groups_ipc(
+    ipc_bytes: &Bound<'_, PyBytes>,
+    nside: i64,
+    nest: bool,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let detections = decode_detections(ipc_bytes)?;
+    benchmark_trials(reps, trials, warmup_reps, || {
+        detection_healpixel_groups_core(&detections, nside, nest)
+    })
+}
+
 /// ADES writer (bead personal-cmy.20 slice B): render a quivr
 /// `ADESObservations` table (Arrow IPC, nested layout, obsTime already in utc)
 /// to the ADES submission format byte-identically to the legacy Python
@@ -2236,7 +2517,10 @@ fn ades_to_string_fused_core(
     seconds_precision: i32,
     columns_precision: &std::collections::HashMap<String, i32>,
 ) -> Result<String, adam_core_rs_coords::SchemaError> {
-    if observations.obs_time.scale != TimeScale::Utc {
+    // Legacy guard: only non-empty tables are rescaled (`len(observations) > 0`),
+    // so an empty table never errors here even when its scale has no
+    // supported rescale to UTC.
+    if !observations.obs_time.days.is_empty() && observations.obs_time.scale != TimeScale::Utc {
         let rescaled = TimeArray::from_parts(
             observations.obs_time.scale,
             observations.obs_time.days.clone(),
@@ -5400,6 +5684,23 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(observations_nested_ipc_round_trip, m)?)?;
     m.add_function(wrap_pyfunction!(exposure_midpoint_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_exposure_midpoint_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(association_object_groups_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_association_object_groups_ipc,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(detection_exposure_groups_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_detection_exposure_groups_ipc,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(detections_healpixels_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_detections_healpixels_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(detection_healpixel_groups_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_detection_healpixel_groups_ipc,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(exposure_groups_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_exposure_groups_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(ades_to_string_ipc, m)?)?;

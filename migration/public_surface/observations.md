@@ -25,12 +25,12 @@ Only plotting/display may remain Python. Unchanged quivr constructors, descripto
 
 | Public API | Current ownership | Parity/timing | Disposition |
 |---|---|---|---|
-| `Associations.group_by_object` | Python/PyArrow generator, including null-last policy | unit-only; native missing | Rust gap |
-| `Associations.link_to_detections` | Python quivr linkage assembly | unit-only; native missing | Rust gap |
-| `PointSourceDetections.group_by_exposure` | Python sort/filter generator | unit-only; native missing | Rust gap |
-| `PointSourceDetections.healpixels` | Python call into healpy | unit-only; native missing | Rust-owned replacement required |
-| `PointSourceDetections.group_by_healpixel` | Python NumPy/PyArrow grouping around healpy | unit-only; native missing | Rust gap |
-| `PointSourceDetections.link_to_exposures` | Python quivr linkage assembly | unit-only; native missing | Rust gap |
+| `Associations.group_by_object` | one Rust grouping/IPC crossing (non-null first-appearance groups, null group last, original row order) | ordering unit parity plus Rust-Instant timing | Compatible veneer |
+| `Associations.link_to_detections` | one-line key-column selection over external quivr `Linkage` machinery | linkage unit tests | Classified generic quivr boundary (no adam-core computation) |
+| `PointSourceDetections.group_by_exposure` | one Rust grouping/IPC crossing, including the legacy null-ID empty-group semantics | ordering unit parity plus Rust-Instant timing | Compatible veneer |
+| `PointSourceDetections.healpixels` | Rust `ang2pix` port of healpix_cxx (nest+ring, lonlat, near-pole branches, nside validation and exact healpy error) | exact healpy-oracle parity across random/structured/near-pole samples and both schemes; Rust-Instant timing | Rust-owned |
+| `PointSourceDetections.group_by_healpixel` | one Rust crossing owns pixel assignment plus ascending-pixel grouping; numpy int64 keys preserved | healpy-oracle parity plus grouping unit tests and Rust-Instant timing | Compatible veneer |
+| `PointSourceDetections.link_to_exposures` | one-line key-column selection over external quivr `Linkage` machinery | linkage unit tests | Classified generic quivr boundary (no adam-core computation) |
 | `Exposures.group_by_observatory_code` | one Rust typed grouping/IPC crossing; Python yields compatibility tables | ordering/schema unit parity plus Rust-Instant timing | Compatible veneer |
 | `Exposures.midpoint` | one Rust crossing owns half-even nanosecond conversion and epoch carry | exact midpoint unit parity plus Rust-Instant timing | Compatible veneer |
 | `Exposures.observers` | one Arrow crossing owns midpoint epochs, code grouping, SPICE state dispatch, frame/origin handling, and nested observer assembly | observer fixture ULP parity plus Rust-Instant fused timing | Compatible veneer |

@@ -24,6 +24,8 @@ pub use bandpasses::{
     BandpassData,
 };
 
+pub mod healpix;
+
 pub mod mpc_designations;
 pub use mpc_designations::MpcDesignationError;
 
