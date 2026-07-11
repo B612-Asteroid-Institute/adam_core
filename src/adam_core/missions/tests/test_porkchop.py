@@ -1126,3 +1126,55 @@ def test_generate_porkchop_data_uses_record_batches_and_direct_wrap(monkeypatch)
     assert result.arrival_time.scale == "tdb"
     tof = result.time_of_flight()
     assert np.all(tof > 0.0)
+
+
+def _stacked_columns(solutions, columns):
+    return np.column_stack(
+        [
+            solutions.table.column(column).to_numpy(zero_copy_only=False)
+            for column in columns
+        ]
+    )
+
+
+def test_lambert_solution_scalar_accessors_match_legacy_expressions():
+    """vinf/c3/time_of_flight are Rust one-crossings; pin bit parity with the
+    legacy NumPy expressions they replaced."""
+    from adam_core.orbits import Orbits  # noqa: F401  (keep import surface warm)
+
+    departure = prepare_and_propagate_orbits(
+        body=OriginCodes.EARTH,
+        start_time=Timestamp.from_mjd([60000], scale="tdb"),
+        end_time=Timestamp.from_mjd([60020], scale="tdb"),
+        propagation_origin=OriginCodes.SUN,
+        step_size=5.0,
+    )
+    arrival = prepare_and_propagate_orbits(
+        body=OriginCodes.MARS_BARYCENTER,
+        start_time=Timestamp.from_mjd([60100], scale="tdb"),
+        end_time=Timestamp.from_mjd([60120], scale="tdb"),
+        propagation_origin=OriginCodes.SUN,
+        step_size=5.0,
+    )
+    solutions = generate_porkchop_data(departure, arrival)
+    assert len(solutions) > 0
+
+    for prefix in ("departure", "arrival"):
+        solution_v = _stacked_columns(
+            solutions, [f"solution_{prefix}_v{axis}" for axis in "xyz"]
+        )
+        body_v = _stacked_columns(
+            solutions, [f"{prefix}_body_v{axis}" for axis in "xyz"]
+        )
+        expected_vinf = np.linalg.norm(solution_v - body_v, axis=1)
+        np.testing.assert_array_equal(
+            getattr(solutions, f"vinf_{prefix}")(), expected_vinf
+        )
+        np.testing.assert_array_equal(
+            getattr(solutions, f"c3_{prefix}")(), expected_vinf**2
+        )
+
+    expected_tof = solutions.arrival_time.mjd().to_numpy(
+        zero_copy_only=False
+    ) - solutions.departure_time.mjd().to_numpy(zero_copy_only=False)
+    np.testing.assert_array_equal(solutions.time_of_flight(), expected_tof)

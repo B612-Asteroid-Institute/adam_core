@@ -149,6 +149,38 @@ fn timestamp_jd_numpy<'py>(
         .into_pyarray(py))
 }
 
+/// Fused elementwise MJD difference between two timestamp columns
+/// (`minuend.mjd() - subtrahend.mjd()`) in one crossing.
+#[pyfunction]
+fn timestamp_mjd_difference_numpy<'py>(
+    py: Python<'py>,
+    minuend_days: PyReadonlyArray1<'py, i64>,
+    minuend_nanos: PyReadonlyArray1<'py, i64>,
+    minuend_scale: &str,
+    subtrahend_days: PyReadonlyArray1<'py, i64>,
+    subtrahend_nanos: PyReadonlyArray1<'py, i64>,
+    subtrahend_scale: &str,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let minuend_days = int_column(&minuend_days, "minuend_days")?;
+    let minuend_nanos = int_column(&minuend_nanos, "minuend_nanos")?;
+    let subtrahend_days = int_column(&subtrahend_days, "subtrahend_days")?;
+    let subtrahend_nanos = int_column(&subtrahend_nanos, "subtrahend_nanos")?;
+    if minuend_days.len() != subtrahend_days.len() {
+        return Err(PyValueError::new_err(
+            "minuend and subtrahend must have equal length",
+        ));
+    }
+    let minuend = time_array(&minuend_days, &minuend_nanos, minuend_scale)?;
+    let subtrahend = time_array(&subtrahend_days, &subtrahend_nanos, subtrahend_scale)?;
+    Ok(minuend
+        .mjd_values()
+        .into_iter()
+        .zip(subtrahend.mjd_values())
+        .map(|(a, b)| a - b)
+        .collect::<Vec<_>>()
+        .into_pyarray(py))
+}
+
 /// Fused `Timestamp.et`: rescale to TDB and convert MJD to ET seconds in one
 /// crossing.
 #[pyfunction]
@@ -346,6 +378,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(timestamp_rounded_nanos_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_fractional_days_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_jd_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(timestamp_mjd_difference_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_et_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_key_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_signature_numpy, m)?)?;

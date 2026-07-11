@@ -382,53 +382,100 @@ class LambertSolutions(qv.Table):
         """
         Return the v infinity in au/d.
         """
-        return np.linalg.norm(
-            np.array(
-                self.table.select(
-                    [
-                        "solution_departure_vx",
-                        "solution_departure_vy",
-                        "solution_departure_vz",
-                    ]
-                )
-            )
-            - np.array(
-                self.table.select(
-                    ["departure_body_vx", "departure_body_vy", "departure_body_vz"]
-                )
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.vinf_numpy(
+                np.ascontiguousarray(
+                    np.array(
+                        self.table.select(
+                            [
+                                "solution_departure_vx",
+                                "solution_departure_vy",
+                                "solution_departure_vz",
+                            ]
+                        )
+                    ),
+                    dtype=np.float64,
+                ),
+                np.ascontiguousarray(
+                    np.array(
+                        self.table.select(
+                            [
+                                "departure_body_vx",
+                                "departure_body_vy",
+                                "departure_body_vz",
+                            ]
+                        )
+                    ),
+                    dtype=np.float64,
+                ),
             ),
-            axis=1,
+            dtype=np.float64,
         )
 
     def vinf_arrival(self) -> npt.NDArray[np.float64]:
         """
         Return the v infinity in au/d.
         """
-        return np.linalg.norm(
-            np.array(
-                self.table.select(
-                    [
-                        "solution_arrival_vx",
-                        "solution_arrival_vy",
-                        "solution_arrival_vz",
-                    ]
-                )
-            )
-            - np.array(
-                self.table.select(
-                    ["arrival_body_vx", "arrival_body_vy", "arrival_body_vz"]
-                )
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.vinf_numpy(
+                np.ascontiguousarray(
+                    np.array(
+                        self.table.select(
+                            [
+                                "solution_arrival_vx",
+                                "solution_arrival_vy",
+                                "solution_arrival_vz",
+                            ]
+                        )
+                    ),
+                    dtype=np.float64,
+                ),
+                np.ascontiguousarray(
+                    np.array(
+                        self.table.select(
+                            ["arrival_body_vx", "arrival_body_vy", "arrival_body_vz"]
+                        )
+                    ),
+                    dtype=np.float64,
+                ),
             ),
-            axis=1,
+            dtype=np.float64,
         )
 
     def time_of_flight(self) -> npt.NDArray[np.float64]:
         """
         Return the time of flight in days.
         """
-        return self.arrival_time.mjd().to_numpy(
-            zero_copy_only=False
-        ) - self.departure_time.mjd().to_numpy(zero_copy_only=False)
+        from adam_core import _rust_native
+
+        # One Rust crossing computes arrival.mjd() - departure.mjd().
+        return np.asarray(
+            _rust_native.timestamp_mjd_difference_numpy(
+                np.ascontiguousarray(
+                    self.arrival_time.days.to_numpy(zero_copy_only=False),
+                    dtype=np.int64,
+                ),
+                np.ascontiguousarray(
+                    self.arrival_time.nanos.to_numpy(zero_copy_only=False),
+                    dtype=np.int64,
+                ),
+                self.arrival_time.scale,
+                np.ascontiguousarray(
+                    self.departure_time.days.to_numpy(zero_copy_only=False),
+                    dtype=np.int64,
+                ),
+                np.ascontiguousarray(
+                    self.departure_time.nanos.to_numpy(zero_copy_only=False),
+                    dtype=np.int64,
+                ),
+                self.departure_time.scale,
+            ),
+            dtype=np.float64,
+        )
 
 
 def departure_spherical_coordinates(
@@ -468,12 +515,19 @@ def departure_spherical_coordinates(
     ), "All arrays must have the same length"
     assert len(vx) > 0, "At least one departure vector is required"
 
-    # Create unit direction vectors from the velocity vectors
-    # Normalize the velocity vectors to get direction only
-    velocity_magnitude = np.sqrt(vx**2 + vy**2 + vz**2)
-    direction_x = vx / velocity_magnitude
-    direction_y = vy / velocity_magnitude
-    direction_z = vz / velocity_magnitude
+    # Create unit direction vectors from the velocity vectors in one Rust
+    # crossing (norm-then-divide order matches the legacy expression).
+    from adam_core import _rust_native
+
+    directions = np.asarray(
+        _rust_native.row_unit3_numpy(
+            np.ascontiguousarray(np.column_stack([vx, vy, vz]), dtype=np.float64)
+        ),
+        dtype=np.float64,
+    )
+    direction_x = directions[:, 0]
+    direction_y = directions[:, 1]
+    direction_z = directions[:, 2]
 
     # Create CartesianCoordinates with the direction as position (on unit sphere)
     # and zero velocity since we only care about the direction

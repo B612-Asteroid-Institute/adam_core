@@ -29,18 +29,39 @@ fn scalars(values: &PyReadonlyArray1<'_, f64>, label: &str) -> PyResult<Vec<f64>
         .ok_or_else(|| PyValueError::new_err(format!("{label} must be contiguous")))
 }
 
-fn c3_values(v1: &[f64], body_v: &[f64]) -> Vec<f64> {
+fn vinf_values(v1: &[f64], body_v: &[f64]) -> Vec<f64> {
     v1.chunks_exact(3)
         .zip(body_v.chunks_exact(3))
         .map(|(v1, body_v)| {
             let dx = v1[0] - body_v[0];
             let dy = v1[1] - body_v[1];
             let dz = v1[2] - body_v[2];
-            // Matches the legacy norm-then-square expression exactly.
-            let norm = (dx * dx + dy * dy + dz * dz).sqrt();
-            norm * norm
+            (dx * dx + dy * dy + dz * dz).sqrt()
         })
         .collect()
+}
+
+fn c3_values(v1: &[f64], body_v: &[f64]) -> Vec<f64> {
+    // Matches the legacy norm-then-square expression exactly.
+    vinf_values(v1, body_v)
+        .into_iter()
+        .map(|norm| norm * norm)
+        .collect()
+}
+
+/// Relative-velocity magnitude (v-infinity) per row, one Rust crossing.
+#[pyfunction]
+fn vinf_numpy<'py>(
+    py: Python<'py>,
+    v1: PyReadonlyArray2<'py, f64>,
+    body_v: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let v1 = rows3(&v1, "v1")?;
+    let body_v = rows3(&body_v, "body_v")?;
+    if v1.len() != body_v.len() {
+        return Err(PyValueError::new_err("v1 and body_v must have equal shape"));
+    }
+    Ok(vinf_values(&v1, &body_v).into_pyarray(py))
 }
 
 #[pyfunction]
@@ -422,6 +443,7 @@ where
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calculate_c3_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(vinf_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_calculate_c3_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_max_outliers_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(
