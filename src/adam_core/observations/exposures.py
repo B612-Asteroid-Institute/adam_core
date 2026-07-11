@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Iterator, Literal
 
 import pyarrow as pa
+import pyarrow.compute as pc
 import quivr as qv
 from quivr.validators import and_, ge, le
 
@@ -33,7 +34,11 @@ class Exposures(qv.Table):
         from .arrow_bridge import observations_from_ipc, observations_to_ipc
 
         for code, raw in _rust_native.exposure_groups_ipc(observations_to_ipc(self)):
-            yield code, observations_from_ipc(raw, Exposures)
+            # Legacy iterated ``observatory_code.unique()`` and therefore
+            # yielded pyarrow large_string scalars; preserve that type.
+            yield pa.scalar(code, type=pa.large_string()), observations_from_ipc(
+                raw, Exposures
+            )
 
     def observers(
         self,
@@ -59,10 +64,56 @@ class Exposures(qv.Table):
             ],
             names=["code", "days", "nanos", "duration"],
         )
-        result = ensure_spice_backend().observer_states_from_exposures_arrow(
-            batch, self.start_time.scale, frame, origin.name
-        )
+        # Only SPICE coverage errors (space-based / unknown observatory codes
+        # the Rust ground table cannot serve) fall back to the legacy per-code
+        # assembly, mirroring Observers.from_codes.
+        try:
+            result = ensure_spice_backend().observer_states_from_exposures_arrow(
+                batch, self.start_time.scale, frame, origin.name
+            )
+        except (RuntimeError, ValueError):
+            return self._observers_legacy(frame=frame, origin=origin)
         return table_from_record_batch(observers.Observers, result)
+
+    def _observers_legacy(
+        self,
+        frame: Literal["ecliptic", "equatorial", "itrf93"] = "ecliptic",
+        origin: OriginCodes = OriginCodes.SUN,
+    ) -> observers.Observers:
+        """Legacy per-code assembly: used when a request includes codes the
+        Rust ground-site table cannot serve (special space observatories,
+        unknown codes). Preserves exact legacy semantics and errors."""
+        from ..observers import state
+
+        # bunch of bookkeeping here to return states with the same
+        # indexing as self
+        coords = []
+        indices = []
+        codes = []
+
+        unique_codes = self.observatory_code.unique().to_pylist()
+        for code in unique_codes:
+            mask = pc.equal(self.observatory_code, code)
+            exposures_for_code = self.apply_mask(mask)
+            indices_for_code = pc.indices_nonzero(mask)
+
+            times_for_code = exposures_for_code.midpoint()
+            coords_for_code = state.get_observer_state(
+                code, times_for_code, frame=frame, origin=origin
+            )
+
+            coords.append(coords_for_code)
+            indices.append(indices_for_code)
+            codes.append(pa.array([code] * len(coords_for_code)))
+
+        observers_table = observers.Observers.from_kwargs(
+            code=pa.concat_arrays(codes),
+            coordinates=qv.concatenate(coords),
+        )
+
+        indices = pa.concat_arrays(indices)
+        original_ordering = pc.array_sort_indices(indices)
+        return observers_table.take(original_ordering)
 
     def midpoint(self) -> Timestamp:
         """

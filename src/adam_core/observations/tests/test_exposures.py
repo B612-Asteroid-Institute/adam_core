@@ -2,6 +2,8 @@ import os
 import pathlib
 
 import numpy as np
+import pyarrow as pa
+import pytest
 import quivr as qv
 
 from ...coordinates.cartesian import CartesianCoordinates
@@ -30,7 +32,9 @@ def test_exposure_midpoints():
     )
     groups = list(exp.group_by_observatory_code())
     assert len(groups) == 1
-    assert groups[0][0] == "I41"
+    # Legacy yielded pyarrow large_string scalars from unique(); preserved.
+    assert isinstance(groups[0][0], pa.Scalar)
+    assert groups[0][0].as_py() == "I41"
     assert groups[0][1].id.to_pylist() == ["e1", "e2"]
 
     from adam_core import _rust_native
@@ -41,6 +45,21 @@ def test_exposure_midpoints():
     midpoint_samples = _rust_native.benchmark_exposure_midpoint_ipc(raw, 2, 2, 1)
     assert all(sample > 0.0 for trial in group_samples for sample in trial)
     assert all(sample > 0.0 for trial in midpoint_samples for sample in trial)
+
+
+def test_exposure_observers_unknown_code_falls_back_to_legacy_error():
+    # Codes the Rust ground-site table cannot serve must fall back to the
+    # legacy per-code assembly, which raises the exact legacy error for
+    # unknown observatory codes.
+    exp = Exposures.from_kwargs(
+        id=["e1"],
+        start_time=Timestamp.from_iso8601(["2000-01-01T00:00:00"]),
+        duration=[30],
+        filter=["g"],
+        observatory_code=["ZZ9"],
+    )
+    with pytest.raises(ValueError, match="ZZ9 is not a valid MPC observatory code"):
+        exp.observers()
 
 
 def test_exposure_states():
