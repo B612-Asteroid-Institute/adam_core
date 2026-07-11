@@ -515,6 +515,15 @@ def departure_spherical_coordinates(
     ), "All arrays must have the same length"
     assert len(vx) > 0, "At least one departure vector is required"
 
+    # Preserve NumPy's legacy divide-by-zero warning for undefined zero
+    # directions; normalization itself remains one Rust crossing.
+    if np.any((vx == 0.0) & (vy == 0.0) & (vz == 0.0)):
+        import warnings
+
+        warnings.warn(
+            "invalid value encountered in divide", RuntimeWarning, stacklevel=2
+        )
+
     # Create unit direction vectors from the velocity vectors in one Rust
     # crossing (norm-then-divide order matches the legacy expression).
     from adam_core import _rust_native
