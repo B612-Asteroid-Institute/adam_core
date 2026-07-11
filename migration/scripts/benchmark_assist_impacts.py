@@ -2,7 +2,7 @@
 
 Times legacy Python ``adam_assist.ASSISTPropagator.detect_collisions`` inside
 ``.legacy-assist-venv`` against local Rust-backed
-``adam_assist_rust.ASSISTPropagator.detect_collisions`` on identical same-epoch
+``adam_assist.ASSISTPropagator.detect_collisions`` on identical same-epoch
 workloads mixing deep Earth impactors (which exercise the stopping-condition
 removal path) with safe heliocentric orbits (which exercise the long stepping
 tail). Writes a JSON artifact next to the other assist public-semantics
@@ -12,7 +12,7 @@ Parity is asserted per lane before timings are recorded: identical impact
 sets and identical survivor sets. Impact-time agreement is reported (max
 abs diff, days) rather than asserted at a threshold; the two libassist C
 builds differ, so raw step sequences are not bit-identical (see
-test_adam_assist_rust_impacts.py for the gated tolerances).
+test_adam_assist_impacts.py for the gated tolerances).
 
 Run with: pdm run assist-impacts-benchmark
 """
@@ -29,7 +29,7 @@ from importlib.metadata import version as package_version
 from pathlib import Path
 
 import numpy as np
-from adam_assist_rust import ASSISTPropagator as RustASSISTPropagator
+from adam_assist import ASSISTPropagator as RustASSISTPropagator
 from adam_core.coordinates import CartesianCoordinates, Origin
 from adam_core.coordinates.origin import OriginCodes
 from adam_core.dynamics.impacts import EARTH_RADIUS_KM, CollisionConditions
@@ -250,14 +250,13 @@ def main(argv: list[str] | None = None) -> int:
         "generated_at_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "description": (
             "Two-runtime: legacy adam_assist.detect_collisions timed inside the "
-            "isolated .legacy-assist-venv vs Rust adam_assist_rust.detect_collisions "
+            "isolated .legacy-assist-venv vs Rust adam_assist.detect_collisions "
             "timed locally, on identical same-epoch impactor/safe workloads; parity "
             "of impact and survivor sets asserted per lane before timing."
         ),
         "machine": _machine(),
         "packages": {
             "adam_assist": package_version("adam-assist"),
-            "adam_assist_rust": package_version("adam-assist-rust"),
             "adam_core": package_version("adam-core"),
         },
         "repeats": args.repeats,

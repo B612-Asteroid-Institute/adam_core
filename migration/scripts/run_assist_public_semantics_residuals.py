@@ -24,7 +24,10 @@ DEFAULT_OUTPUT = (
     PROJECT_ROOT
     / "migration/artifacts/assist_public_semantics_residuals_2026-05-20.json"
 )
-DEFAULT_MANIFEST = PROJECT_ROOT / "rust/adam_core_rs_assist/Cargo.toml"
+DEFAULT_ADAM_ASSIST_REPO = Path(
+    os.environ.get("ADAM_ASSIST_RUST_REPO", PROJECT_ROOT.parent / "adam-assist")
+)
+DEFAULT_MANIFEST = DEFAULT_ADAM_ASSIST_REPO / "rust/adam_assist_rs/Cargo.toml"
 PLANETS_PACKAGE = "naif_de440"
 PLANETS_FILE = "de440.bsp"
 ASTEROIDS_PACKAGE = "jpl_small_bodies_de441_n16"
@@ -44,7 +47,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--manifest-path",
         type=Path,
         default=DEFAULT_MANIFEST,
-        help="adam_core_rs_assist Cargo.toml path.",
+        help="Downstream adam_assist_rs Cargo.toml path.",
     )
     return parser.parse_args(argv)
 

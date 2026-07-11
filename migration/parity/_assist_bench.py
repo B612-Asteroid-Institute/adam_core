@@ -2,7 +2,7 @@
 
 Pairs with :class:`migration.parity._assist_oracle.LegacyAssistPropagator`: the
 legacy adam_assist call is timed *inside* the isolated ``.legacy-assist-venv``
-(the proxy ``time_*`` methods), and the Rust ``adam_assist_rust`` call is timed
+(the proxy ``time_*`` methods), and the Rust ``adam_assist`` call is timed
 locally with :func:`time_rust`. :func:`percentiles` computes matching p50/p95
 for both sides so speedups are apples-to-apples.
 """
@@ -18,7 +18,7 @@ import numpy as np
 TWO_RUNTIME_COMPARISON_MODE = "gpl_rust_assist_backend_vs_legacy_python_adam_assist"
 PERFORMANCE_COLUMNS = {
     "legacy_adam_core": "legacy adam_assist over pinned legacy adam_core",
-    "current_python": "current adam_assist_rust public Python method",
+    "current_python": "current adam_assist public Python method",
     "native_rust": (
         "direct Rust call timed inside Rust with std::time::Instant; null until "
         "a Rust-internal adapter exists"

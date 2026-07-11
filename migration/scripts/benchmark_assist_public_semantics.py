@@ -4,7 +4,7 @@ This is the RM-STANDALONE-007B apples-to-apples benchmark hook for
 ``ASSISTPropagator.propagate_orbits`` public semantics. Legacy
 ``adam_assist`` is exercised in the isolated ``.legacy-assist-venv`` via the
 migration oracle (timing loop inside the subprocess, output cached separately),
-while ``adam_assist_rust`` is timed locally over identical quivr orbit/time
+while ``adam_assist`` is timed locally over identical quivr orbit/time
 workloads. The artifact records timing plus residual metadata.
 """
 
@@ -25,7 +25,7 @@ from typing import Any
 
 import numpy as np
 import pyarrow as pa
-from adam_assist_rust import ASSISTPropagator as RustASSISTPropagator
+from adam_assist import ASSISTPropagator as RustASSISTPropagator
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.transform import transform_coordinates
@@ -559,7 +559,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=mp.cpu_count(),
         help=(
             "Parallel worker/thread count for both implementations. Python adam-assist "
-            "uses adam-core Ray workers; adam_assist_rust maps the same public value "
+            "uses adam-core Ray workers; adam_assist maps the same public value "
             "to a Rust Rayon thread limit. Default: multiprocessing.cpu_count()."
         ),
     )
@@ -651,7 +651,7 @@ def main(argv: list[str] | None = None) -> int:
                 (
                     f"parallel public calls: max_processes={args.max_processes}; "
                     "legacy Python adam-assist is timed inside .legacy-assist-venv "
-                    "(Ray worker processes) and adam_assist_rust uses the same public "
+                    "(Ray worker processes) and adam_assist uses the same public "
                     "value as its Rust Rayon thread_limit"
                 )
                 if args.max_processes > 1
@@ -676,13 +676,13 @@ def main(argv: list[str] | None = None) -> int:
                 "Two-runtime benchmark: legacy adam-assist timing loops run inside "
                 ".legacy-assist-venv and include the legacy public call lifecycle "
                 "(ASSISTPropagator/Ephem construction per call, matching downstream "
-                "composition behavior). Rust adam_assist_rust is constructed once in "
+                "composition behavior). Rust adam_assist is constructed once in "
                 "the current runtime; timed calls reuse its AssistData. Legacy parity "
                 "outputs are cached separately from timing samples."
             ),
             "constructor_seconds": {
                 "legacy_oracle_proxy": legacy_proxy_constructor_seconds,
-                "rust_adam_assist_rust": rust_constructor_seconds,
+                "rust_adam_assist": rust_constructor_seconds,
             },
         },
         "workloads": results,

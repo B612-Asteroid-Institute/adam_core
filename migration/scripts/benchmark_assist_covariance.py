@@ -5,7 +5,7 @@ This is the RM-STANDALONE-007B apples-to-apples covariance benchmark hook for
 times the public sampled-covariance path (variant creation, variant
 propagation, and collapse-to-nominal covariance) for legacy Python
 ``adam_assist`` in the isolated ``.legacy-assist-venv`` and local Rust
-``adam_assist_rust`` over identical quivr orbit/time workloads, and records
+``adam_assist`` over identical quivr orbit/time workloads, and records
 timing plus state and covariance residual metadata.
 
 This is intentionally kept separate from the propagation-only state benchmark
@@ -15,7 +15,7 @@ conflated with the ``covariance=False`` state-path speed claim.
 Stochastic policy
 -----------------
 Sigma-point and ``auto`` (when sigma points reconstruct the input covariance)
-are deterministic in both Python ``adam_assist`` and ``adam_assist_rust``, so
+are deterministic in both Python ``adam_assist`` and ``adam_assist``, so
 their collapsed covariance is compared element-wise (``parity_expected=True``).
 Monte-carlo sampling uses NumPy ``default_rng`` in Python and an internal
 SplitMix64 normal sampler in Rust; identical seeds do not produce identical
@@ -37,7 +37,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 import numpy as np
-from adam_assist_rust import ASSISTPropagator as RustASSISTPropagator
+from adam_assist import ASSISTPropagator as RustASSISTPropagator
 from adam_core.coordinates.covariances import CoordinateCovariances
 from adam_core.orbits.orbits import Orbits
 from adam_core.time import Timestamp
@@ -338,7 +338,7 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         default=mp.cpu_count(),
         help=(
             "Parallel public-call workers. Python adam-assist uses Ray worker "
-            "processes; adam_assist_rust uses the same value as its Rust Rayon "
+            "processes; adam_assist uses the same value as its Rust Rayon "
             "thread_limit."
         ),
     )
@@ -424,7 +424,7 @@ def main(argv: list[str] | None = None) -> int:
             "thread_mode": (
                 "two-runtime public calls: legacy Python adam-assist is timed "
                 "inside .legacy-assist-venv (Ray worker processes) and local "
-                "adam_assist_rust uses the same public max_processes value as "
+                "adam_assist uses the same public max_processes value as "
                 "its Rust Rayon thread_limit"
             ),
             "covariance_methods": (

@@ -21,7 +21,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from adam_assist_rust import ASSISTPropagator as RustASSISTPropagator  # noqa: E402
+from adam_assist import ASSISTPropagator as RustASSISTPropagator  # noqa: E402
 from adam_core.observers import Observers  # noqa: E402
 from adam_core.time import Timestamp  # noqa: E402
 from adam_core.utils.helpers.orbits import make_real_orbits  # noqa: E402

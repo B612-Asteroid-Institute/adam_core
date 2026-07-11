@@ -190,7 +190,7 @@ rust-smoke = { composite = [
   "pytest -q src/adam_core/tests/test_rust_backends.py src/adam_core/utils/tests/test_spice_backend.py src/adam_core/utils/tests/test_spice.py src/adam_core/orbits/tests/test_spice_kernel.py src/adam_core/coordinates/tests/test_rust_covariance_autodiff.py src/adam_core/orbit_determination/tests/test_iod.py",
 ] }
 assist-public-semantics-residuals = "python migration/scripts/run_assist_public_semantics_residuals.py"
-assist-rust-develop = { cmd = "maturin develop --manifest-path rust/adam_core_rs_assist/Cargo.toml --release --features python,extension-module", env = { CARGO_NET_GIT_FETCH_WITH_CLI = "true" } }
+assist-rust-develop = "python migration/scripts/develop_downstream_adam_assist.py"
 assist-public-semantics-benchmark = { composite = [
   "pdm run assist-rust-develop",
   "python migration/scripts/benchmark_assist_public_semantics.py",

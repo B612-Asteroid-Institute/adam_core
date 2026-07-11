@@ -41,7 +41,7 @@ DEFAULT_PARITY_ARTIFACT = Path("migration/artifacts/parity_gate.json")
 DEFAULT_SPEED_ARTIFACT = Path("migration/artifacts/parity_speed_cold_warm.json")
 
 # GPL ASSIST lane artifacts. These compare the Rust GPL backend
-# (adam_assist_rust over assist-rs + adam_core_rs_assist) against the current
+# (downstream adam-assist over assist-rs + adam-core contracts) against the current
 # Python adam_assist.ASSISTPropagator public semantics. The legacy checkout has
 # no ASSIST surface, so this lane is current-Python vs current-Rust rather than
 # legacy-vs-current. Both sides load the same DE440/SB441 kernels from the
@@ -1197,8 +1197,8 @@ def _format_assist_section(
     comparison_mode = _assist_comparison_mode(propagation, covariance, impacts)
     if "legacy_python_adam_assist" in comparison_mode:
         comparison_text = (
-            "Rust GPL backend (`adam_assist_rust` over `assist-rs` + "
-            "`adam_core_rs_assist`) vs legacy Python "
+            "Rust GPL backend (downstream `adam_assist` over `assist-rs` + "
+            "adam-core contracts) vs legacy Python "
             "`adam_assist.ASSISTPropagator` executed in the isolated "
             "`.legacy-assist-venv` runtime. The current adam_core tree no "
             "longer ships the Python Propagator composition, so refreshed "
@@ -1206,8 +1206,8 @@ def _format_assist_section(
         )
     else:
         comparison_text = (
-            "Rust GPL backend (`adam_assist_rust` over `assist-rs` + "
-            "`adam_core_rs_assist`) vs the current Python "
+            "Rust GPL backend (downstream `adam_assist` over `assist-rs` + "
+            "adam-core contracts) vs the current Python "
             "`adam_assist.ASSISTPropagator` public path. Both sides are current "
             "implementations; this describes historical artifacts that predate "
             "the two-runtime oracle refresh."

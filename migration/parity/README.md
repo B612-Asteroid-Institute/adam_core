@@ -109,11 +109,12 @@ Verify it's reachable:
 
 ## Legacy adam_assist oracle
 
-The GPL `adam_assist_rust` parity suite
-(`rust/adam_core_rs_assist/python/tests/`) compares the Rust
-`adam_assist_rust.ASSISTPropagator` against the legacy, composition-based
-downstream `adam_assist.ASSISTPropagator` with the **same two-runtime
-pattern**. adam_core here has deleted the base `Propagator` composition, so
+The GPL parity suite is owned downstream by the adam-assist migration branch
+(`tests/rust/`) and compares the Rust-backed
+`adam_assist.ASSISTPropagator` against the pinned legacy, composition-based
+`adam_assist.ASSISTPropagator` with the **same two-runtime pattern**. Set
+`ADAM_ASSIST_RUST_REPO` and run `pdm run assist-rust-develop` to install that
+downstream checkout into the adam-core development environment. adam_core here has deleted the base `Propagator` composition, so
 the legacy propagator is no longer instantiable in the main runtime; it runs
 in a dedicated `.legacy-assist-venv` (gitignored) pinning legacy adam_core
 (composition) + downstream `adam_assist`:

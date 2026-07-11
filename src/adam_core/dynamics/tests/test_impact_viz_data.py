@@ -5,7 +5,7 @@ import pytest
 
 # Check if optional dependencies are available
 try:
-    from adam_assist_rust import ASSISTPropagator
+    from adam_assist import ASSISTPropagator
 
     HAS_ASSIST = True
 except ImportError:

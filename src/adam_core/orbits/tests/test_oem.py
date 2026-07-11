@@ -6,7 +6,7 @@ import pytest
 
 # Check if required modules are available
 try:
-    from adam_assist_rust import ASSISTPropagator
+    from adam_assist import ASSISTPropagator
 
     from ...orbits.oem_io import orbit_from_oem, orbit_to_oem, orbit_to_oem_propagated
 

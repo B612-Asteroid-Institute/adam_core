@@ -1,7 +1,7 @@
 """Abstract propagator framework.
 
 adam_core ships no concrete propagator and no Python composition: only
-Rust-backed propagators (e.g. ``adam_assist_rust.ASSISTPropagator``) are
+Rust-backed propagators (e.g. ``adam_assist.ASSISTPropagator``) are
 supported. Each public surface -- :meth:`Propagator.propagate_orbits`,
 :meth:`EphemerisMixin.generate_ephemeris`, and
 :meth:`~adam_core.dynamics.impacts.ImpactMixin.detect_collisions` -- is the
@@ -15,7 +15,7 @@ The former Python composition (per-chunk Ray fan-out, covariance
 sample/propagate/collapse, the generic light-time ephemeris pipeline, and the
 ``_propagate_orbits``/``_generate_ephemeris`` hooks) has been deleted; its
 behavior is replicated inside the Rust backends and validated by the
-``adam_core_rs_assist`` test suites.
+the downstream ``adam-assist`` Rust/parity test suites.
 """
 
 import logging

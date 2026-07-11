@@ -1,15 +1,15 @@
 """Contract tests for the abstract propagator framework.
 
 adam_core ships no concrete propagator and no Python composition: only
-Rust-backed propagators (e.g. ``adam_assist_rust.ASSISTPropagator``) are
+Rust-backed propagators (e.g. ``adam_assist.ASSISTPropagator``) are
 supported. These tests assert the abstract single-crossing contract
 (``propagate_orbits`` / ``generate_ephemeris`` are abstract and enforced).
 
 Behavioral coverage -- covariance sample/propagate/collapse, the light-time /
 aberration / photometry ephemeris pipeline, variant handling, and parallelism
 -- now lives inside the Rust backend and is validated by the backend suites in
-``rust/adam_core_rs_assist/python/tests`` (propagate, covariance, ephemeris,
-impacts) and by the migration parity/speed harness.
+the downstream adam-assist Rust/parity suites (propagate, covariance,
+ephemeris, impacts) and by this repository's cross-package integration harness.
 """
 
 import pytest
@@ -60,7 +60,7 @@ def test_ephemeris_mixin_generate_ephemeris_is_abstract() -> None:
 def test_rust_backend_satisfies_contract() -> None:
     """The in-repo Rust backend is a concrete Propagator implementing the
     single-crossing contract."""
-    assist = pytest.importorskip("adam_assist_rust")
+    assist = pytest.importorskip("adam_assist")
     prop = assist.ASSISTPropagator()
     assert callable(prop.propagate_orbits)
     assert callable(prop.generate_ephemeris)

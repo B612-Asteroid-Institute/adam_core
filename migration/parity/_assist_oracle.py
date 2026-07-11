@@ -8,7 +8,7 @@ adam_core (composition) + downstream ``adam_assist``. It exposes
 ``_detect_collisions`` surface as ``adam_assist.ASSISTPropagator``. Each call
 serializes its quivr inputs to Arrow IPC, runs the legacy propagator in the
 isolated runtime, and reconstructs the result under the main runtime's
-adam_core -- so parity tests compare ``adam_assist_rust.ASSISTPropagator``
+adam_core -- so parity tests compare ``adam_assist.ASSISTPropagator``
 against the legacy reference across two separate runtimes, exactly like the
 adam_core parity gate.
 
