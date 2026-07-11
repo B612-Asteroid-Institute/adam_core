@@ -4075,6 +4075,279 @@ fn group_by_orbit_id_record_batch(
         .collect()
 }
 
+fn cartesian_samples(values: &CoordinateValues, label: &str) -> Result<Vec<[f64; 6]>, String> {
+    values
+        .cartesian()
+        .map(<[[f64; 6]]>::to_vec)
+        .ok_or_else(|| format!("{label} coordinates must be Cartesian"))
+}
+
+fn variant_linkage_groups<'a>(
+    variants: &'a DataOrbitVariantBatch,
+    times: &TimeArray,
+) -> HashMap<(&'a str, i64, i64), Vec<usize>> {
+    let mut groups: HashMap<(&str, i64, i64), Vec<usize>> = HashMap::new();
+    for (row, orbit_id) in variants.orbit_id.iter().enumerate() {
+        let epoch = times.epochs[row];
+        groups
+            .entry((orbit_id.0.as_str(), epoch.days, epoch.nanos / 1_000_000))
+            .or_default()
+            .push(row);
+    }
+    groups
+}
+
+/// Rust-owned `VariantOrbits.collapse`: per-orbit weighted covariance from the
+/// linked variants, with the mean state taken from the orbit rows.
+fn collapse_variant_orbits_record_batch(
+    orbit_batch: &RecordBatch,
+    variant_batch: &RecordBatch,
+) -> Result<RecordBatch, String> {
+    let mut orbits = DataOrbitBatch::try_from_nested_record_batch(orbit_batch)
+        .map_err(|err| format!("failed to decode OrbitBatch: {err}"))?;
+    let variants = DataOrbitVariantBatch::try_from_nested_record_batch(variant_batch)
+        .map_err(|err| format!("failed to decode OrbitVariantBatch: {err}"))?;
+    let orbit_times = orbits
+        .coordinates
+        .times
+        .clone()
+        .ok_or_else(|| "orbit coordinates require times".to_string())?;
+    let variant_times = variants
+        .coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| "variant coordinates require times".to_string())?;
+    if orbit_times.scale != variant_times.scale {
+        return Err("assertion failed: orbit and variant time scales must match".to_string());
+    }
+    let orbit_values = cartesian_samples(&orbits.coordinates.values, "orbit")?;
+    let variant_values = cartesian_samples(&variants.coordinates.values, "variant")?;
+    let groups = variant_linkage_groups(&variants, variant_times);
+
+    let rows = orbits.len();
+    let mut covariance_values = vec![0.0_f64; rows * 36];
+    for row in 0..rows {
+        let epoch = orbit_times.epochs[row];
+        let key = (
+            orbits.orbit_id[row].0.as_str(),
+            epoch.days,
+            epoch.nanos / 1_000_000,
+        );
+        let indices: &[usize] = groups.get(&key).map_or(&[], Vec::as_slice);
+        let samples: Vec<f64> = indices
+            .iter()
+            .flat_map(|&index| variant_values[index].iter().copied())
+            .collect();
+        let weights: Vec<f64> = indices
+            .iter()
+            .map(|&index| variants.weights_cov[index].unwrap_or(f64::NAN))
+            .collect();
+        let covariance =
+            weighted_covariance_flat(&orbit_values[row], &samples, &weights, indices.len(), 6);
+        covariance_values[row * 36..(row + 1) * 36].copy_from_slice(&covariance);
+    }
+    let covariance = CovarianceBatch::new(
+        rows,
+        6,
+        covariance_values,
+        CovarianceUnits::Coordinate(DataRepresentation::Cartesian),
+    )
+    .map_err(|err| format!("failed to assemble covariance: {err}"))?;
+    orbits.coordinates.covariance = Some(covariance);
+    orbits
+        .into_nested_record_batch()
+        .map_err(|err| format!("failed to encode OrbitBatch: {err}"))
+}
+
+/// Rust-owned `VariantOrbits.collapse_by_object_id`: per-object uniform mean
+/// and covariance grouped in first-appearance order.
+fn collapse_variant_orbits_by_object_id_record_batch(
+    variant_batch: &RecordBatch,
+    orbit_ids: &[String],
+) -> Result<RecordBatch, String> {
+    let variants = DataOrbitVariantBatch::try_from_nested_record_batch(variant_batch)
+        .map_err(|err| format!("failed to decode OrbitVariantBatch: {err}"))?;
+    let times = variants
+        .coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| "variant coordinates require times".to_string())?;
+    let variant_values = cartesian_samples(&variants.coordinates.values, "variant")?;
+
+    let mut lookup: HashMap<Option<&str>, usize> = HashMap::new();
+    let mut groups: Vec<(Option<String>, Vec<usize>)> = Vec::new();
+    for (row, object_id) in variants.object_id.iter().enumerate() {
+        let key = object_id.as_ref().map(|value| value.0.as_str());
+        match lookup.get(&key) {
+            Some(&group) => groups[group].1.push(row),
+            None => {
+                lookup.insert(key, groups.len());
+                groups.push((object_id.as_ref().map(|value| value.0.clone()), vec![row]));
+            }
+        }
+    }
+    if groups.len() != orbit_ids.len() {
+        return Err(format!(
+            "expected {} collapsed orbit ids, got {}",
+            groups.len(),
+            orbit_ids.len()
+        ));
+    }
+
+    let n_groups = groups.len();
+    let mut means = Vec::with_capacity(n_groups);
+    let mut covariance_values = vec![0.0_f64; n_groups * 36];
+    let mut epochs = Vec::with_capacity(n_groups);
+    let mut origins = Vec::with_capacity(n_groups);
+    let mut object_ids = Vec::with_capacity(n_groups);
+    let mut first_rows = Vec::with_capacity(n_groups);
+    for (group, (object_id, rows)) in groups.into_iter().enumerate() {
+        let unique_epochs: HashSet<Epoch> = rows.iter().map(|&row| times.epochs[row]).collect();
+        if unique_epochs.len() != 1 {
+            return Err(
+                "assertion failed: all variants of an object must share a single epoch".to_string(),
+            );
+        }
+        let unique_origins: HashSet<String> = rows
+            .iter()
+            .map(|&row| variants.coordinates.origins.origins[row].code())
+            .collect();
+        if unique_origins.len() != 1 {
+            return Err(
+                "assertion failed: all variants of an object must share a single origin"
+                    .to_string(),
+            );
+        }
+        let n = rows.len();
+        let samples: Vec<f64> = rows
+            .iter()
+            .flat_map(|&row| variant_values[row].iter().copied())
+            .collect();
+        let uniform = vec![1.0 / n as f64; n];
+        let mean = weighted_mean_flat(&samples, &uniform, n, 6);
+        let covariance = weighted_covariance_flat(&mean, &samples, &uniform, n, 6);
+        covariance_values[group * 36..(group + 1) * 36].copy_from_slice(&covariance);
+        means.push([mean[0], mean[1], mean[2], mean[3], mean[4], mean[5]]);
+        let first = rows[0];
+        first_rows.push(first);
+        epochs.push(times.epochs[first]);
+        origins.push(variants.coordinates.origins.origins[first].clone());
+        object_ids.push(object_id.map(adam_core_rs_coords::ObjectId));
+    }
+
+    let covariance = CovarianceBatch::new(
+        n_groups,
+        6,
+        covariance_values,
+        CovarianceUnits::Coordinate(DataRepresentation::Cartesian),
+    )
+    .map_err(|err| format!("failed to assemble covariance: {err}"))?;
+    let coordinates = DataCoordinateBatch::cartesian(
+        means,
+        variants.coordinates.frame,
+        OriginArray::new(origins),
+        Some(
+            TimeArray::new(times.scale, epochs)
+                .map_err(|err| format!("failed to assemble times: {err}"))?,
+        ),
+        Some(covariance),
+    )
+    .map_err(|err| format!("failed to assemble coordinates: {err}"))?;
+    let mut collapsed = DataOrbitBatch::new(
+        orbit_ids
+            .iter()
+            .map(|orbit_id| adam_core_rs_coords::OrbitId(orbit_id.clone()))
+            .collect(),
+        object_ids,
+        coordinates,
+    )
+    .map_err(|err| format!("failed to assemble OrbitBatch: {err}"))?;
+    if let Some(physical_parameters) = &variants.physical_parameters {
+        collapsed = collapsed
+            .with_physical_parameters(physical_parameters.take(&first_rows))
+            .map_err(|err| format!("failed to attach physical parameters: {err}"))?;
+    }
+    collapsed
+        .into_nested_record_batch()
+        .map_err(|err| format!("failed to encode OrbitBatch: {err}"))
+}
+
+#[pyfunction]
+fn collapse_variant_orbits_arrow(
+    py: Python<'_>,
+    orbit_batch: &Bound<'_, PyAny>,
+    variant_batch: &Bound<'_, PyAny>,
+) -> PyResult<PyObject> {
+    let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    let variants = RecordBatch::from_pyarrow_bound(variant_batch).map_err(|err| {
+        PyValueError::new_err(format!("invalid VariantOrbits RecordBatch: {err}"))
+    })?;
+    let output = py
+        .allow_threads(|| collapse_variant_orbits_record_batch(&orbits, &variants))
+        .map_err(PyValueError::new_err)?;
+    output
+        .to_pyarrow(py)
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to export RecordBatch: {err}")))
+}
+
+#[pyfunction]
+fn collapse_variant_orbits_by_object_id_arrow(
+    py: Python<'_>,
+    variant_batch: &Bound<'_, PyAny>,
+    orbit_ids: Vec<String>,
+) -> PyResult<PyObject> {
+    let variants = RecordBatch::from_pyarrow_bound(variant_batch).map_err(|err| {
+        PyValueError::new_err(format!("invalid VariantOrbits RecordBatch: {err}"))
+    })?;
+    let output = py
+        .allow_threads(|| collapse_variant_orbits_by_object_id_record_batch(&variants, &orbit_ids))
+        .map_err(PyValueError::new_err)?;
+    output
+        .to_pyarrow(py)
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to export RecordBatch: {err}")))
+}
+
+#[pyfunction]
+#[pyo3(signature = (orbit_batch, variant_batch, reps, trials, warmup_reps=1))]
+fn benchmark_collapse_variant_orbits_arrow(
+    orbit_batch: &Bound<'_, PyAny>,
+    variant_batch: &Bound<'_, PyAny>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
+    let variants = RecordBatch::from_pyarrow_bound(variant_batch).map_err(|err| {
+        PyValueError::new_err(format!("invalid VariantOrbits RecordBatch: {err}"))
+    })?;
+    benchmark_orbit_surface(reps, trials, warmup_reps, || {
+        black_box(collapse_variant_orbits_record_batch(&orbits, &variants)?);
+        Ok(())
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (variant_batch, orbit_ids, reps, trials, warmup_reps=1))]
+fn benchmark_collapse_variant_orbits_by_object_id_arrow(
+    variant_batch: &Bound<'_, PyAny>,
+    orbit_ids: Vec<String>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let variants = RecordBatch::from_pyarrow_bound(variant_batch).map_err(|err| {
+        PyValueError::new_err(format!("invalid VariantOrbits RecordBatch: {err}"))
+    })?;
+    benchmark_orbit_surface(reps, trials, warmup_reps, || {
+        black_box(collapse_variant_orbits_by_object_id_record_batch(
+            &variants, &orbit_ids,
+        )?);
+        Ok(())
+    })
+}
+
 const ORBIT_CLASS_NAMES: [&str; 14] = [
     "AST", "AMO", "APO", "ATE", "CEN", "IEO", "IMB", "MBA", "MCA", "OMB", "TJN", "TNO", "PAA",
     "HYA",
@@ -4226,6 +4499,19 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         m
     )?)?;
     m.add_function(wrap_pyfunction!(group_by_orbit_id_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(collapse_variant_orbits_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        collapse_variant_orbits_by_object_id_arrow,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_collapse_variant_orbits_arrow,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_collapse_variant_orbits_by_object_id_arrow,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(dynamical_class_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_group_by_orbit_id_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_dynamical_class_arrow, m)?)?;

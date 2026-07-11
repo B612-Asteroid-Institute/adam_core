@@ -166,34 +166,24 @@ class VariantOrbits(qv.Table):
         collapsed_orbits : `~adam_core.orbits.orbits.Orbits`
             The collapsed orbits.
         """
-        link = self.link_to_orbits(orbits)
+        from adam_core import _rust_native
 
-        # Iterate over the variants and calculate the mean state and covariance matrix
-        # for each orbit at each epoch then create a new orbit with the calculated covariance matrix
-        orbits_list = []
-        for orbit in orbits:
-            assert len(orbit) == 1
+        from .arrow_bridge import (
+            orbits_from_record_batch,
+            orbits_to_record_batch,
+            variants_to_record_batch,
+        )
 
-            key = link.key(
-                orbit_id=orbit.orbit_id[0].as_py(),
-                day=orbit.coordinates.time.days[0].as_py(),
-                millis=orbit.coordinates.time.millis()[0].as_py(),
-            )
-            variants = link.select_right(key)
+        # Legacy linkage asserted matching time scales before collapsing.
+        assert orbits.coordinates.time.scale == self.coordinates.time.scale
 
-            samples = variants.coordinates.values
-            mean = orbit.coordinates.values[0]
-            covariance = weighted_covariance(
-                mean, samples, variants.weights_cov.to_numpy(zero_copy_only=False)
-            ).reshape(1, 6, 6)
-
-            orbit_collapsed = orbit.set_column(
-                "coordinates.covariance", CoordinateCovariances.from_matrix(covariance)
-            )
-
-            orbits_list.append(orbit_collapsed)
-
-        return qv.concatenate(orbits_list)
+        # One Rust crossing owns linkage grouping, weighted covariance, and
+        # finished-table assembly; the mean state stays the orbit row state.
+        collapsed = _rust_native.collapse_variant_orbits_arrow(
+            orbits_to_record_batch(orbits),
+            variants_to_record_batch(self),
+        )
+        return orbits_from_record_batch(collapsed)
 
     def collapse_by_object_id(self) -> Orbits:
         """
@@ -204,63 +194,30 @@ class VariantOrbits(qv.Table):
         collapsed_orbits : `~adam_core.orbits.orbits.Orbits`
             The collapsed orbits.
         """
-        unique_object_ids = self.object_id.unique()
-        n_objects = len(unique_object_ids)
+        from adam_core import _rust_native
+
+        from .arrow_bridge import (
+            orbits_from_record_batch,
+            variants_to_record_batch,
+        )
+
+        n_objects = len(self.object_id.unique())
         if n_objects == 0:
             return Orbits.empty()
 
-        # Pre-allocate output columns.
-        means = np.empty((n_objects, 6), dtype=np.float64)
-        covariances = np.empty((n_objects, 6, 6), dtype=np.float64)
-        orbit_ids = np.empty(n_objects, dtype=object)
-        object_id_strs = np.empty(n_objects, dtype=object)
-        physical_parameters_rows: list = []
-        times_rows: list = []
-        origins_rows: list = []
-
-        frame = None
-        for i, object_id in enumerate(unique_object_ids):
-            object_variants = self.select("object_id", object_id)
-
-            # All the variants must have the same epoch
-            assert len(object_variants.coordinates.time.unique()) == 1
-            assert len(pc.unique(object_variants.coordinates.origin.code)) == 1
-
-            samples = object_variants.coordinates.values
-            mean = np.average(samples, axis=0)
-            means[i] = mean
-            covariances[i] = weighted_covariance(
-                mean,
-                samples,
-                np.ones(len(object_variants), dtype=np.float64) / len(object_variants),
+        # Fresh random output identities are input preparation; grouping,
+        # single-epoch/origin validation, means, covariances, and finished
+        # table assembly are one Rust crossing.
+        orbit_ids = [uuid.uuid4().hex for _ in range(n_objects)]
+        try:
+            collapsed = _rust_native.collapse_variant_orbits_by_object_id_arrow(
+                variants_to_record_batch(self), orbit_ids
             )
-            orbit_ids[i] = uuid.uuid4().hex
-            object_id_strs[i] = object_id
-            physical_parameters_rows.append(
-                object_variants.physical_parameters.take([0])
-            )
-            times_rows.append(object_variants.coordinates.time[0])
-            origins_rows.append(object_variants.coordinates.origin[0])
-            if frame is None:
-                frame = object_variants.coordinates.frame
-
-        return Orbits.from_kwargs(
-            orbit_id=orbit_ids,
-            object_id=object_id_strs,
-            physical_parameters=qv.concatenate(physical_parameters_rows),
-            coordinates=CartesianCoordinates.from_kwargs(
-                x=means[:, 0],
-                y=means[:, 1],
-                z=means[:, 2],
-                vx=means[:, 3],
-                vy=means[:, 4],
-                vz=means[:, 5],
-                covariance=CoordinateCovariances.from_matrix(covariances),
-                time=qv.concatenate(times_rows),
-                origin=qv.concatenate(origins_rows),
-                frame=frame,
-            ),
-        )
+        except ValueError as exc:
+            if "assertion failed" in str(exc):
+                raise AssertionError(str(exc)) from None
+            raise
+        return orbits_from_record_batch(collapsed)
 
 
 class VariantEphemeris(qv.Table):

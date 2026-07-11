@@ -2,6 +2,8 @@ import numpy as np
 import pyarrow.compute as pc
 import pytest
 
+from adam_core import _rust_native
+
 from ...coordinates import CartesianCoordinates, Origin, SphericalCoordinates
 from ...coordinates.covariances import CoordinateCovariances
 from ...orbits.orbits import Orbits
@@ -104,6 +106,55 @@ def test_VariantOrbits_create_monte_carlo_preserves_physical_parameters():
         variants.physical_parameters.H_v.to_numpy(zero_copy_only=False),
         np.repeat([15.0, 16.0, 17.0], 100),
     )
+
+
+def test_VariantOrbits_collapse_paths_have_rust_owned_timing():
+    from ..arrow_bridge import orbits_to_record_batch, variants_to_record_batch
+
+    orbits = _covariance_orbits(_well_conditioned_covariances())
+    variants = VariantOrbits.create(orbits, method="sigma-point")
+    orbit_batch = orbits_to_record_batch(orbits)
+    variant_batch = variants_to_record_batch(variants)
+
+    samples = _rust_native.benchmark_collapse_variant_orbits_arrow(
+        orbit_batch, variant_batch, 2, 2, 1
+    )
+    assert len(samples) == 2
+    assert all(len(trial) == 2 for trial in samples)
+    assert all(value > 0.0 for trial in samples for value in trial)
+
+    orbit_ids = [f"collapsed{i}" for i in range(len(orbits))]
+    samples = _rust_native.benchmark_collapse_variant_orbits_by_object_id_arrow(
+        variant_batch, orbit_ids, 2, 2, 1
+    )
+    assert len(samples) == 2
+    assert all(len(trial) == 2 for trial in samples)
+    assert all(value > 0.0 for trial in samples for value in trial)
+
+
+def test_VariantOrbits_collapse_by_object_id_rejects_mixed_epochs():
+    orbits = _covariance_orbits(_well_conditioned_covariances(2))
+    variants = VariantOrbits.create(orbits, method="sigma-point")
+    # Same object across two epochs must fail the single-epoch contract.
+    mixed = variants.set_column(
+        "object_id",
+        pc.cast(
+            pc.if_else(pc.equal(variants.object_id, "obj0"), "obj0", "obj0"),
+            variants.object_id.type,
+        ),
+    ).set_column(
+        "coordinates.time",
+        Timestamp.from_kwargs(
+            days=pc.add(
+                variants.coordinates.time.days,
+                pc.if_else(pc.equal(variants.orbit_id, variants.orbit_id[0]), 0, 1),
+            ),
+            nanos=variants.coordinates.time.nanos,
+            scale=variants.coordinates.time.scale,
+        ),
+    )
+    with pytest.raises(AssertionError):
+        mixed.collapse_by_object_id()
 
 
 def test_VariantOrbits_create_auto_falls_back_to_monte_carlo():
