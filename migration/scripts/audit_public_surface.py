@@ -40,6 +40,47 @@ _IO_TOKENS = (
     ".from_parquet(",
 )
 
+_DOMAIN_AUDITS: dict[str, tuple[str, str]] = {
+    "constants": (
+        "migration/public_surface/photometry_constants.md",
+        "personal-cmy.37.6",
+    ),
+    "coordinates": (
+        "migration/public_surface/coordinates_time_observers.md",
+        "personal-cmy.37.2",
+    ),
+    "dynamics": ("migration/public_surface/dynamics_od.md", "personal-cmy.37.3"),
+    "missions": ("migration/public_surface/dynamics_od.md", "personal-cmy.37.3"),
+    "observations": ("migration/public_surface/observations.md", "personal-cmy.37.7"),
+    "observers": (
+        "migration/public_surface/coordinates_time_observers.md",
+        "personal-cmy.37.2",
+    ),
+    "orbit_determination": (
+        "migration/public_surface/dynamics_od.md",
+        "personal-cmy.37.3",
+    ),
+    "orbits": ("migration/public_surface/orbits.md", "personal-cmy.37.1"),
+    "parallel": (
+        "migration/public_surface/io_queries_utilities.md",
+        "personal-cmy.37.4",
+    ),
+    "photometry": (
+        "migration/public_surface/photometry_constants.md",
+        "personal-cmy.37.6",
+    ),
+    "propagator": ("migration/public_surface/dynamics_od.md", "personal-cmy.37.3"),
+    "ray_cluster": (
+        "migration/public_surface/io_queries_utilities.md",
+        "personal-cmy.37.4",
+    ),
+    "time": (
+        "migration/public_surface/coordinates_time_observers.md",
+        "personal-cmy.37.2",
+    ),
+    "utils": ("migration/public_surface/io_queries_utilities.md", "personal-cmy.37.4"),
+}
+
 
 def _module_name(path: Path) -> str:
     relative = path.relative_to(SOURCE_ROOT).with_suffix("")
@@ -117,6 +158,46 @@ def _signals(segment: str, *, module: str, qualname: str) -> dict[str, bool]:
     }
 
 
+def _review_fields(
+    *, module: str, qualname: str, kind: str, segment: str
+) -> dict[str, Any]:
+    domain = _domain(module)
+    audit_document, tracking_issue = _DOMAIN_AUDITS[domain]
+    signals = _signals(segment, module=module, qualname=qualname)
+    if signals["plotting"]:
+        implementation_class = "plotting_exemption_candidate"
+        parity_coverage = "not_applicable_plotting"
+        native_timing = "not_applicable_plotting"
+    elif kind in {"class", "constant"}:
+        implementation_class = "compatibility_data_or_external_generic"
+        parity_coverage = "compatibility_or_schema_see_domain_audit"
+        native_timing = "not_applicable_data_or_generic"
+    elif signals["rust_reference"] and not (
+        signals["python_loop"] or signals["external_io_reference"]
+    ):
+        implementation_class = "rust_veneer_candidate_see_domain_audit"
+        parity_coverage = "see_domain_audit"
+        native_timing = "see_domain_audit"
+    elif signals["rust_reference"]:
+        implementation_class = "mixed_rust_python_gap"
+        parity_coverage = "see_domain_audit"
+        native_timing = "missing_or_partial_see_domain_audit"
+    else:
+        implementation_class = "python_gap_or_external_boundary"
+        parity_coverage = "see_domain_audit"
+        native_timing = "missing_or_not_applicable_see_domain_audit"
+    return {
+        "signals": signals,
+        "review_status": "domain_audited",
+        "implementation_class": implementation_class,
+        "rust_entrypoint": None,
+        "parity_coverage": parity_coverage,
+        "native_timing": native_timing,
+        "tracking_issue": tracking_issue,
+        "audit_document": audit_document,
+    }
+
+
 def _symbol(
     *,
     module: str,
@@ -128,7 +209,9 @@ def _symbol(
     explicit_export: bool | None,
     segment: str,
 ) -> dict[str, Any]:
-    plotting = _signals(segment, module=module, qualname=qualname)["plotting"]
+    review = _review_fields(
+        module=module, qualname=qualname, kind=kind, segment=segment
+    )
     return {
         "id": f"{module}:{qualname}",
         "module": module,
@@ -139,14 +222,8 @@ def _symbol(
         "source": str(path.relative_to(ROOT)),
         "line": line,
         "explicit_export": explicit_export,
-        "plotting_exemption_candidate": plotting,
-        "signals": _signals(segment, module=module, qualname=qualname),
-        "review_status": "unreviewed",
-        "implementation_class": "unreviewed",
-        "rust_entrypoint": None,
-        "parity_coverage": None,
-        "native_timing": None,
-        "tracking_issue": "personal-cmy.37",
+        "plotting_exemption_candidate": review["signals"]["plotting"],
+        **review,
     }
 
 
@@ -262,6 +339,7 @@ def collect() -> dict[str, Any]:
     )
     counts = Counter(item["kind"] for item in symbols)
     domains = Counter(item["domain"] for item in symbols)
+    implementations = Counter(item["implementation_class"] for item in symbols)
     return {
         "schema_version": 1,
         "scope": {
@@ -278,6 +356,7 @@ def collect() -> dict[str, Any]:
             "symbols": len(symbols),
             "by_kind": dict(sorted(counts.items())),
             "by_domain": dict(sorted(domains.items())),
+            "by_implementation_class": dict(sorted(implementations.items())),
             "plotting_exemption_candidates": sum(
                 bool(item["plotting_exemption_candidate"]) for item in symbols
             ),

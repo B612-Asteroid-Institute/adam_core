@@ -147,7 +147,7 @@ The two asset creators' complete signatures are the source signatures; every key
 
 ## Network query helpers
 
-Network transport itself may remain with external Python clients. The migration bar applies to deterministic payload normalization and adam-core table construction after the response arrives.
+External services remain integration boundaries, but adam-core-owned request construction, retries, chunking, response normalization, and typed result assembly must be Rust-owned. Only plotting/display is exempt from implementation migration.
 
 | Public API | Implementation status | Parity status | Native timing | Disposition |
 |---|---|---|---|---|
@@ -175,18 +175,16 @@ Parity and native timing are N/Q under the accepted plotting/display waiver. Com
 
 ## Gap-to-bead coverage
 
-Concrete children of `personal-cmy.37.1` cover every non-plotting gap identified above:
+Concrete implementation beads cover every non-plotting gap identified above:
 
-1. core `Orbits` grouping/fused dynamical classification and classification native timing;
-2. all VariantOrbits/VariantEphemeris linkage and collapse operations;
-3. `Ephemeris.link_to_observers`;
-4. SPK fitting, Type 3/9 segment writing and end-to-end SPK facade;
-5. OEM read/write/propagated facades;
-6. OpenSpace CSV/asset composition and `LuaDict.to_pascal_case`;
-7. Horizons facades;
-8. NEOCC facade;
-9. SBDB legacy/new facades and exception semantics;
-10. Scout facades;
-11. package export compatibility.
+1. `personal-cmy.37.1.4`: core `Orbits` grouping/fused dynamical classification and classification native timing;
+2. `personal-cmy.37.1.2`: all VariantOrbits/VariantEphemeris linkage and collapse operations;
+3. `personal-cmy.37.1.3`: `Ephemeris.link_to_observers`;
+4. `personal-cmy.37.4.6`: SPK fitting, Type 3/9 segment writing, and end-to-end SPK facade;
+5. `personal-cmy.37.4.4`: OEM read/write/propagated facades;
+6. `personal-cmy.37.4.5`: OpenSpace CSV/asset composition and `LuaDict.to_pascal_case`;
+7. `personal-cmy.37.4.1`: Horizons facades;
+8. `personal-cmy.37.4.2`: NEOCC, SBDB legacy/new, Scout facades, and exception semantics;
+9. `personal-cmy.37.1.1`: package export compatibility.
 
 Each implementation child must add direct pinned-legacy parity for its complete public facade and qualifying Rust-internal timing, not merely a Python benchmark or a test against another current Python path. Generic quivr/dataclass/Enum/transport operations and plotting are deliberately classified rather than silently counted as migrated.
