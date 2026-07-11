@@ -2113,10 +2113,46 @@ fn benchmark_exposure_midpoint_ipc(
     })
 }
 
+fn take_exposures(
+    exposures: &adam_core_rs_coords::observations::ExposureBatch,
+    indices: &[usize],
+) -> adam_core_rs_coords::observations::ExposureBatch {
+    use adam_core_rs_coords::observations::TimeColumn;
+    adam_core_rs_coords::observations::ExposureBatch {
+        id: indices.iter().map(|&i| exposures.id[i].clone()).collect(),
+        start_time: TimeColumn {
+            days: indices
+                .iter()
+                .map(|&i| exposures.start_time.days[i])
+                .collect(),
+            nanos: indices
+                .iter()
+                .map(|&i| exposures.start_time.nanos[i])
+                .collect(),
+            scale: exposures.start_time.scale,
+            validity: exposures
+                .start_time
+                .validity
+                .as_ref()
+                .map(|validity| indices.iter().map(|&i| validity[i]).collect()),
+        },
+        duration: indices.iter().map(|&i| exposures.duration[i]).collect(),
+        filter: indices
+            .iter()
+            .map(|&i| exposures.filter[i].clone())
+            .collect(),
+        observatory_code: indices
+            .iter()
+            .map(|&i| exposures.observatory_code[i].clone())
+            .collect(),
+        seeing: indices.iter().map(|&i| exposures.seeing[i]).collect(),
+        depth_5sigma: indices.iter().map(|&i| exposures.depth_5sigma[i]).collect(),
+    }
+}
+
 fn exposure_groups_core(
     exposures: &adam_core_rs_coords::observations::ExposureBatch,
 ) -> PyResult<Vec<(String, Vec<u8>)>> {
-    use adam_core_rs_coords::observations::{ExposureBatch, TimeColumn};
     let mut order = Vec::<String>::new();
     let mut groups = std::collections::HashMap::<&str, Vec<usize>>::new();
     for (index, code) in exposures.observatory_code.iter().enumerate() {
@@ -2128,41 +2164,112 @@ fn exposure_groups_core(
     order
         .into_iter()
         .map(|code| {
-            let indices = &groups[code.as_str()];
-            let subset = ExposureBatch {
-                id: indices.iter().map(|&i| exposures.id[i].clone()).collect(),
-                start_time: TimeColumn {
-                    days: indices
-                        .iter()
-                        .map(|&i| exposures.start_time.days[i])
-                        .collect(),
-                    nanos: indices
-                        .iter()
-                        .map(|&i| exposures.start_time.nanos[i])
-                        .collect(),
-                    scale: exposures.start_time.scale,
-                    validity: exposures
-                        .start_time
-                        .validity
-                        .as_ref()
-                        .map(|validity| indices.iter().map(|&i| validity[i]).collect()),
-                },
-                duration: indices.iter().map(|&i| exposures.duration[i]).collect(),
-                filter: indices
-                    .iter()
-                    .map(|&i| exposures.filter[i].clone())
-                    .collect(),
-                observatory_code: indices
-                    .iter()
-                    .map(|&i| exposures.observatory_code[i].clone())
-                    .collect(),
-                seeing: indices.iter().map(|&i| exposures.seeing[i]).collect(),
-                depth_5sigma: indices.iter().map(|&i| exposures.depth_5sigma[i]).collect(),
-            };
+            let subset = take_exposures(exposures, &groups[code.as_str()]);
             let batch = subset.into_nested_record_batch().map_err(ades_error)?;
             Ok((code, write_orbit_ipc(&batch)?))
         })
         .collect()
+}
+
+/// Legacy `SourceCatalog.exposures` dedupe: quivr
+/// `drop_duplicates(subset=["id"], keep="first")` -- first occurrence of
+/// each exposure ID, in first-appearance order.
+fn exposure_dedupe_core(
+    exposures: &adam_core_rs_coords::observations::ExposureBatch,
+) -> PyResult<Vec<u8>> {
+    let mut seen: HashSet<&str> = HashSet::new();
+    let mut indices: Vec<usize> = Vec::new();
+    for (index, id) in exposures.id.iter().enumerate() {
+        if seen.insert(id.as_str()) {
+            indices.push(index);
+        }
+    }
+    let subset = take_exposures(exposures, &indices);
+    write_orbit_ipc(&subset.into_nested_record_batch().map_err(ades_error)?)
+}
+
+#[pyfunction]
+fn exposures_drop_duplicate_ids_ipc<'py>(
+    py: Python<'py>,
+    ipc_bytes: &Bound<'py, PyBytes>,
+) -> PyResult<Bound<'py, PyBytes>> {
+    let bytes = exposure_dedupe_core(&decode_exposures(ipc_bytes)?)?;
+    Ok(PyBytes::new(py, &bytes))
+}
+
+#[pyfunction]
+#[pyo3(signature = (ipc_bytes, reps, trials, warmup_reps=1))]
+fn benchmark_exposures_drop_duplicate_ids_ipc(
+    ipc_bytes: &Bound<'_, PyBytes>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let exposures = decode_exposures(ipc_bytes)?;
+    benchmark_trials(reps, trials, warmup_reps, || {
+        exposure_dedupe_core(&exposures)
+    })
+}
+
+/// Legacy `SourceCatalog.coordinates` covariance kernel: NaN-filled
+/// (N, 6, 6) matrices with lon/lat variances and the lon-lat covariance
+/// filled from arcsecond sigmas and the dimensionless correlation, in the
+/// exact legacy IEEE operation order (convert to degrees, square, then
+/// corr * ra_sigma * dec_sigma left-to-right).
+fn radec_covariance_core(ra_sigma: &[f64], dec_sigma: &[f64], radec_corr: &[f64]) -> Vec<f64> {
+    let n = ra_sigma.len();
+    let mut out = vec![f64::NAN; n * 36];
+    for i in 0..n {
+        let rs = ra_sigma[i] / 3600.0;
+        let ds = dec_sigma[i] / 3600.0;
+        let cov_ra = rs * rs;
+        let cov_dec = ds * ds;
+        let cov_radec = radec_corr[i] * rs * ds;
+        out[i * 36 + 6 + 1] = cov_ra; // [1, 1]
+        out[i * 36 + 12 + 2] = cov_dec; // [2, 2]
+        out[i * 36 + 6 + 2] = cov_radec; // [1, 2]
+        out[i * 36 + 12 + 1] = cov_radec; // [2, 1]
+    }
+    out
+}
+
+#[pyfunction]
+fn radec_covariance_matrices_numpy<'py>(
+    py: Python<'py>,
+    ra_sigma: PyReadonlyArray1<'py, f64>,
+    dec_sigma: PyReadonlyArray1<'py, f64>,
+    radec_corr: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    let ra_sigma = ra_sigma.as_slice()?;
+    let dec_sigma = dec_sigma.as_slice()?;
+    let radec_corr = radec_corr.as_slice()?;
+    if ra_sigma.len() != dec_sigma.len() || ra_sigma.len() != radec_corr.len() {
+        return Err(PyValueError::new_err(
+            "ra_sigma, dec_sigma and radec_corr must have equal length",
+        ));
+    }
+    let flat = radec_covariance_core(ra_sigma, dec_sigma, radec_corr);
+    let arr = ndarray::Array3::from_shape_vec((ra_sigma.len(), 6, 6), flat)
+        .map_err(|err| PyValueError::new_err(format!("failed to shape covariances: {err}")))?;
+    Ok(arr.into_pyarray(py))
+}
+
+#[pyfunction]
+#[pyo3(signature = (ra_sigma, dec_sigma, radec_corr, reps, trials, warmup_reps=1))]
+fn benchmark_radec_covariance_matrices_numpy(
+    ra_sigma: PyReadonlyArray1<'_, f64>,
+    dec_sigma: PyReadonlyArray1<'_, f64>,
+    radec_corr: PyReadonlyArray1<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let ra_sigma = ra_sigma.as_slice()?.to_vec();
+    let dec_sigma = dec_sigma.as_slice()?.to_vec();
+    let radec_corr = radec_corr.as_slice()?.to_vec();
+    benchmark_trials(reps, trials, warmup_reps, || {
+        Ok(radec_covariance_core(&ra_sigma, &dec_sigma, &radec_corr))
+    })
 }
 
 #[pyfunction]
@@ -5703,6 +5810,16 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(exposure_groups_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_exposure_groups_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(exposures_drop_duplicate_ids_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_exposures_drop_duplicate_ids_ipc,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(radec_covariance_matrices_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_radec_covariance_matrices_numpy,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(ades_to_string_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(ades_string_to_observations_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(pack_numbered_designation, m)?)?;

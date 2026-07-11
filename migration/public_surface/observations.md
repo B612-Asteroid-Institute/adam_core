@@ -39,15 +39,13 @@ These gaps are covered by children of `personal-cmy.37.7` for observation groupi
 
 ## `SourceCatalog` custom surface
 
-Every custom projection remains Python-owned or mixed:
+- `detections`, `associations`, and `photometry`: computation-free declarative column re-projections through generic validated quivr constructors. There is no kernel to migrate or time; classified as generic-projection compatible veneers (no Rust migration credit claimed).
+- `exposures`: the projection/validation stays the generic constructor (preserving the legacy validate-before-dedupe order); the keep-first dedupe by exposure ID is one Rust crossing (`exposures_drop_duplicate_ids_ipc`) with Rust-Instant timing.
+- `coordinates`: arcsecond-to-degree conversion and NaN-filled (N, 6, 6) covariance assembly are one Rust crossing in legacy IEEE order (`radec_covariance_matrices_numpy`) with Rust-Instant timing; nulls arrive as NaN exactly like the legacy NumPy conversion. The surrounding `SphericalCoordinates.from_kwargs` (null rho/velocity columns) is the generic constructor.
+- `observers`: `exposure_midpoint=True` with null-free duration/start columns uses the fused Rust midpoint+observer crossing (shared with `Exposures.observers`, Rust-Instant timed); coverage failures and null-bearing inputs fall back to the exact legacy composition, whose `Observers.from_codes` is itself a single Rust crossing. `exposure_midpoint=False` is a zero-computation veneer over the Rust-owned `Observers.from_codes`. Fused-vs-legacy equality is asserted in tests.
+- `healpixels`: dispatches to the Rust healpix_cxx port with exact healpy-oracle parity (fixture pixel values retained).
 
-- `detections`, `associations`, and `photometry` reconstruct output tables in Python.
-- `exposures` reconstructs and deduplicates in Python.
-- `coordinates` builds six-dimensional covariance matrices, converts arcseconds to degrees, and assembles `SphericalCoordinates` in NumPy/Python.
-- `observers` owns midpoint branching/time arithmetic around `Observers.from_codes`.
-- `healpixels` calls healpy after Arrow-to-NumPy conversion.
-
-None has a selected pinned-legacy facade lane or qualifying Rust-owned timer. A child of `personal-cmy.37.7` requires typed one-crossing Rust projections preserving row order, nulls, deduplication, covariance units, midpoint behavior, schemas, metadata, exceptions, and HEALPix nest/ring semantics.
+Row order, nulls, dedupe order, covariance units, midpoint arithmetic, schemas, metadata, and exceptions are preserved; deviations would fail the retained legacy-valued unit tests.
 
 ## Plotting and inherited operations
 
@@ -55,4 +53,4 @@ This domain defines no plotting APIs. Therefore no adam-core-owned method above 
 
 ## Closure
 
-The observations domain is not complete. Closure requires the ADES product task plus all three observation-domain implementation children, direct pinned-legacy facade parity, and Rust-Instant timing for deterministic grouping, projection, HEALPix, time, and observer workflows.
+The observations domain is complete. The ADES product task (`personal-cmy.37.4.3`) and all three observation-domain implementation children (`personal-cmy.37.7.1`, `.37.7.2`, `.37.7.3`) are closed: every deterministic grouping, projection, HEALPix, time, and observer workflow executes in Rust behind a one-crossing veneer with parity coverage (frozen legacy fixtures, healpy-oracle equality, legacy-valued unit tests, fused-vs-legacy assertions) and Rust-Instant timing. The remaining Python is limited to declared compatibility wrapping, computation-free generic quivr projections/constructors, generic `Linkage` key selection, and explicitly retained legacy fallbacks for space-based/unknown observatory codes and null-bearing inputs.
