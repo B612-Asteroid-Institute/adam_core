@@ -318,19 +318,35 @@ class KeplerianCoordinates(qv.Table):
         return coords
 
     def to_cometary(self) -> cometary.CometaryCoordinates:
-        return cometary.CometaryCoordinates.from_cartesian(self.to_cartesian())
+        from ._conversion import convert_representation
+
+        return convert_representation(
+            self, "keplerian", "cometary", cometary.CometaryCoordinates
+        )
 
     @classmethod
     def from_cometary(
         cls, cometary_coordinates: cometary.CometaryCoordinates
     ) -> KeplerianCoordinates:
-        return cls.from_cartesian(cometary_coordinates.to_cartesian())
+        from ._conversion import convert_representation
+
+        return convert_representation(
+            cometary_coordinates, "cometary", "keplerian", cls
+        )
 
     def to_spherical(self) -> spherical.SphericalCoordinates:
-        return spherical.SphericalCoordinates.from_cartesian(self.to_cartesian())
+        from ._conversion import convert_representation
+
+        return convert_representation(
+            self, "keplerian", "spherical", spherical.SphericalCoordinates
+        )
 
     @classmethod
     def from_spherical(
         cls, spherical_coordinates: spherical.SphericalCoordinates
     ) -> KeplerianCoordinates:
-        return cls.from_cartesian(spherical_coordinates.to_cartesian())
+        from ._conversion import convert_representation
+
+        return convert_representation(
+            spherical_coordinates, "spherical", "keplerian", cls
+        )
