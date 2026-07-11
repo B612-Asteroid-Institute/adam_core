@@ -769,6 +769,63 @@ def test_orbit_determination_kernel_native_rust_adapters_live(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    "api_id",
+    [
+        "coordinates.cartesian_to_spherical",
+        "coordinates.spherical.to_cartesian",
+        "coordinates.cartesian_to_geodetic",
+        "coordinates.cartesian_to_keplerian",
+        "coordinates.keplerian.to_cartesian",
+        "coordinates.cartesian_to_cometary",
+        "coordinates.cometary.to_cartesian",
+        "coordinates.rotate_cartesian_time_varying",
+        "coordinates.residuals.calculate_chi2",
+        "coordinates.residuals.bound_longitude_residuals",
+        "coordinates.residuals.apply_cosine_latitude_correction",
+        "statistics.weighted_mean",
+        "statistics.weighted_covariance",
+        "orbits.classify_orbits",
+        "dynamics.calc_mean_motion",
+        "dynamics.tisserand_parameter",
+        "dynamics.calculate_moid",
+        "dynamics.calculate_moid_batch",
+        "missions.porkchop_grid",
+        "dynamics.propagate_2body_along_arc",
+        "dynamics.propagate_2body_arc_batch",
+        "dynamics.propagate_2body_with_covariance",
+        "dynamics.solve_lambert",
+        "dynamics.add_light_time",
+        "photometry.calculate_phase_angle",
+        "photometry.calculate_apparent_magnitude_v",
+        "photometry.calculate_apparent_magnitude_v_and_phase_angle",
+        "photometry.predict_magnitudes",
+        "photometry.fit_absolute_magnitude_rows",
+        "photometry.fit_absolute_magnitude_grouped",
+    ],
+)
+def test_numpy_kernel_native_rust_adapters_live(api_id: str) -> None:
+    """Registered NumPy-flat lanes measure direct Rust calls with Rust clocks."""
+    rng = np.random.default_rng(20260711)
+    sample = _inputs.make(api_id, rng, 10)
+    native = _native_rust_runner.measure(
+        api_id,
+        sample.rust_kwargs,
+        reps=2,
+        warmup=1,
+        trials=2,
+    )
+
+    assert native.status == "measured", native.reason
+    assert len(native.sample_trials_s) == 2
+    assert all(len(trial) == 2 for trial in native.sample_trials_s)
+    assert all(value > 0.0 for trial in native.sample_trials_s for value in trial)
+    assert native.entrypoint.startswith("adam_core_rs_coords::")
+    assert "std::time::Instant" in native.timing_boundary
+    assert "Python/PyO3 launch" in native.timing_boundary
+
+
+@pytest.mark.integration
 def test_observer_native_rust_adapter_live() -> None:
     """A registered native adapter must not silently degrade to a blank column."""
     rng = np.random.default_rng(20260709)

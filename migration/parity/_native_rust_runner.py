@@ -245,9 +245,10 @@ def _kernel_timing(
     trials: int,
     entrypoint: str,
     kernel: str,
+    suffix_args: tuple[Any, ...] = (),
 ) -> NativeRustTiming:
     """Launch one Rust-owned timer after all canonical input preparation."""
-    samples = function(*args, reps, trials, warmup)
+    samples = function(*args, reps, trials, warmup, *suffix_args)
     return NativeRustTiming(
         status="measured",
         sample_trials_s=[[float(value) for value in trial] for trial in samples],
@@ -261,6 +262,305 @@ def _kernel_timing(
 
 def _f64(value: Any) -> np.ndarray:
     return np.ascontiguousarray(np.asarray(value, dtype=np.float64))
+
+
+def _native_array_kernel(
+    benchmark_name: str,
+    args: tuple[Any, ...],
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    entrypoint: str,
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    return _kernel_timing(
+        getattr(_rust_native, benchmark_name),
+        args,
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint=entrypoint,
+        kernel=entrypoint.rsplit("::", 1)[-1],
+    )
+
+
+def _cartesian_to_spherical(
+    *, coords: Any, reps: int, warmup: int, trials: int, **_unused: Any
+) -> NativeRustTiming:
+    return _native_array_kernel(
+        "benchmark_cartesian_to_spherical_native",
+        (_f64(coords),),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::cartesian_to_spherical_flat6",
+    )
+
+
+def _spherical_to_cartesian(
+    *, coords: Any, reps: int, warmup: int, trials: int, **_unused: Any
+) -> NativeRustTiming:
+    return _native_array_kernel(
+        "benchmark_spherical_to_cartesian_native",
+        (_f64(coords),),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::spherical_to_cartesian_flat6",
+    )
+
+
+def _cartesian_to_geodetic(
+    *,
+    coords: Any,
+    a: float,
+    f: float,
+    max_iter: int,
+    tol: float,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    return _native_array_kernel(
+        "benchmark_cartesian_to_geodetic_native",
+        (_f64(coords), float(a), float(f), int(max_iter), float(tol)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::cartesian_to_geodetic_flat6",
+    )
+
+
+def _cartesian_to_keplerian(
+    *,
+    coords: Any,
+    t0: Any,
+    mu: Any,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    return _native_array_kernel(
+        "benchmark_cartesian_to_keplerian_native",
+        (_f64(coords), _f64(t0), _f64(mu)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::cartesian_to_keplerian_flat6",
+    )
+
+
+def _keplerian_to_cartesian(
+    *,
+    coords: Any,
+    mu: Any,
+    max_iter: int,
+    tol: float,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    return _native_array_kernel(
+        "benchmark_keplerian_to_cartesian_native",
+        (_f64(coords), _f64(mu), int(max_iter), float(tol)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::keplerian_to_cartesian_flat6",
+    )
+
+
+def _cartesian_to_cometary(
+    *,
+    coords: Any,
+    t0: Any,
+    mu: Any,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    return _native_array_kernel(
+        "benchmark_cartesian_to_cometary_native",
+        (_f64(coords), _f64(t0), _f64(mu)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::cartesian_to_cometary_flat6",
+    )
+
+
+def _cometary_to_cartesian(
+    *,
+    coords: Any,
+    t0: Any,
+    mu: Any,
+    max_iter: int,
+    tol: float,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    return _native_array_kernel(
+        "benchmark_cometary_to_cartesian_native",
+        (_f64(coords), _f64(t0), _f64(mu), int(max_iter), float(tol)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::cometary_to_cartesian_flat6",
+    )
+
+
+def _rotate_cartesian_time_varying(
+    *,
+    coords: Any,
+    time_index: Any,
+    matrices: Any,
+    covariances: Any,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    coords_array = _f64(coords)
+    covariance_array = _f64(covariances).reshape(coords_array.shape[0], 36)
+    return _native_array_kernel(
+        "benchmark_rotate_cartesian_time_varying_native",
+        (
+            coords_array,
+            np.ascontiguousarray(time_index, dtype=np.int64),
+            _f64(matrices),
+            covariance_array,
+        ),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::rotate_cartesian_time_varying_flat6",
+    )
+
+
+def _calculate_chi2(
+    *,
+    residuals: Any,
+    covariances: Any,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    return _native_array_kernel(
+        "benchmark_calculate_chi2_native",
+        (_f64(residuals), _f64(covariances)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::calculate_chi2_flat",
+    )
+
+
+def _bound_longitude_residuals(
+    *,
+    observed: Any,
+    residuals: Any,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    return _native_array_kernel(
+        "benchmark_bound_longitude_residuals_native",
+        (_f64(observed), _f64(residuals)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::bound_longitude_residuals_flat",
+    )
+
+
+def _apply_cosine_latitude_correction(
+    *,
+    lat: Any,
+    residuals: Any,
+    covariances: Any,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    return _native_array_kernel(
+        "benchmark_apply_cosine_latitude_correction_native",
+        (_f64(lat), _f64(residuals), _f64(covariances)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::apply_cosine_latitude_correction_flat",
+    )
+
+
+def _weighted_mean(
+    *,
+    samples: Any,
+    weights: Any,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    return _native_array_kernel(
+        "benchmark_weighted_mean_native",
+        (_f64(samples), _f64(weights)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::weighted_mean_flat",
+    )
+
+
+def _weighted_covariance(
+    *,
+    mean: Any,
+    samples: Any,
+    weights: Any,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    return _native_array_kernel(
+        "benchmark_weighted_covariance_native",
+        (_f64(mean), _f64(samples), _f64(weights)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::weighted_covariance_flat",
+    )
+
+
+def _classify_orbits(
+    *,
+    a: Any,
+    e: Any,
+    q: Any,
+    q_apo: Any,
+    reps: int,
+    warmup: int,
+    trials: int,
+    **_unused: Any,
+) -> NativeRustTiming:
+    return _native_array_kernel(
+        "benchmark_classify_orbits_native",
+        (_f64(a), _f64(e), _f64(q), _f64(q_apo)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
+        entrypoint="adam_core_rs_coords::classify_orbits_flat",
+    )
 
 
 def _calc_mean_motion(
@@ -321,18 +621,13 @@ def _calculate_moid(
 
     return _kernel_timing(
         _rust_native.benchmark_calculate_moid_numpy,
-        (
-            _f64(primary_orbits),
-            _f64(secondary_orbits),
-            _f64(mus),
-            int(max_iter),
-            float(xtol),
-        ),
+        (_f64(primary_orbits), _f64(secondary_orbits), _f64(mus)),
         reps=reps,
         warmup=warmup,
         trials=trials,
         entrypoint="adam_core_rs_coords::calculate_moid",
         kernel="canonical per-pair calculate_moid loop",
+        suffix_args=(int(max_iter), float(xtol)),
     )
 
 
@@ -352,123 +647,196 @@ def _calculate_moid_batch(
 
     return _kernel_timing(
         _rust_native.benchmark_calculate_moid_batch_numpy,
-        (
-            _f64(primary_orbits),
-            _f64(secondary_orbits),
-            _f64(mus),
-            int(max_iter),
-            float(xtol),
-        ),
+        (_f64(primary_orbits), _f64(secondary_orbits), _f64(mus)),
         reps=reps,
         warmup=warmup,
         trials=trials,
         entrypoint="adam_core_rs_coords::calculate_moid_batch",
         kernel="calculate_moid_batch",
+        suffix_args=(int(max_iter), float(xtol)),
     )
 
 
 def _propagate_2body_along_arc(
-    *, reps: int, warmup: int, trials: int, orbit: Any, dts: Any, mu: float,
-    max_iter: int, tol: float, **_unused: Any
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    orbit: Any,
+    dts: Any,
+    mu: float,
+    max_iter: int,
+    tol: float,
+    **_unused: Any,
 ) -> NativeRustTiming:
     from adam_core import _rust_native
 
     return _kernel_timing(
         _rust_native.benchmark_propagate_2body_along_arc_numpy,
-        (_f64(orbit), _f64(dts), float(mu), int(max_iter), float(tol)),
-        reps=reps, warmup=warmup, trials=trials,
+        (_f64(orbit), _f64(dts), float(mu)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
         entrypoint="adam_core_rs_coords::propagate_2body_along_arc",
         kernel="propagate_2body_along_arc",
+        suffix_args=(int(max_iter), float(tol)),
     )
 
 
 def _propagate_2body_arc_batch(
-    *, reps: int, warmup: int, trials: int, orbits: Any, dts: Any, mus: Any,
-    max_iter: int, tol: float, **_unused: Any
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    orbits: Any,
+    dts: Any,
+    mus: Any,
+    max_iter: int,
+    tol: float,
+    **_unused: Any,
 ) -> NativeRustTiming:
     from adam_core import _rust_native
 
     return _kernel_timing(
         _rust_native.benchmark_propagate_2body_arc_batch_numpy,
-        (_f64(orbits), _f64(dts), _f64(mus), int(max_iter), float(tol)),
-        reps=reps, warmup=warmup, trials=trials,
+        (_f64(orbits), _f64(dts), _f64(mus)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
         entrypoint="adam_core_rs_coords::propagate_2body_arc_batch_flat6",
         kernel="propagate_2body_arc_batch_flat6",
+        suffix_args=(int(max_iter), float(tol)),
     )
 
 
 def _propagate_2body_with_covariance(
-    *, reps: int, warmup: int, trials: int, orbits: Any, covariances: Any,
-    dts: Any, mus: Any, max_iter: int, tol: float, **_unused: Any
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    orbits: Any,
+    covariances: Any,
+    dts: Any,
+    mus: Any,
+    max_iter: int,
+    tol: float,
+    **_unused: Any,
 ) -> NativeRustTiming:
     from adam_core import _rust_native
 
     return _kernel_timing(
         _rust_native.benchmark_propagate_2body_with_covariance_numpy,
-        (
-            _f64(orbits), _f64(covariances), _f64(dts), _f64(mus),
-            int(max_iter), float(tol),
-        ),
-        reps=reps, warmup=warmup, trials=trials,
+        (_f64(orbits), _f64(covariances), _f64(dts), _f64(mus)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
         entrypoint="adam_core_rs_coords::propagate_2body_with_covariance_flat6",
         kernel="state and covariance propagation",
+        suffix_args=(int(max_iter), float(tol)),
     )
 
 
 def _solve_lambert(
-    *, reps: int, warmup: int, trials: int, r1: Any, r2: Any, tof: Any,
-    mu: float, m: int, prograde: bool, low_path: bool, maxiter: int,
-    atol: float, rtol: float, **_unused: Any
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    r1: Any,
+    r2: Any,
+    tof: Any,
+    mu: float,
+    m: int,
+    prograde: bool,
+    low_path: bool,
+    maxiter: int,
+    atol: float,
+    rtol: float,
+    **_unused: Any,
 ) -> NativeRustTiming:
     from adam_core import _rust_native
 
     return _kernel_timing(
         _rust_native.benchmark_izzo_lambert_numpy,
         (
-            _f64(r1), _f64(r2), _f64(tof), float(mu), int(m), bool(prograde),
-            bool(low_path), int(maxiter), float(atol), float(rtol),
+            _f64(r1),
+            _f64(r2),
+            _f64(tof),
+            float(mu),
+            int(m),
+            bool(prograde),
+            bool(low_path),
         ),
-        reps=reps, warmup=warmup, trials=trials,
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
         entrypoint="adam_core_rs_coords::izzo_lambert_batch_flat",
         kernel="izzo_lambert_batch_flat",
+        suffix_args=(int(maxiter), float(atol), float(rtol)),
     )
 
 
 def _add_light_time(
-    *, reps: int, warmup: int, trials: int, orbits: Any,
-    observer_positions: Any, mus: Any, lt_tol: float, max_iter: int,
-    tol: float, max_lt_iter: int, **_unused: Any
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    orbits: Any,
+    observer_positions: Any,
+    mus: Any,
+    lt_tol: float,
+    max_iter: int,
+    tol: float,
+    max_lt_iter: int,
+    **_unused: Any,
 ) -> NativeRustTiming:
     from adam_core import _rust_native
 
     return _kernel_timing(
         _rust_native.benchmark_add_light_time_numpy,
-        (
-            _f64(orbits), _f64(observer_positions), _f64(mus), float(lt_tol),
-            int(max_iter), float(tol), int(max_lt_iter),
-        ),
-        reps=reps, warmup=warmup, trials=trials,
+        (_f64(orbits), _f64(observer_positions), _f64(mus)),
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
         entrypoint="adam_core_rs_coords::add_light_time_batch_flat",
         kernel="add_light_time_batch_flat",
+        suffix_args=(float(lt_tol), int(max_iter), float(tol), int(max_lt_iter)),
     )
 
 
 def _porkchop_grid(
-    *, reps: int, warmup: int, trials: int, dep_states: Any, dep_mjds: Any,
-    arr_states: Any, arr_mjds: Any, mu: float, prograde: bool, maxiter: int,
-    atol: float, rtol: float, **_unused: Any
+    *,
+    reps: int,
+    warmup: int,
+    trials: int,
+    dep_states: Any,
+    dep_mjds: Any,
+    arr_states: Any,
+    arr_mjds: Any,
+    mu: float,
+    prograde: bool,
+    maxiter: int,
+    atol: float,
+    rtol: float,
+    **_unused: Any,
 ) -> NativeRustTiming:
     from adam_core import _rust_native
 
     return _kernel_timing(
         _rust_native.benchmark_porkchop_grid_numpy,
         (
-            _f64(dep_states), _f64(dep_mjds), _f64(arr_states), _f64(arr_mjds),
-            float(mu), bool(prograde), int(maxiter), float(atol), float(rtol),
+            _f64(dep_states),
+            _f64(dep_mjds),
+            _f64(arr_states),
+            _f64(arr_mjds),
+            float(mu),
+            bool(prograde),
         ),
-        reps=reps, warmup=warmup, trials=trials,
+        reps=reps,
+        warmup=warmup,
+        trials=trials,
         entrypoint="adam_core_rs_coords::porkchop_grid_flat",
         kernel="porkchop_grid_flat",
+        suffix_args=(int(maxiter), float(atol), float(rtol)),
     )
 
 
@@ -703,7 +1071,9 @@ def _orbit_determination_kernel(
         )
         samples = benchmark(*common, *times, float(mu), reps, trials, warmup)
         entrypoint = (
-            "calc_herrick_gibbs_row" if api_id == "calcHerrickGibbs" else "calc_gauss_row"
+            "calc_herrick_gibbs_row"
+            if api_id == "calcHerrickGibbs"
+            else "calc_gauss_row"
         )
     return NativeRustTiming(
         status="measured",
@@ -871,8 +1241,14 @@ def _photometry_calculate_phase_angle(
 
 
 def _photometry_calculate_apparent_magnitude_v(
-    *, h_v: Any, object_pos: Any, observer_pos: Any, g: Any,
-    reps: int, warmup: int, trials: int
+    *,
+    h_v: Any,
+    object_pos: Any,
+    observer_pos: Any,
+    g: Any,
+    reps: int,
+    warmup: int,
+    trials: int,
 ) -> NativeRustTiming:
     from adam_core import _rust_native
 
@@ -892,8 +1268,14 @@ def _photometry_calculate_apparent_magnitude_v(
 
 
 def _photometry_calculate_apparent_magnitude_v_and_phase_angle(
-    *, h_v: Any, object_pos: Any, observer_pos: Any, g: Any,
-    reps: int, warmup: int, trials: int
+    *,
+    h_v: Any,
+    object_pos: Any,
+    observer_pos: Any,
+    g: Any,
+    reps: int,
+    warmup: int,
+    trials: int,
 ) -> NativeRustTiming:
     from adam_core import _rust_native
 
@@ -918,8 +1300,16 @@ def _photometry_calculate_apparent_magnitude_v_and_phase_angle(
 
 
 def _photometry_predict_magnitudes(
-    *, h_v: Any, object_pos: Any, observer_pos: Any, g: Any,
-    target_ids: Any, delta_table: Any, reps: int, warmup: int, trials: int
+    *,
+    h_v: Any,
+    object_pos: Any,
+    observer_pos: Any,
+    g: Any,
+    target_ids: Any,
+    delta_table: Any,
+    reps: int,
+    warmup: int,
+    trials: int,
 ) -> NativeRustTiming:
     from adam_core import _rust_native
 
@@ -960,8 +1350,13 @@ def _photometry_fit_absolute_magnitude_rows(
 
 
 def _photometry_fit_absolute_magnitude_grouped(
-    *, h_rows: Any, sigma_rows: Any, group_offsets: Any,
-    reps: int, warmup: int, trials: int
+    *,
+    h_rows: Any,
+    sigma_rows: Any,
+    group_offsets: Any,
+    reps: int,
+    warmup: int,
+    trials: int,
 ) -> NativeRustTiming:
     from adam_core import _rust_native
 
@@ -1019,6 +1414,22 @@ def _observers_from_codes(
 
 _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
     "coordinates.transform_coordinates": _transform_coordinates,
+    "coordinates.cartesian_to_spherical": _cartesian_to_spherical,
+    "coordinates.spherical.to_cartesian": _spherical_to_cartesian,
+    "coordinates.cartesian_to_geodetic": _cartesian_to_geodetic,
+    "coordinates.cartesian_to_keplerian": _cartesian_to_keplerian,
+    "coordinates.keplerian.to_cartesian": _keplerian_to_cartesian,
+    "coordinates.cartesian_to_cometary": _cartesian_to_cometary,
+    "coordinates.cometary.to_cartesian": _cometary_to_cartesian,
+    "coordinates.rotate_cartesian_time_varying": _rotate_cartesian_time_varying,
+    "coordinates.residuals.calculate_chi2": _calculate_chi2,
+    "coordinates.residuals.bound_longitude_residuals": (_bound_longitude_residuals),
+    "coordinates.residuals.apply_cosine_latitude_correction": (
+        _apply_cosine_latitude_correction
+    ),
+    "statistics.weighted_mean": _weighted_mean,
+    "statistics.weighted_covariance": _weighted_covariance,
+    "orbits.classify_orbits": _classify_orbits,
     "dynamics.calc_mean_motion": _calc_mean_motion,
     "dynamics.tisserand_parameter": _tisserand_parameter,
     "dynamics.calculate_moid": _calculate_moid,
@@ -1048,9 +1459,7 @@ _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
         _photometry_calculate_apparent_magnitude_v_and_phase_angle
     ),
     "photometry.predict_magnitudes": _photometry_predict_magnitudes,
-    "photometry.fit_absolute_magnitude_rows": (
-        _photometry_fit_absolute_magnitude_rows
-    ),
+    "photometry.fit_absolute_magnitude_rows": (_photometry_fit_absolute_magnitude_rows),
     "photometry.fit_absolute_magnitude_grouped": (
         _photometry_fit_absolute_magnitude_grouped
     ),
