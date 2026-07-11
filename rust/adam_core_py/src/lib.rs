@@ -6,6 +6,7 @@
 
 use pyo3::prelude::*;
 
+mod coordinate_ops;
 mod coordinates;
 mod dynamics;
 mod native_benchmarks;
@@ -16,6 +17,7 @@ mod variant_ephemeris;
 
 #[pymodule]
 fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    coordinate_ops::register(m)?;
     coordinates::register(m)?;
     dynamics::register(m)?;
     native_benchmarks::register(m)?;

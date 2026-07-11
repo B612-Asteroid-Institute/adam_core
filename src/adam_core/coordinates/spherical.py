@@ -101,26 +101,15 @@ class SphericalCoordinates(qv.Table):
         SphericalCoordinates
             Spherical coordinates on a unit sphere, with rho and vrho set to 1.0 and 0.0, respectively.
         """
-        # Extract coordinate values
-        coords = self.values
+        from adam_core import _rust_native
 
-        # Set rho to 1.0 for all points that are NaN, or if force is True
-        # then set rho to 1.0 for all points
-        if not only_missing:
-            mask = np.ones(len(coords), dtype=bool)
-        else:
-            mask = np.isnan(coords[:, 0])
-
-        coords[mask, 0] = 1.0
-
-        # Set vrho to 0.0 for all points that are NaN, or if force is True
-        # then set vrho to 0.0 for all points
-        if not only_missing:
-            mask = np.ones(len(coords), dtype=bool)
-        else:
-            mask = np.isnan(coords[:, 3])
-
-        coords[mask, 3] = 0.0
+        # One Rust crossing owns the rho/vrho unit-sphere policy.
+        coords = np.asarray(
+            _rust_native.spherical_to_unit_sphere_numpy(
+                self.values, bool(only_missing)
+            ),
+            dtype=np.float64,
+        )
 
         # Convert back to spherical coordinates
         return SphericalCoordinates.from_kwargs(

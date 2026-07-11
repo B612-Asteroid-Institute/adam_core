@@ -28,10 +28,14 @@ def sigmas_to_covariances(sigmas: np.ndarray) -> np.ndarray:
     covariances : `numpy.ndarray` (N, D, D)
         Covariance matrices for N coordinates in D dimensions.
     """
-    D = sigmas.shape[1]
-    identity = np.identity(D, dtype=sigmas.dtype)
-    covariances = np.einsum("kj,ji->kij", sigmas**2, identity, order="C")
-    return covariances
+    from adam_core import _rust_native
+
+    return np.asarray(
+        _rust_native.sigmas_to_covariances_numpy(
+            np.ascontiguousarray(sigmas, dtype=np.float64)
+        ),
+        dtype=np.float64,
+    )
 
 
 class CoordinateCovariances(qv.Table):
@@ -46,9 +50,11 @@ class CoordinateCovariances(qv.Table):
 
     @property
     def sigmas(self):
-        cov_diag = np.diagonal(self.to_matrix(), axis1=1, axis2=2)
-        sigmas = np.sqrt(cov_diag)
-        return sigmas
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.covariance_sigmas_numpy(self.to_matrix()), dtype=np.float64
+        )
 
     def _fast_to_matrix(self) -> Optional[np.ndarray]:
         """
@@ -213,7 +219,9 @@ class CoordinateCovariances(qv.Table):
         is_all_nan : bool
             True if all covariance matrix elements are NaN, False otherwise.
         """
-        return np.all(np.isnan(self.to_matrix()))
+        from adam_core import _rust_native
+
+        return _rust_native.covariance_is_all_nan_numpy(self.to_matrix())
 
 
 def make_positive_semidefinite(

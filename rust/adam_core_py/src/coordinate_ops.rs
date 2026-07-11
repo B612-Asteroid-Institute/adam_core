@@ -1,0 +1,973 @@
+//! Rust-owned kernels for adam-core coordinate table properties: derived
+//! vectors, RIC rotations, unit conversions, covariance access, derived
+//! orbital elements, unit-sphere projection, and origin gravitational
+//! parameters. Python veneers extract Arrow columns once and make one
+//! crossing per public property/function.
+
+use adam_core_rs_coords::{
+    calc_apoapsis_distance, calc_mean_motion, calc_period, calc_semi_latus_rectum,
+    calc_semi_major_axis, origin_mu_au3_day2, OriginId,
+};
+use numpy::{
+    IntoPyArray, PyArray1, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3,
+};
+use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
+use std::hint::black_box;
+use std::time::Instant;
+
+const KM_P_AU: f64 = 149_597_870.7;
+const S_P_DAY: f64 = 86_400.0;
+const SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE: f64 = 1e-20;
+
+fn rows3(values: &PyReadonlyArray2<'_, f64>, label: &str) -> PyResult<Vec<f64>> {
+    let view = values.as_array();
+    if view.ncols() != 3 {
+        return Err(PyValueError::new_err(format!(
+            "{label} must have shape (N, 3)"
+        )));
+    }
+    view.as_slice()
+        .map(<[f64]>::to_vec)
+        .ok_or_else(|| PyValueError::new_err(format!("{label} must be contiguous")))
+}
+
+fn rows6(values: &PyReadonlyArray2<'_, f64>, label: &str) -> PyResult<Vec<f64>> {
+    let view = values.as_array();
+    if view.ncols() != 6 {
+        return Err(PyValueError::new_err(format!(
+            "{label} must have shape (N, 6)"
+        )));
+    }
+    view.as_slice()
+        .map(<[f64]>::to_vec)
+        .ok_or_else(|| PyValueError::new_err(format!("{label} must be contiguous")))
+}
+
+fn scalars(values: &PyReadonlyArray1<'_, f64>, label: &str) -> PyResult<Vec<f64>> {
+    values
+        .as_array()
+        .as_slice()
+        .map(<[f64]>::to_vec)
+        .ok_or_else(|| PyValueError::new_err(format!("{label} must be contiguous")))
+}
+
+fn covariance_rows(
+    values: &PyReadonlyArray3<'_, f64>,
+    label: &str,
+) -> PyResult<(Vec<f64>, usize, usize)> {
+    let view = values.as_array();
+    let shape = view.shape();
+    if shape[1] != shape[2] {
+        return Err(PyValueError::new_err(format!(
+            "{label} must have shape (N, D, D)"
+        )));
+    }
+    let flat = view
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err(format!("{label} must be contiguous")))?
+        .to_vec();
+    Ok((flat, shape[0], shape[1]))
+}
+
+fn array1<'py>(py: Python<'py>, values: Vec<f64>) -> Bound<'py, PyArray1<f64>> {
+    values.into_pyarray(py)
+}
+
+fn array2<'py>(
+    py: Python<'py>,
+    values: Vec<f64>,
+    rows: usize,
+    cols: usize,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    ndarray::Array2::from_shape_vec((rows, cols), values)
+        .map(|array| array.into_pyarray(py))
+        .map_err(|err| PyValueError::new_err(err.to_string()))
+}
+
+fn array3<'py>(
+    py: Python<'py>,
+    values: Vec<f64>,
+    rows: usize,
+    dim: usize,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    ndarray::Array3::from_shape_vec((rows, dim, dim), values)
+        .map(|array| array.into_pyarray(py))
+        .map_err(|err| PyValueError::new_err(err.to_string()))
+}
+
+fn bench<F, T>(
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    mut run: F,
+) -> PyResult<Vec<Vec<f64>>>
+where
+    F: FnMut() -> T,
+{
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let mut trial_samples = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            black_box(run());
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            black_box(run());
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        trial_samples.push(samples);
+    }
+    Ok(trial_samples)
+}
+
+// ---------------------------------------------------------------------------
+// Vector kernels
+// ---------------------------------------------------------------------------
+
+fn norm3(flat: &[f64]) -> Vec<f64> {
+    flat.chunks_exact(3)
+        .map(|row| (row[0] * row[0] + row[1] * row[1] + row[2] * row[2]).sqrt())
+        .collect()
+}
+
+fn unit3(flat: &[f64]) -> Vec<f64> {
+    flat.chunks_exact(3)
+        .flat_map(|row| {
+            let norm = (row[0] * row[0] + row[1] * row[1] + row[2] * row[2]).sqrt();
+            [row[0] / norm, row[1] / norm, row[2] / norm]
+        })
+        .collect()
+}
+
+fn cross3(a: &[f64], b: &[f64]) -> Vec<f64> {
+    a.chunks_exact(3)
+        .zip(b.chunks_exact(3))
+        .flat_map(|(a, b)| {
+            [
+                a[1] * b[2] - a[2] * b[1],
+                a[2] * b[0] - a[0] * b[2],
+                a[0] * b[1] - a[1] * b[0],
+            ]
+        })
+        .collect()
+}
+
+fn h_mag_from_values(values: &[f64]) -> Vec<f64> {
+    values
+        .chunks_exact(6)
+        .map(|row| {
+            let h = [
+                row[1] * row[5] - row[2] * row[4],
+                row[2] * row[3] - row[0] * row[5],
+                row[0] * row[4] - row[1] * row[3],
+            ];
+            (h[0] * h[0] + h[1] * h[1] + h[2] * h[2]).sqrt()
+        })
+        .collect()
+}
+
+#[pyfunction]
+fn row_norm3_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let flat = rows3(&values, "values")?;
+    Ok(array1(py, norm3(&flat)))
+}
+
+#[pyfunction]
+fn row_unit3_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let flat = rows3(&values, "values")?;
+    let rows = flat.len() / 3;
+    array2(py, unit3(&flat), rows, 3)
+}
+
+#[pyfunction]
+fn row_cross3_numpy<'py>(
+    py: Python<'py>,
+    a: PyReadonlyArray2<'py, f64>,
+    b: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let a = rows3(&a, "a")?;
+    let b = rows3(&b, "b")?;
+    if a.len() != b.len() {
+        return Err(PyValueError::new_err("a and b must have the same shape"));
+    }
+    let rows = a.len() / 3;
+    array2(py, cross3(&a, &b), rows, 3)
+}
+
+#[pyfunction]
+fn cartesian_h_mag_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let flat = rows6(&values, "values")?;
+    Ok(array1(py, h_mag_from_values(&flat)))
+}
+
+// ---------------------------------------------------------------------------
+// RIC rotation matrices
+// ---------------------------------------------------------------------------
+
+fn ric3_flat(values: &[f64]) -> Vec<f64> {
+    let rows = values.len() / 6;
+    let mut out = vec![0.0_f64; rows * 9];
+    for row in 0..rows {
+        let state = &values[row * 6..row * 6 + 6];
+        let mut radial = [state[0], state[1], state[2]];
+        let velocity = [state[3], state[4], state[5]];
+        let mut cross_track = [
+            radial[1] * velocity[2] - radial[2] * velocity[1],
+            radial[2] * velocity[0] - radial[0] * velocity[2],
+            radial[0] * velocity[1] - radial[1] * velocity[0],
+        ];
+        let mut r_mag =
+            (radial[0] * radial[0] + radial[1] * radial[1] + radial[2] * radial[2]).sqrt();
+        let mut h_mag = (cross_track[0] * cross_track[0]
+            + cross_track[1] * cross_track[1]
+            + cross_track[2] * cross_track[2])
+            .sqrt();
+        // Degenerate orbital plane: identity policy matching the legacy
+        // implementation (radial -> X, cross-track -> Z).
+        if h_mag < SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE {
+            radial = [1.0, 0.0, 0.0];
+            r_mag = 1.0;
+            cross_track = [0.0, 0.0, 1.0];
+            h_mag = 1.0;
+        }
+        let radial = [radial[0] / r_mag, radial[1] / r_mag, radial[2] / r_mag];
+        let cross_track = [
+            cross_track[0] / h_mag,
+            cross_track[1] / h_mag,
+            cross_track[2] / h_mag,
+        ];
+        let in_track = [
+            cross_track[1] * radial[2] - cross_track[2] * radial[1],
+            cross_track[2] * radial[0] - cross_track[0] * radial[2],
+            cross_track[0] * radial[1] - cross_track[1] * radial[0],
+        ];
+        let base = row * 9;
+        out[base..base + 3].copy_from_slice(&radial);
+        out[base + 3..base + 6].copy_from_slice(&in_track);
+        out[base + 6..base + 9].copy_from_slice(&cross_track);
+    }
+    out
+}
+
+fn ric6_flat(values: &[f64]) -> Vec<f64> {
+    let rows = values.len() / 6;
+    let ric3 = ric3_flat(values);
+    let mut out = vec![0.0_f64; rows * 36];
+    for row in 0..rows {
+        for j in 0..3 {
+            for k in 0..3 {
+                let value = ric3[row * 9 + j * 3 + k];
+                out[row * 36 + j * 6 + k] = value;
+                out[row * 36 + (j + 3) * 6 + (k + 3)] = value;
+            }
+        }
+    }
+    out
+}
+
+#[pyfunction]
+fn ric3_matrix_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    let flat = rows6(&values, "values")?;
+    let rows = flat.len() / 6;
+    array3(py, ric3_flat(&flat), rows, 3)
+}
+
+#[pyfunction]
+fn ric6_matrix_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    let flat = rows6(&values, "values")?;
+    let rows = flat.len() / 6;
+    array3(py, ric6_flat(&flat), rows, 6)
+}
+
+#[pyfunction]
+#[pyo3(signature = (values, reps, trials, warmup_reps=1))]
+fn benchmark_ric_matrices_numpy(
+    values: PyReadonlyArray2<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let flat = rows6(&values, "values")?;
+    bench(reps, trials, warmup_reps, || ric6_flat(&flat))
+}
+
+// ---------------------------------------------------------------------------
+// Translation and unit conversions
+// ---------------------------------------------------------------------------
+
+fn translate6(values: &[f64], vector: &[f64]) -> Vec<f64> {
+    let broadcast = vector.len() == 6;
+    values
+        .chunks_exact(6)
+        .enumerate()
+        .flat_map(|(row, state)| {
+            let offset = if broadcast { 0 } else { row * 6 };
+            [
+                state[0] + vector[offset],
+                state[1] + vector[offset + 1],
+                state[2] + vector[offset + 2],
+                state[3] + vector[offset + 3],
+                state[4] + vector[offset + 4],
+                state[5] + vector[offset + 5],
+            ]
+        })
+        .collect()
+}
+
+#[pyfunction]
+fn translate_cartesian_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray2<'py, f64>,
+    vector: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let values = rows6(&values, "values")?;
+    let vector = rows6(&vector, "vector")?;
+    let rows = values.len() / 6;
+    if vector.len() != 6 && vector.len() != values.len() {
+        return Err(PyValueError::new_err(
+            "vector must have shape (1, 6) or (N, 6)",
+        ));
+    }
+    array2(py, translate6(&values, &vector), rows, 6)
+}
+
+#[pyfunction]
+fn au_to_km_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let values = scalars(&values, "values")?;
+    Ok(array1(
+        py,
+        values.iter().map(|value| value * KM_P_AU).collect(),
+    ))
+}
+
+#[pyfunction]
+fn km_to_au_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let values = scalars(&values, "values")?;
+    Ok(array1(
+        py,
+        values.iter().map(|value| value / KM_P_AU).collect(),
+    ))
+}
+
+#[pyfunction]
+fn au_per_day_to_km_per_s_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let values = scalars(&values, "values")?;
+    Ok(array1(
+        py,
+        values
+            .iter()
+            .map(|value| value * KM_P_AU / S_P_DAY)
+            .collect(),
+    ))
+}
+
+#[pyfunction]
+fn km_per_s_to_au_per_day_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let values = scalars(&values, "values")?;
+    Ok(array1(
+        py,
+        values
+            .iter()
+            .map(|value| value / KM_P_AU * S_P_DAY)
+            .collect(),
+    ))
+}
+
+fn convert_values(flat: &[f64], au_to_km: bool) -> Vec<f64> {
+    flat.chunks_exact(6)
+        .flat_map(|row| {
+            if au_to_km {
+                [
+                    row[0] * KM_P_AU,
+                    row[1] * KM_P_AU,
+                    row[2] * KM_P_AU,
+                    row[3] * KM_P_AU / S_P_DAY,
+                    row[4] * KM_P_AU / S_P_DAY,
+                    row[5] * KM_P_AU / S_P_DAY,
+                ]
+            } else {
+                [
+                    row[0] / KM_P_AU,
+                    row[1] / KM_P_AU,
+                    row[2] / KM_P_AU,
+                    row[3] / KM_P_AU * S_P_DAY,
+                    row[4] / KM_P_AU * S_P_DAY,
+                    row[5] / KM_P_AU * S_P_DAY,
+                ]
+            }
+        })
+        .collect()
+}
+
+fn convert_covariance(flat: &[f64], au_to_km: bool) -> Vec<f64> {
+    // Matches the legacy outer-product conversion factor exactly.
+    let unit = if au_to_km {
+        [
+            KM_P_AU,
+            KM_P_AU,
+            KM_P_AU,
+            KM_P_AU / S_P_DAY,
+            KM_P_AU / S_P_DAY,
+            KM_P_AU / S_P_DAY,
+        ]
+    } else {
+        [
+            1.0 / KM_P_AU,
+            1.0 / KM_P_AU,
+            1.0 / KM_P_AU,
+            S_P_DAY / KM_P_AU,
+            S_P_DAY / KM_P_AU,
+            S_P_DAY / KM_P_AU,
+        ]
+    };
+    flat.chunks_exact(36)
+        .flat_map(|matrix| {
+            let mut out = [0.0_f64; 36];
+            for j in 0..6 {
+                for k in 0..6 {
+                    out[j * 6 + k] = matrix[j * 6 + k] * (unit[j] * unit[k]);
+                }
+            }
+            out
+        })
+        .collect()
+}
+
+#[pyfunction]
+fn convert_cartesian_values_au_to_km_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let flat = rows6(&values, "values")?;
+    let rows = flat.len() / 6;
+    array2(py, convert_values(&flat, true), rows, 6)
+}
+
+#[pyfunction]
+fn convert_cartesian_values_km_to_au_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let flat = rows6(&values, "values")?;
+    let rows = flat.len() / 6;
+    array2(py, convert_values(&flat, false), rows, 6)
+}
+
+#[pyfunction]
+fn convert_cartesian_covariance_au_to_km_numpy<'py>(
+    py: Python<'py>,
+    covariances: PyReadonlyArray3<'py, f64>,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    let (flat, rows, dim) = covariance_rows(&covariances, "covariances")?;
+    if dim != 6 {
+        return Err(PyValueError::new_err(
+            "covariances must have shape (N, 6, 6)",
+        ));
+    }
+    array3(py, convert_covariance(&flat, true), rows, 6)
+}
+
+#[pyfunction]
+fn convert_cartesian_covariance_km_to_au_numpy<'py>(
+    py: Python<'py>,
+    covariances: PyReadonlyArray3<'py, f64>,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    let (flat, rows, dim) = covariance_rows(&covariances, "covariances")?;
+    if dim != 6 {
+        return Err(PyValueError::new_err(
+            "covariances must have shape (N, 6, 6)",
+        ));
+    }
+    array3(py, convert_covariance(&flat, false), rows, 6)
+}
+
+#[pyfunction]
+#[pyo3(signature = (values, covariances, reps, trials, warmup_reps=1))]
+fn benchmark_cartesian_unit_conversions_numpy(
+    values: PyReadonlyArray2<'_, f64>,
+    covariances: PyReadonlyArray3<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let values = rows6(&values, "values")?;
+    let (covariances, _, _) = covariance_rows(&covariances, "covariances")?;
+    bench(reps, trials, warmup_reps, || {
+        (
+            convert_values(&values, true),
+            convert_values(&values, false),
+            convert_covariance(&covariances, true),
+            convert_covariance(&covariances, false),
+        )
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Covariance construction and access
+// ---------------------------------------------------------------------------
+
+fn covariance_sigmas(flat: &[f64], rows: usize, dim: usize) -> Vec<f64> {
+    let mut out = vec![0.0_f64; rows * dim];
+    for row in 0..rows {
+        for j in 0..dim {
+            out[row * dim + j] = flat[row * dim * dim + j * dim + j].sqrt();
+        }
+    }
+    out
+}
+
+fn sigma_block_norm(flat: &[f64], rows: usize, dim: usize, start: usize, len: usize) -> Vec<f64> {
+    let mut out = vec![0.0_f64; rows];
+    for row in 0..rows {
+        let mut total = 0.0_f64;
+        for j in start..start + len {
+            let sigma = flat[row * dim * dim + j * dim + j].sqrt();
+            total += sigma * sigma;
+        }
+        out[row] = total.sqrt();
+    }
+    out
+}
+
+fn sigmas_to_covariances_flat(sigmas: &[f64], rows: usize, dim: usize) -> Vec<f64> {
+    let mut out = vec![0.0_f64; rows * dim * dim];
+    for row in 0..rows {
+        for j in 0..dim {
+            let sigma = sigmas[row * dim + j];
+            out[row * dim * dim + j * dim + j] = sigma * sigma;
+        }
+    }
+    out
+}
+
+#[pyfunction]
+fn covariance_sigmas_numpy<'py>(
+    py: Python<'py>,
+    covariances: PyReadonlyArray3<'py, f64>,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let (flat, rows, dim) = covariance_rows(&covariances, "covariances")?;
+    array2(py, covariance_sigmas(&flat, rows, dim), rows, dim)
+}
+
+#[pyfunction]
+fn covariance_sigma_block_norm_numpy<'py>(
+    py: Python<'py>,
+    covariances: PyReadonlyArray3<'py, f64>,
+    start: usize,
+    len: usize,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let (flat, rows, dim) = covariance_rows(&covariances, "covariances")?;
+    if start + len > dim {
+        return Err(PyValueError::new_err("sigma block exceeds dimension"));
+    }
+    Ok(array1(py, sigma_block_norm(&flat, rows, dim, start, len)))
+}
+
+#[pyfunction]
+fn sigmas_to_covariances_numpy<'py>(
+    py: Python<'py>,
+    sigmas: PyReadonlyArray2<'py, f64>,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    let view = sigmas.as_array();
+    let rows = view.nrows();
+    let dim = view.ncols();
+    let flat = view
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("sigmas must be contiguous"))?;
+    array3(py, sigmas_to_covariances_flat(flat, rows, dim), rows, dim)
+}
+
+#[pyfunction]
+fn covariance_is_all_nan_numpy(covariances: PyReadonlyArray3<'_, f64>) -> PyResult<bool> {
+    let (flat, _, _) = covariance_rows(&covariances, "covariances")?;
+    Ok(flat.iter().all(|value| value.is_nan()))
+}
+
+#[pyfunction]
+#[pyo3(signature = (covariances, reps, trials, warmup_reps=1))]
+fn benchmark_covariance_sigmas_numpy(
+    covariances: PyReadonlyArray3<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let (flat, rows, dim) = covariance_rows(&covariances, "covariances")?;
+    bench(reps, trials, warmup_reps, || {
+        covariance_sigmas(&flat, rows, dim)
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (sigmas, reps, trials, warmup_reps=1))]
+fn benchmark_sigmas_to_covariances_numpy(
+    sigmas: PyReadonlyArray2<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let view = sigmas.as_array();
+    let rows = view.nrows();
+    let dim = view.ncols();
+    let flat = view
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("sigmas must be contiguous"))?
+        .to_vec();
+    bench(reps, trials, warmup_reps, || {
+        sigmas_to_covariances_flat(&flat, rows, dim)
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Derived orbital elements
+// ---------------------------------------------------------------------------
+
+fn map2(a: &[f64], b: &[f64], op: impl Fn(f64, f64) -> f64) -> Vec<f64> {
+    a.iter().zip(b.iter()).map(|(&a, &b)| op(a, b)).collect()
+}
+
+#[pyfunction]
+fn cometary_apoapsis_distance_numpy<'py>(
+    py: Python<'py>,
+    q: PyReadonlyArray1<'py, f64>,
+    e: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let q = scalars(&q, "q")?;
+    let e = scalars(&e, "e")?;
+    Ok(array1(
+        py,
+        map2(&q, &e, |q, e| {
+            calc_apoapsis_distance(calc_semi_major_axis(q, e), e)
+        }),
+    ))
+}
+
+#[pyfunction]
+fn cometary_semi_latus_rectum_numpy<'py>(
+    py: Python<'py>,
+    q: PyReadonlyArray1<'py, f64>,
+    e: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let q = scalars(&q, "q")?;
+    let e = scalars(&e, "e")?;
+    Ok(array1(
+        py,
+        map2(&q, &e, |q, e| {
+            calc_semi_latus_rectum(calc_semi_major_axis(q, e), e)
+        }),
+    ))
+}
+
+#[pyfunction]
+fn cometary_period_numpy<'py>(
+    py: Python<'py>,
+    q: PyReadonlyArray1<'py, f64>,
+    e: PyReadonlyArray1<'py, f64>,
+    mu: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let q = scalars(&q, "q")?;
+    let e = scalars(&e, "e")?;
+    let mu = scalars(&mu, "mu")?;
+    Ok(array1(
+        py,
+        q.iter()
+            .zip(e.iter())
+            .zip(mu.iter())
+            .map(|((&q, &e), &mu)| calc_period(calc_semi_major_axis(q, e), mu))
+            .collect(),
+    ))
+}
+
+#[pyfunction]
+fn mean_motion_degrees_numpy<'py>(
+    py: Python<'py>,
+    a: PyReadonlyArray1<'py, f64>,
+    mu: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let a = scalars(&a, "a")?;
+    let mu = scalars(&mu, "mu")?;
+    Ok(array1(
+        py,
+        map2(&a, &mu, |a, mu| calc_mean_motion(a, mu).to_degrees()),
+    ))
+}
+
+#[pyfunction]
+fn cometary_mean_motion_degrees_numpy<'py>(
+    py: Python<'py>,
+    q: PyReadonlyArray1<'py, f64>,
+    e: PyReadonlyArray1<'py, f64>,
+    mu: PyReadonlyArray1<'py, f64>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let q = scalars(&q, "q")?;
+    let e = scalars(&e, "e")?;
+    let mu = scalars(&mu, "mu")?;
+    Ok(array1(
+        py,
+        q.iter()
+            .zip(e.iter())
+            .zip(mu.iter())
+            .map(|((&q, &e), &mu)| calc_mean_motion(calc_semi_major_axis(q, e), mu).to_degrees())
+            .collect(),
+    ))
+}
+
+#[pyfunction]
+fn period_from_origin_numpy<'py>(
+    py: Python<'py>,
+    a: PyReadonlyArray1<'py, f64>,
+    codes: Vec<String>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let a = scalars(&a, "a")?;
+    let mu = origin_mu_values(&codes).map_err(PyValueError::new_err)?;
+    if a.len() != mu.len() {
+        return Err(PyValueError::new_err("a and codes must have equal length"));
+    }
+    Ok(array1(py, map2(&a, &mu, calc_period)))
+}
+
+#[pyfunction]
+fn mean_motion_degrees_from_origin_numpy<'py>(
+    py: Python<'py>,
+    a: PyReadonlyArray1<'py, f64>,
+    codes: Vec<String>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let a = scalars(&a, "a")?;
+    let mu = origin_mu_values(&codes).map_err(PyValueError::new_err)?;
+    if a.len() != mu.len() {
+        return Err(PyValueError::new_err("a and codes must have equal length"));
+    }
+    Ok(array1(
+        py,
+        map2(&a, &mu, |a, mu| calc_mean_motion(a, mu).to_degrees()),
+    ))
+}
+
+#[pyfunction]
+fn cometary_period_from_origin_numpy<'py>(
+    py: Python<'py>,
+    q: PyReadonlyArray1<'py, f64>,
+    e: PyReadonlyArray1<'py, f64>,
+    codes: Vec<String>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let q = scalars(&q, "q")?;
+    let e = scalars(&e, "e")?;
+    let mu = origin_mu_values(&codes).map_err(PyValueError::new_err)?;
+    if q.len() != mu.len() || e.len() != mu.len() {
+        return Err(PyValueError::new_err("q, e, codes must have equal length"));
+    }
+    Ok(array1(
+        py,
+        q.iter()
+            .zip(e.iter())
+            .zip(mu.iter())
+            .map(|((&q, &e), &mu)| calc_period(calc_semi_major_axis(q, e), mu))
+            .collect(),
+    ))
+}
+
+#[pyfunction]
+fn cometary_mean_motion_degrees_from_origin_numpy<'py>(
+    py: Python<'py>,
+    q: PyReadonlyArray1<'py, f64>,
+    e: PyReadonlyArray1<'py, f64>,
+    codes: Vec<String>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let q = scalars(&q, "q")?;
+    let e = scalars(&e, "e")?;
+    let mu = origin_mu_values(&codes).map_err(PyValueError::new_err)?;
+    if q.len() != mu.len() || e.len() != mu.len() {
+        return Err(PyValueError::new_err("q, e, codes must have equal length"));
+    }
+    Ok(array1(
+        py,
+        q.iter()
+            .zip(e.iter())
+            .zip(mu.iter())
+            .map(|((&q, &e), &mu)| calc_mean_motion(calc_semi_major_axis(q, e), mu).to_degrees())
+            .collect(),
+    ))
+}
+
+#[pyfunction]
+#[pyo3(signature = (q, e, mu, reps, trials, warmup_reps=1))]
+fn benchmark_derived_elements_numpy(
+    q: PyReadonlyArray1<'_, f64>,
+    e: PyReadonlyArray1<'_, f64>,
+    mu: PyReadonlyArray1<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let q = scalars(&q, "q")?;
+    let e = scalars(&e, "e")?;
+    let mu = scalars(&mu, "mu")?;
+    bench(reps, trials, warmup_reps, || {
+        q.iter()
+            .zip(e.iter())
+            .zip(mu.iter())
+            .map(|((&q, &e), &mu)| {
+                let a = calc_semi_major_axis(q, e);
+                (
+                    calc_apoapsis_distance(a, e),
+                    calc_semi_latus_rectum(a, e),
+                    calc_period(a, mu),
+                    calc_mean_motion(a, mu).to_degrees(),
+                )
+            })
+            .collect::<Vec<_>>()
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Unit sphere and origin mu
+// ---------------------------------------------------------------------------
+
+fn to_unit_sphere(flat: &[f64], only_missing: bool) -> Vec<f64> {
+    flat.chunks_exact(6)
+        .flat_map(|row| {
+            let rho = if !only_missing || row[0].is_nan() {
+                1.0
+            } else {
+                row[0]
+            };
+            let vrho = if !only_missing || row[3].is_nan() {
+                0.0
+            } else {
+                row[3]
+            };
+            [rho, row[1], row[2], vrho, row[4], row[5]]
+        })
+        .collect()
+}
+
+#[pyfunction]
+#[pyo3(signature = (values, only_missing=false))]
+fn spherical_to_unit_sphere_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray2<'py, f64>,
+    only_missing: bool,
+) -> PyResult<Bound<'py, PyArray2<f64>>> {
+    let flat = rows6(&values, "values")?;
+    let rows = flat.len() / 6;
+    array2(py, to_unit_sphere(&flat, only_missing), rows, 6)
+}
+
+fn origin_mu_values(codes: &[String]) -> Result<Vec<f64>, String> {
+    codes
+        .iter()
+        .map(|code| {
+            origin_mu_au3_day2(&OriginId::from_code(code.clone()))
+                .map_err(|_| format!("Unknown origin code: {code}"))
+        })
+        .collect()
+}
+
+#[pyfunction]
+fn origin_mu_numpy<'py>(
+    py: Python<'py>,
+    codes: Vec<String>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    origin_mu_values(&codes)
+        .map(|values| array1(py, values))
+        .map_err(PyValueError::new_err)
+}
+
+#[pyfunction]
+#[pyo3(signature = (codes, reps, trials, warmup_reps=1))]
+fn benchmark_origin_mu_numpy(
+    codes: Vec<String>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    bench(reps, trials, warmup_reps, || origin_mu_values(&codes))
+}
+
+pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(row_norm3_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(row_unit3_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(row_cross3_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(cartesian_h_mag_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(ric3_matrix_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(ric6_matrix_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_ric_matrices_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(translate_cartesian_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(au_to_km_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(km_to_au_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(au_per_day_to_km_per_s_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(km_per_s_to_au_per_day_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        convert_cartesian_values_au_to_km_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        convert_cartesian_values_km_to_au_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        convert_cartesian_covariance_au_to_km_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        convert_cartesian_covariance_km_to_au_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_cartesian_unit_conversions_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(covariance_sigmas_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(covariance_sigma_block_norm_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(sigmas_to_covariances_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(covariance_is_all_nan_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_covariance_sigmas_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_sigmas_to_covariances_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(cometary_apoapsis_distance_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(cometary_semi_latus_rectum_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(cometary_period_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(mean_motion_degrees_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(cometary_mean_motion_degrees_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(period_from_origin_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(mean_motion_degrees_from_origin_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(cometary_period_from_origin_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        cometary_mean_motion_degrees_from_origin_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(benchmark_derived_elements_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(spherical_to_unit_sphere_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(origin_mu_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_origin_mu_numpy, m)?)?;
+    Ok(())
+}

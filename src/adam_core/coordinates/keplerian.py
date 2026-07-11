@@ -80,10 +80,14 @@ class KeplerianCoordinates(qv.Table):
         """
         Periapsis distance.
         """
-        # Pure-NumPy: q = a · (1 − e). No JAX dispatch overhead.
-        a = self.a.to_numpy()
-        e = self.e.to_numpy()
-        return a * (1.0 - e)
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.calc_periapsis_distance_numpy(
+                self.a.to_numpy(), self.e.to_numpy()
+            ),
+            dtype=np.float64,
+        )
 
     @q.setter
     def q(self, value):
@@ -106,10 +110,14 @@ class KeplerianCoordinates(qv.Table):
         """
         Apoapsis distance.
         """
-        # Pure-NumPy: Q = a · (1 + e), or ∞ for e ≥ 1 (parabolic/hyperbolic).
-        a = self.a.to_numpy()
-        e = self.e.to_numpy()
-        return np.where(e >= 1.0, np.inf, a * (1.0 + e))
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.calc_apoapsis_distance_numpy(
+                self.a.to_numpy(), self.e.to_numpy()
+            ),
+            dtype=np.float64,
+        )
 
     @Q.setter
     def Q(self, value):
@@ -132,10 +140,14 @@ class KeplerianCoordinates(qv.Table):
         """
         Semi-latus rectum.
         """
-        # Pure-NumPy: p = a · (1 − e²).
-        a = self.a.to_numpy()
-        e = self.e.to_numpy()
-        return a * (1.0 - e * e)
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.calc_semi_latus_rectum_numpy(
+                self.a.to_numpy(), self.e.to_numpy()
+            ),
+            dtype=np.float64,
+        )
 
     @p.setter
     def p(self, value):
@@ -158,12 +170,14 @@ class KeplerianCoordinates(qv.Table):
         """
         Period.
         """
-        # Pure-NumPy: P = 2π · sqrt(a³/μ), or ∞ for a < 0 (hyperbolic).
-        # `np.where` evaluates both branches, so clamp sqrt's input to
-        # |a³| to avoid RuntimeWarning on the hyperbolic branch.
-        a = self.a.to_numpy()
-        mu = self.origin.mu()
-        return np.where(a < 0.0, np.inf, 2.0 * np.pi * np.sqrt(np.abs(a**3) / mu))
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.period_from_origin_numpy(
+                self.a.to_numpy(), self.origin.code.to_pylist()
+            ),
+            dtype=np.float64,
+        )
 
     @P.setter
     def P(self, value):
@@ -186,14 +200,14 @@ class KeplerianCoordinates(qv.Table):
         """
         Mean motion in degrees.
         """
-        # Rust-backed NumPy kernel for concrete-array callers (1.6x faster
-        # than JAX at N=50k per `migration/scripts/calc_mean_motion_bench.py`).
-        from .._rust.api import calc_mean_motion_numpy as _rust_calc_mean_motion
+        from adam_core import _rust_native
 
-        a = self.a.to_numpy()
-        mu = self.origin.mu()
-        rust_out = _rust_calc_mean_motion(a, mu)
-        return np.degrees(rust_out)
+        return np.asarray(
+            _rust_native.mean_motion_degrees_from_origin_numpy(
+                self.a.to_numpy(), self.origin.code.to_pylist()
+            ),
+            dtype=np.float64,
+        )
 
     @n.setter
     def n(self, value):

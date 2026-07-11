@@ -3,7 +3,6 @@ from enum import Enum
 
 import numpy as np
 import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
 
 from ..constants import KM_P_AU, S_P_DAY
@@ -145,15 +144,10 @@ class Origin(qv.Table):
         ValueError
             If the origin code is not recognized.
         """
-        mu = np.empty(len(self.code), dtype=np.float64)
-        for code in pc.unique(self.code):
-            code = code.as_py()
-            mask = pc.equal(self.code, code).to_numpy(zero_copy_only=False)
-            if code == "SOLAR_SYSTEM_BARYCENTER":
-                mu[mask] = OriginGravitationalParameters.SOLAR_SYSTEM_BARYCENTER()
-            elif code in OriginGravitationalParameters.__members__:
-                mu[mask] = OriginGravitationalParameters[code].value
-            else:
-                raise ValueError(f"Unknown origin code: {code}")
+        from adam_core import _rust_native
 
-        return mu
+        # One Rust crossing owns the per-code gravitational-parameter lookup;
+        # the Rust table is asserted against the legacy Python contract.
+        return np.asarray(
+            _rust_native.origin_mu_numpy(self.code.to_pylist()), dtype=np.float64
+        )

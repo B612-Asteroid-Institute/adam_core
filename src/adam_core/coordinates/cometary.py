@@ -84,10 +84,14 @@ class CometaryCoordinates(qv.Table):
         """
         Semi-major axis.
         """
-        # Pure-NumPy: a = q / (1 − e).
-        q = self.q.to_numpy()
-        e = self.e.to_numpy()
-        return q / (1.0 - e)
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.calc_semi_major_axis_numpy(
+                self.q.to_numpy(), self.e.to_numpy()
+            ),
+            dtype=np.float64,
+        )
 
     @a.setter
     def a(self, value):
@@ -110,10 +114,14 @@ class CometaryCoordinates(qv.Table):
         """
         Apoapsis distance.
         """
-        # Pure-NumPy: Q = a · (1 + e), or ∞ for e ≥ 1.
-        a = self.a
-        e = self.e.to_numpy()
-        return np.where(e >= 1.0, np.inf, a * (1.0 + e))
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.cometary_apoapsis_distance_numpy(
+                self.q.to_numpy(), self.e.to_numpy()
+            ),
+            dtype=np.float64,
+        )
 
     @Q.setter
     def Q(self, value):
@@ -136,10 +144,14 @@ class CometaryCoordinates(qv.Table):
         """
         Semi-latus rectum.
         """
-        # Pure-NumPy: p = a · (1 − e²).
-        a = self.a
-        e = self.e.to_numpy()
-        return a * (1.0 - e * e)
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.cometary_semi_latus_rectum_numpy(
+                self.q.to_numpy(), self.e.to_numpy()
+            ),
+            dtype=np.float64,
+        )
 
     @p.setter
     def p(self, value):
@@ -162,10 +174,14 @@ class CometaryCoordinates(qv.Table):
         """
         Period.
         """
-        # Pure-NumPy: P = 2π · sqrt(|a³|/μ), ∞ for a < 0 (hyperbolic).
-        a = self.a
-        mu = self.origin.mu()
-        return np.where(a < 0.0, np.inf, 2.0 * np.pi * np.sqrt(np.abs(a**3) / mu))
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.cometary_period_from_origin_numpy(
+                self.q.to_numpy(), self.e.to_numpy(), self.origin.code.to_pylist()
+            ),
+            dtype=np.float64,
+        )
 
     @P.setter
     def P(self, value):
@@ -188,14 +204,14 @@ class CometaryCoordinates(qv.Table):
         """
         Mean motion in degrees.
         """
-        # Rust-backed NumPy kernel for concrete-array callers (1.6x faster
-        # than JAX at N=50k per `migration/scripts/calc_mean_motion_bench.py`).
-        from .._rust.api import calc_mean_motion_numpy as _rust_calc_mean_motion
+        from adam_core import _rust_native
 
-        a = np.asarray(self.a, dtype=np.float64)
-        mu = np.asarray(self.origin.mu(), dtype=np.float64)
-        rust_out = _rust_calc_mean_motion(a, mu)
-        return np.degrees(rust_out)
+        return np.asarray(
+            _rust_native.cometary_mean_motion_degrees_from_origin_numpy(
+                self.q.to_numpy(), self.e.to_numpy(), self.origin.code.to_pylist()
+            ),
+            dtype=np.float64,
+        )
 
     @n.setter
     def n(self, value):
