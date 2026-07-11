@@ -95,9 +95,6 @@ native column remains blank under `personal-98v.1`:
 - `dynamics.solve_lambert`
 - `dynamics.tisserand_parameter`
 - `missions.porkchop_grid`
-- `orbit_determination.calcGauss`
-- `orbit_determination.calcGibbs`
-- `orbit_determination.calcHerrickGibbs`
 - `orbits.classify_orbits`
 - `photometry.calculate_apparent_magnitude_v`
 - `photometry.calculate_apparent_magnitude_v_and_phase_angle`
@@ -123,5 +120,8 @@ implemented.
 - `dynamics.generate_porkchop_data`
 - `dynamics.propagate_2body`
 - `observers.Observers.from_codes`
+- `orbit_determination.calcGauss`
+- `orbit_determination.calcGibbs`
+- `orbit_determination.calcHerrickGibbs`
 - `orbit_determination.gaussIOD`
 - `orbits.VariantOrbits.create`

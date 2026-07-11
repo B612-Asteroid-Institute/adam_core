@@ -665,6 +665,70 @@ def _residuals_calculate(
     )
 
 
+def _orbit_determination_kernel(
+    *,
+    api_id: str,
+    reps: int,
+    warmup: int,
+    trials: int,
+    r1: Any,
+    r2: Any,
+    r3: Any,
+    mu: float,
+    t1: Any | None = None,
+    t2: Any | None = None,
+    t3: Any | None = None,
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    positions = [
+        np.ascontiguousarray(np.asarray(values, dtype=np.float64))
+        for values in (r1, r2, r3)
+    ]
+    common = [*positions]
+    if api_id == "calcGibbs":
+        samples = _rust_native.benchmark_calc_gibbs(
+            *common, float(mu), reps, trials, warmup
+        )
+        entrypoint = "calc_gibbs_row"
+    else:
+        times = [
+            np.ascontiguousarray(np.asarray(values, dtype=np.float64))
+            for values in (t1, t2, t3)
+        ]
+        benchmark = (
+            _rust_native.benchmark_calc_herrick_gibbs
+            if api_id == "calcHerrickGibbs"
+            else _rust_native.benchmark_calc_gauss
+        )
+        samples = benchmark(*common, *times, float(mu), reps, trials, warmup)
+        entrypoint = (
+            "calc_herrick_gibbs_row" if api_id == "calcHerrickGibbs" else "calc_gauss_row"
+        )
+    return NativeRustTiming(
+        status="measured",
+        sample_trials_s=[[float(value) for value in trial] for trial in samples],
+        entrypoint=f"adam_core_rs_orbit_determination::{entrypoint}",
+        timing_boundary=(
+            f"Rust std::time::Instant around direct {entrypoint} calls for all "
+            "canonical-lane rows; input copies, outer Python/PyO3 launch, and "
+            "NumPy access excluded"
+        ),
+    )
+
+
+def _calc_gibbs(**kwargs: Any) -> NativeRustTiming:
+    return _orbit_determination_kernel(api_id="calcGibbs", **kwargs)
+
+
+def _calc_herrick_gibbs(**kwargs: Any) -> NativeRustTiming:
+    return _orbit_determination_kernel(api_id="calcHerrickGibbs", **kwargs)
+
+
+def _calc_gauss(**kwargs: Any) -> NativeRustTiming:
+    return _orbit_determination_kernel(api_id="calcGauss", **kwargs)
+
+
 def _gauss_iod(
     *,
     reps: int,
@@ -970,6 +1034,9 @@ _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
     "dynamics.generate_ephemeris_2body_with_covariance": _generate_ephemeris_2body,
     "dynamics.calculate_perturber_moids": _calculate_perturber_moids,
     "dynamics.generate_porkchop_data": _generate_porkchop_data,
+    "orbit_determination.calcGibbs": _calc_gibbs,
+    "orbit_determination.calcHerrickGibbs": _calc_herrick_gibbs,
+    "orbit_determination.calcGauss": _calc_gauss,
     "orbit_determination.gaussIOD": _gauss_iod,
     "coordinates.residuals.Residuals.calculate": _residuals_calculate,
     "orbits.VariantOrbits.create": _variant_orbits_create,

@@ -634,7 +634,9 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         coverage_note=(
             "Classified numpy-flat (bead personal-cmy.36.7): scalar (3,)-vector "
             "velocity helper with no table identity; the Arrow-native "
-            "single-crossing bar does not apply."
+            "single-crossing bar does not apply. Canonical tiny/small/large "
+            "lanes have Rust-owned Instant timing around direct calc_gibbs_row "
+            "calls (bead personal-98v.1.4)."
         ),
         latency_gate=True,
     ),
@@ -648,7 +650,9 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         coverage_note=(
             "Classified numpy-flat (bead personal-cmy.36.7): scalar (3,)-vector "
             "velocity helper with no table identity; the Arrow-native "
-            "single-crossing bar does not apply."
+            "single-crossing bar does not apply. Canonical tiny/small/large "
+            "lanes have Rust-owned Instant timing around direct "
+            "calc_herrick_gibbs_row calls (bead personal-98v.1.4)."
         ),
         latency_gate=True,
     ),
@@ -662,7 +666,9 @@ API_MIGRATIONS: Final[tuple[ApiMigration, ...]] = (
         coverage_note=(
             "Classified numpy-flat (bead personal-cmy.36.7): scalar (3,)-vector "
             "velocity helper with no table identity; the Arrow-native "
-            "single-crossing bar does not apply."
+            "single-crossing bar does not apply. Canonical tiny/small/large "
+            "lanes have Rust-owned Instant timing around direct calc_gauss_row "
+            "calls (bead personal-98v.1.4)."
         ),
         latency_gate=True,
     ),

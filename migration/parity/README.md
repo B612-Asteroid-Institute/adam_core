@@ -88,7 +88,10 @@ native-Rust measurement. When no Rust-internal timer exists, the native column
 is `null` and carries an explicit reason/TODO rather than a proxy value. The
 Arrow-native observer reference implements this contract; each
 `personal-cmy.36.3`–`.36.9` conversion must add its Rust-internal timer as the
-surface moves from NumPy to native Arrow.
+surface moves from NumPy to native Arrow. Classified NumPy-flat surfaces may
+also provide a Rust-owned adapter that copies prepared arrays before timing and
+records only direct kernel calls; the three canonical orbit-determination
+helpers use this contract.
 
 To preserve historical artifact readers without duplicating raw sample
 matrices, old keys remain the sample owners. In adam_core speed artifacts,

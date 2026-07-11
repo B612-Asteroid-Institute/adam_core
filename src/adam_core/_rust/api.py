@@ -32,6 +32,9 @@ except Exception as exc:  # pragma: no cover - depends on build/install state
 _REQUIRED_NATIVE_SYMBOLS = (
     "AdamCoreSpiceBackend",
     "benchmark_transform_coordinates_arrow",
+    "benchmark_calc_gauss",
+    "benchmark_calc_gibbs",
+    "benchmark_calc_herrick_gibbs",
     "transform_coordinates_arrow",
     "calculate_perturber_moids_native",
     "add_light_time_numpy",

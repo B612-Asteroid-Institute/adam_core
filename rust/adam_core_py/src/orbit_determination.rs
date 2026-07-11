@@ -12,6 +12,56 @@ use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2}
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
+fn copy_vector_rows(name: &str, values: &PyReadonlyArray2<'_, f64>) -> PyResult<Vec<[f64; 3]>> {
+    let values = values.as_array();
+    if values.ncols() != 3 {
+        return Err(PyValueError::new_err(format!(
+            "{name} must have shape (n, 3)"
+        )));
+    }
+    Ok(values
+        .rows()
+        .into_iter()
+        .map(|row| [row[0], row[1], row[2]])
+        .collect())
+}
+
+fn copy_scalars(name: &str, values: &PyReadonlyArray1<'_, f64>) -> PyResult<Vec<f64>> {
+    values
+        .as_array()
+        .as_slice()
+        .map(<[f64]>::to_vec)
+        .ok_or_else(|| PyValueError::new_err(format!("{name} must be contiguous")))
+}
+
+fn benchmark_direct_rows<F>(
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    mut run_once: F,
+) -> PyResult<Vec<Vec<f64>>>
+where
+    F: FnMut(),
+{
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            run_once();
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = std::time::Instant::now();
+            run_once();
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
+}
+
 #[pyfunction]
 fn calc_gibbs_numpy<'py>(
     py: Python<'py>,
@@ -103,6 +153,116 @@ fn calc_gauss_numpy<'py>(
     );
 
     Ok(ndarray::Array1::from_vec(out.to_vec()).into_pyarray(py))
+}
+
+/// Rust-owned Instant timer for the canonical calcGibbs lanes. NumPy/PyO3
+/// inputs are copied into Rust vectors before warmups and recorded samples.
+#[pyfunction]
+#[pyo3(signature = (r1, r2, r3, mu, reps, trials, warmup_reps=1))]
+fn benchmark_calc_gibbs(
+    r1: PyReadonlyArray2<'_, f64>,
+    r2: PyReadonlyArray2<'_, f64>,
+    r3: PyReadonlyArray2<'_, f64>,
+    mu: f64,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let r1 = copy_vector_rows("r1", &r1)?;
+    let r2 = copy_vector_rows("r2", &r2)?;
+    let r3 = copy_vector_rows("r3", &r3)?;
+    if r2.len() != r1.len() || r3.len() != r1.len() {
+        return Err(PyValueError::new_err(
+            "r1, r2, and r3 must have the same row count",
+        ));
+    }
+    benchmark_direct_rows(reps, trials, warmup_reps, || {
+        for row in 0..r1.len() {
+            std::hint::black_box(calc_gibbs_row(r1[row], r2[row], r3[row], mu));
+        }
+    })
+}
+
+/// Rust-owned Instant timer for the canonical calcHerrickGibbs lanes. All
+/// boundary conversion is complete before the direct kernel loop is timed.
+#[pyfunction]
+#[pyo3(signature = (r1, r2, r3, t1, t2, t3, mu, reps, trials, warmup_reps=1))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_calc_herrick_gibbs(
+    r1: PyReadonlyArray2<'_, f64>,
+    r2: PyReadonlyArray2<'_, f64>,
+    r3: PyReadonlyArray2<'_, f64>,
+    t1: PyReadonlyArray1<'_, f64>,
+    t2: PyReadonlyArray1<'_, f64>,
+    t3: PyReadonlyArray1<'_, f64>,
+    mu: f64,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let r1 = copy_vector_rows("r1", &r1)?;
+    let r2 = copy_vector_rows("r2", &r2)?;
+    let r3 = copy_vector_rows("r3", &r3)?;
+    let t1 = copy_scalars("t1", &t1)?;
+    let t2 = copy_scalars("t2", &t2)?;
+    let t3 = copy_scalars("t3", &t3)?;
+    let rows = r1.len();
+    if [r2.len(), r3.len(), t1.len(), t2.len(), t3.len()]
+        .into_iter()
+        .any(|len| len != rows)
+    {
+        return Err(PyValueError::new_err(
+            "position and time inputs must have the same row count",
+        ));
+    }
+    benchmark_direct_rows(reps, trials, warmup_reps, || {
+        for row in 0..rows {
+            std::hint::black_box(calc_herrick_gibbs_row(
+                r1[row], r2[row], r3[row], t1[row], t2[row], t3[row], mu,
+            ));
+        }
+    })
+}
+
+/// Rust-owned Instant timer for the canonical calcGauss lanes. All NumPy and
+/// PyO3 work remains outside every recorded sample.
+#[pyfunction]
+#[pyo3(signature = (r1, r2, r3, t1, t2, t3, mu, reps, trials, warmup_reps=1))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_calc_gauss(
+    r1: PyReadonlyArray2<'_, f64>,
+    r2: PyReadonlyArray2<'_, f64>,
+    r3: PyReadonlyArray2<'_, f64>,
+    t1: PyReadonlyArray1<'_, f64>,
+    t2: PyReadonlyArray1<'_, f64>,
+    t3: PyReadonlyArray1<'_, f64>,
+    mu: f64,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let r1 = copy_vector_rows("r1", &r1)?;
+    let r2 = copy_vector_rows("r2", &r2)?;
+    let r3 = copy_vector_rows("r3", &r3)?;
+    let t1 = copy_scalars("t1", &t1)?;
+    let t2 = copy_scalars("t2", &t2)?;
+    let t3 = copy_scalars("t3", &t3)?;
+    let rows = r1.len();
+    if [r2.len(), r3.len(), t1.len(), t2.len(), t3.len()]
+        .into_iter()
+        .any(|len| len != rows)
+    {
+        return Err(PyValueError::new_err(
+            "position and time inputs must have the same row count",
+        ));
+    }
+    benchmark_direct_rows(reps, trials, warmup_reps, || {
+        for row in 0..rows {
+            std::hint::black_box(calc_gauss_row(
+                r1[row], r2[row], r3[row], t1[row], t2[row], t3[row], mu,
+            ));
+        }
+    })
 }
 
 #[pyfunction]
@@ -512,6 +672,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(calc_gibbs_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(calc_herrick_gibbs_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(calc_gauss_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_calc_gibbs, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_calc_herrick_gibbs, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_calc_gauss, m)?)?;
     m.add_function(wrap_pyfunction!(gauss_iod_orbits_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(gauss_iod_fused_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(gauss_iod_orbits_arrow, m)?)?;

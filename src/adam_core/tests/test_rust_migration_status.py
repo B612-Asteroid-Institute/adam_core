@@ -736,6 +736,39 @@ def test_native_rust_timer_is_internal_and_missing_surfaces_are_blank(
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("api_id", "entrypoint"),
+    [
+        ("orbit_determination.calcGibbs", "calc_gibbs_row"),
+        ("orbit_determination.calcHerrickGibbs", "calc_herrick_gibbs_row"),
+        ("orbit_determination.calcGauss", "calc_gauss_row"),
+    ],
+)
+def test_orbit_determination_kernel_native_rust_adapters_live(
+    api_id: str, entrypoint: str
+) -> None:
+    """Canonical IOD lanes record only direct Rust kernel calls."""
+    rng = np.random.default_rng(20260710)
+    sample = _inputs.make(api_id, rng, 10)
+    native = _native_rust_runner.measure(
+        api_id,
+        sample.rust_kwargs,
+        reps=2,
+        warmup=1,
+        trials=2,
+    )
+
+    assert native.status == "measured", native.reason
+    assert len(native.sample_trials_s) == 2
+    assert all(len(trial) == 2 for trial in native.sample_trials_s)
+    assert all(value > 0.0 for trial in native.sample_trials_s for value in trial)
+    assert native.entrypoint == f"adam_core_rs_orbit_determination::{entrypoint}"
+    assert "std::time::Instant" in native.timing_boundary
+    assert "Python/PyO3 launch" in native.timing_boundary
+    assert "NumPy access excluded" in native.timing_boundary
+
+
+@pytest.mark.integration
 def test_observer_native_rust_adapter_live() -> None:
     """A registered native adapter must not silently degrade to a blank column."""
     rng = np.random.default_rng(20260709)
