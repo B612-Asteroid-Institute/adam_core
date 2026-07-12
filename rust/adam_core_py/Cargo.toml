@@ -15,8 +15,10 @@ arrow = { version = "54", features = ["pyarrow"] }
 arrow-array = "54"
 arrow-ipc = "54"
 arrow-schema = "54"
+parquet = { version = "54", default-features = false, features = ["arrow", "zstd"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 pathdiff = "0.2"
+ureq = { version = "2.12", default-features = false, features = ["tls"] }
 adam_core_rs_coords = { path = "../adam_core_rs_coords" }
 adam_core_rs_orbit_determination = { path = "../adam_core_rs_orbit_determination" }
 adam_core_rs_spice = { path = "../adam_core_rs_spice" }

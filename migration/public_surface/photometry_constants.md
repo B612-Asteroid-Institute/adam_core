@@ -40,7 +40,7 @@ Children of `personal-cmy.37.6` cover end-to-end prediction/fitting, magnitude/c
 
 ## Vendoring/product builders
 
-`build_bandpass_curves`, `build_observatory_band_map`, `build_asteroid_templates`, `build_solar_spectrum`, and `build_template_bandpass_integrals` remain Python implementations. They own HTTP, VOTable/FITS parsing, normalization, interpolation/integration, loops, quivr assembly, and Parquet writes. They are product/data-generation APIs, not plotting, so they are not exempt. A dedicated child requires Rust-owned end-to-end workflows, recorded service fixtures, frozen product parity, atomic file integration, errors, and typed results.
+`build_bandpass_curves`, `build_observatory_band_map`, `build_asteroid_templates`, `build_solar_spectrum`, and `build_template_bandpass_integrals` are one-crossing Rust product veneers. Rust owns SVO and STScI HTTP, VOTable TABLEDATA and FITS BINTABLE parsing, curve normalization, template math, Parquet input loading, interpolation/integration, Arrow assembly, and atomic publication. Python only converts specs and wraps returned Arrow batches. Recorded SVO/FITS responses, frozen canonical Parquet products, malformed/duplicate/empty inputs, missing-directory atomicity, and Rust-owned `Instant` timing are gated under `personal-cmy.37.6.2`.
 
 ## Plotting
 

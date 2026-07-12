@@ -6,6 +6,7 @@
 
 use pyo3::prelude::*;
 
+mod bandpass_vendor;
 mod coordinate_ops;
 mod coordinates;
 mod dynamics;
@@ -19,6 +20,7 @@ mod variant_ephemeris;
 
 #[pymodule]
 fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    bandpass_vendor::register(m)?;
     coordinate_ops::register(m)?;
     coordinates::register(m)?;
     dynamics::register(m)?;

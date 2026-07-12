@@ -98,7 +98,7 @@ fn array3<'py>(
         .map_err(|err| PyValueError::new_err(err.to_string()))
 }
 
-fn bench<F, T>(
+pub(crate) fn bench<F, T>(
     reps: usize,
     trials: usize,
     warmup_reps: usize,
@@ -119,6 +119,34 @@ where
         for _ in 0..reps {
             let started = Instant::now();
             black_box(run());
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        trial_samples.push(samples);
+    }
+    Ok(trial_samples)
+}
+
+pub(crate) fn bench_result<F, T>(
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    mut run: F,
+) -> PyResult<Vec<Vec<f64>>>
+where
+    F: FnMut() -> PyResult<T>,
+{
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let mut trial_samples = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            black_box(run()?);
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            black_box(run()?);
             samples.push(started.elapsed().as_secs_f64());
         }
         trial_samples.push(samples);
