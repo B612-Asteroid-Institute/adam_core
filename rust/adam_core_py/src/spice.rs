@@ -28,6 +28,17 @@ fn spice_err_to_py(err: SpiceBackendError) -> PyErr {
     PyRuntimeError::new_err(format!("{err}"))
 }
 
+fn observer_states_err_to_py(err: SpiceBackendError) -> PyErr {
+    match err {
+        SpiceBackendError::InvalidObserverSite { message, .. }
+            if message.contains("is not a valid MPC observatory code") =>
+        {
+            PyValueError::new_err(message)
+        }
+        other => spice_err_to_py(other),
+    }
+}
+
 fn spk_product_err_to_py(err: adam_core_rs_spice::spk_product::SpkProductError) -> PyErr {
     match err {
         adam_core_rs_spice::spk_product::SpkProductError::InvalidKernelType(value) => {
@@ -191,7 +202,7 @@ impl PyAdamCoreSpiceBackend {
         let flat = self
             .lock()?
             .observer_states_from_codes(&unique_codes, &slots, &tdb_times, frame, &origin)
-            .map_err(spice_err_to_py)?;
+            .map_err(observer_states_err_to_py)?;
         let states: Vec<[f64; 6]> = flat
             .chunks_exact(6)
             .map(|c| [c[0], c[1], c[2], c[3], c[4], c[5]])

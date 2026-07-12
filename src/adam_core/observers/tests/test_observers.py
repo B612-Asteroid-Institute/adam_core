@@ -86,6 +86,12 @@ def test_Observers_from_codes_raises(codes_times) -> None:
     with pytest.raises(ValueError, match="codes and times must have the same length."):
         Observers.from_codes(codes, times[:3])
 
+    with pytest.raises(
+        ValueError,
+        match="INVALID_CODE is not a valid MPC observatory code and was not found in SPICE kernels",
+    ):
+        Observers.from_codes(["INVALID_CODE"], times[:1])
+
 
 def test_ObservatoryParallaxCoefficients_lon_lat() -> None:
     # Data taken from: https://en.wikipedia.org/wiki/List_of_observatory_codes

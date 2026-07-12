@@ -478,11 +478,6 @@ impl AdamCoreSpiceBackend {
             }
             .into());
         }
-        if self.obscodes.is_empty() {
-            return Err(SpiceBackendError::ObsCodes(
-                "MPC observatory codes are not loaded; call load_mpc_obscodes first".to_string(),
-            ));
-        }
         let mut groups: Vec<Vec<usize>> = vec![Vec::new(); unique_codes.len()];
         for (row, &slot) in code_indices.iter().enumerate() {
             groups
@@ -500,15 +495,21 @@ impl AdamCoreSpiceBackend {
                 continue;
             }
             let code = &unique_codes[slot];
-            let site = self.obscodes.get(code.as_str()).ok_or_else(|| {
-                SpiceBackendError::InvalidObserverSite {
-                    code: code.clone(),
-                    message: "unknown or space-based observatory code".to_string(),
-                }
-            })?;
             let epochs: Vec<Epoch> = rows.iter().map(|&row| times.epochs[row]).collect();
             let group_times = TimeArray::new(times.scale, epochs)?;
-            let coordinates = self.ground_observer_state(site, &group_times, frame, origin)?;
+            let coordinates = if let Some(site) = self.obscodes.get(code.as_str()) {
+                self.ground_observer_state(site, &group_times, frame, origin)?
+            } else {
+                let body_id = self.bodn2c(code).map_err(|_| {
+                    SpiceBackendError::InvalidObserverSite {
+                        code: code.clone(),
+                        message: format!(
+                            "{code} is not a valid MPC observatory code and was not found in SPICE kernels."
+                        ),
+                    }
+                })?;
+                self.state_batch(&OriginId::Naif(body_id), origin, frame, &group_times)?
+            };
             let values = coordinates.values.cartesian().ok_or_else(|| {
                 SpiceBackendError::NotCovered(
                     "ground observer states were not Cartesian".to_string(),

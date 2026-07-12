@@ -91,6 +91,20 @@ def test_jwst_as_observer_from_code(jwst_kernel):
     assert observers.coordinates.origin.code[0].as_py() == "SUN"
 
 
+def test_mixed_ground_and_custom_space_observers_share_one_batch(jwst_kernel):
+    times = Timestamp.from_iso8601(["2022-01-01T00:00:00Z", "2022-01-02T00:00:00Z"])
+    mixed = Observers.from_codes(["JWST", "500"], times)
+    jwst = get_observer_state("JWST", times[:1])
+    geocenter = get_observer_state("500", times[1:])
+    np.testing.assert_allclose(
+        mixed.coordinates.values[0], jwst.values[0], rtol=0, atol=0
+    )
+    np.testing.assert_allclose(
+        mixed.coordinates.values[1], geocenter.values[0], rtol=0, atol=4e-18
+    )
+    assert mixed.code.to_pylist() == ["JWST", "500"]
+
+
 def test_jwst_states_match_legacy_cspice_fixture(jwst_kernel):
     """Numeric parity for the custom-kernel space-observatory path
     (correction to the personal-cmy.27 audit): the spicekit-served JWST

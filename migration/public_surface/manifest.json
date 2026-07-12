@@ -7757,7 +7757,7 @@
       "kind": "constant",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 21,
+      "line": 20,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -7785,7 +7785,7 @@
       "kind": "constant",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 105,
+      "line": 104,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -7813,7 +7813,7 @@
       "kind": "constant",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 97,
+      "line": 96,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -7841,7 +7841,7 @@
       "kind": "class",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 24,
+      "line": 23,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -7869,7 +7869,7 @@
       "kind": "method",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 31,
+      "line": 30,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -7897,7 +7897,7 @@
       "kind": "method",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 60,
+      "line": 59,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -7925,7 +7925,7 @@
       "kind": "class",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 127,
+      "line": 126,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -7953,7 +7953,7 @@
       "kind": "classmethod",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 231,
+      "line": 188,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -7981,7 +7981,7 @@
       "kind": "classmethod",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 132,
+      "line": 131,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8009,7 +8009,7 @@
       "kind": "method",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 284,
+      "line": 241,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8037,7 +8037,7 @@
       "kind": "constant",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 19,
+      "line": 18,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8065,7 +8065,7 @@
       "kind": "constant",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 20,
+      "line": 19,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

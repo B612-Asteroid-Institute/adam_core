@@ -171,8 +171,8 @@ below. None of these generated constructors has a dedicated parity row.
 | `ObservatoryParallaxCoefficients.timezone` | Python-only / external data | no | no | Per-row `timezonefinder` lookup. |
 | constants `R_EARTH_EQUATORIAL`, `R_EARTH_POLAR`, `E_EARTH`, `OBSCODES`, `OBSERVATORY_PARALLAX_COEFFICIENTS`, `OBSERVATORY_CODES` | Python-only data | no | n/a | Import-time pandas/data-package construction; data/discovery concern, not numeric Rust credit. |
 | `Observers` columns `code`, `coordinates` | external inheritance | no | n/a | Quivr schema/constructor. |
-| `Observers.from_codes` | one-crossing for supported ground MPC codes; mixed fallback otherwise | yes | **yes** | Rust Arrow fast path, Python per-code fallback for unsupported/space/custom cases. |
-| `Observers.from_code` | mixed | indirect via `from_codes` only | no | Python type dispatch; OriginCodes path uses observer-state orchestration. |
+| `Observers.from_codes` | one Arrow crossing for mixed ground MPC and loaded custom/space SPICE bodies; Rust owns code grouping, epoch conversion, site/body dispatch, state lookup, row scatter, and finished Observers assembly | yes, including frozen legacy JWST states and mixed ground/custom order | **yes** | Complete; invalid codes raise the legacy ValueError directly from the boundary. |
+| `Observers.from_code` | string codes are a zero-computation veneer over `from_codes`; `OriginCodes` use the explicit observer-state provider boundary | indirect via `from_codes` plus observer-state tests | through `from_codes` | Complete for string/custom observer codes (personal-cmy.33.7). |
 | `Observers.iterate_codes` | Python-only | no | no | Python generator over quivr selections. |
 | `clear_observer_state_cache` | Python-only | no | no | Cache governance helper. |
 | `get_mpc_observer_state` | mixed | indirect via `Observers.from_codes` ground cases | no | Python geodetic/cache/frame orchestration around several Rust SPICE calls; not one crossing. |
@@ -216,7 +216,8 @@ credit.
 - Direct transform numeric functions, Rust covariance transform, residual numeric
   helpers, and dense integer timestamp arithmetic are one-crossing veneers.
 - `Residuals.calculate`, `transform_coordinates`, and `Observers.from_codes`
-  have Arrow-native normal paths and qualifying native timing.
+  have Arrow-native paths and qualifying native timing; `from_codes` includes
+  mixed ground and loaded custom/space SPICE bodies without a Python fallback.
 - Plot/display (`google_maps_url`), Astropy interoperability, unchanged quivr
   table operations, enum mechanics, protocol declarations, and static constants
   are explicitly classified rather than counted as Rust migration wins.

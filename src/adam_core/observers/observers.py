@@ -5,7 +5,6 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
 from mpc_obscodes import mpc_obscodes
 from timezonefinder import TimezoneFinder
@@ -156,13 +155,9 @@ class Observers(qv.Table):
         if not isinstance(codes, pa.Array):
             codes = pa.array([str(code) for code in codes], type=pa.large_string())
 
-        # Single Rust crossing: obscodes lookup, DE440 Earth state, and the
-        # ITRF93 ground-offset rotation all run in the spicekit backend
-        # (bead personal-cmy.6). Requests containing codes the Rust ground
-        # table cannot serve (special space observatories such as JWST, or
-        # unknown codes) fall back to the legacy per-code assembly, which
-        # either computes them through their dedicated paths or raises the
-        # exact legacy error.
+        # Single Rust crossing: obscodes lookup, DE440 Earth state, ITRF93
+        # ground-offset rotation, and loaded custom/space-body SPICE states all
+        # run in the spicekit backend (beads personal-cmy.6 and .33.7).
         from .._rust.arrow import ensure_spice_backend, table_from_record_batch
 
         # Single Arrow C Data Interface crossing (bead personal-cmy.36): the
@@ -186,46 +181,8 @@ class Observers(qv.Table):
             ],
             names=["code", "days", "nanos"],
         )
-        # Only SPICE coverage errors (space-based / unknown observatory codes
-        # the Rust ground table cannot serve) fall back to the legacy per-code
-        # assembly. Programming errors (missing method, schema mismatch) must
-        # surface, not silently degrade to the slow path.
-        try:
-            result = backend.observer_states_from_codes_arrow(batch, times.scale)
-        except (RuntimeError, ValueError):
-            return cls._from_codes_legacy(codes, times)
-
+        result = backend.observer_states_from_codes_arrow(batch, times.scale)
         return table_from_record_batch(cls, result)
-
-    @classmethod
-    def _from_codes_legacy(cls, codes: pa.Array, times: Timestamp) -> Self:
-        """Legacy per-code assembly: used when a request includes codes the
-        Rust ground-site table cannot serve (special space observatories,
-        unknown codes). Preserves exact legacy semantics and errors."""
-        from .state import get_observer_state
-
-        class IndexedObservers(qv.Table):
-            index = qv.UInt64Column()
-            observers = Observers.as_column()
-
-        indexed_observers = IndexedObservers.empty()
-
-        for code in pc.unique(codes):
-            indices = pc.indices_nonzero(pc.equal(codes, code))
-            times_code = times.take(indices)
-            observers_i = cls.from_kwargs(
-                code=[code.as_py()] * len(times_code),
-                coordinates=get_observer_state(code.as_py(), times_code),
-            )
-            indexed_observers_i = IndexedObservers.from_kwargs(
-                index=indices,
-                observers=observers_i,
-            )
-            indexed_observers = qv.concatenate([indexed_observers, indexed_observers_i])
-            if indexed_observers.fragmented():
-                indexed_observers = qv.defragment(indexed_observers)
-
-        return indexed_observers.sort_by("index").observers
 
     @classmethod
     def from_code(cls, code: Union[str, OriginCodes], times: Timestamp) -> Self:
