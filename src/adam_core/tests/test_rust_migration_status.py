@@ -819,7 +819,14 @@ def test_numpy_kernel_native_rust_adapters_live(api_id: str) -> None:
     assert native.status == "measured", native.reason
     assert len(native.sample_trials_s) == 2
     assert all(len(trial) == 2 for trial in native.sample_trials_s)
-    assert all(value > 0.0 for trial in native.sample_trials_s for value in trial)
+    # Sub-tick kernels (e.g. 10-row calc_mean_motion) can quantize to exactly
+    # 0.0 on Apple Silicon's ~41.7ns Instant granularity; samples must be
+    # finite and non-negative, and the lane must remain measurable.
+    assert all(
+        np.isfinite(value) and value >= 0.0
+        for trial in native.sample_trials_s
+        for value in trial
+    )
     assert native.entrypoint.startswith("adam_core_rs_coords::")
     assert "std::time::Instant" in native.timing_boundary
     assert "Python/PyO3 launch" in native.timing_boundary

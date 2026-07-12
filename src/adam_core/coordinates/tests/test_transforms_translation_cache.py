@@ -62,8 +62,8 @@ def test_cartesian_to_origin_translation_cache_avoids_recompute(monkeypatch):
 def test_mpc_observer_state_cache_avoids_recompute(monkeypatch):
     # Observers.from_codes is served by the Rust backend since bead
     # personal-cmy.6; the Python pxform cache under test here lives on the
-    # retained legacy fallback path (_from_codes_legacy, used for codes the
-    # Rust ground-site table cannot serve), so exercise that path directly.
+    # retained legacy fallback state path (used when the Rust backend cannot
+    # serve a code), so force and exercise that path directly.
     clear_observer_state_cache()
     spice_mod.clear_spkez_cache()
 
@@ -86,15 +86,10 @@ def test_mpc_observer_state_cache_avoids_recompute(monkeypatch):
     monkeypatch.setattr(state_mod, "_query_pxform_itrf93_batch", _batch_counted)
 
     t = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60001.0]), scale="tdb")
-    import pyarrow as pa
-
-    from adam_core.observers import Observers
-
-    codes = pa.array(["X05"] * len(t))
-    _ = Observers._from_codes_legacy(codes, t)
+    _ = state_mod.get_observer_state("X05", t)
     n1 = int(calls["n"])
     assert n1 > 0
-    _ = Observers._from_codes_legacy(codes, t)
+    _ = state_mod.get_observer_state("X05", t)
     assert int(calls["n"]) == n1
 
 
