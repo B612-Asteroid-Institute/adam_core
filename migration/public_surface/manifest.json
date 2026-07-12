@@ -40,9 +40,9 @@
     },
     "by_implementation_class": {
       "compatibility_data_or_external_generic": 129,
-      "mixed_rust_python_gap": 77,
+      "mixed_rust_python_gap": 79,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 248,
+      "python_gap_or_external_boundary": 246,
       "rust_veneer_candidate_see_domain_audit": 97
     },
     "plotting_exemption_candidates": 16,
@@ -8795,12 +8795,12 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 535,
+      "line": 634,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": false,
         "pyarrow_reference": false,
@@ -8808,10 +8808,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -8823,12 +8823,12 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 264,
+      "line": 343,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -8836,10 +8836,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -8851,7 +8851,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 135,
+      "line": 214,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8879,7 +8879,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 82,
+      "line": 86,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8907,7 +8907,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 29,
+      "line": 33,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
