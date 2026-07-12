@@ -40,9 +40,9 @@
     },
     "by_implementation_class": {
       "compatibility_data_or_external_generic": 129,
-      "mixed_rust_python_gap": 73,
+      "mixed_rust_python_gap": 74,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 253,
+      "python_gap_or_external_boundary": 252,
       "rust_veneer_candidate_see_domain_audit": 96
     },
     "plotting_exemption_candidates": 16,
@@ -8347,7 +8347,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/evaluate.py",
-      "line": 23,
+      "line": 21,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8375,7 +8375,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/evaluate.py",
-      "line": 17,
+      "line": 15,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8403,23 +8403,23 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/evaluate.py",
-      "line": 87,
+      "line": 29,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
-        "pyarrow_reference": true,
+        "pyarrow_reference": false,
         "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },

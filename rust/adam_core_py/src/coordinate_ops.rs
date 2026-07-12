@@ -1122,6 +1122,343 @@ fn compute_residuals_chi2_probability_numpy<'py>(
 }
 
 // ---------------------------------------------------------------------------
+// Orbit evaluation orchestration
+// ---------------------------------------------------------------------------
+
+type EvaluateOrbitsResult<'py> = (
+    Bound<'py, PyArray2<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<i64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<f64>>,
+    Bound<'py, PyArray1<i64>>,
+    Bound<'py, PyArray1<i64>>,
+    Bound<'py, PyArray1<bool>>,
+    bool,
+);
+
+struct OrbitEvaluation {
+    residuals: Vec<f64>,
+    residual_chi2: Vec<f64>,
+    residual_dof: Vec<i64>,
+    residual_probability: Vec<f64>,
+    orbit_chi2: Vec<f64>,
+    reduced_chi2: Vec<f64>,
+    arc_length: Vec<f64>,
+    num_obs: Vec<i64>,
+    observation_indices: Vec<i64>,
+    member_outliers: Vec<bool>,
+    had_off_diagonal_nan: bool,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn evaluate_orbits_flat(
+    orbit_ids: &[String],
+    ephemeris_orbit_ids: &[String],
+    observation_ids: &[String],
+    observed_origin_ids: &[String],
+    predicted_origin_ids: &[String],
+    observed_frame: &str,
+    predicted_frame: &str,
+    observed: &[f64],
+    predicted: &[f64],
+    observed_covariances: &[f64],
+    predicted_covariances: &[f64],
+    observation_days: &[i64],
+    observation_nanos: &[i64],
+    ignore: &[String],
+    parameters: i64,
+) -> Result<OrbitEvaluation, String> {
+    let num_orbits = orbit_ids.len();
+    let num_observations = observation_ids.len();
+    let rows = num_orbits
+        .checked_mul(num_observations)
+        .ok_or_else(|| "orbit/observation product is too large".to_string())?;
+    if observed.len() != num_observations * 6
+        || observed_covariances.len() != num_observations * 36
+        || observation_days.len() != num_observations
+        || observation_nanos.len() != num_observations
+        || observed_origin_ids.len() != num_observations
+    {
+        return Err("observation arrays must have equal length".to_string());
+    }
+    if predicted.len() != rows * 6
+        || predicted_covariances.len() != rows * 36
+        || ephemeris_orbit_ids.len() != rows
+        || predicted_origin_ids.len() != rows
+    {
+        return Err(
+            "Ephemeris rows must be grouped by sorted orbit_id with one block per observation; this is the documented Propagator.generate_ephemeris order."
+                .to_string(),
+        );
+    }
+
+    let expected_ids = orbit_ids
+        .iter()
+        .flat_map(|orbit_id| std::iter::repeat_n(orbit_id, num_observations));
+    if !ephemeris_orbit_ids
+        .iter()
+        .zip(expected_ids)
+        .all(|(actual, expected)| actual == expected)
+    {
+        return Err(
+            "Ephemeris rows must be grouped by sorted orbit_id with one block per observation; this is the documented Propagator.generate_ephemeris order."
+                .to_string(),
+        );
+    }
+
+    if observed_frame != predicted_frame {
+        return Err(format!(
+            "Observed ({observed_frame}) and predicted ({predicted_frame}) coordinates must have the same frame."
+        ));
+    }
+    let origins_all_differ = (0..rows)
+        .all(|row| observed_origin_ids[row % num_observations] != predicted_origin_ids[row]);
+    if origins_all_differ {
+        return Err("Observed and predicted coordinates must have the same origin.".to_string());
+    }
+
+    let mut repeated_observed = Vec::with_capacity(rows * 6);
+    let mut repeated_covariances = Vec::with_capacity(rows * 36);
+    for _ in 0..num_orbits {
+        repeated_observed.extend_from_slice(observed);
+        repeated_covariances.extend_from_slice(observed_covariances);
+    }
+    let mut predicted_covariances = predicted_covariances.to_vec();
+    for value in &mut predicted_covariances {
+        if value.is_nan() {
+            *value = 0.0;
+        }
+    }
+    let output = compute_residuals_chi2_flat(
+        &repeated_observed,
+        predicted,
+        &repeated_covariances,
+        &predicted_covariances,
+        rows,
+        6,
+        true,
+    )
+    .map_err(|err| format!("residual computation failed: {err:?}"))?;
+    let residual_probability = output
+        .chi2
+        .iter()
+        .zip(output.dof.iter())
+        .map(|(&chi2, &dof)| {
+            if chi2.is_nan() {
+                f64::NAN
+            } else {
+                chi2_survival(chi2, dof as f64)
+            }
+        })
+        .collect();
+
+    let included = observation_ids
+        .iter()
+        .map(|id| !ignore.iter().any(|ignored| ignored == id))
+        .collect::<Vec<_>>();
+    let num_included = included.iter().filter(|&&value| value).count();
+    if num_included == 0 {
+        return Err(
+            "zero-size array to reduction operation maximum which has no identity".to_string(),
+        );
+    }
+    let included_times = observation_days
+        .iter()
+        .zip(observation_nanos)
+        .zip(&included)
+        .filter_map(|((&days, &nanos), &include)| {
+            include.then_some(days as f64 + nanos as f64 / (S_P_DAY * 1e9))
+        })
+        .collect::<Vec<_>>();
+    let min_time = included_times.iter().copied().fold(f64::INFINITY, f64::min);
+    let max_time = included_times
+        .iter()
+        .copied()
+        .fold(f64::NEG_INFINITY, f64::max);
+    let arc = max_time - min_time;
+
+    let mut orbit_chi2 = Vec::with_capacity(num_orbits);
+    let mut reduced_chi2 = Vec::with_capacity(num_orbits);
+    for orbit in 0..num_orbits {
+        let offset = orbit * num_observations;
+        let mut chi2 = 0.0;
+        let mut dof = 0_i64;
+        for (observation, &include) in included.iter().enumerate() {
+            if include {
+                chi2 += output.chi2[offset + observation];
+                dof += output.dof[offset + observation];
+            }
+        }
+        orbit_chi2.push(chi2);
+        reduced_chi2.push(chi2 / (dof - parameters) as f64);
+    }
+
+    Ok(OrbitEvaluation {
+        residuals: output.residuals,
+        residual_chi2: output.chi2,
+        residual_dof: output.dof,
+        residual_probability,
+        orbit_chi2,
+        reduced_chi2,
+        arc_length: vec![arc; num_orbits],
+        num_obs: vec![num_included as i64; num_orbits],
+        observation_indices: (0..num_orbits)
+            .flat_map(|_| 0..num_observations as i64)
+            .collect(),
+        member_outliers: (0..num_orbits)
+            .flat_map(|_| included.iter().map(|&value| !value))
+            .collect(),
+        had_off_diagonal_nan: output.had_off_diagonal_nan,
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (orbit_ids, ephemeris_orbit_ids, observation_ids, observed_origin_ids, predicted_origin_ids, observed_frame, predicted_frame, observed, predicted, observed_covariances, predicted_covariances, observation_days, observation_nanos, ignore, parameters))]
+#[allow(clippy::too_many_arguments)]
+fn evaluate_orbits_numpy<'py>(
+    py: Python<'py>,
+    orbit_ids: Vec<String>,
+    ephemeris_orbit_ids: Vec<String>,
+    observation_ids: Vec<String>,
+    observed_origin_ids: Vec<String>,
+    predicted_origin_ids: Vec<String>,
+    observed_frame: &str,
+    predicted_frame: &str,
+    observed: PyReadonlyArray2<'py, f64>,
+    predicted: PyReadonlyArray2<'py, f64>,
+    observed_covariances: PyReadonlyArray3<'py, f64>,
+    predicted_covariances: PyReadonlyArray3<'py, f64>,
+    observation_days: PyReadonlyArray1<'py, i64>,
+    observation_nanos: PyReadonlyArray1<'py, i64>,
+    ignore: Vec<String>,
+    parameters: i64,
+) -> PyResult<EvaluateOrbitsResult<'py>> {
+    let observed = rows6(&observed, "observed")?;
+    let predicted = rows6(&predicted, "predicted")?;
+    let (observed_covariances, _, observed_dim) =
+        covariance_rows(&observed_covariances, "observed_covariances")?;
+    let (predicted_covariances, _, predicted_dim) =
+        covariance_rows(&predicted_covariances, "predicted_covariances")?;
+    if observed_dim != 6 || predicted_dim != 6 {
+        return Err(PyValueError::new_err(
+            "covariance arrays must have shape (N, 6, 6)",
+        ));
+    }
+    let observation_days = observation_days
+        .as_array()
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("observation_days must be contiguous"))?
+        .to_vec();
+    let observation_nanos = observation_nanos
+        .as_array()
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("observation_nanos must be contiguous"))?
+        .to_vec();
+    let output = evaluate_orbits_flat(
+        &orbit_ids,
+        &ephemeris_orbit_ids,
+        &observation_ids,
+        &observed_origin_ids,
+        &predicted_origin_ids,
+        observed_frame,
+        predicted_frame,
+        &observed,
+        &predicted,
+        &observed_covariances,
+        &predicted_covariances,
+        &observation_days,
+        &observation_nanos,
+        &ignore,
+        parameters,
+    )
+    .map_err(PyValueError::new_err)?;
+    let rows = output.residual_chi2.len();
+    Ok((
+        array2(py, output.residuals, rows, 6)?,
+        array1(py, output.residual_chi2),
+        output.residual_dof.into_pyarray(py),
+        array1(py, output.residual_probability),
+        array1(py, output.orbit_chi2),
+        array1(py, output.reduced_chi2),
+        array1(py, output.arc_length),
+        output.num_obs.into_pyarray(py),
+        output.observation_indices.into_pyarray(py),
+        output.member_outliers.into_pyarray(py),
+        output.had_off_diagonal_nan,
+    ))
+}
+
+#[pyfunction]
+#[pyo3(signature = (orbit_ids, ephemeris_orbit_ids, observation_ids, observed_origin_ids, predicted_origin_ids, observed_frame, predicted_frame, observed, predicted, observed_covariances, predicted_covariances, observation_days, observation_nanos, parameters, ignore, reps, trials, warmup_reps=1))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_evaluate_orbits_numpy(
+    orbit_ids: Vec<String>,
+    ephemeris_orbit_ids: Vec<String>,
+    observation_ids: Vec<String>,
+    observed_origin_ids: Vec<String>,
+    predicted_origin_ids: Vec<String>,
+    observed_frame: &str,
+    predicted_frame: &str,
+    observed: PyReadonlyArray2<'_, f64>,
+    predicted: PyReadonlyArray2<'_, f64>,
+    observed_covariances: PyReadonlyArray3<'_, f64>,
+    predicted_covariances: PyReadonlyArray3<'_, f64>,
+    observation_days: PyReadonlyArray1<'_, i64>,
+    observation_nanos: PyReadonlyArray1<'_, i64>,
+    parameters: i64,
+    ignore: Vec<String>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let observed = rows6(&observed, "observed")?;
+    let predicted = rows6(&predicted, "predicted")?;
+    let (observed_covariances, _, observed_dim) =
+        covariance_rows(&observed_covariances, "observed_covariances")?;
+    let (predicted_covariances, _, predicted_dim) =
+        covariance_rows(&predicted_covariances, "predicted_covariances")?;
+    if observed_dim != 6 || predicted_dim != 6 {
+        return Err(PyValueError::new_err(
+            "covariance arrays must have shape (N, 6, 6)",
+        ));
+    }
+    let observation_days = observation_days
+        .as_array()
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("observation_days must be contiguous"))?
+        .to_vec();
+    let observation_nanos = observation_nanos
+        .as_array()
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("observation_nanos must be contiguous"))?
+        .to_vec();
+    let run = || {
+        evaluate_orbits_flat(
+            &orbit_ids,
+            &ephemeris_orbit_ids,
+            &observation_ids,
+            &observed_origin_ids,
+            &predicted_origin_ids,
+            observed_frame,
+            predicted_frame,
+            &observed,
+            &predicted,
+            &observed_covariances,
+            &predicted_covariances,
+            &observation_days,
+            &observation_nanos,
+            &ignore,
+            parameters,
+        )
+    };
+    run().map_err(PyValueError::new_err)?;
+    bench(reps, trials, warmup_reps, run)
+}
+
+// ---------------------------------------------------------------------------
 // Covariance sampling
 // ---------------------------------------------------------------------------
 
@@ -1398,6 +1735,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         compute_residuals_chi2_probability_numpy,
         m
     )?)?;
+    m.add_function(wrap_pyfunction!(evaluate_orbits_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_evaluate_orbits_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(sample_coordinate_variants_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(
         benchmark_sample_coordinate_variants_numpy,

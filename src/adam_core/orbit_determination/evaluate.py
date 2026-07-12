@@ -1,9 +1,7 @@
+import warnings
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
-import numpy.typing as npt
-import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
 
 from ..coordinates.residuals import Residuals
@@ -26,62 +24,6 @@ class OrbitDeterminationObservations(qv.Table):
     coordinates = SphericalCoordinates.as_column()
     observers = Observers.as_column()
     photometry = OrbitDeterminationPhotometry.as_column()
-
-
-def _mask_to_numpy(mask: pa.BooleanArray | pa.ChunkedArray) -> npt.NDArray[np.bool_]:
-    return np.asarray(mask.to_numpy(zero_copy_only=False), dtype=np.bool_)
-
-
-def _repeat_observation_indices(
-    num_orbits: int, num_observations: int
-) -> npt.NDArray[np.int64]:
-    observation_indices = np.arange(num_observations, dtype=np.int64)
-    return np.tile(observation_indices, num_orbits)
-
-
-def _validate_ephemeris_orbit_order(
-    ephemeris_orbit_ids: pa.Array | pa.ChunkedArray,
-    orbit_ids: pa.Array | pa.ChunkedArray,
-    num_observations: int,
-) -> None:
-    expected = np.repeat(
-        orbit_ids.to_numpy(zero_copy_only=False),
-        num_observations,
-    )
-    actual = ephemeris_orbit_ids.to_numpy(zero_copy_only=False)
-    if np.array_equal(actual, expected):
-        return
-
-    raise ValueError(
-        "Ephemeris rows must be grouped by sorted orbit_id with one block per "
-        "observation; this is the documented Propagator.generate_ephemeris order."
-    )
-
-
-def _calculate_orbit_statistics(
-    residuals: Residuals,
-    num_orbits: int,
-    num_observations: int,
-    include_mask: npt.NDArray[np.bool_],
-    parameters: int,
-) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-    expected_residuals = num_orbits * num_observations
-    if len(residuals) != expected_residuals:
-        raise ValueError(
-            f"Expected {expected_residuals} residual rows, got {len(residuals)}."
-        )
-
-    chi2_rows = residuals.chi2.to_numpy(zero_copy_only=False).reshape(
-        num_orbits, num_observations
-    )
-    dof_rows = residuals.dof.to_numpy(zero_copy_only=False).reshape(
-        num_orbits, num_observations
-    )
-
-    chi2 = chi2_rows[:, include_mask].sum(axis=1)
-    dof = dof_rows[:, include_mask].sum(axis=1) - parameters
-    reduced_chi2 = chi2 / dof
-    return chi2, reduced_chi2
 
 
 def evaluate_orbits(
@@ -128,77 +70,76 @@ def evaluate_orbits(
 
     assert len(orbits) == len(orbits.orbit_id.unique())
 
-    # Compute ephemeris and residuals
+    # Propagation remains an explicit provider boundary. The generated product
+    # then enters one Rust crossing for order validation, residuals, masks,
+    # orbit statistics, arc length, and member indexing.
     ephemeris = propagator.generate_ephemeris(
         orbits,
         observations.observers,
         max_processes=1,
     )
-
-    # Sort the orbits by ID (the ephemeris is already sorted by
-    # orbit ID, time, and origin)
     orbits = orbits.sort_by(["orbit_id"])
-    num_observations = len(observations)
-    _validate_ephemeris_orbit_order(
-        ephemeris.orbit_id,
-        orbits.orbit_id,
-        num_observations,
-    )
 
-    # Stack the observation coordinates logically by taking the observation rows
-    # in orbit-major order. This avoids constructing full repeated observation
-    # tables before residual calculation.
-    observation_indices = _repeat_observation_indices(num_orbits, num_observations)
-    observation_indices_arrow = pa.array(observation_indices)
-    residuals = Residuals.calculate(
-        observations.coordinates.take(observation_indices), ephemeris.coordinates
-    )
+    observed = observations.coordinates
+    predicted = ephemeris.coordinates
+    from adam_core import _rust_native
 
-    # If outliers are provided, we need to mask them out of the observations
-    # before we compute the chi2, reduced chi2, and arc length values.
-    if ignore is not None:
-        mask = pc.invert(pc.is_in(observations.id, pa.array(ignore)))
-        observations_to_include = observations.apply_mask(mask)
-    else:
-        mask = pa.repeat(True, len(observations))
-        observations_to_include = observations
-    include_mask = _mask_to_numpy(mask)
-
-    # Compute number of observations
-    num_obs = len(observations_to_include)
-
-    # Compute chi2 and reduced chi2 for each orbit by reshaping the residual rows
-    # into the documented Propagator output order: (orbit_id, observation).
-    chi2, reduced_chi2 = _calculate_orbit_statistics(
-        residuals,
-        num_orbits,
-        num_observations,
-        include_mask,
+    (
+        residual_values,
+        residual_chi2,
+        residual_dof,
+        residual_probability,
+        chi2,
+        reduced_chi2,
+        arc_length,
+        num_obs,
+        observation_indices,
+        member_outliers,
+        had_off_diagonal_nan,
+    ) = _rust_native.evaluate_orbits_numpy(
+        orbits.orbit_id.to_pylist(),
+        ephemeris.orbit_id.to_pylist(),
+        observations.id.to_pylist(),
+        observed.origin.code.to_pylist(),
+        predicted.origin.code.to_pylist(),
+        observed.frame,
+        predicted.frame,
+        np.ascontiguousarray(observed.values, dtype=np.float64),
+        np.ascontiguousarray(predicted.values, dtype=np.float64),
+        np.ascontiguousarray(observed.covariance.to_matrix(), dtype=np.float64),
+        np.ascontiguousarray(predicted.covariance.to_matrix(), dtype=np.float64),
+        np.ascontiguousarray(observed.time.days.to_numpy(), dtype=np.int64),
+        np.ascontiguousarray(observed.time.nanos.to_numpy(), dtype=np.int64),
+        [] if ignore is None else ignore,
         parameters,
     )
+    if had_off_diagonal_nan:
+        warnings.warn(
+            "Covariance matrix has NaNs on the off-diagonal (these will be assumed to be 0.0).",
+            UserWarning,
+        )
 
-    # Compute arc length for the orbits (will be the same for all orbits)
-    arc_length = (
-        observations_to_include.coordinates.time.max().mjd()[0].as_py()
-        - observations_to_include.coordinates.time.min().mjd()[0].as_py()
+    residuals = Residuals.from_kwargs(
+        values=residual_values.tolist(),
+        chi2=residual_chi2,
+        dof=residual_dof,
+        probability=residual_probability,
     )
-
-    # Now we create a fitted orbit and fitted orbit members from the solution orbit
-    # and residuals. We also need to compute the chi2 and reduced chi2 values.
     fitted_orbit = FittedOrbits.from_kwargs(
         orbit_id=orbits.orbit_id,
         object_id=orbits.object_id,
         coordinates=orbits.coordinates,
-        arc_length=pa.repeat(arc_length, num_orbits),
-        num_obs=pa.repeat(num_obs, num_orbits),
+        arc_length=arc_length,
+        num_obs=num_obs,
         chi2=chi2,
         reduced_chi2=reduced_chi2,
     )
     fitted_orbit_members = FittedOrbitMembers.from_kwargs(
         orbit_id=ephemeris.orbit_id,
-        obs_id=pc.take(observations.id, observation_indices_arrow),
+        obs_id=observations.id.take(observation_indices),
         residuals=residuals,
-        outlier=np.tile(~include_mask, num_orbits),
+        outlier=member_outliers,
     )
 
+    assert len(fitted_orbit) == num_orbits
     return fitted_orbit, fitted_orbit_members

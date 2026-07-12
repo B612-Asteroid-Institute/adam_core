@@ -130,7 +130,7 @@ All five quivr classes below have public declarative constructors and inherited 
 | `gaussIOD` | Rust-1x Arrow facade | yes | yes | Complete in the governed shared-root regime; unconstrained multi-root subset equivalence remains explicitly excluded by current tolerance policy. |
 | `residual_function` | Python orbit assembly + backend ephemeris + residual reduction | no | no | Multi-crossing implementation/parity/native-timing gap. |
 | `fit_least_squares` | conditional backend-native hook, otherwise SciPy/Python iterative fallback; Python evaluation/assembly on both paths | no | no | Public API is not wholly Rust-1x; finish native orchestration and govern both dispatch semantics and results. |
-| `evaluate_orbits` | one backend ephemeris call followed by Python sorting, residual/statistics, table assembly | no | no | Substantive Python orchestration gap. |
+| `evaluate_orbits` | explicit `Propagator.generate_ephemeris` provider boundary followed by one Rust crossing for stable order validation, residuals, ignore masks, statistics, arc length, and member indexing; Python only wraps the returned arrays as quivr tables | yes | yes | Complete. Frozen pinned-main fixtures cover normal, ignored, empty, and malformed-order cases; reordered equal-length provider output now raises the documented stable-order error intentionally. |
 | `LeastSquares(use_central_difference)` | Python stateful algorithm class | no | no | Constructor semantics need parity with a Rust-owned implementation. |
 | `LeastSquares.least_squares` | repeated backend calls + Python finite differences/normal equations | no | no | Multi-crossing implementation/parity/native-timing gap. |
 | `OrbitFitter()` / `initial_fit(...)` | abstract contract | downstream only | downstream only | Govern concrete backend implementations. |
@@ -155,6 +155,7 @@ The current native adapter map in `migration/parity/_native_rust_runner.py` cont
 - `dynamics.calculate_perturber_moids`
 - `dynamics.generate_porkchop_data`
 - `orbit_determination.gaussIOD`
+- `evaluate_orbits` through `benchmark_evaluate_orbits_numpy` (outside the selected 44-API registry)
 
 Consequently, current report rows for `add_light_time`, `calc_mean_motion`, `calculate_moid`, `solve_lambert`, Tisserand, raw propagation/MOID/porkchop kernels, `calcGibbs`, `calcHerrickGibbs`, and `calcGauss` explicitly show missing native samples. Rust-backed public helpers absent from the selected registry have no native-timing row at all. Direct timing for Python-owned OD/IOD/impact/mission utilities is blocked until a qualifying direct Rust entrypoint exists.
 
@@ -170,7 +171,7 @@ Children of `personal-cmy.37.3` cover every non-plotting gap above, grouped only
 | `personal-cmy.37.3.4` | All custom `LambertSolutions` methods |
 | `personal-cmy.37.3.5` | Mission departure-direction and body preparation/propagation orchestration |
 | `personal-cmy.37.3.6` | Fitted-orbit conversion/deduplication and outlier utilities |
-| `personal-cmy.37.3.7` | `evaluate_orbits` one-crossing orchestration |
+| `personal-cmy.37.3.7` | `evaluate_orbits` one-crossing orchestration (complete: frozen parity and Rust-owned timing) |
 | `personal-cmy.37.3.8` | `residual_function` and `fit_least_squares` native orchestration |
 | `personal-cmy.37.3.9` | `LeastSquares` public algorithm |
 | `personal-cmy.37.3.10` | `od_worker`, `od`, and `differential_correction` |

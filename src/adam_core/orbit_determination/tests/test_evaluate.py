@@ -1,4 +1,6 @@
+import json
 import os
+from pathlib import Path
 
 import numpy as np
 import pyarrow as pa
@@ -174,10 +176,103 @@ def test_evaluate_orbits_vectorized_statistics() -> None:
     assert fitted_orbit_members.outlier.to_pylist() == expected_outliers
 
 
-def test_evaluate_orbits_requires_grouped_ephemeris_order() -> None:
-    orbits, observations, propagator = make_evaluate_case(2, 3)
-    propagator.ephemeris = propagator.ephemeris.take([3, 4, 5, 0, 1, 2])
+@pytest.mark.parametrize(
+    ("fixture_case", "ignore"),
+    [("normal", None), ("ignored", ["obs001", "obs006"])],
+)
+def test_evaluate_orbits_frozen_legacy_parity(fixture_case, ignore) -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[4]
+        / "migration"
+        / "artifacts"
+        / "evaluate_orbits_fixture_2026-07-12.json"
+    )
+    expected = json.loads(fixture_path.read_text())[fixture_case]
+    orbits, observations, propagator = make_evaluate_case(4, 8)
+    fitted, members = evaluate_orbits(
+        orbits, observations, propagator, parameters=6, ignore=ignore
+    )
 
+    assert fitted.orbit_id.to_pylist() == expected["orbit_ids"]
+    assert fitted.num_obs.to_pylist() == expected["num_obs"]
+    assert members.obs_id.to_pylist() == expected["member_obs_ids"]
+    assert members.outlier.to_pylist() == expected["member_outlier"]
+    np.testing.assert_allclose(fitted.arc_length.to_pylist(), expected["arc_length"])
+    np.testing.assert_allclose(fitted.chi2.to_pylist(), expected["chi2"], rtol=1e-14)
+    np.testing.assert_allclose(
+        fitted.reduced_chi2.to_pylist(), expected["reduced_chi2"], rtol=1e-14
+    )
+    np.testing.assert_allclose(
+        members.residuals.to_array(), expected["residual_values"], rtol=1e-14
+    )
+    np.testing.assert_allclose(
+        members.residuals.chi2.to_pylist(), expected["residual_chi2"], rtol=1e-14
+    )
+    assert members.residuals.dof.to_pylist() == expected["residual_dof"]
+    np.testing.assert_allclose(
+        members.residuals.probability.to_pylist(),
+        expected["residual_probability"],
+        rtol=1e-14,
+    )
+
+
+def test_evaluate_orbits_empty_legacy_error() -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[4]
+        / "migration"
+        / "artifacts"
+        / "evaluate_orbits_fixture_2026-07-12.json"
+    )
+    expected = json.loads(fixture_path.read_text())["empty"]
+    orbits, observations, propagator = make_evaluate_case(1, 0)
+    with pytest.raises(ValueError, match=expected["error"]):
+        evaluate_orbits(orbits, observations, propagator)
+
+
+def test_evaluate_orbits_rust_native_timing() -> None:
+    from adam_core import _rust_native
+
+    orbits, observations, propagator = make_evaluate_case(4, 8)
+    observed = observations.coordinates
+    predicted = propagator.ephemeris.coordinates
+    samples = _rust_native.benchmark_evaluate_orbits_numpy(
+        orbits.orbit_id.to_pylist(),
+        propagator.ephemeris.orbit_id.to_pylist(),
+        observations.id.to_pylist(),
+        observed.origin.code.to_pylist(),
+        predicted.origin.code.to_pylist(),
+        observed.frame,
+        predicted.frame,
+        np.ascontiguousarray(observed.values),
+        np.ascontiguousarray(predicted.values),
+        np.ascontiguousarray(observed.covariance.to_matrix()),
+        np.ascontiguousarray(predicted.covariance.to_matrix()),
+        np.ascontiguousarray(observed.time.days.to_numpy()),
+        np.ascontiguousarray(observed.time.nanos.to_numpy()),
+        6,
+        ["obs001", "obs006"],
+        2,
+        2,
+        0,
+    )
+    assert len(samples) == 2
+    assert all(len(trial) == 2 for trial in samples)
+    assert all(sample >= 0 for trial in samples for sample in trial)
+
+
+@pytest.mark.parametrize("indices", [[0, 1, 2, 3, 4], [3, 4, 5, 0, 1, 2]])
+def test_evaluate_orbits_requires_grouped_ephemeris_order(indices) -> None:
+    fixture_path = (
+        Path(__file__).resolve().parents[4]
+        / "migration"
+        / "artifacts"
+        / "evaluate_orbits_fixture_2026-07-12.json"
+    )
+    baseline_error = json.loads(fixture_path.read_text())["ordering_error"]
+    assert baseline_error["error_type"] == "ValueError"
+
+    orbits, observations, propagator = make_evaluate_case(2, 3)
+    propagator.ephemeris = propagator.ephemeris.take(indices)
     with pytest.raises(ValueError, match="Ephemeris rows must be grouped"):
         evaluate_orbits(orbits, observations, propagator)
 
