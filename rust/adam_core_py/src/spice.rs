@@ -20,7 +20,7 @@ use adam_core_rs_spice::{
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
 use arrow_array::{Array, Float64Array, Int64Array, LargeStringArray, RecordBatch};
 use numpy::{IntoPyArray, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2};
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyRuntimeError, PyValueError, PyZeroDivisionError};
 use pyo3::prelude::*;
 use pyo3::types::PyBytes;
 
@@ -1279,6 +1279,207 @@ impl NaifSpkWriter {
     }
 }
 
+pub(crate) fn mission_time_grid(
+    start_days: &[i64],
+    start_nanos: &[i64],
+    start_scale: &str,
+    end_days: &[i64],
+    end_nanos: &[i64],
+    end_scale: &str,
+    step_size: f64,
+) -> PyResult<TimeArray> {
+    let start = TimeArray::from_parts(
+        TimeScale::parse(start_scale).map_err(|err| PyValueError::new_err(err.to_string()))?,
+        start_days.to_vec(),
+        start_nanos.to_vec(),
+    )
+    .map_err(|err| PyValueError::new_err(err.to_string()))?
+    .rescale(TimeScale::Tdb)
+    .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let end = TimeArray::from_parts(
+        TimeScale::parse(end_scale).map_err(|err| PyValueError::new_err(err.to_string()))?,
+        end_days.to_vec(),
+        end_nanos.to_vec(),
+    )
+    .map_err(|err| PyValueError::new_err(err.to_string()))?
+    .rescale(TimeScale::Tdb)
+    .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let start_mjd = *start
+        .mjd_values()
+        .first()
+        .ok_or_else(|| PyValueError::new_err("start_time must contain at least one row"))?;
+    let end_mjd = *end
+        .mjd_values()
+        .first()
+        .ok_or_else(|| PyValueError::new_err("end_time must contain at least one row"))?;
+    if step_size == 0.0 {
+        return Err(PyZeroDivisionError::new_err("float division by zero"));
+    }
+    if step_size.is_nan() {
+        return Err(PyValueError::new_err("arange: cannot compute length"));
+    }
+    let advances =
+        (step_size > 0.0 && start_mjd < end_mjd) || (step_size < 0.0 && start_mjd > end_mjd);
+    let count = if !advances {
+        0
+    } else if step_size.is_infinite() {
+        1
+    } else {
+        ((end_mjd - start_mjd) / step_size).ceil().max(0.0) as usize
+    };
+    let mjd = (0..count)
+        .map(|row| start_mjd + row as f64 * step_size)
+        .collect::<Vec<_>>();
+    TimeArray::from_mjd(TimeScale::Tdb, &mjd).map_err(|err| PyValueError::new_err(err.to_string()))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prepare_major_body_orbits(
+    backend: &mut AdamCoreSpiceBackend,
+    start_days: &[i64],
+    start_nanos: &[i64],
+    start_scale: &str,
+    end_days: &[i64],
+    end_nanos: &[i64],
+    end_scale: &str,
+    step_size: f64,
+    target_id: i32,
+    origin_id: i32,
+    origin_code: &str,
+) -> PyResult<RecordBatch> {
+    let times = mission_time_grid(
+        start_days,
+        start_nanos,
+        start_scale,
+        end_days,
+        end_nanos,
+        end_scale,
+        step_size,
+    )?;
+    let days = times
+        .epochs
+        .iter()
+        .map(|epoch| epoch.days)
+        .collect::<Vec<_>>();
+    let nanos = times
+        .epochs
+        .iter()
+        .map(|epoch| epoch.nanos)
+        .collect::<Vec<_>>();
+    let flat = backend
+        .perturber_states_cached(target_id, origin_id, "ECLIPJ2000", &days, &nanos, 10_000)
+        .map_err(spice_err_to_py)?;
+    perturber_states_record_batch(&flat, DataFrame::Ecliptic, origin_code, times)
+}
+
+#[pyfunction]
+#[allow(clippy::too_many_arguments)]
+fn prepare_major_body_orbits_arrow<'py>(
+    py: Python<'py>,
+    start_days: PyReadonlyArray1<'py, i64>,
+    start_nanos: PyReadonlyArray1<'py, i64>,
+    start_scale: &str,
+    end_days: PyReadonlyArray1<'py, i64>,
+    end_nanos: PyReadonlyArray1<'py, i64>,
+    end_scale: &str,
+    step_size: f64,
+    target_id: i32,
+    origin_id: i32,
+    origin_code: &str,
+) -> PyResult<PyObject> {
+    let mut backend = global_backend()
+        .lock()
+        .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
+    prepare_major_body_orbits(
+        &mut backend,
+        start_days.as_slice()?,
+        start_nanos.as_slice()?,
+        start_scale,
+        end_days.as_slice()?,
+        end_nanos.as_slice()?,
+        end_scale,
+        step_size,
+        target_id,
+        origin_id,
+        origin_code,
+    )?
+    .to_pyarrow(py)
+    .map_err(|err| PyRuntimeError::new_err(format!("failed to export prepared orbits: {err}")))
+}
+
+#[pyfunction]
+#[pyo3(signature = (start_days, start_nanos, start_scale, end_days, end_nanos, end_scale, step_size, target_id, origin_id, origin_code, reps, trials, warmup_reps=1))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_prepare_major_body_orbits(
+    start_days: PyReadonlyArray1<'_, i64>,
+    start_nanos: PyReadonlyArray1<'_, i64>,
+    start_scale: &str,
+    end_days: PyReadonlyArray1<'_, i64>,
+    end_nanos: PyReadonlyArray1<'_, i64>,
+    end_scale: &str,
+    step_size: f64,
+    target_id: i32,
+    origin_id: i32,
+    origin_code: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let start_days = start_days.as_slice()?.to_vec();
+    let start_nanos = start_nanos.as_slice()?.to_vec();
+    let end_days = end_days.as_slice()?.to_vec();
+    let end_nanos = end_nanos.as_slice()?.to_vec();
+    let mut output = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            let mut backend = global_backend()
+                .lock()
+                .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
+            backend.clear_spkez_state_cache();
+            black_box(prepare_major_body_orbits(
+                &mut backend,
+                &start_days,
+                &start_nanos,
+                start_scale,
+                &end_days,
+                &end_nanos,
+                end_scale,
+                step_size,
+                target_id,
+                origin_id,
+                origin_code,
+            )?);
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let mut backend = global_backend()
+                .lock()
+                .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
+            backend.clear_spkez_state_cache();
+            let started = Instant::now();
+            black_box(prepare_major_body_orbits(
+                &mut backend,
+                &start_days,
+                &start_nanos,
+                start_scale,
+                &end_days,
+                &end_nanos,
+                end_scale,
+                step_size,
+                target_id,
+                origin_id,
+                origin_code,
+            )?);
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        output.push(samples);
+    }
+    Ok(output)
+}
+
 #[pyfunction]
 fn naif_bodn2c(name: &str) -> PyResult<i32> {
     builtin_bodn2c(name).map_err(|e| PyValueError::new_err(format!("{e}")))
@@ -1325,6 +1526,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(naif_spk_open, m)?)?;
     m.add_function(wrap_pyfunction!(naif_pck_open, m)?)?;
     m.add_function(wrap_pyfunction!(naif_spk_writer, m)?)?;
+    m.add_function(wrap_pyfunction!(prepare_major_body_orbits_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_prepare_major_body_orbits, m)?)?;
     m.add_function(wrap_pyfunction!(spk_fit_chebyshev, m)?)?;
     m.add_function(wrap_pyfunction!(spk_write_orbits_product, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_spk_write_orbits_product, m)?)?;

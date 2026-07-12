@@ -40,9 +40,9 @@
     },
     "by_implementation_class": {
       "compatibility_data_or_external_generic": 129,
-      "mixed_rust_python_gap": 74,
+      "mixed_rust_python_gap": 75,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 251,
+      "python_gap_or_external_boundary": 250,
       "rust_veneer_candidate_see_domain_audit": 97
     },
     "plotting_exemption_candidates": 16,
@@ -6331,7 +6331,7 @@
       "kind": "class",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 228,
+      "line": 227,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6359,7 +6359,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 260,
+      "line": 259,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6387,7 +6387,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 318,
+      "line": 317,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6415,7 +6415,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 297,
+      "line": 296,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6443,7 +6443,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 256,
+      "line": 255,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6471,7 +6471,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 268,
+      "line": 267,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6499,7 +6499,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 264,
+      "line": 263,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6527,7 +6527,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 407,
+      "line": 406,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6555,7 +6555,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 375,
+      "line": 374,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6583,7 +6583,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 339,
+      "line": 338,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6611,7 +6611,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 439,
+      "line": 438,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6639,7 +6639,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 129,
+      "line": 128,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6667,7 +6667,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 576,
+      "line": 587,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6695,7 +6695,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 48,
+      "line": 47,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6723,7 +6723,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 639,
+      "line": 650,
       "explicit_export": null,
       "plotting_exemption_candidate": true,
       "signals": {
@@ -6751,12 +6751,12 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 502,
+      "line": 501,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -6764,10 +6764,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },

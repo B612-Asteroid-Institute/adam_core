@@ -1,7 +1,12 @@
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
+from adam_core.coordinates import CartesianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
+from adam_core.orbits import Orbits
 from adam_core.coordinates.units import au_per_day_to_km_per_s
 from adam_core.time import Timestamp
 
@@ -10,6 +15,136 @@ from ..porkchop import (
     plot_porkchop_plotly,
     prepare_and_propagate_orbits,
 )
+
+
+class _EchoPropagator:
+    def propagate_orbits(self, body, times, max_processes=1):
+        state = body.coordinates.values[0]
+        rows = len(times)
+        return Orbits.from_kwargs(
+            orbit_id=[body.orbit_id[0].as_py()] * rows,
+            object_id=[body.object_id[0].as_py()] * rows,
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=np.full(rows, state[0]),
+                y=np.full(rows, state[1]),
+                z=np.full(rows, state[2]),
+                vx=np.full(rows, state[3]),
+                vy=np.full(rows, state[4]),
+                vz=np.full(rows, state[5]),
+                time=times,
+                origin=Origin.from_kwargs(
+                    code=[body.coordinates.origin.code[0].as_py()] * rows
+                ),
+                frame=body.coordinates.frame,
+            ),
+        )
+
+
+def _assert_orbit_fixture(actual, expected):
+    assert actual.orbit_id.to_pylist() == expected["orbit_id"]
+    assert actual.object_id.to_pylist() == expected["object_id"]
+    np.testing.assert_allclose(
+        actual.coordinates.values, expected["values"], rtol=1e-13, atol=1e-13
+    )
+    assert actual.coordinates.time.days.to_pylist() == expected["days"]
+    assert actual.coordinates.time.nanos.to_pylist() == expected["nanos"]
+    assert actual.coordinates.time.scale == expected["scale"]
+    assert actual.coordinates.origin.code.to_pylist() == expected["origins"]
+    assert actual.coordinates.frame == expected["frame"]
+
+
+def test_prepare_and_propagate_orbits_frozen_legacy_parity():
+    fixture_path = (
+        Path(__file__).resolve().parents[4]
+        / "migration"
+        / "artifacts"
+        / "departure_spherical_fixture_2026-07-12.json"
+    )
+    fixture = json.loads(fixture_path.read_text())
+    major = prepare_and_propagate_orbits(
+        OriginCodes.EARTH,
+        Timestamp.from_mjd([60000.0], scale="utc"),
+        Timestamp.from_mjd([60002.0], scale="utc"),
+        propagation_origin=OriginCodes.SUN,
+        step_size=0.5,
+    )
+    _assert_orbit_fixture(major, fixture["prepare_major_body"])
+
+    body = Orbits.from_kwargs(
+        orbit_id=["provider-body"],
+        object_id=["provider-body"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.1],
+            z=[-0.05],
+            vx=[0.001],
+            vy=[0.017],
+            vz=[0.0002],
+            time=Timestamp.from_mjd([60000.0], scale="tdb"),
+            origin=Origin.from_kwargs(code=["EARTH"]),
+            frame="equatorial",
+        ),
+    )
+    provider = prepare_and_propagate_orbits(
+        body,
+        Timestamp.from_mjd([60000.0], scale="tdb"),
+        Timestamp.from_mjd([60002.0], scale="tdb"),
+        propagation_origin=OriginCodes.SUN,
+        step_size=0.5,
+        propagator_class=_EchoPropagator,
+        max_processes=1,
+    )
+    _assert_orbit_fixture(provider, fixture["prepare_provider_body"])
+
+
+def test_prepare_major_body_grid_edge_compatibility():
+    start = Timestamp.from_mjd([60000.0], scale="tdb")
+    end = Timestamp.from_mjd([60002.0], scale="tdb")
+    with pytest.raises(ZeroDivisionError, match="float division by zero"):
+        prepare_and_propagate_orbits(OriginCodes.EARTH, start, end, step_size=0.0)
+    with pytest.raises(ValueError, match="arange: cannot compute length"):
+        prepare_and_propagate_orbits(
+            OriginCodes.EARTH, start, end, step_size=float("nan")
+        )
+    assert (
+        len(
+            prepare_and_propagate_orbits(
+                OriginCodes.EARTH, start, end, step_size=float("inf")
+            )
+        )
+        == 1
+    )
+    assert (
+        len(prepare_and_propagate_orbits(OriginCodes.EARTH, start, end, step_size=-1.0))
+        == 0
+    )
+
+
+def test_prepare_major_body_orbits_rust_native_timing():
+    from adam_core import _rust_native
+    from adam_core._rust.arrow import ensure_spice_backend
+
+    ensure_spice_backend()
+    start = Timestamp.from_mjd([60000.0], scale="utc")
+    end = Timestamp.from_mjd([60002.0], scale="utc")
+    samples = _rust_native.benchmark_prepare_major_body_orbits(
+        np.ascontiguousarray(start.days.to_numpy()),
+        np.ascontiguousarray(start.nanos.to_numpy()),
+        start.scale,
+        np.ascontiguousarray(end.days.to_numpy()),
+        np.ascontiguousarray(end.nanos.to_numpy()),
+        end.scale,
+        0.5,
+        OriginCodes.EARTH.value,
+        OriginCodes.SUN.value,
+        OriginCodes.SUN.name,
+        2,
+        2,
+        0,
+    )
+    assert len(samples) == 2
+    assert all(len(trial) == 2 for trial in samples)
+    assert all(sample >= 0 for trial in samples for sample in trial)
 
 
 def test_generate_porkchop_data_origins():

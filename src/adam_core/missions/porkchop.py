@@ -11,7 +11,7 @@ from astropy.time import Time
 import pyarrow as pa
 
 from adam_core._rust import generate_porkchop_data_arrow
-from adam_core.coordinates import CartesianCoordinates, transform_coordinates
+from adam_core.coordinates import CartesianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.spherical import SphericalCoordinates
 from adam_core.coordinates.units import au_per_day_to_km_per_s
@@ -19,7 +19,6 @@ from adam_core.dynamics.lambert import calculate_c3
 from adam_core.orbits import Orbits
 from adam_core.propagator import Propagator
 from adam_core.time import Timestamp
-from adam_core.utils import get_perturber_state
 from adam_core.utils.plots.logos import AsteroidInstituteLogoLight, get_logo_base64
 
 logger = logging.getLogger(__name__)
@@ -533,40 +532,52 @@ def prepare_and_propagate_orbits(
     Orbits
         The propagated orbits over the specified time range.
     """
-    # if body is an Orbit, ensure its origin is the propagation_origin
+    from adam_core import _rust_native
+    from adam_core._rust.arrow import ensure_spice_backend, table_from_record_batch
+
+    ensure_spice_backend()
     if isinstance(body, Orbits):
+        # Orbit normalization and target-grid construction are one Rust
+        # crossing. Actual propagation remains the explicit provider boundary.
+        from adam_core.coordinates.transform import _coordinate_record_batch
+
+        coordinate_batch, days, nanos = _rust_native.prepare_orbit_propagation_arrow(
+            _coordinate_record_batch(body.coordinates, "cartesian"),
+            np.ascontiguousarray(start_time.days.to_numpy(), dtype=np.int64),
+            np.ascontiguousarray(start_time.nanos.to_numpy(), dtype=np.int64),
+            start_time.scale,
+            np.ascontiguousarray(end_time.days.to_numpy(), dtype=np.int64),
+            np.ascontiguousarray(end_time.nanos.to_numpy(), dtype=np.int64),
+            end_time.scale,
+            step_size,
+            propagation_origin.name,
+        )
         body = body.set_column(
             "coordinates",
-            transform_coordinates(
-                body.coordinates,
-                representation_out=CartesianCoordinates,
-                frame_out="ecliptic",
-                origin_out=propagation_origin,
-            ),
+            table_from_record_batch(CartesianCoordinates, coordinate_batch),
         )
-
-    times = Timestamp.from_mjd(
-        np.arange(
-            start_time.rescale("tdb").mjd()[0].as_py(),
-            end_time.rescale("tdb").mjd()[0].as_py(),
-            step_size,
-        ),
-        scale="tdb",
-    )
-
-    # get orbits for the body at specified times
-    if isinstance(body, Orbits):
+        times = Timestamp.from_kwargs(days=days, nanos=nanos, scale="tdb")
         propagator = propagator_class()
         orbits = propagator.propagate_orbits(body, times, max_processes=max_processes)
     else:
-        # For major bodies, create an Orbits object with the body's origin code as the orbit_id
-        coordinates = get_perturber_state(
-            body, times, frame="ecliptic", origin=propagation_origin
+        # Major-body preparation is one Rust crossing: input-scale conversion,
+        # arange-compatible TDB grid construction, cached SPICE state lookup,
+        # unit conversion, and coordinate batch assembly.
+        coordinate_batch = _rust_native.prepare_major_body_orbits_arrow(
+            np.ascontiguousarray(start_time.days.to_numpy(), dtype=np.int64),
+            np.ascontiguousarray(start_time.nanos.to_numpy(), dtype=np.int64),
+            start_time.scale,
+            np.ascontiguousarray(end_time.days.to_numpy(), dtype=np.int64),
+            np.ascontiguousarray(end_time.nanos.to_numpy(), dtype=np.int64),
+            end_time.scale,
+            step_size,
+            body.value,
+            propagation_origin.value,
+            propagation_origin.name,
         )
-        # Create orbit IDs based on the body name and time index
-        orbit_ids = np.repeat(body.name, len(coordinates))
+        coordinates = table_from_record_batch(CartesianCoordinates, coordinate_batch)
         orbits = Orbits.from_kwargs(
-            orbit_id=orbit_ids,
+            orbit_id=np.repeat(body.name, len(coordinates)),
             coordinates=coordinates,
         )
 

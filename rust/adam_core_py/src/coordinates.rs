@@ -4941,6 +4941,66 @@ fn benchmark_departure_spherical_coordinates(
     })
 }
 
+#[pyfunction]
+#[pyo3(signature = (coordinate_batch, start_days, start_nanos, start_scale, end_days, end_nanos, end_scale, step_size, propagation_origin))]
+#[allow(clippy::too_many_arguments)]
+fn prepare_orbit_propagation_arrow<'py>(
+    py: Python<'py>,
+    coordinate_batch: &Bound<'py, PyAny>,
+    start_days: PyReadonlyArray1<'py, i64>,
+    start_nanos: PyReadonlyArray1<'py, i64>,
+    start_scale: &str,
+    end_days: PyReadonlyArray1<'py, i64>,
+    end_nanos: PyReadonlyArray1<'py, i64>,
+    end_scale: &str,
+    step_size: f64,
+    propagation_origin: &str,
+) -> PyResult<(
+    PyObject,
+    Bound<'py, PyArray1<i64>>,
+    Bound<'py, PyArray1<i64>>,
+)> {
+    let coordinates = RecordBatch::from_pyarrow_bound(coordinate_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid coordinate RecordBatch: {err}")))?;
+    let config = TransformArrowConfig {
+        representation_out: DataRepresentation::Cartesian,
+        frame_out: DataFrame::Ecliptic,
+        target_origin: Some(OriginId::from_code(propagation_origin)),
+        a: 0.0,
+        f: 0.0,
+        max_iter: 100,
+        tol: 1e-15,
+    };
+    let transformed = transform_coordinates_record_batch(&coordinates, &config)?
+        .ok_or_else(|| PyRuntimeError::new_err("native orbit preparation transform fell back"))?;
+    let times = crate::spice::mission_time_grid(
+        start_days.as_slice()?,
+        start_nanos.as_slice()?,
+        start_scale,
+        end_days.as_slice()?,
+        end_nanos.as_slice()?,
+        end_scale,
+        step_size,
+    )?;
+    let days = times
+        .epochs
+        .iter()
+        .map(|epoch| epoch.days)
+        .collect::<Vec<_>>();
+    let nanos = times
+        .epochs
+        .iter()
+        .map(|epoch| epoch.nanos)
+        .collect::<Vec<_>>();
+    Ok((
+        transformed.to_pyarrow(py).map_err(|err| {
+            PyRuntimeError::new_err(format!("failed to export prepared coordinates: {err}"))
+        })?,
+        days.into_pyarray(py),
+        nanos.into_pyarray(py),
+    ))
+}
+
 /// Arrow-native `transform_coordinates`: one RecordBatch enters Rust and one
 /// transformed RecordBatch leaves Rust. PyArrow conversion is outside the
 /// Rust-owned implementation.
@@ -6789,6 +6849,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         benchmark_departure_spherical_coordinates,
         m
     )?)?;
+    m.add_function(wrap_pyfunction!(prepare_orbit_propagation_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_perturber_moids_native, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_perturber_moids_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(

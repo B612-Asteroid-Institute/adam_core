@@ -98,7 +98,7 @@ The base-class constructors have no custom behavior. Abstract method signatures,
 | `.vinf_departure()` / `.vinf_arrival()` | Python extraction + NumPy norm | only indirectly | no | Direct implementation + standalone parity/timing gap. |
 | `.time_of_flight()` | Python timestamp conversion/subtraction | only indirectly | no | Direct implementation + standalone parity/timing gap. |
 | `departure_spherical_coordinates` | Rust-1x Arrow facade owns normalization, Cartesian-to-spherical/frame transform, metadata, and output assembly; Python preserves assertion/warning compatibility and wraps the batch | frozen pinned-main parity plus behavior suite | yes | Complete; pinned cases cover Earth/ecliptic and Mars/equatorial vectors, values, time, origin, and frame metadata. |
-| `prepare_and_propagate_orbits` | Python dispatch across transform, backend propagation, or SPICE state lookup | no | no | Multi-step orchestration gap; backend-dependent parity/timing needed. |
+| `prepare_and_propagate_orbits` | Rust-1x major-body product; for `Orbits`, one Rust preprocessing crossing followed by the explicit `Propagator.propagate_orbits` provider boundary | frozen pinned-main parity for both branches | yes for the complete major-body product; concrete provider timing governs the provider branch | Complete under the provider-boundary policy. Rust owns scale conversion, NumPy-compatible grid semantics, input transform, SPICE state lookup, units, and batch assembly; Python only dispatches the declared body/provider union and wraps products. |
 | `generate_porkchop_data` | Rust-1x Arrow facade | yes | yes | Complete for current contract. |
 | `generate_saturated_colorscale`, `generate_perceptual_colorscale`, `plot_porkchop_plotly` | plotting/display | no | N/A | Explicitly exempt. |
 
@@ -171,7 +171,7 @@ Children of `personal-cmy.37.3` cover every non-plotting gap above, grouped only
 | `personal-cmy.37.3.2` | Impact defaults, orchestration, probability reduction, linkage, and Mahalanobis distance |
 | `personal-cmy.37.3.3` | Propagator normalization utilities and concrete backend contract evidence (complete: one-crossing utilities, frozen parity, native timing, and compiled ASSIST delegation evidence) |
 | `personal-cmy.37.3.4` | All custom `LambertSolutions` methods |
-| `personal-cmy.37.3.5` | Mission departure-direction and body preparation/propagation orchestration |
+| `personal-cmy.37.3.5` | Mission departure-direction and body preparation/propagation orchestration (complete: Rust-owned products around the explicit propagator boundary, frozen parity, and native timing) |
 | `personal-cmy.37.3.6` | Fitted-orbit conversion/deduplication and outlier utilities |
 | `personal-cmy.37.3.7` | `evaluate_orbits` one-crossing orchestration (complete: frozen parity and Rust-owned timing) |
 | `personal-cmy.37.3.8` | `residual_function` and `fit_least_squares` native orchestration |
