@@ -43,6 +43,7 @@ use crate::{
     CoordinateValues, CovarianceBatch, ObjectId, ObserverBatch, OrbitBatch, OrbitId, OriginArray,
     TimeArray, Validity,
 };
+use adam_core_rs_orbit_determination::gauss_iod_fused;
 
 /// Legacy light-time failure phrase. adam-core's public `LeastSquares` class
 /// treats provider errors containing this text as a rejected trial step; the
@@ -1091,6 +1092,372 @@ fn finish_vallado(
 }
 
 // ---------------------------------------------------------------------------
+// Legacy Gauss initial-orbit-determination acceptance loop
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ObservationSelectionMethod {
+    Combinations,
+    FirstMiddleLast,
+    Thirds,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct IodConfig {
+    pub min_obs: usize,
+    pub min_arc_length: f64,
+    pub contamination_percentage: f64,
+    pub rchi2_threshold: f64,
+    pub observation_selection_method: ObservationSelectionMethod,
+    pub light_time: bool,
+    pub mu: f64,
+    pub speed_of_light: f64,
+}
+
+/// Product of the complete preliminary-IOD decision loop for one linkage.
+/// `state` is heliocentric/ecliptic at `epoch_mjd`; residual/member arrays
+/// retain the caller's observation order.
+#[derive(Debug, Clone)]
+pub struct IodOutput {
+    pub found: bool,
+    pub state: [f64; 6],
+    pub epoch_mjd: f64,
+    pub arc_length: f64,
+    pub num_obs: usize,
+    pub chi2_total: f64,
+    pub reduced_chi2: f64,
+    pub residuals: Vec<f64>,
+    pub residual_chi2: Vec<f64>,
+    pub residual_dof: Vec<i64>,
+    pub residual_probability: Vec<f64>,
+    pub solution: Vec<bool>,
+    pub outlier: Vec<bool>,
+}
+
+impl IodOutput {
+    fn not_found(n: usize) -> Self {
+        Self {
+            found: false,
+            state: [f64::NAN; 6],
+            epoch_mjd: f64::NAN,
+            arc_length: f64::NAN,
+            num_obs: 0,
+            chi2_total: f64::NAN,
+            reduced_chi2: f64::NAN,
+            residuals: Vec::new(),
+            residual_chi2: Vec::new(),
+            residual_dof: Vec::new(),
+            residual_probability: Vec::new(),
+            solution: vec![false; n],
+            outlier: vec![false; n],
+        }
+    }
+}
+
+/// Complete legacy `iod()` work unit: triplet selection, fused Gauss
+/// candidate generation, backend ephemeris/residual scoring, outlier trials,
+/// and first-acceptable-candidate selection. The input rows must already be
+/// in the public IOD observation order; all output member arrays preserve it.
+#[allow(clippy::too_many_arguments)]
+pub fn iod_fit_barycentric<P, T>(
+    propagator: &P,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &IodConfig,
+    options: &EphemerisOptions,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<IodOutput>
+where
+    P: Propagator,
+    T: OriginTranslationProvider,
+{
+    let n = observed.len();
+    if observers.len() != n {
+        return Err(PropagationError::InvalidRequest(
+            "observed and observers must have equal length".to_string(),
+        ));
+    }
+    if n == 0 || n < config.min_obs {
+        return Ok(IodOutput::not_found(n));
+    }
+    let observed_values = observed.values.spherical().ok_or_else(|| {
+        PropagationError::InvalidRequest("IOD requires spherical observed coordinates".to_string())
+    })?;
+    let times = observed_times_mjd(observed)?;
+    let observer_positions = observers.coordinates.values.cartesian().ok_or_else(|| {
+        PropagationError::InvalidRequest("IOD requires Cartesian observer coordinates".to_string())
+    })?;
+
+    let max_outliers =
+        (((n as f64) * (config.contamination_percentage / 100.0)) as usize).min(n - config.min_obs);
+    let mut triplets = select_observation_triplets(&times, config.observation_selection_method);
+    triplets.truncate(max_outliers + 1);
+    if triplets.is_empty() {
+        return Ok(IodOutput::not_found(n));
+    }
+
+    for triplet in triplets {
+        let ra = std::array::from_fn(|slot| observed_values[triplet[slot]][1]);
+        let dec = std::array::from_fn(|slot| observed_values[triplet[slot]][2]);
+        let triplet_times = std::array::from_fn(|slot| times[triplet[slot]]);
+        let triplet_observers = std::array::from_fn(|slot| {
+            let row = observer_positions[triplet[slot]];
+            [row[0], row[1], row[2]]
+        });
+        let (epochs, states_flat) = gauss_iod_fused(
+            ra,
+            dec,
+            triplet_times,
+            triplet_observers,
+            1,
+            config.light_time,
+            config.mu,
+            config.speed_of_light,
+        );
+        let candidate_count = epochs.len();
+        for candidate in 0..candidate_count {
+            let state: [f64; 6] = std::array::from_fn(|axis| states_flat[candidate * 6 + axis]);
+            if !state.iter().all(|value| value.is_finite()) {
+                continue;
+            }
+            let epoch = mjd_epoch(epochs[candidate]);
+            let candidate_coordinates = CoordinateBatch::cartesian(
+                vec![state],
+                Frame::Ecliptic,
+                OriginArray::repeat(crate::OriginId::from_code("SUN"), 1),
+                Some(TimeArray::new(
+                    observed.times.as_ref().unwrap().scale,
+                    vec![epoch],
+                )?),
+                None,
+            )?;
+            let orbit = OrbitBatch::new(
+                vec![OrbitId("iod-candidate-0000".to_string())],
+                vec![None],
+                candidate_coordinates,
+            )?;
+            let evaluation = evaluate_orbit_barycentric(
+                propagator,
+                state,
+                &orbit,
+                observed,
+                observers,
+                &vec![false; n],
+                6,
+                options,
+                provider,
+                translation_provider,
+            )?;
+
+            if evaluation.reduced_chi2 <= config.rchi2_threshold {
+                return Ok(iod_accepted_output(
+                    state,
+                    epochs[candidate],
+                    &times,
+                    triplet,
+                    Vec::new(),
+                    evaluation,
+                ));
+            }
+            if max_outliers == 0 {
+                if candidate + 1 == candidate_count {
+                    return Ok(IodOutput::not_found(n));
+                }
+                continue;
+            }
+
+            let triplet_mask: Vec<bool> = (0..n).map(|row| triplet.contains(&row)).collect();
+            let mut removable: Vec<usize> = (0..n).filter(|&row| !triplet_mask[row]).collect();
+            removable.sort_by(|&left, &right| {
+                evaluation.chi2[left]
+                    .total_cmp(&evaluation.chi2[right])
+                    .then(left.cmp(&right))
+            });
+            for count in 1..=max_outliers.min(removable.len()) {
+                let removed = removable[removable.len() - count..].to_vec();
+                let removed_chi2: f64 = removed.iter().map(|&row| evaluation.chi2[row]).sum();
+                let num_obs = n - removed.len();
+                let chi2 = evaluation.orbit_chi2 - removed_chi2;
+                let reduced = chi2 / (2 * num_obs - 6) as f64;
+                let keep: Vec<bool> = (0..n).map(|row| !removed.contains(&row)).collect();
+                let (arc_length, _, _) = masked_arc_length(&times, &keep);
+                if reduced <= config.rchi2_threshold && arc_length >= config.min_arc_length {
+                    let mut accepted = iod_accepted_output(
+                        state,
+                        epochs[candidate],
+                        &times,
+                        triplet,
+                        removed,
+                        evaluation,
+                    );
+                    accepted.chi2_total = chi2;
+                    accepted.reduced_chi2 = reduced;
+                    accepted.num_obs = num_obs;
+                    accepted.arc_length = arc_length;
+                    return Ok(accepted);
+                }
+            }
+        }
+    }
+    Ok(IodOutput::not_found(n))
+}
+
+/// Batch the complete IOD work unit across linkage row selections without
+/// returning control to Python between linkages. `chunk_size` is a scheduling
+/// control owned by Rust; output order always matches `linkage_rows`.
+#[allow(clippy::too_many_arguments)]
+pub fn iod_fit_linkages_barycentric<P, T>(
+    propagator: &P,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    linkage_rows: &[Vec<usize>],
+    chunk_size: usize,
+    config: &IodConfig,
+    options: &EphemerisOptions,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<Vec<IodOutput>>
+where
+    P: Propagator,
+    T: OriginTranslationProvider,
+{
+    let chunk_size = chunk_size.max(1);
+    let mut outputs = Vec::with_capacity(linkage_rows.len());
+    for chunk in linkage_rows.chunks(chunk_size) {
+        for rows in chunk {
+            for &row in rows {
+                if row >= observed.len() {
+                    return Err(PropagationError::InvalidRequest(format!(
+                        "linkage observation row {row} is out of bounds for {} observations",
+                        observed.len()
+                    )));
+                }
+            }
+            let linkage_observed = take_coordinate_batch(observed, rows)?;
+            let linkage_observers = take_observer_batch(observers, rows)?;
+            outputs.push(iod_fit_barycentric(
+                propagator,
+                &linkage_observed,
+                &linkage_observers,
+                config,
+                options,
+                provider,
+                translation_provider,
+            )?);
+        }
+    }
+    Ok(outputs)
+}
+
+fn iod_accepted_output(
+    state: [f64; 6],
+    epoch_mjd: f64,
+    times: &[f64],
+    triplet: [usize; 3],
+    removed: Vec<usize>,
+    evaluation: FitEvaluation,
+) -> IodOutput {
+    let outlier: Vec<bool> = (0..times.len()).map(|row| removed.contains(&row)).collect();
+    let solution: Vec<bool> = (0..times.len()).map(|row| triplet.contains(&row)).collect();
+    IodOutput {
+        found: true,
+        state,
+        epoch_mjd,
+        arc_length: evaluation.arc_length,
+        num_obs: evaluation.num_obs,
+        chi2_total: evaluation.orbit_chi2,
+        reduced_chi2: evaluation.reduced_chi2,
+        residuals: evaluation.residuals,
+        residual_chi2: evaluation.chi2,
+        residual_dof: evaluation.dof,
+        residual_probability: evaluation.probability,
+        solution,
+        outlier,
+    }
+}
+
+fn mjd_epoch(mjd: f64) -> crate::Epoch {
+    let days = mjd.floor();
+    crate::Epoch::new(
+        days as i64,
+        ((mjd - days) * 86_400_000_000_000.0).round() as i64,
+    )
+}
+
+fn select_observation_triplets(
+    times: &[f64],
+    method: ObservationSelectionMethod,
+) -> Vec<[usize; 3]> {
+    let n = times.len();
+    let mut triplets = match method {
+        ObservationSelectionMethod::FirstMiddleLast => {
+            percentile_triplet(times, [0.0, 50.0, 100.0])
+                .into_iter()
+                .collect()
+        }
+        ObservationSelectionMethod::Thirds => {
+            percentile_triplet(times, [100.0 / 6.0, 50.0, 500.0 / 6.0])
+                .into_iter()
+                .collect()
+        }
+        ObservationSelectionMethod::Combinations => {
+            let mut rows = Vec::new();
+            for first in 0..n {
+                for second in first + 1..n {
+                    for third in second + 1..n {
+                        rows.push([first, second, third]);
+                    }
+                }
+            }
+            rows.sort_by(|a, b| {
+                let arc_a = times[a[2]] - times[a[0]];
+                let arc_b = times[b[2]] - times[b[0]];
+                let mid_a = ((times[a[2]] + times[a[0]]) / 2.0 - times[a[1]]).abs();
+                let mid_b = ((times[b[2]] + times[b[0]]) / 2.0 - times[b[1]]).abs();
+                arc_b.total_cmp(&arc_a).then(mid_a.total_cmp(&mid_b))
+            });
+            rows
+        }
+    };
+    triplets.retain(|row| {
+        times[row[0]] != times[row[1]]
+            && times[row[0]] != times[row[2]]
+            && times[row[1]] != times[row[2]]
+    });
+    triplets
+}
+
+fn percentile_triplet(times: &[f64], percentiles: [f64; 3]) -> Option<[usize; 3]> {
+    if times.is_empty() {
+        return None;
+    }
+    let mut sorted = times.to_vec();
+    sorted.sort_by(f64::total_cmp);
+    let mut indices = Vec::with_capacity(3);
+    for percentile in percentiles {
+        let rank = percentile / 100.0 * (times.len() as f64 - 1.0);
+        let lower = rank.floor();
+        let fractional = rank - lower;
+        let nearest = if fractional < 0.5 {
+            lower
+        } else if fractional > 0.5 {
+            lower + 1.0
+        } else if (lower as i64) % 2 == 0 {
+            lower
+        } else {
+            lower + 1.0
+        } as usize;
+        let value = sorted[nearest.min(sorted.len() - 1)];
+        let index = times.iter().position(|item| *item == value)?;
+        if !indices.contains(&index) {
+            indices.push(index);
+        }
+    }
+    (indices.len() == 3).then(|| [indices[0], indices[1], indices[2]])
+}
+
+// ---------------------------------------------------------------------------
 // Shared internals
 // ---------------------------------------------------------------------------
 
@@ -1437,6 +1804,13 @@ fn filter_coordinate_batch(
         .enumerate()
         .filter_map(|(index, &flag)| flag.then_some(index))
         .collect();
+    take_coordinate_batch(batch, &rows)
+}
+
+fn take_coordinate_batch(
+    batch: &CoordinateBatch,
+    rows: &[usize],
+) -> PropagationResultValue<CoordinateBatch> {
     let raw = batch.values.raw_values();
     let filtered_rows: Vec<[f64; 6]> = rows.iter().map(|&index| raw[index]).collect();
     let values = match batch.values {
@@ -1462,7 +1836,7 @@ fn filter_coordinate_batch(
         Some(covariance) => {
             let stride = covariance.dimension * covariance.dimension;
             let mut values = Vec::with_capacity(rows.len() * stride);
-            for &index in &rows {
+            for &index in rows {
                 values.extend_from_slice(
                     &covariance.values_row_major[index * stride..(index + 1) * stride],
                 );
@@ -1488,14 +1862,23 @@ fn filter_observer_batch(
     observers: &ObserverBatch,
     keep: &[bool],
 ) -> PropagationResultValue<ObserverBatch> {
-    let codes = observers
-        .code
+    let rows: Vec<usize> = keep
         .iter()
-        .zip(keep.iter())
-        .filter(|(_, &flag)| flag)
-        .map(|(code, _)| code.clone())
+        .enumerate()
+        .filter_map(|(index, &flag)| flag.then_some(index))
         .collect();
-    let coordinates = filter_coordinate_batch(&observers.coordinates, keep)?;
+    take_observer_batch(observers, &rows)
+}
+
+fn take_observer_batch(
+    observers: &ObserverBatch,
+    rows: &[usize],
+) -> PropagationResultValue<ObserverBatch> {
+    let codes = rows
+        .iter()
+        .map(|&row| observers.code[row].clone())
+        .collect();
+    let coordinates = take_coordinate_batch(&observers.coordinates, rows)?;
     ObserverBatch::new(codes, coordinates).map_err(Into::into)
 }
 
@@ -1786,6 +2169,33 @@ mod tests {
         assert!(!output.found);
         assert_eq!(output.iterations, 0);
         assert!(output.residual_chi2.is_empty());
+    }
+
+    #[test]
+    fn iod_triplet_selection_preserves_legacy_priority() {
+        let times = [1.0, 2.0, 4.0, 8.0];
+        assert_eq!(
+            select_observation_triplets(&times, ObservationSelectionMethod::FirstMiddleLast),
+            vec![[0, 2, 3]]
+        );
+        assert!(select_observation_triplets(&times, ObservationSelectionMethod::Thirds).is_empty());
+        let combinations =
+            select_observation_triplets(&times, ObservationSelectionMethod::Combinations);
+        assert_eq!(combinations[0], [0, 2, 3]);
+        assert_eq!(combinations.len(), 4);
+    }
+
+    #[test]
+    fn iod_triplet_selection_rejects_coincident_epochs() {
+        let times = [1.0, 1.0, 2.0];
+        assert!(
+            select_observation_triplets(&times, ObservationSelectionMethod::Combinations)
+                .is_empty()
+        );
+        assert!(
+            select_observation_triplets(&times, ObservationSelectionMethod::FirstMiddleLast)
+                .is_empty()
+        );
     }
 
     #[test]

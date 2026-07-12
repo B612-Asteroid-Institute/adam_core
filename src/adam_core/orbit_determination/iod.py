@@ -1,5 +1,6 @@
 import logging
 import time
+import uuid
 from typing import Literal, Optional, Tuple, Type, Union
 
 import numpy as np
@@ -8,9 +9,12 @@ import pyarrow as pa
 import quivr as qv
 import ray
 
+from ..coordinates import CartesianCoordinates
+from ..coordinates.origin import Origin
 from ..coordinates.residuals import Residuals
 from ..parallel import get_backend, resolve_max_processes
 from ..propagator import Propagator
+from ..time import Timestamp
 from ..utils.iter import _iterate_chunk_indices, _iterate_chunks
 from . import (
     FittedOrbitMembers,
@@ -130,6 +134,81 @@ def select_observations(
         return np.array([])
 
     return obs_ids[selected_index]
+
+
+def _tables_from_native_iod(output: dict) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    """Wrap one fused Rust IOD batch product without further computation."""
+    orbit_ids = list(output["orbit_ids"])
+    if not orbit_ids:
+        return FittedOrbits.empty(), FittedOrbitMembers.empty()
+    states = np.asarray(output["states"], dtype=np.float64)
+    epochs = Timestamp.from_mjd(
+        np.asarray(output["epoch_mjd"], dtype=np.float64), scale="utc"
+    )
+    orbits = FittedOrbits.from_kwargs(
+        orbit_id=orbit_ids,
+        object_id=[None] * len(orbit_ids),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=states[:, 0],
+            y=states[:, 1],
+            z=states[:, 2],
+            vx=states[:, 3],
+            vy=states[:, 4],
+            vz=states[:, 5],
+            time=epochs,
+            origin=Origin.from_kwargs(code=["SUN"] * len(orbit_ids)),
+            frame="ecliptic",
+        ),
+        arc_length=output["arc_length"],
+        num_obs=output["num_obs"],
+        chi2=output["chi2"],
+        reduced_chi2=output["reduced_chi2"],
+    )
+    residuals = Residuals.from_kwargs(
+        values=np.asarray(output["residual_values"], dtype=np.float64).tolist(),
+        chi2=output["residual_chi2"],
+        dof=output["residual_dof"],
+        probability=output["residual_probability"],
+    )
+    members = FittedOrbitMembers.from_kwargs(
+        orbit_id=output["member_orbit_ids"],
+        obs_id=output["member_obs_ids"],
+        residuals=residuals,
+        solution=output["solution"],
+        outlier=output["outlier"],
+    )
+    return orbits, members
+
+
+def _native_initial_orbit_determination(
+    prop: Propagator,
+    observations: OrbitDeterminationObservations,
+    linkage_ids: list[str],
+    member_linkage_ids: list[str],
+    member_obs_ids: list[str],
+    *,
+    min_obs: int,
+    min_arc_length: float,
+    contamination_percentage: float,
+    rchi2_threshold: float,
+    observation_selection_method: str,
+    light_time: bool,
+    chunk_size: int,
+) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    output = prop.initial_orbit_determination(
+        observations,
+        linkage_ids,
+        member_linkage_ids,
+        member_obs_ids,
+        min_obs=min_obs,
+        min_arc_length=min_arc_length,
+        contamination_percentage=contamination_percentage,
+        rchi2_threshold=rchi2_threshold,
+        observation_selection_method=observation_selection_method,
+        light_time=light_time,
+        chunk_size=chunk_size,
+    )
+    return _tables_from_native_iod(output)
 
 
 def iod_worker(
@@ -341,6 +420,26 @@ def iod(
     """
     # Initialize the propagator
     prop = propagator(**propagator_kwargs)
+
+    # One native crossing owns the complete preliminary-IOD decision loop on
+    # providers exposing the fused work unit. UUID creation remains Python-
+    # owned; the native batch uses it as the synthetic linkage/final orbit id.
+    if hasattr(prop, "initial_orbit_determination"):
+        orbit_id = uuid.uuid4().hex
+        return _native_initial_orbit_determination(
+            prop,
+            observations,
+            [orbit_id],
+            [orbit_id] * len(observations),
+            observations.id.to_pylist(),
+            min_obs=min_obs,
+            min_arc_length=min_arc_length,
+            contamination_percentage=contamination_percentage,
+            rchi2_threshold=rchi2_threshold,
+            observation_selection_method=observation_selection_method,
+            light_time=light_time,
+            chunk_size=1,
+        )
 
     processable = True
     if len(observations) == 0:
@@ -569,6 +668,29 @@ def initial_orbit_determination(
         logger.info("Retrieved observations from the object store.")
     else:
         observations_ref = None
+
+    # The supported native provider owns the entire multi-linkage workflow in
+    # one crossing; chunk_size is consumed by Rust and max_processes is kept
+    # only for signature compatibility (native execution replaces Ray).
+    native_prop = propagator(**propagator_kwargs)
+    if hasattr(native_prop, "initial_orbit_determination"):
+        if len(observations) == 0 or len(linkage_members) == 0:
+            return FittedOrbits.empty(), FittedOrbitMembers.empty()
+        linkage_ids = linkage_members.column(linkage_id_col).unique().to_pylist()
+        return _native_initial_orbit_determination(
+            native_prop,
+            observations,
+            linkage_ids,
+            linkage_members.column(linkage_id_col).to_pylist(),
+            linkage_members.obs_id.to_pylist(),
+            min_obs=min_obs,
+            min_arc_length=min_arc_length,
+            contamination_percentage=contamination_percentage,
+            rchi2_threshold=rchi2_threshold,
+            observation_selection_method=observation_selection_method,
+            light_time=light_time,
+            chunk_size=chunk_size,
+        )
 
     iod_orbits_chunks: list[FittedOrbits] = []
     iod_orbit_members_chunks: list[FittedOrbitMembers] = []

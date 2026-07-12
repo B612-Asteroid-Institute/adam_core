@@ -29,6 +29,7 @@ name = "adam_core_rs_coords"
 version = "0.1.0"
 dependencies = [
  "adam_core_rs_autodiff",
+ "adam_core_rs_orbit_determination",
  "arrow-array",
  "arrow-buffer",
  "arrow-schema",

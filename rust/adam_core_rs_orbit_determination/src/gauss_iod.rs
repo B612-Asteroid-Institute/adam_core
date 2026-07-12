@@ -371,6 +371,10 @@ pub fn gauss_iod_fused(
     if r2_mags.is_empty() {
         return (Vec::new(), Vec::new());
     }
+    // Legacy numpy.roots emits the positive real roots in descending
+    // magnitude for this sparse degree-8 polynomial. Candidate order is
+    // observable because public IOD accepts the first qualifying orbit.
+    r2_mags.sort_by(|left, right| right.total_cmp(left));
 
     // Step 6: per-root orbit construction — reuse the already-Rust
     // implementation in gauss_iod_orbits_from_roots.

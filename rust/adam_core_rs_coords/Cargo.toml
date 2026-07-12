@@ -11,6 +11,7 @@ arrow-schema = "54"
 parquet = { version = "54", default-features = false, features = ["arrow", "snap", "zstd"] }
 erfars = "0.2"
 adam_core_rs_autodiff = { path = "../adam_core_rs_autodiff" }
+adam_core_rs_orbit_determination = { path = "../adam_core_rs_orbit_determination" }
 # Pure-rust dense linalg with hand-tuned SIMD (NEON, AVX2/512). Used for
 # weighted_mean / weighted_covariance GEMV/GEMM and unblocks future
 # Cholesky/LU/QR/eigen kernels (sigma-point sampling, ATWA solve, etc.).

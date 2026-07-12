@@ -28,8 +28,8 @@ The selected registry currently covers only 19 rows in these domains (including 
 | Propagator contracts | The base classes are now contracts rather than Python composition. Concrete parity/timing must be proven by each backend; adam-assist is the currently relevant backend. Two compatibility utilities still perform Python table orchestration. |
 | Missions | `generate_porkchop_data` is Rust-1x and governed. `LambertSolutions` accessors, departure-direction conversion, and body preparation/propagation remain Python. Plot/color helpers are exempt. |
 | Impacts | Collision detection is only an abstract backend contract. Variant creation, collision dispatch, probability reduction, linking, and Mahalanobis post-processing remain Python and have no selected parity/native timing. |
-| OD / IOD | Gibbs/Herrick-Gibbs/Gauss and `gaussIOD` are Rust kernels; full OD/IOD orchestration is still Python/Ray/SciPy with repeated backend crossings. A conditional native least-squares backend hook exists, but the public orchestration and fallback are not Rust-1x. |
-| Direct-Rust timing | Present only for `propagate_2body`, both ephemeris lanes, `calculate_perturber_moids`, `generate_porkchop_data`, and `gaussIOD`. Every other qualifying Rust-backed API is missing a native adapter. |
+| OD / IOD | Full ASSIST-backed OD and IOD algorithms execute as fused backend-generic Rust work units. Public Python owns only table marshalling/reconstruction; non-native providers retain documented compatibility fallbacks. Multi-linkage IOD no longer uses Ray on the native path. |
+| Direct-Rust timing | Rust-owned timing covers propagation/ephemeris, OD (`fit_least_squares_evaluated`, `od_fit`, Vallado), IOD (`initial_orbit_determination`), selected scalar dynamics, porkchop preparation, and `gaussIOD`; remaining gaps are tracked by domain beads. |
 
 ## Dynamics public inventory
 
@@ -138,11 +138,11 @@ All five quivr classes below have public declarative constructors and inherited 
 | `od_worker` | Python per-orbit id/member/observation marshaling around one Rust crossing per orbit | via `od` parity | via `od` lane | Complete: indexing/sorting is argument marshaling; the per-orbit computation is the fused `od_fit` work unit. |
 | `od` | one fused Rust crossing (`od_fit`): delta bounding, finite/central perturbation batching, weighted normal equations, condition/covariance rejections, acceptance bookkeeping, chi2-ranked outlier retries, and residual/member statistics | two-runtime legacy parity plus dispatch bit-identity | yes (`benchmark_last_native` lane `od_fit`) | Complete under the provider-boundary policy; legacy loop retained as the documented non-native-provider fallback (bead personal-dqk). Legacy quirks (initial-residual RHS, first-`num_obs` weight rows after outlier removal) are preserved; outlier ties break by index instead of numpy introsort order, and the Gauss-Jordan/Jacobi linear algebra matches LAPACK to round-off, not bitwise. |
 | `differential_correction` | Ray/chunk distribution wrapper (exempt) over the one-crossing-per-orbit work units | via `od` parity | via `od` lane | Complete under the distribution-wrapper policy. |
-| `sort_by_id_and_time` | Python/Arrow joins/sorts | no | no | IOD utility implementation/parity/native-timing gap. |
-| `select_observations` | Python combinations/percentiles/sorting | no | no | IOD utility implementation/parity/native-timing gap. |
-| `iod_worker` | Python per-linkage loop/indexing and calls to `iod` | no | no | Orchestration gap. |
-| `iod` | Python candidate selection, Rust `gaussIOD`, repeated backend ephemeris calls, residual/outlier acceptance | no | no | Core IOD remains multi-crossing Python; implementation/parity/native-timing gap. |
-| `initial_orbit_determination` | Python/Ray chunking, object-store handling, workers, deduplication, sorting | no | no | Top-level IOD Rust-1x/parity/native-timing gap. |
+| `sort_by_id_and_time` | one Rust crossing owns observation-time indexing and stable linkage/member ordering | utility parity suite | fused into IOD timing | Complete. |
+| `select_observations` | one Rust crossing owns percentile/combinations selection, unique-time filtering, and priority ordering | utility parity suite | fused into IOD timing | Complete. |
+| `iod_worker` | compatibility worker; native providers bypass it with the all-linkage Rust batch work unit | through end-to-end IOD parity | through IOD lane | Complete under provider-fallback policy. |
+| `iod` | one fused Rust crossing owns triplet selection, descending legacy root order, Gauss candidates, backend ephemeris/residual scoring, outlier acceptance, and member statistics | pinned-main fixture plus fused-vs-composed parity | yes (`benchmark_last_native` lane `initial_orbit_determination`) | Complete; Python creates the final UUID and wraps tables. |
+| `initial_orbit_determination` | one fused Rust crossing owns linkage/member indexing, chronological ordering, per-linkage IOD, Rust chunk scheduling, exact-state deduplication, final linkage/member sorting and assembly; `max_processes` is compatibility-only on this path | pinned-main single-linkage fixture, duplicate-linkage and empty integration gates | yes (`benchmark_last_native` lane `initial_orbit_determination`) | Complete for the native provider; legacy Python/Ray path remains only for providers without the work unit. |
 
 Package-level `orbit_determination` re-exports `fit_least_squares`, `OrbitDeterminationObservations`, `evaluate_orbits`, `FittedOrbitMembers`, `FittedOrbits`, `drop_duplicate_orbits`, `gaussIOD`, `calcGibbs`, `calcHerrickGibbs`, `initial_orbit_determination`, `iod`, `select_observations`, `sort_by_id_and_time`, `calculate_max_outliers`, and `remove_lowest_probability_observation`. Other names remain public at module paths. `differential_correction` and `initial_orbit_determination` are the intended top-level orchestration APIs (`__all__` in their modules).
 
@@ -159,6 +159,7 @@ The current native adapter map in `migration/parity/_native_rust_runner.py` cont
 - `ensure_input_time_scale` and `ensure_input_origin_and_frame` through their dedicated Rust-owned benchmarks (outside the selected registry)
 - all concrete `adam_assist.ASSISTPropagator` propagation, ephemeris, covariance, and collision lanes through the downstream 26-lane Rust timing contract
 - the fused OD work units `fit_least_squares_evaluated`, `od_fit`, and `vallado_least_squares` through the downstream `benchmark_last_native` contract (bead personal-dqk)
+- fused single-/multi-linkage IOD through the downstream `initial_orbit_determination` `benchmark_last_native` lane (bead personal-cmy.37.3.12)
 
 Consequently, current report rows for `add_light_time`, `calc_mean_motion`, `calculate_moid`, `solve_lambert`, Tisserand, raw propagation/MOID/porkchop kernels, `calcGibbs`, `calcHerrickGibbs`, and `calcGauss` explicitly show missing native samples. Rust-backed public helpers absent from the selected registry have no native-timing row at all. Direct timing for Python-owned OD/IOD/impact/mission utilities is blocked until a qualifying direct Rust entrypoint exists.
 
@@ -179,7 +180,7 @@ Children of `personal-cmy.37.3` cover every non-plotting gap above, grouped only
 | `personal-cmy.37.3.9` | `LeastSquares` public algorithm (complete: Rust Vallado work unit with debug-trace parity) |
 | `personal-cmy.37.3.10` | `od_worker`, `od`, and `differential_correction` (complete: fused per-orbit `od_fit` work unit; Ray remains the exempt distribution wrapper) |
 | `personal-cmy.37.3.11` | IOD sorting and observation-selection utilities |
-| `personal-cmy.37.3.12` | `iod_worker`, `iod`, and `initial_orbit_determination` |
+| `personal-cmy.37.3.12` | `iod_worker`, `iod`, and `initial_orbit_determination` (complete: fused all-linkage Rust work unit and pinned-main parity) |
 | `personal-cmy.37.3.13` | Missing direct-Rust timing for already governed dynamics/OD kernels |
 
 The child descriptions carry the exhaustive API lists and acceptance details. No shared parity-registry refactor is requested or authorized by this audit. Inventory review should precede any registry-governance redesign.
