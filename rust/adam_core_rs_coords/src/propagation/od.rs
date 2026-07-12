@@ -1164,9 +1164,13 @@ fn observed_times_mjd(observed: &CoordinateBatch) -> PropagationResultValue<Vec<
         .mjd_values())
 }
 
-/// Predict spherical topocentric coordinates for `states` (candidate-major
-/// row blocks). Outer `Err` is a request/setup failure; inner `Err` is a
-/// per-row numerical failure carrying the legacy light-time message.
+/// Predict spherical topocentric coordinates for `states`, returned as
+/// candidate-major row blocks in INPUT candidate order. Backends may emit
+/// rows in their own public order (the ASSIST backend sorts by orbit id, so
+/// `od-candidate-10` would precede `od-candidate-2`); rows are scattered back
+/// through the diagnostics' input orbit/observer indices. Outer `Err` is a
+/// request/setup failure; inner `Err` is a per-row numerical failure carrying
+/// the legacy light-time message.
 fn predict_spherical<P, T>(
     propagator: &P,
     states: &[[f64; 6]],
@@ -1204,10 +1208,34 @@ where
         .ok_or_else(|| {
             PropagationError::Backend("ephemeris output was not spherical".to_string())
         })?;
-    Ok(Ok(values
-        .iter()
-        .flat_map(|row| row.iter().copied())
-        .collect()))
+    let n_obs = observers.len();
+    let expected_rows = states.len() * n_obs;
+    if values.len() != expected_rows || result.diagnostics.rows.len() != expected_rows {
+        return Err(PropagationError::Backend(format!(
+            "ephemeris returned {} rows for {} candidates x {} observers",
+            values.len(),
+            states.len(),
+            n_obs
+        )));
+    }
+    let mut out = vec![f64::NAN; expected_rows * 6];
+    let mut filled = vec![false; expected_rows];
+    for (row, diagnostic) in result.diagnostics.rows.iter().enumerate() {
+        if diagnostic.input_orbit_index >= states.len() || diagnostic.observer_index >= n_obs {
+            return Err(PropagationError::Backend(
+                "ephemeris diagnostics do not index the candidate grid".to_string(),
+            ));
+        }
+        let slot = diagnostic.input_orbit_index * n_obs + diagnostic.observer_index;
+        if filled[slot] {
+            return Err(PropagationError::Backend(
+                "ephemeris diagnostics repeated a candidate grid slot".to_string(),
+            ));
+        }
+        out[slot * 6..slot * 6 + 6].copy_from_slice(&values[row]);
+        filled[slot] = true;
+    }
+    Ok(Ok(out))
 }
 
 fn candidate_batch(
@@ -1225,8 +1253,13 @@ fn candidate_batch(
         None,
     )?;
     OrbitBatch::new(
+        // Zero-padded ids: backends honoring the public sorted-output
+        // contract (the ASSIST propagator sorts blocks lexicographically by
+        // orbit id) must return candidate blocks in input order, otherwise
+        // Jacobian plus/minus blocks would be paired against the wrong
+        // candidates once more than ten states are batched.
         (0..states.len())
-            .map(|index| OrbitId(format!("od-candidate-{index}")))
+            .map(|index| OrbitId(format!("od-candidate-{index:04}")))
             .collect(),
         vec![None::<ObjectId>; states.len()],
         coordinates,
