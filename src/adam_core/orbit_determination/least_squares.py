@@ -312,6 +312,105 @@ class LeastSquares(ABC):
         N, m = residuals.shape
         return np.sqrt(np.sum(residuals**2 * weights) / (N * m))
 
+    def _least_squares_native(
+        self,
+        native,
+        initial_orbit: FittedOrbits | Orbits,
+        observations: OrbitDeterminationObservations,
+        perturbation_initial_fraction: float,
+        perturbation_multiplier: float,
+        rms_epsilon: float,
+        max_iterations: float,
+        debug_info: Dict[str, Any] | None,
+    ) -> Optional[Orbits]:
+        """One-crossing Vallado least squares on a propagator exposing the
+        fused native ``vallado_least_squares`` work unit (the Rust adam-assist
+        backend). The full algorithm — central/forward differences, weighted
+        normal equations, rejected-update semantics, perturbation backoff,
+        and the debug iteration trace — executes in Rust; Python reconstructs
+        the legacy ``debug_info`` dict shapes and the return contract."""
+        output = native(
+            initial_orbit,
+            observations,
+            use_central_difference=self._use_central_difference,
+            perturbation_initial_fraction=perturbation_initial_fraction,
+            perturbation_multiplier=perturbation_multiplier,
+            rms_epsilon=rms_epsilon,
+            max_iterations=int(max_iterations),
+        )
+
+        if debug_info is not None:
+            debug_info["num_observations"] = int(output["num_observations"])
+            records = []
+            rchi2 = output["iterations_rchi2"]
+            rms = output["iterations_rms"]
+            delta_rms = output["iterations_delta_rms"]
+            converged = output["iterations_converged"]
+            perturbation = output["iterations_perturbation"]
+            errors = output["iterations_error"]
+            for index in range(len(rms)):
+                if index == 0:
+                    records.append(
+                        {
+                            "rchi2": rchi2[0],
+                            "rms": rms[0],
+                            "perturbation": perturbation[0],
+                        }
+                    )
+                elif errors[index] is not None:
+                    records.append(
+                        {
+                            "rchi2": float("inf"),
+                            "rms": float("inf"),
+                            "delta_rms": float("-inf"),
+                            "converged": False,
+                            "perturbation": perturbation[index],
+                            "error": errors[index],
+                        }
+                    )
+                else:
+                    records.append(
+                        {
+                            "rchi2": rchi2[index],
+                            "rms": rms[index],
+                            "delta_rms": delta_rms[index],
+                            "converged": converged[index],
+                            "perturbation": perturbation[index],
+                        }
+                    )
+            debug_info["iterations"] = records
+            debug_info["corrections"] = np.asarray(
+                output["corrections"], dtype=np.float64
+            ).tolist()
+            if output["exit_message"] is not None:
+                debug_info["exit_message"] = output["exit_message"]
+
+        status = output["status"]
+        if status == "not_improved":
+            return None
+        if status == "initial":
+            return initial_orbit
+        state = np.asarray(output["state"], dtype=np.float64)
+        covariance = np.asarray(output["covariance"], dtype=np.float64).reshape(1, 6, 6)
+        base = initial_orbit.coordinates
+        updated = Orbits.from_kwargs(
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=state[0:1],
+                y=state[1:2],
+                z=state[2:3],
+                vx=state[3:4],
+                vy=state[4:5],
+                vz=state[5:6],
+                covariance=CoordinateCovariances.from_matrix(covariance),
+                time=base.time,
+                origin=base.origin,
+                frame=base.frame,
+            ),
+        )
+        return updated.set_column("object_id", initial_orbit.object_id).set_column(
+            "orbit_id", initial_orbit.orbit_id
+        )
+
     def least_squares(
         self,
         initial_orbit: FittedOrbits | Orbits,
@@ -350,6 +449,23 @@ class LeastSquares(ABC):
         --------
         Improved orbit (length 1) or None, if no improvement was found.
         """
+        # One-crossing Rust path (bead personal-dqk): propagators exposing
+        # the fused native Vallado work unit run the whole algorithm behind
+        # one crossing. The retained Python loop below is the documented
+        # compatibility fallback for providers without the native work unit.
+        native = getattr(prop, "vallado_least_squares", None)
+        if native is not None:
+            return self._least_squares_native(
+                native,
+                initial_orbit,
+                observations,
+                perturbation_initial_fraction,
+                perturbation_multiplier,
+                rms_epsilon,
+                max_iterations,
+                debug_info,
+            )
+
         num_obs = len(observations)
         num_param = initial_orbit.coordinates.values.shape[1]
         if debug_info is not None:

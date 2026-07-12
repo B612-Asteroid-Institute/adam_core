@@ -147,6 +147,80 @@ def _od_chunk_worker(
     )
 
 
+def _od_native(
+    prop: Propagator,
+    orbit: FittedOrbits,
+    observations: OrbitDeterminationObservations,
+    rchi2_threshold: float,
+    min_obs: int,
+    min_arc_length: float,
+    contamination_percentage: float,
+    delta: float,
+    max_iter: int,
+    method: str,
+) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    """One-crossing `od` on a propagator exposing the fused native `od_fit`
+    work unit (the Rust adam-assist backend). The entire differential
+    correction loop — delta bounding, finite/central perturbation batching,
+    weighted normal equations, condition/covariance rejections, acceptance
+    bookkeeping, and chi2-ranked outlier retries — executes in Rust; Python
+    only wraps the returned arrays as the public tables."""
+    output = prop.od_fit(
+        orbit,
+        observations,
+        rchi2_threshold=rchi2_threshold,
+        min_obs=min_obs,
+        min_arc_length=min_arc_length,
+        contamination_percentage=contamination_percentage,
+        delta=delta,
+        max_iter=max_iter,
+        method=method,
+    )
+    if not output["found"]:
+        return FittedOrbits.empty(), FittedOrbitMembers.empty()
+
+    state = np.asarray(output["state"], dtype=np.float64)
+    covariance = np.asarray(output["covariance"], dtype=np.float64).reshape(1, 6, 6)
+    od_orbit = FittedOrbits.from_kwargs(
+        orbit_id=orbit.orbit_id,
+        object_id=orbit.object_id,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=state[0:1],
+            y=state[1:2],
+            z=state[2:3],
+            vx=state[3:4],
+            vy=state[4:5],
+            vz=state[5:6],
+            covariance=CoordinateCovariances.from_matrix(covariance),
+            time=orbit.coordinates.time,
+            origin=orbit.coordinates.origin,
+            frame=orbit.coordinates.frame,
+        ),
+        arc_length=[output["arc_length"]],
+        num_obs=[output["num_obs"]],
+        chi2=[output["chi2"]],
+        reduced_chi2=[output["reduced_chi2"]],
+        iterations=[output["iterations"]],
+        success=[output["improved"]],
+        status_code=[0],
+    )
+    residuals = Residuals.from_kwargs(
+        values=np.asarray(output["residual_values"], dtype=np.float64).tolist(),
+        chi2=output["residual_chi2"],
+        dof=output["residual_dof"],
+        probability=output["residual_probability"],
+    )
+    outlier = np.asarray(output["outlier"], dtype=bool)
+    od_orbit_members = FittedOrbitMembers.from_kwargs(
+        orbit_id=np.full(len(observations), orbit.orbit_id[0].as_py(), dtype="object"),
+        obs_id=observations.id,
+        residuals=residuals,
+        solution=~outlier,
+        outlier=outlier,
+    )
+    return od_orbit, od_orbit_members
+
+
 def od(
     orbit: FittedOrbits,
     observations: OrbitDeterminationObservations,
@@ -166,6 +240,24 @@ def od(
     if method not in ["central", "finite"]:
         err = "method should be one of 'central' or 'finite'."
         raise ValueError(err)
+
+    # One-crossing Rust path: propagators exposing the fused native `od_fit`
+    # work unit (the supported Rust adam-assist backend) run the whole loop
+    # behind one crossing. The retained Python loop below is the documented
+    # compatibility fallback for providers without the native work unit.
+    if getattr(prop, "od_fit", None) is not None:
+        return _od_native(
+            prop,
+            orbit,
+            observations,
+            rchi2_threshold,
+            min_obs,
+            min_arc_length,
+            contamination_percentage,
+            delta,
+            max_iter,
+            method,
+        )
 
     obs_ids_all = observations.id.to_numpy(zero_copy_only=False)
     coords = observations.coordinates

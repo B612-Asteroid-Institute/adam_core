@@ -128,16 +128,16 @@ All five quivr classes below have public declarative constructors and inherited 
 | `calcHerrickGibbs` | Rust kernel | yes | no | Native timing gap. |
 | `calcGauss` | Rust kernel | yes | no | Native timing gap. |
 | `gaussIOD` | Rust-1x Arrow facade | yes | yes | Complete in the governed shared-root regime; unconstrained multi-root subset equivalence remains explicitly excluded by current tolerance policy. |
-| `residual_function` | Python orbit assembly + backend ephemeris + residual reduction | no | no | Multi-crossing implementation/parity/native-timing gap. |
-| `fit_least_squares` | conditional backend-native hook, otherwise SciPy/Python iterative fallback; Python evaluation/assembly on both paths | no | no | Public API is not wholly Rust-1x; finish native orchestration and govern both dispatch semantics and results. |
+| `residual_function` | retained Python composition used only by the explicit SciPy-kwargs compatibility path of `fit_least_squares` | via the legacy-path suite | no | Documented compatibility veneer: the primary public fit path no longer calls it. |
+| `fit_least_squares` | one fused Rust crossing (`fit_least_squares_evaluated`: Gauss-Newton fit + final residual/statistics pass) on the supported Rust backend; SciPy-kwargs requests keep the documented legacy fallback | two-runtime legacy parity plus fused-vs-composed bit identity | yes (`benchmark_last_native` lane `fit_least_squares_evaluated`) | Complete under the provider-boundary policy (bead personal-dqk). |
 | `evaluate_orbits` | explicit `Propagator.generate_ephemeris` provider boundary followed by one Rust crossing for stable order validation, residuals, ignore masks, statistics, arc length, and member indexing; Python only wraps the returned arrays as quivr tables | yes | yes | Complete. Frozen pinned-main fixtures cover normal, ignored, empty, and malformed-order cases; reordered equal-length provider output now raises the documented stable-order error intentionally. |
-| `LeastSquares(use_central_difference)` | Python stateful algorithm class | no | no | Constructor semantics need parity with a Rust-owned implementation. |
-| `LeastSquares.least_squares` | repeated backend calls + Python finite differences/normal equations | no | no | Multi-crossing implementation/parity/native-timing gap. |
+| `LeastSquares(use_central_difference)` | constructor stores the difference mode consumed by the Rust work unit | behavior suite on both modes | N/A | Complete; semantics preserved. |
+| `LeastSquares.least_squares` | one fused Rust crossing (`vallado_least_squares`): central/forward differences, weighted normal equations, rejected-update semantics, perturbation backoff, and the debug iteration trace; Python reconstructs the legacy `debug_info` shapes and Optional return | two-runtime legacy parity plus the behavior suite | yes (`benchmark_last_native` lane `vallado_least_squares`) | Complete under the provider-boundary policy; the retained Python loop is the documented fallback for providers without the work unit (bead personal-dqk). |
 | `OrbitFitter()` / `initial_fit(...)` | abstract contract | downstream only | downstream only | Govern concrete backend implementations. |
 | `OrbitFitter.__getstate__` / `__setstate__` | public serialization protocol that raises until overridden | unit behavior only | N/A | Retain contract behavior; no native timing qualification. |
-| `od_worker` | Python per-orbit indexing/loop and calls to `od` | no | no | Orchestration gap. |
-| `od` | Python/SciPy iterative finite differences, repeated ephemeris crossings, outlier policy | no | no | Core OD Rust-1x gap. |
-| `differential_correction` | Python/Ray chunking, object-store handling, worker dispatch, concatenation | no | no | Top-level OD Rust-1x/parity/native-timing gap. |
+| `od_worker` | Python per-orbit id/member/observation marshaling around one Rust crossing per orbit | via `od` parity | via `od` lane | Complete: indexing/sorting is argument marshaling; the per-orbit computation is the fused `od_fit` work unit. |
+| `od` | one fused Rust crossing (`od_fit`): delta bounding, finite/central perturbation batching, weighted normal equations, condition/covariance rejections, acceptance bookkeeping, chi2-ranked outlier retries, and residual/member statistics | two-runtime legacy parity plus dispatch bit-identity | yes (`benchmark_last_native` lane `od_fit`) | Complete under the provider-boundary policy; legacy loop retained as the documented non-native-provider fallback (bead personal-dqk). Legacy quirks (initial-residual RHS, first-`num_obs` weight rows after outlier removal) are preserved; outlier ties break by index instead of numpy introsort order, and the Gauss-Jordan/Jacobi linear algebra matches LAPACK to round-off, not bitwise. |
+| `differential_correction` | Ray/chunk distribution wrapper (exempt) over the one-crossing-per-orbit work units | via `od` parity | via `od` lane | Complete under the distribution-wrapper policy. |
 | `sort_by_id_and_time` | Python/Arrow joins/sorts | no | no | IOD utility implementation/parity/native-timing gap. |
 | `select_observations` | Python combinations/percentiles/sorting | no | no | IOD utility implementation/parity/native-timing gap. |
 | `iod_worker` | Python per-linkage loop/indexing and calls to `iod` | no | no | Orchestration gap. |
@@ -158,6 +158,7 @@ The current native adapter map in `migration/parity/_native_rust_runner.py` cont
 - `evaluate_orbits` through `benchmark_evaluate_orbits_numpy` (outside the selected 44-API registry)
 - `ensure_input_time_scale` and `ensure_input_origin_and_frame` through their dedicated Rust-owned benchmarks (outside the selected registry)
 - all concrete `adam_assist.ASSISTPropagator` propagation, ephemeris, covariance, and collision lanes through the downstream 26-lane Rust timing contract
+- the fused OD work units `fit_least_squares_evaluated`, `od_fit`, and `vallado_least_squares` through the downstream `benchmark_last_native` contract (bead personal-dqk)
 
 Consequently, current report rows for `add_light_time`, `calc_mean_motion`, `calculate_moid`, `solve_lambert`, Tisserand, raw propagation/MOID/porkchop kernels, `calcGibbs`, `calcHerrickGibbs`, and `calcGauss` explicitly show missing native samples. Rust-backed public helpers absent from the selected registry have no native-timing row at all. Direct timing for Python-owned OD/IOD/impact/mission utilities is blocked until a qualifying direct Rust entrypoint exists.
 
@@ -174,9 +175,9 @@ Children of `personal-cmy.37.3` cover every non-plotting gap above, grouped only
 | `personal-cmy.37.3.5` | Mission departure-direction and body preparation/propagation orchestration (complete: Rust-owned products around the explicit propagator boundary, frozen parity, and native timing) |
 | `personal-cmy.37.3.6` | Fitted-orbit conversion/deduplication and outlier utilities |
 | `personal-cmy.37.3.7` | `evaluate_orbits` one-crossing orchestration (complete: frozen parity and Rust-owned timing) |
-| `personal-cmy.37.3.8` | `residual_function` and `fit_least_squares` native orchestration |
-| `personal-cmy.37.3.9` | `LeastSquares` public algorithm |
-| `personal-cmy.37.3.10` | `od_worker`, `od`, and `differential_correction` |
+| `personal-cmy.37.3.8` | `residual_function` and `fit_least_squares` native orchestration (complete: fused work unit + documented SciPy compatibility fallback) |
+| `personal-cmy.37.3.9` | `LeastSquares` public algorithm (complete: Rust Vallado work unit with debug-trace parity) |
+| `personal-cmy.37.3.10` | `od_worker`, `od`, and `differential_correction` (complete: fused per-orbit `od_fit` work unit; Ray remains the exempt distribution wrapper) |
 | `personal-cmy.37.3.11` | IOD sorting and observation-selection utilities |
 | `personal-cmy.37.3.12` | `iod_worker`, `iod`, and `initial_orbit_determination` |
 | `personal-cmy.37.3.13` | Missing direct-Rust timing for already governed dynamics/OD kernels |

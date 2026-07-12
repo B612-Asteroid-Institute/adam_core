@@ -40,9 +40,9 @@
     },
     "by_implementation_class": {
       "compatibility_data_or_external_generic": 129,
-      "mixed_rust_python_gap": 75,
+      "mixed_rust_python_gap": 77,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 250,
+      "python_gap_or_external_boundary": 248,
       "rust_veneer_candidate_see_domain_audit": 97
     },
     "plotting_exemption_candidates": 16,
@@ -8940,7 +8940,7 @@
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -8991,12 +8991,12 @@
       "kind": "method",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/least_squares.py",
-      "line": 315,
+      "line": 414,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -9004,10 +9004,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -9019,7 +9019,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/od.py",
-      "line": 578,
+      "line": 670,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -9047,12 +9047,12 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/od.py",
-      "line": 150,
+      "line": 224,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -9060,10 +9060,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
