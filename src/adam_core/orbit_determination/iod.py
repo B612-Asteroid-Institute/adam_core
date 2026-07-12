@@ -1,21 +1,19 @@
 import logging
 import time
 import uuid
-from typing import Literal, Optional, Tuple, Type, Union
+from typing import Literal, Optional, Tuple, Type
 
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 import quivr as qv
-import ray
 
 from ..coordinates import CartesianCoordinates
 from ..coordinates.origin import Origin
 from ..coordinates.residuals import Residuals
-from ..parallel import get_backend, resolve_max_processes
 from ..propagator import Propagator
 from ..time import Timestamp
-from ..utils.iter import _iterate_chunk_indices, _iterate_chunks
+from ..utils.iter import _iterate_chunks
 from . import (
     FittedOrbitMembers,
     FittedOrbits,
@@ -213,8 +211,8 @@ def _native_initial_orbit_determination(
 
 def iod_worker(
     linkage_ids: npt.NDArray[np.str_],
-    observations: Union[OrbitDeterminationObservations, ray.ObjectRef],
-    linkage_members: Union[FittedOrbitMembers, ray.ObjectRef],
+    observations: OrbitDeterminationObservations,
+    linkage_members: FittedOrbitMembers,
     propagator: Type[Propagator],
     min_obs: int = 6,
     min_arc_length: float = 1.0,
@@ -299,45 +297,6 @@ def iod_worker(
         else FittedOrbitMembers.empty()
     )
     return iod_orbits, iod_orbit_members
-
-
-def _iod_chunk_worker(
-    linkage_ids: Union[npt.NDArray[np.str_], ray.ObjectRef],
-    linkage_members_indices: Tuple[int, int],
-    observations: Union[OrbitDeterminationObservations, ray.ObjectRef],
-    linkage_members: Union[FittedOrbitMembers, ray.ObjectRef],
-    propagator: Type[Propagator],
-    min_obs: int = 6,
-    min_arc_length: float = 1.0,
-    contamination_percentage: float = 0.0,
-    rchi2_threshold: float = 200,
-    observation_selection_method: Literal[
-        "combinations", "first+middle+last", "thirds"
-    ] = "combinations",
-    linkage_id_col: str = "cluster_id",
-    iterate: bool = False,
-    light_time: bool = True,
-    propagator_kwargs: dict = {},
-) -> Tuple[FittedOrbits, FittedOrbitMembers]:
-    # Select linkage ids from linkage_members_indices
-    linkage_id_chunk = linkage_ids[
-        linkage_members_indices[0] : linkage_members_indices[1]
-    ]
-    return iod_worker(
-        linkage_id_chunk,
-        observations,
-        linkage_members,
-        min_obs=min_obs,
-        min_arc_length=min_arc_length,
-        contamination_percentage=contamination_percentage,
-        rchi2_threshold=rchi2_threshold,
-        observation_selection_method=observation_selection_method,
-        linkage_id_col=linkage_id_col,
-        iterate=iterate,
-        light_time=light_time,
-        propagator=propagator,
-        propagator_kwargs=propagator_kwargs,
-    )
 
 
 def iod(
@@ -632,8 +591,8 @@ def iod(
 
 
 def initial_orbit_determination(
-    observations: Union[OrbitDeterminationObservations, ray.ObjectRef],
-    linkage_members: Union[FittedOrbitMembers, ray.ObjectRef],
+    observations: OrbitDeterminationObservations,
+    linkage_members: FittedOrbitMembers,
     propagator: Type[Propagator],
     min_obs: int = 6,
     min_arc_length: float = 1.0,
@@ -654,20 +613,6 @@ def initial_orbit_determination(
     """
     time_start = time.perf_counter()
     logger.info("Running initial orbit determination...")
-
-    if isinstance(linkage_members, ray.ObjectRef):
-        linkage_members_ref = linkage_members
-        linkage_members = ray.get(linkage_members)
-        logger.info("Retrieved linkage members from the object store.")
-    else:
-        linkage_members_ref = None
-
-    if isinstance(observations, ray.ObjectRef):
-        observations_ref = observations
-        observations = ray.get(observations)
-        logger.info("Retrieved observations from the object store.")
-    else:
-        observations_ref = None
 
     # The supported native provider owns the entire multi-linkage workflow in
     # one crossing; chunk_size is consumed by Rust and max_processes is kept
@@ -698,80 +643,28 @@ def initial_orbit_determination(
         # Extract linkage IDs
         linkage_ids = linkage_members.column(linkage_id_col).unique()
 
-        max_processes = resolve_max_processes(max_processes)
-
-        if max_processes > 1:
-            backend = get_backend(max_processes)
-            refs_to_free = []
-
-            linkage_ids_ref = backend.put(linkage_ids)
-            refs_to_free.append(linkage_ids_ref)
-            logger.info("Placed linkage IDs in the object store.")
-
-            if linkage_members_ref is None:
-                linkage_members_ref = backend.put(linkage_members)
-                refs_to_free.append(linkage_members_ref)
-                logger.info("Placed linkage members in the object store.")
-
-            if observations_ref is None:
-                observations_ref = backend.put(observations)
-                refs_to_free.append(observations_ref)
-                logger.info("Placed observations in the object store.")
-
-            args_iter = (
-                (
-                    linkage_ids_ref,
-                    linkage_id_chunk_indices,
-                    observations_ref,
-                    linkage_members_ref,
-                    propagator,
-                    min_obs,
-                    min_arc_length,
-                    contamination_percentage,
-                    rchi2_threshold,
-                    observation_selection_method,
-                    linkage_id_col,
-                    iterate,
-                    light_time,
-                    propagator_kwargs,
-                )
-                for linkage_id_chunk_indices in _iterate_chunk_indices(
-                    linkage_ids, chunk_size
-                )
+        # `max_processes` remains accepted for signature compatibility.
+        # Native providers returned above; non-native providers use the
+        # deterministic serial fallback instead of Python/Ray distribution.
+        del max_processes
+        for linkage_id_chunk in _iterate_chunks(linkage_ids, chunk_size):
+            iod_orbits_chunk, iod_orbit_members_chunk = iod_worker(
+                linkage_id_chunk,
+                observations,
+                linkage_members,
+                min_obs=min_obs,
+                min_arc_length=min_arc_length,
+                contamination_percentage=contamination_percentage,
+                rchi2_threshold=rchi2_threshold,
+                observation_selection_method=observation_selection_method,
+                iterate=iterate,
+                light_time=light_time,
+                linkage_id_col=linkage_id_col,
+                propagator=propagator,
+                propagator_kwargs=propagator_kwargs,
             )
-            for iod_orbits_chunk, iod_orbit_members_chunk in backend.map_unordered(
-                _iod_chunk_worker,
-                args_iter,
-                worker_options={"num_returns": 1, "num_cpus": 1},
-            ):
-                iod_orbits_chunks.append(iod_orbits_chunk)
-                iod_orbit_members_chunks.append(iod_orbit_members_chunk)
-
-            backend.free(refs_to_free)
-            if refs_to_free:
-                logger.info(
-                    f"Removed {len(refs_to_free)} references from the object store."
-                )
-
-        else:
-            for linkage_id_chunk in _iterate_chunks(linkage_ids, chunk_size):
-                iod_orbits_chunk, iod_orbit_members_chunk = iod_worker(
-                    linkage_id_chunk,
-                    observations,
-                    linkage_members,
-                    min_obs=min_obs,
-                    min_arc_length=min_arc_length,
-                    contamination_percentage=contamination_percentage,
-                    rchi2_threshold=rchi2_threshold,
-                    observation_selection_method=observation_selection_method,
-                    iterate=iterate,
-                    light_time=light_time,
-                    linkage_id_col=linkage_id_col,
-                    propagator=propagator,
-                    propagator_kwargs=propagator_kwargs,
-                )
-                iod_orbits_chunks.append(iod_orbits_chunk)
-                iod_orbit_members_chunks.append(iod_orbit_members_chunk)
+            iod_orbits_chunks.append(iod_orbits_chunk)
+            iod_orbit_members_chunks.append(iod_orbit_members_chunk)
 
         iod_orbits = (
             qv.concatenate(iod_orbits_chunks)

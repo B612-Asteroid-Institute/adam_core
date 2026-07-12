@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ast
+import importlib.util
 import tomllib
 from collections.abc import Iterator
 from pathlib import Path
@@ -14,6 +15,7 @@ RETIRED_PYTHON_BACKENDS = frozenset(
         "jax",
         "jaxlib",
         "numba",
+        "ray",
         "spiceypy",
         "spicekit",
     }
@@ -57,6 +59,11 @@ def test_package_and_migration_code_do_not_import_retired_python_backends() -> N
                     offenders.append(f"{path}: from {node.module} import ...")
 
     assert offenders == []
+
+
+def test_retired_ray_public_modules_are_absent() -> None:
+    assert importlib.util.find_spec("adam_core.parallel") is None
+    assert importlib.util.find_spec("adam_core.ray_cluster") is None
 
 
 def test_project_runtime_dependencies_exclude_retired_python_backends() -> None:

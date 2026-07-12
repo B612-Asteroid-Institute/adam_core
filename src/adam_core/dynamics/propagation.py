@@ -5,7 +5,6 @@ import pyarrow as pa
 from .._rust import propagate_orbits_arrow
 from ..orbits.arrow_bridge import orbits_from_record_batch, orbits_to_record_batch
 from ..orbits.orbits import Orbits
-from ..parallel import resolve_max_processes
 from ..time import Timestamp
 from .exceptions import DynamicsNumericalError
 
@@ -110,11 +109,9 @@ def propagate_2body(
     `~adam_core.orbits.orbits.Orbits` (N*M)
         Fully assembled propagated orbit table.
     """
-    # Preserve input validation for the compatibility option, but do not build
-    # a fresh per-call Rayon pool. `max_processes` historically controlled only
-    # optional outer Python distribution; warmed local parallelism belongs to
-    # Rust and uses the process-global Rayon pool.
-    resolve_max_processes(max_processes)
+    # The retired Python process-count option is accepted but ignored; warmed
+    # local parallelism belongs to Rust's process-global Rayon pool.
+    del max_processes
     return _propagate_2body_serial(
         orbits,
         times,

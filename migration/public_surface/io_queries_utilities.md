@@ -284,14 +284,14 @@ adam-core public API. `_iterate_chunks` and `_iterate_chunk_indices` remain
 private implementation details of OD/IOD and Horizons and are eliminated with
 their fused workflow beads rather than promoted as standalone public APIs.
 
-`adam_core.parallel` publicly names `ParallelBackend`, `SequentialBackend`,
-`RayBackend`, `get_backend`, and `resolve_max_processes`; their methods expose
-Python callables and Ray ObjectRefs. `initialize_use_ray` is also public by
-module and documentation. Arbitrary Python callable scheduling is not a useful
-line-by-line Rust port. Closure should instead move adam-core workflows to
-fused Rayon entrypoints and retire/deprecate the generic Ray surface. If a
-compatibility API is retained, its contract and execution must be Rust-owned;
-Ray attachment cannot remain an untracked exception.
+The generic `adam_core.parallel` and `adam_core.ray_cluster` modules have been
+retired together with the direct Ray dependency. Their Python-callable and
+ObjectRef contracts were not meaningful Rust APIs and are not retained as
+shims. Production propagation and ephemeris already execute in fused Rayon
+entrypoints; ASSIST-backed OD and IOD now execute in backend-generic Rust work
+units. Their historical `max_processes` parameters remain accepted and ignored
+for signature compatibility. Non-native provider fallbacks are deterministic
+serial compositions and no longer initialize an object store or scheduler.
 
 ## Governance requirements
 
@@ -325,7 +325,7 @@ algorithm, HTTP, file, scheduling, grouping, parsing, or product orchestration.
 | `personal-cmy.37.4.5` | Rust-owned OpenSpace multi-file products |
 | `personal-cmy.37.4.6` | Rust-owned SPK fitting/segment/product workflow |
 | `personal-cmy.37.4.7` | Batched MPC dates and port-or-retire generic utilities |
-| `personal-cmy.37.4.8` | Replace or retire Python Ray/parallel orchestration |
+| `personal-cmy.37.4.8` | Replace or retire Python Ray/parallel orchestration (complete: dependency/modules removed; workflows use Rust/Rayon or serial provider fallback) |
 | `personal-cmy.37.4.9` | One-crossing SPICE setup/cache/state utility facades |
 | `personal-cmy.37.4.10` | Query/product integration and native-timing governance |
 

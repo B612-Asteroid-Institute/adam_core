@@ -32,7 +32,6 @@ dependencies = [
   "pdm",
   "pyarrow>=13.0.0",
   "pandas",
-  "ray",
   "requests",
   "scipy",
   "quivr>=0.8.1",

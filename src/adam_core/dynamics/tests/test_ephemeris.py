@@ -4,7 +4,6 @@ import numpy as np
 import pyarrow.compute as pc
 import pytest
 import quivr as qv
-import ray
 from astropy import units as u
 
 from ...coordinates.cartesian import CartesianCoordinates
@@ -608,11 +607,7 @@ def test_generate_ephemeris_2body_phase_angle_matches_calculate_phase_angle() ->
     np.testing.assert_allclose(have, expected, rtol=0.0, atol=1e-6)
 
 
-def test_generate_ephemeris_2body_ray_matches_serial() -> None:
-    if ray.is_initialized():  # type: ignore[name-defined]
-        ray.shutdown()  # type: ignore[name-defined]
-    ray.init(num_cpus=2, include_dashboard=False)  # type: ignore[name-defined]
-
+def test_generate_ephemeris_2body_process_count_compatibility_matches_default() -> None:
     orbits = make_real_orbits(3)
     base_mjd = float(
         np.median(orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False))
@@ -648,8 +643,6 @@ def test_generate_ephemeris_2body_ray_matches_serial() -> None:
         rtol=0,
         atol=0,
     )
-
-    ray.shutdown()  # type: ignore[name-defined]
 
 
 def test_generate_ephemeris_2body_failfast_nonfinite_light_time(monkeypatch) -> None:

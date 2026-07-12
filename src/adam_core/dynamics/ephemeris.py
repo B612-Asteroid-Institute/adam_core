@@ -8,7 +8,6 @@ from ..observers.observers import Observers
 from ..orbits.arrow_bridge import observers_to_record_batch, orbits_to_record_batch
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
-from ..parallel import resolve_max_processes
 from .exceptions import DynamicsNumericalError
 
 
@@ -47,15 +46,16 @@ def generate_ephemeris_2body(
     photometry, diagnostics, and construction of the finished Ephemeris batch.
     Python directly wraps that returned RecordBatch without rebuilding columns.
 
-    ``max_processes`` remains a validated compatibility option; no Python/Ray
-    fan-out occurs and local parallelism uses Rust's warmed global Rayon pool.
+    ``max_processes`` remains an accepted, ignored compatibility option; no
+    Python process fan-out occurs and local parallelism uses Rust's warmed
+    global Rayon pool.
     """
     if len(propagated_orbits) != len(observers):
         raise AssertionError(
             "Orbits and observers must be paired and orbits must be propagated "
             "to observer times."
         )
-    resolve_max_processes(max_processes)
+    del max_processes
     ensure_spice_backend()
     try:
         result = generate_ephemeris_arrow(

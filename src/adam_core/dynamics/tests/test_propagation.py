@@ -3,7 +3,6 @@ import itertools
 
 import numpy as np
 import pytest
-import ray
 from astropy import units as u
 
 from ..._rust import propagate_2body_numpy
@@ -368,12 +367,7 @@ def test_propagate_2body_single_does_not_include_padded_rows() -> None:
     np.testing.assert_allclose(out_mjd, in_mjd)
 
 
-def test_propagate_2body_single_ray_matches_serial() -> None:
-    # Ensure a clean local ray runtime for this test.
-    if ray.is_initialized():  # type: ignore[name-defined]
-        ray.shutdown()  # type: ignore[name-defined]
-    ray.init(num_cpus=2, include_dashboard=False)  # type: ignore[name-defined]
-
+def test_propagate_2body_process_count_compatibility_matches_default() -> None:
     orbits = make_real_orbits(5)
     base_mjd = float(
         np.median(orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False))
@@ -391,8 +385,6 @@ def test_propagate_2body_single_ray_matches_serial() -> None:
     np.testing.assert_allclose(
         serial.coordinates.values, parallel.coordinates.values, rtol=0, atol=0
     )
-
-    ray.shutdown()  # type: ignore[name-defined]
 
 
 def test_propagate_2body_uses_record_batches_without_numpy_rebuild(monkeypatch) -> None:

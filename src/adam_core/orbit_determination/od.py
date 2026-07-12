@@ -1,12 +1,11 @@
 import logging
 import time
-from typing import Literal, Optional, Tuple, Type, Union
+from typing import Literal, Optional, Tuple, Type
 
 import numpy as np
 import numpy.typing as npt
 import pyarrow.compute as pc
 import quivr as qv
-import ray
 from scipy.linalg import solve
 
 from ..coordinates import CartesianCoordinates, CoordinateCovariances
@@ -14,10 +13,9 @@ from ..coordinates.origin import Origin
 from ..coordinates.residuals import Residuals, compute_residuals_ndarray
 from ..orbit_determination import OrbitDeterminationObservations
 from ..orbits import Orbits
-from ..parallel import get_backend, resolve_max_processes
 from ..propagator import Propagator
 from ..time import Timestamp
-from ..utils.iter import _iterate_chunk_indices, _iterate_chunks
+from ..utils.iter import _iterate_chunks
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .outliers import calculate_max_outliers
 
@@ -111,40 +109,6 @@ def od_worker(
         else FittedOrbitMembers.empty()
     )
     return od_orbits, od_orbit_members
-
-
-def _od_chunk_worker(
-    orbit_ids: npt.NDArray[np.str_],
-    orbit_ids_indices: Tuple[int, int],
-    orbits: FittedOrbits,
-    orbit_members: FittedOrbitMembers,
-    observations: OrbitDeterminationObservations,
-    propagator: Type[Propagator],
-    rchi2_threshold: float = 100,
-    min_obs: int = 5,
-    min_arc_length: float = 1.0,
-    contamination_percentage: float = 0.0,
-    delta: float = 1e-6,
-    max_iter: int = 20,
-    method: Literal["central", "finite"] = "central",
-    propagator_kwargs: dict = {},
-) -> Tuple[FittedOrbits, FittedOrbitMembers]:
-    orbit_ids_chunk = orbit_ids[orbit_ids_indices[0] : orbit_ids_indices[1]]
-    return od_worker(
-        orbit_ids_chunk,
-        orbits,
-        orbit_members,
-        observations,
-        rchi2_threshold=rchi2_threshold,
-        min_obs=min_obs,
-        min_arc_length=min_arc_length,
-        contamination_percentage=contamination_percentage,
-        delta=delta,
-        max_iter=max_iter,
-        method=method,
-        propagator=propagator,
-        propagator_kwargs=propagator_kwargs,
-    )
 
 
 def _od_native(
@@ -668,9 +632,9 @@ def od(
 
 
 def differential_correction(
-    orbits: Union[FittedOrbits, ray.ObjectRef],
-    orbit_members: Union[FittedOrbitMembers, ray.ObjectRef],
-    observations: Union[OrbitDeterminationObservations, ray.ObjectRef],
+    orbits: FittedOrbits,
+    orbit_members: FittedOrbitMembers,
+    observations: OrbitDeterminationObservations,
     propagator: Type[Propagator],
     min_obs: int = 5,
     min_arc_length: float = 1.0,
@@ -700,45 +664,19 @@ def differential_correction(
     """
     time_start = time.perf_counter()
     logger.info("Running differential correction...")
-    if isinstance(orbits, ray.ObjectRef):
-        orbits_ref = orbits
-        orbits = ray.get(orbits)
-        logger.info("Retrieved orbits from the object store.")
-
-        if orbit_ids is not None:
-            orbits = orbits.apply_mask(pc.is_in(orbits.orbit_id, orbit_ids))
-            logger.info("Applied mask to orbit members.")
-    else:
-        orbits_ref = None
-
-    if isinstance(orbit_members, ray.ObjectRef):
-        orbit_members_ref = orbit_members
-        orbit_members = ray.get(orbit_members)
-        logger.info("Retrieved orbit members from the object store.")
-
-        if obs_ids is not None:
-            orbit_members = orbit_members.apply_mask(
-                pc.is_in(orbit_members.obs_id, obs_ids)
-            )
-            logger.info("Applied mask to orbit members.")
-        if orbit_ids is not None:
-            orbit_members = orbit_members.apply_mask(
-                pc.is_in(orbit_members.orbit_id, orbit_ids)
-            )
-            logger.info("Applied mask to orbit members.")
-    else:
-        orbit_members_ref = None
-
-    if isinstance(observations, ray.ObjectRef):
-        observations_ref = observations
-        observations = ray.get(observations)
-        logger.info("Retrieved observations from the object store.")
-
-        if obs_ids is not None:
-            observations = observations.apply_mask(pc.is_in(observations.id, obs_ids))
-            logger.info("Applied mask to observations.")
-    else:
-        observations_ref = None
+    # Object-store inputs were part of the retired Ray execution contract.
+    # Plain-table filtering remains available through the compatibility
+    # selectors and occurs before the serial provider fallback.
+    if orbit_ids is not None:
+        orbits = orbits.apply_mask(pc.is_in(orbits.orbit_id, orbit_ids))
+        orbit_members = orbit_members.apply_mask(
+            pc.is_in(orbit_members.orbit_id, orbit_ids)
+        )
+    if obs_ids is not None:
+        orbit_members = orbit_members.apply_mask(
+            pc.is_in(orbit_members.obs_id, obs_ids)
+        )
+        observations = observations.apply_mask(pc.is_in(observations.id, obs_ids))
 
     if len(orbits) == 0 or len(orbit_members) == 0:
         logger.info("Received no orbits or orbit members.")
@@ -756,87 +694,28 @@ def differential_correction(
     od_orbits_chunks: list[FittedOrbits] = []
     od_orbit_members_chunks: list[FittedOrbitMembers] = []
 
-    max_processes = resolve_max_processes(max_processes)
-
-    if max_processes > 1:
-        backend = get_backend(max_processes)
-        refs_to_free = []
-
-        orbit_ids_ref = backend.put(orbit_ids)
-        orbit_ids = backend.get(orbit_ids_ref)
-        refs_to_free.append(orbit_ids_ref)
-        logger.info("Placed orbit IDs in the object store.")
-
-        if orbits_ref is None:
-            orbits_ref = backend.put(orbits)
-            orbits = backend.get(orbits_ref)
-            refs_to_free.append(orbits_ref)
-            logger.info("Placed orbits in the object store.")
-
-        if orbit_members_ref is None:
-            orbit_members_ref = backend.put(orbit_members)
-            orbit_members = backend.get(orbit_members_ref)
-            refs_to_free.append(orbit_members_ref)
-            logger.info("Placed orbit members in the object store.")
-
-        if observations_ref is None:
-            observations_ref = backend.put(observations)
-            refs_to_free.append(observations_ref)
-            observations = backend.get(observations_ref)
-            logger.info("Placed observations in the object store.")
-
-        args_iter = (
-            (
-                orbit_ids_ref,
-                orbit_ids_indices,
-                orbits_ref,
-                orbit_members_ref,
-                observations_ref,
-                propagator,
-                rchi2_threshold,
-                min_obs,
-                min_arc_length,
-                contamination_percentage,
-                delta,
-                max_iter,
-                method,
-                propagator_kwargs,
-            )
-            for orbit_ids_indices in _iterate_chunk_indices(orbit_ids, chunk_size)
+    # `max_processes` remains accepted for compatibility. Native providers
+    # execute inside Rust; non-native providers use this deterministic serial
+    # fallback rather than resurrecting Python callable/object-store execution.
+    del max_processes
+    for orbit_ids_chunk in _iterate_chunks(orbit_ids, chunk_size):
+        od_orbits_chunk, od_orbit_members_chunk = od_worker(
+            orbit_ids_chunk,
+            orbits,
+            orbit_members,
+            observations,
+            rchi2_threshold=rchi2_threshold,
+            min_obs=min_obs,
+            min_arc_length=min_arc_length,
+            contamination_percentage=contamination_percentage,
+            delta=delta,
+            max_iter=max_iter,
+            method=method,
+            propagator=propagator,
+            propagator_kwargs=propagator_kwargs,
         )
-        for od_orbits_chunk, od_orbit_members_chunk in backend.map_unordered(
-            _od_chunk_worker,
-            args_iter,
-            worker_options={"num_returns": 1, "num_cpus": 1},
-        ):
-            od_orbits_chunks.append(od_orbits_chunk)
-            od_orbit_members_chunks.append(od_orbit_members_chunk)
-
-        backend.free(refs_to_free)
-        if refs_to_free:
-            logger.info(
-                f"Removed {len(refs_to_free)} references from the object store."
-            )
-
-    else:
-        for orbit_ids_chunk in _iterate_chunks(orbit_ids, chunk_size):
-            od_orbits_chunk, od_orbit_members_chunk = od_worker(
-                orbit_ids_chunk,
-                orbits,
-                orbit_members,
-                observations,
-                rchi2_threshold=rchi2_threshold,
-                min_obs=min_obs,
-                min_arc_length=min_arc_length,
-                contamination_percentage=contamination_percentage,
-                delta=delta,
-                max_iter=max_iter,
-                method=method,
-                propagator=propagator,
-                propagator_kwargs=propagator_kwargs,
-            )
-            od_orbits_chunks.append(od_orbits_chunk)
-            od_orbit_members_chunks.append(od_orbit_members_chunk)
+        od_orbits_chunks.append(od_orbits_chunk)
+        od_orbit_members_chunks.append(od_orbit_members_chunk)
 
     od_orbits = (
         qv.concatenate(od_orbits_chunks) if od_orbits_chunks else FittedOrbits.empty()
