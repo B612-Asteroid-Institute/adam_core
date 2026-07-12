@@ -40,10 +40,10 @@
     },
     "by_implementation_class": {
       "compatibility_data_or_external_generic": 129,
-      "mixed_rust_python_gap": 69,
+      "mixed_rust_python_gap": 71,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 260,
-      "rust_veneer_candidate_see_domain_audit": 93
+      "python_gap_or_external_boundary": 256,
+      "rust_veneer_candidate_see_domain_audit": 95
     },
     "plotting_exemption_candidates": 16,
     "unreviewed": 0
@@ -9915,7 +9915,7 @@
       "kind": "class",
       "domain": "orbits",
       "source": "src/adam_core/orbits/openspace/assets.py",
-      "line": 49,
+      "line": 50,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -9943,7 +9943,7 @@
       "kind": "class",
       "domain": "orbits",
       "source": "src/adam_core/orbits/openspace/assets.py",
-      "line": 43,
+      "line": 44,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -9971,7 +9971,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/openspace/assets.py",
-      "line": 93,
+      "line": 116,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -9999,12 +9999,12 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/openspace/assets.py",
-      "line": 99,
+      "line": 122,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": false,
         "pyarrow_reference": false,
@@ -10012,10 +10012,10 @@
         "external_io_reference": true
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.1",
       "audit_document": "migration/public_surface/orbits.md"
     },
@@ -10027,12 +10027,12 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/openspace/assets.py",
-      "line": 251,
+      "line": 313,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": false,
         "pyarrow_reference": false,
@@ -10040,10 +10040,10 @@
         "external_io_reference": true
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.1",
       "audit_document": "migration/public_surface/orbits.md"
     },
@@ -10055,23 +10055,23 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/openspace/assets.py",
-      "line": 57,
+      "line": 58,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
-        "python_loop": true,
+        "rust_reference": true,
+        "python_loop": false,
         "numpy_reference": false,
-        "pyarrow_reference": true,
+        "pyarrow_reference": false,
         "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.1",
       "audit_document": "migration/public_surface/orbits.md"
     },
@@ -10116,18 +10116,18 @@
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
-        "python_loop": true,
+        "rust_reference": true,
+        "python_loop": false,
         "numpy_reference": false,
         "pyarrow_reference": false,
         "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.1",
       "audit_document": "migration/public_surface/orbits.md"
     },
@@ -10139,7 +10139,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/openspace/lua.py",
-      "line": 29,
+      "line": 31,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

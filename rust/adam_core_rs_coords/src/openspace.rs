@@ -64,7 +64,7 @@ pub fn py_float_repr(value: f64) -> String {
     }
 }
 
-fn pascal_case(value: &str) -> String {
+pub fn openspace_pascal_case(value: &str) -> String {
     value
         .split('_')
         .map(|word| {
@@ -152,7 +152,7 @@ fn render_dict(value: &Value, indent: usize) -> SchemaResult<String> {
         let key_str = if key == "gui" {
             "GUI".to_string()
         } else {
-            pascal_case(key)
+            openspace_pascal_case(key)
         };
         let _ = writeln!(lua, "{}{} = {},", " ".repeat(indent), key_str, rendered);
     }

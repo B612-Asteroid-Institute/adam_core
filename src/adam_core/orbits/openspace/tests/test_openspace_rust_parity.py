@@ -156,3 +156,8 @@ def test_openspace_initialization_matches_legacy_fixture(fixture):
         create_initialization(["Object00000000", "Object00000001"])
         == fixture["initialization"]
     )
+
+
+def test_openspace_pascal_case_matches_legacy_fixture(fixture, objects):
+    for value, expected in fixture["pascal_case"].items():
+        assert objects["gui"].to_pascal_case(value) == expected

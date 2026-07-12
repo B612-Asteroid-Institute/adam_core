@@ -2,6 +2,7 @@
 Utilities for generating and reading OpenSpace Asset files
 """
 
+import json
 import os
 from dataclasses import dataclass
 from typing import List, Literal, Optional, Tuple, Union
@@ -221,6 +222,45 @@ def create_renderable_orbital_kepler(
     if gui_path is None:
         gui_path = "/ADAM"
 
+    from adam_core import _rust_native as _rn
+
+    from ..arrow_bridge import orbits_to_ipc
+
+    config = {
+        "identifier": identifier,
+        "gui_name": gui_name,
+        "gui_path": gui_path,
+        "color": color,
+        "segment_quality": segment_quality,
+        "contiguous_mode": contiguous_mode,
+        "enable_max_size": enable_max_size,
+        "enable_outline": enable_outline,
+        "max_size": max_size,
+        "outline_color": outline_color,
+        "outline_width": outline_width,
+        "point_size_exponent": point_size_exponent,
+        "rendering": rendering.value if rendering is not None else None,
+        "render_size": render_size,
+        "start_render_idx": start_render_idx,
+        "trail_fade": trail_fade,
+        "trail_width": trail_width,
+        "dim_in_atmosphere": dim_in_atmosphere,
+        "enabled": enabled,
+        "opacity": opacity,
+        "render_bin_mode": (
+            render_bin_mode.value if render_bin_mode is not None else None
+        ),
+        "tag": tag,
+    }
+    try:
+        written = _rn.openspace_create_orbital_kepler_product(
+            str(out_dir), orbits_to_ipc(orbits), json.dumps(config)
+        )
+    except (RuntimeError, ValueError):
+        written = False
+    if written:
+        return
+
     gui = Gui(name=gui_name, path=gui_path)
 
     # Create SBDB formatted file
@@ -372,6 +412,46 @@ def create_renderable_trail_orbit(
 
     if gui_path is None:
         gui_path = "/ADAM"
+
+    # Unsupported translation values retain the legacy exception path below.
+    if translation_type in {"Kepler", "Spice"}:
+        from adam_core import _rust_native as _rn
+
+        from ..arrow_bridge import orbits_to_ipc
+
+        config = {
+            "identifier": identifier,
+            "trail_head": trail_head,
+            "gui_name": gui_name,
+            "gui_path": gui_path,
+            "color": color,
+            "resolution": resolution,
+            "translation_type": translation_type,
+            "enable_fade": enable_fade,
+            "line_fade_amount": line_fade_amount,
+            "line_length": line_length,
+            "line_width": line_width,
+            "point_size": point_size,
+            "rendering": rendering.value if rendering is not None else None,
+            "dim_in_atmosphere": dim_in_atmosphere,
+            "enabled": enabled,
+            "opacity": opacity,
+            "period": period,
+            "render_bin_mode": (
+                render_bin_mode.value if render_bin_mode is not None else None
+            ),
+            "tag": tag,
+            "spice_kernel_path": spice_kernel_path,
+            "spice_id_mappings": spice_id_mappings,
+        }
+        try:
+            written = _rn.openspace_create_trail_orbit_product(
+                str(out_dir), orbits_to_ipc(orbits), json.dumps(config)
+            )
+        except (RuntimeError, ValueError):
+            written = False
+        if written:
+            return
 
     keplerian = transform_coordinates(
         orbits.coordinates,

@@ -140,5 +140,12 @@
    "text": "{\n        Translation = {\n            Type = \"KeplerTranslation\",\n            ArgumentOfPeriapsis = 45.25,\n            AscendingNode = 180.0,\n            Eccentricity = 0.123456789,\n            Epoch = \"2026-07-06 12:34:56.789\",\n            Inclination = 12.5,\n            MeanAnomaly = 270.75,\n            Period = 31557600.0,\n            SemiMajorAxis = 149597870.7,\n        },\n    }"
   }
  ],
- "initialization": "asset.onInitialize(function ()\n  openspace.addSceneGraphNode(Object00000000);\n  openspace.addSceneGraphNode(Object00000001);\nend)\nasset.onDeinitialize(function ()\n  openspace.removeSceneGraphNode(Object00000000);\n  openspace.removeSceneGraphNode(Object00000001);\nend)"
+ "initialization": "asset.onInitialize(function ()\n  openspace.addSceneGraphNode(Object00000000);\n  openspace.addSceneGraphNode(Object00000001);\nend)\nasset.onDeinitialize(function ()\n  openspace.removeSceneGraphNode(Object00000000);\n  openspace.removeSceneGraphNode(Object00000001);\nend)",
+ "pascal_case": {
+  "simple_name": "SimpleName",
+  "alreadyPascal": "Alreadypascal",
+  "MIXED_case_VALUE": "MixedCaseValue",
+  "leading__and_trailing_": "LeadingAndTrailing",
+  "": ""
+ }
 }

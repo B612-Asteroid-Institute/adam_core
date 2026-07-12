@@ -132,16 +132,16 @@ Public enums and members:
 - `RenderableOrbitalKeplerRendering`: `TRAIL`, `POINT`, `POINTS_TRAILS`.
 - `RenderableTrailRendering`: `LINES`, `POINTS`, `LINES_POINTS`.
 
-The dataclass/Enum construction and field access are **External/generic, parity/native timing N/Q** and are acceptable Python compatibility veneers. `LuaDict.to_string(indent=0)` and `Resource.to_string(indent=0)` serialize one prepared payload in one Rust call; representative frozen OpenSpace text fixtures pass, native timing is N/Q for this small formatting boundary. `LuaDict.to_pascal_case(s)` is adam-owned Python string logic, appears unused by current serialization, and has no parity evidence; it is included in the OpenSpace implementation gap. Inherited `to_string` is public on every LuaDict subclass.
+The dataclass/Enum construction and field access are **External/generic, parity/native timing N/Q** and are acceptable Python compatibility veneers. `LuaDict.to_string(indent=0)` and `Resource.to_string(indent=0)` serialize one prepared payload in one Rust call; representative frozen OpenSpace text fixtures pass, native timing is N/Q for this small formatting boundary. `LuaDict.to_pascal_case(s)` is now a direct Rust veneer with frozen legacy cases. Inherited `to_string` is public on every LuaDict subclass.
 
 ### Functions
 
 | Public API | Implementation status | Parity status | Native timing | Disposition |
 |---|---|---|---|---|
-| `orbits_to_sbdb_file(orbits, path)` | **Python** transform/epoch formatting/Pandas CSV assembly | representative asset fixture at best; no focused complete parity | missing | Gap |
+| `orbits_to_sbdb_file(orbits, path)` | one fused Rust transform/epoch/CSV/write crossing | frozen legacy panels: TDB/UTC, heliocentric and SSB/equatorial, quoting/float edge cases; exact current fallback bytes | Rust `Instant` p50 lanes | Complete veneer |
 | `create_initialization(assets)` | one-call Rust string formatter | frozen text fixture pass | N/Q (formatting helper) | Complete veneer |
-| `create_renderable_orbital_kepler(...)` | **Mixed**: Python option conversion, transform/CSV, dataclass tree, file I/O; Rust only renders initialization/Lua payload fragments | representative fixture partial; option matrix not covered | missing | Gap |
-| `create_renderable_trail_orbit(...)` | **Mixed/Python** per-orbit conversion, translation/renderable assembly and file I/O; Rust only string rendering fragments | representative fixture partial; Kepler/Spice and option matrix incomplete | missing | Gap |
+| `create_renderable_orbital_kepler(...)` | one fused Rust transform/CSV/model/render/staged multi-file write crossing | frozen whole-directory all-option fixture plus exact current fallback bytes | Rust `Instant` p50 lanes | Complete veneer |
+| `create_renderable_trail_orbit(...)` | one fused Rust transform/per-orbit model/render/staged write crossing for Kepler and SPICE modes | frozen whole-directory Kepler/Spice fixtures, nullable IDs, snippets/errors, exact current fallback bytes | Rust `Instant` p50 lanes | Complete veneer |
 
 The two asset creators' complete signatures are the source signatures; every keyword listed there is public and must remain compatible. They are grouped as single operations rather than pretending each keyword is a separate API.
 
@@ -182,9 +182,11 @@ Concrete implementation beads cover every non-plotting gap identified above:
 3. `personal-cmy.37.1.3`: `Ephemeris.link_to_observers`;
 4. `personal-cmy.37.4.6`: SPK fitting, Type 3/9 segment writing, and end-to-end SPK facade;
 5. `personal-cmy.37.4.4`: OEM read/write/propagated facades;
-6. `personal-cmy.37.4.5`: OpenSpace CSV/asset composition and `LuaDict.to_pascal_case`;
-7. `personal-cmy.37.4.1`: Horizons facades;
-8. `personal-cmy.37.4.2`: NEOCC, SBDB legacy/new, Scout facades, and exception semantics;
-9. `personal-cmy.37.1.1`: package export compatibility.
+6. `personal-cmy.37.4.1`: Horizons facades;
+7. `personal-cmy.37.4.2`: NEOCC, SBDB legacy/new, Scout facades, and exception semantics;
+8. `personal-cmy.37.1.1`: package export compatibility.
+
+`personal-cmy.37.4.5` closed the previously listed OpenSpace product and
+`LuaDict.to_pascal_case` gaps.
 
 Each implementation child must add direct pinned-legacy parity for its complete public facade and qualifying Rust-internal timing, not merely a Python benchmark or a test against another current Python path. Generic quivr/dataclass/Enum/transport operations and plotting are deliberately classified rather than silently counted as migrated.

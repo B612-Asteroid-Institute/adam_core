@@ -32,11 +32,13 @@ use numpy::{
     IntoPyArray, PyArray1, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2,
     PyReadonlyArray3, PyReadwriteArray2,
 };
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyList};
+use serde_json::{json, Value as JsonValue};
 use std::collections::{HashMap, HashSet};
 use std::hint::black_box;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 fn schema_metadata(schema: arrow_schema::Schema) -> (Vec<String>, HashMap<String, String>) {
@@ -2895,13 +2897,9 @@ fn csv_float_field(value: f64) -> String {
     }
 }
 
-/// Fused legacy `orbits_to_sbdb_file` render (bead personal-cmy.37.4.5):
-/// heliocentric-ecliptic Keplerian transform through the shared native
-/// transform orchestrator, astropy-identical `epoch_cal` strings (ERFA date
-/// part + `repr(mjd)` fraction), Sun-mu periods, and pandas-identical CSV
-/// text. Returns `None` when the native transform does not cover the input
-/// (the Python veneer falls back to the retained legacy composition).
-fn openspace_sbdb_csv_core(orbits: &DataOrbitBatch) -> PyResult<Option<String>> {
+fn openspace_keplerian_core(
+    orbits: &DataOrbitBatch,
+) -> PyResult<Option<(Vec<[f64; 6]>, TimeArray, f64)>> {
     let coordinates_batch = orbits
         .coordinates
         .clone()
@@ -2921,7 +2919,7 @@ fn openspace_sbdb_csv_core(orbits: &DataOrbitBatch) -> PyResult<Option<String>> 
     };
     let keplerian =
         DataCoordinateBatch::try_from_nested_record_batch(&transformed).map_err(ades_error)?;
-    let CoordinateValues::Keplerian(keplerian_rows) = &keplerian.values else {
+    let CoordinateValues::Keplerian(keplerian_rows) = keplerian.values else {
         return Err(PyValueError::new_err("expected Keplerian transform output"));
     };
     let times = orbits
@@ -2935,7 +2933,19 @@ fn openspace_sbdb_csv_core(orbits: &DataOrbitBatch) -> PyResult<Option<String>> 
         .map_err(ades_error)?;
     let mu_sun = adam_core_rs_coords::origin_mu_au3_day2(&OriginId::from_code("SUN"))
         .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    Ok(Some((keplerian_rows, tdb, mu_sun)))
+}
 
+/// Fused legacy `orbits_to_sbdb_file` render (bead personal-cmy.37.4.5):
+/// heliocentric-ecliptic Keplerian transform through the shared native
+/// transform orchestrator, astropy-identical `epoch_cal` strings (ERFA date
+/// part + `repr(mjd)` fraction), Sun-mu periods, and pandas-identical CSV
+/// text. Returns `None` when the native transform does not cover the input
+/// (the Python veneer falls back to the retained legacy composition).
+fn openspace_sbdb_csv_core(orbits: &DataOrbitBatch) -> PyResult<Option<String>> {
+    let Some((keplerian_rows, tdb, mu_sun)) = openspace_keplerian_core(orbits)? else {
+        return Ok(None);
+    };
     let mut out = String::from("full_name,epoch_cal,e,a,i,om,w,ma,per\n");
     for (row, kep) in keplerian_rows.iter().enumerate() {
         let epoch = tdb.epochs[row];
@@ -3008,10 +3018,513 @@ fn benchmark_openspace_write_sbdb_csv(
     })
 }
 
+fn lua_string(value: &str) -> JsonValue {
+    json!({"kind": "string", "value": value})
+}
+
+fn lua_raw(value: impl Into<String>) -> JsonValue {
+    json!({"kind": "raw", "value": value.into()})
+}
+
+fn lua_bool(value: bool) -> JsonValue {
+    json!({"kind": "bool", "value": value})
+}
+
+fn lua_tuple(value: &JsonValue) -> PyResult<JsonValue> {
+    let values = value
+        .as_array()
+        .ok_or_else(|| PyValueError::new_err("OpenSpace tuple option must be an array"))?
+        .iter()
+        .map(JsonValue::to_string)
+        .collect::<Vec<_>>();
+    Ok(json!({"kind": "tuple", "values": values}))
+}
+
+fn lua_tag(value: &JsonValue) -> PyResult<JsonValue> {
+    if let Some(value) = value.as_str() {
+        return Ok(lua_string(value));
+    }
+    let values = value
+        .as_array()
+        .ok_or_else(|| PyValueError::new_err("OpenSpace tag must be a string or list"))?
+        .iter()
+        .map(|value| {
+            value
+                .as_str()
+                .map(str::to_string)
+                .unwrap_or_else(|| value.to_string())
+        })
+        .collect::<Vec<_>>();
+    Ok(json!({"kind": "list", "values": values}))
+}
+
+fn lua_resource(path: &str) -> JsonValue {
+    json!({"kind": "resource", "path": path})
+}
+
+fn lua_dict(fields: Vec<(&'static str, JsonValue)>) -> JsonValue {
+    let fields = fields
+        .into_iter()
+        .map(|(key, value)| json!({"key": key, "value": value}))
+        .collect::<Vec<_>>();
+    json!({"kind": "dict", "fields": fields})
+}
+
+fn openspace_config(config_json: &str) -> PyResult<JsonValue> {
+    serde_json::from_str(config_json)
+        .map_err(|err| PyValueError::new_err(format!("invalid OpenSpace options: {err}")))
+}
+
+fn config_required_str<'a>(config: &'a JsonValue, key: &str) -> PyResult<&'a str> {
+    config
+        .get(key)
+        .and_then(JsonValue::as_str)
+        .ok_or_else(|| PyValueError::new_err(format!("OpenSpace option {key:?} must be a string")))
+}
+
+fn config_value<'a>(config: &'a JsonValue, key: &str) -> Option<&'a JsonValue> {
+    config.get(key).filter(|value| !value.is_null())
+}
+
+fn push_optional_raw(
+    fields: &mut Vec<(&'static str, JsonValue)>,
+    config: &JsonValue,
+    key: &'static str,
+) {
+    if let Some(value) = config_value(config, key) {
+        fields.push((key, lua_raw(value.to_string())));
+    }
+}
+
+fn push_optional_bool(
+    fields: &mut Vec<(&'static str, JsonValue)>,
+    config: &JsonValue,
+    key: &'static str,
+) -> PyResult<()> {
+    if let Some(value) = config_value(config, key) {
+        fields.push((
+            key,
+            lua_bool(value.as_bool().ok_or_else(|| {
+                PyValueError::new_err(format!("OpenSpace option {key:?} must be bool"))
+            })?),
+        ));
+    }
+    Ok(())
+}
+
+fn push_optional_string(
+    fields: &mut Vec<(&'static str, JsonValue)>,
+    config: &JsonValue,
+    key: &'static str,
+) -> PyResult<()> {
+    if let Some(value) = config_value(config, key) {
+        fields.push((
+            key,
+            lua_string(value.as_str().ok_or_else(|| {
+                PyValueError::new_err(format!("OpenSpace option {key:?} must be a string"))
+            })?),
+        ));
+    }
+    Ok(())
+}
+
+fn render_lua_dict(fields: Vec<(&'static str, JsonValue)>) -> PyResult<String> {
+    let payload = lua_dict(fields);
+    adam_core_rs_coords::openspace_lua_to_string(&payload.to_string(), 4).map_err(time_value_error)
+}
+
+fn stage_product_files(out_dir: &Path, files: &[(String, String)]) -> PyResult<()> {
+    std::fs::create_dir_all(out_dir).map_err(|err| {
+        PyRuntimeError::new_err(format!("failed to create {}: {err}", out_dir.display()))
+    })?;
+    let mut staged = Vec::with_capacity(files.len());
+    for (index, (name, text)) in files.iter().enumerate() {
+        let final_path = out_dir.join(name);
+        let temp_path = out_dir.join(format!(
+            ".{name}.adam-core-{}-{index}.tmp",
+            std::process::id()
+        ));
+        if let Err(err) = std::fs::write(&temp_path, text) {
+            for (path, _) in &staged {
+                let _ = std::fs::remove_file(path);
+            }
+            return Err(PyRuntimeError::new_err(format!(
+                "failed to stage {}: {err}",
+                final_path.display()
+            )));
+        }
+        staged.push((temp_path, final_path));
+    }
+    for (temp_path, final_path) in &staged {
+        if let Err(err) = std::fs::rename(temp_path, final_path) {
+            for (path, _) in &staged {
+                let _ = std::fs::remove_file(path);
+            }
+            return Err(PyRuntimeError::new_err(format!(
+                "failed to publish {}: {err}",
+                final_path.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn orbital_asset_text(config: &JsonValue, safe_identifier: &str) -> PyResult<String> {
+    let gui = lua_dict(vec![
+        ("name", lua_string(config_required_str(config, "gui_name")?)),
+        ("path", lua_string(config_required_str(config, "gui_path")?)),
+    ]);
+    let mut renderable = vec![("type", lua_string("RenderableOrbitalKepler"))];
+    push_optional_bool(&mut renderable, config, "dim_in_atmosphere")?;
+    push_optional_bool(&mut renderable, config, "enabled")?;
+    push_optional_raw(&mut renderable, config, "opacity");
+    push_optional_string(&mut renderable, config, "render_bin_mode")?;
+    if let Some(tag) = config_value(config, "tag") {
+        renderable.push(("tag", lua_tag(tag)?));
+    }
+    renderable.push((
+        "color",
+        lua_tuple(
+            config
+                .get("color")
+                .ok_or_else(|| PyValueError::new_err("OpenSpace option 'color' is required"))?,
+        )?,
+    ));
+    renderable.push(("format", lua_string("SBDB")));
+    renderable.push(("path", lua_resource(&format!("{safe_identifier}.csv"))));
+    renderable.push((
+        "segment_quality",
+        lua_raw(
+            config
+                .get("segment_quality")
+                .ok_or_else(|| {
+                    PyValueError::new_err("OpenSpace option 'segment_quality' is required")
+                })?
+                .to_string(),
+        ),
+    ));
+    push_optional_bool(&mut renderable, config, "contiguous_mode")?;
+    push_optional_bool(&mut renderable, config, "enable_max_size")?;
+    push_optional_bool(&mut renderable, config, "enable_outline")?;
+    push_optional_raw(&mut renderable, config, "max_size");
+    if let Some(value) = config_value(config, "outline_color") {
+        renderable.push(("outline_color", lua_tuple(value)?));
+    }
+    push_optional_raw(&mut renderable, config, "outline_width");
+    push_optional_raw(&mut renderable, config, "point_size_exponent");
+    push_optional_string(&mut renderable, config, "rendering")?;
+    push_optional_raw(&mut renderable, config, "render_size");
+    push_optional_raw(&mut renderable, config, "start_render_idx");
+    push_optional_raw(&mut renderable, config, "trail_fade");
+    push_optional_raw(&mut renderable, config, "trail_width");
+
+    let asset = render_lua_dict(vec![
+        ("identifier", lua_string(safe_identifier)),
+        ("parent", lua_string("SunEclipJ2000")),
+        ("gui", gui),
+        ("renderable", lua_dict(renderable)),
+    ])?;
+    Ok(format!(
+        "local Object = {asset}\n\n{}",
+        adam_core_rs_coords::openspace_create_initialization(&["Object".to_string()])
+    ))
+}
+
+fn openspace_orbital_product_core(
+    out_dir: &Path,
+    orbits: &DataOrbitBatch,
+    config_json: &str,
+) -> PyResult<bool> {
+    let config = openspace_config(config_json)?;
+    let identifier = config_required_str(&config, "identifier")?;
+    let safe_identifier = identifier.replace(' ', "_");
+    let Some(csv) = openspace_sbdb_csv_core(orbits)? else {
+        return Ok(false);
+    };
+    let asset = orbital_asset_text(&config, &safe_identifier)?;
+    stage_product_files(
+        out_dir,
+        &[
+            (format!("{safe_identifier}.csv"), csv),
+            (format!("{safe_identifier}.asset"), asset),
+        ],
+    )?;
+    Ok(true)
+}
+
+#[pyfunction]
+fn openspace_create_orbital_kepler_product(
+    out_dir: &str,
+    orbits_ipc: &Bound<'_, PyBytes>,
+    config_json: &str,
+) -> PyResult<bool> {
+    let orbits =
+        DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbits_ipc.as_bytes())?)
+            .map_err(ades_error)?;
+    openspace_orbital_product_core(Path::new(out_dir), &orbits, config_json)
+}
+
+#[pyfunction]
+#[pyo3(signature = (orbits_ipc, reps, trials, warmup_reps=1, *, out_dir, config_json))]
+fn benchmark_openspace_create_orbital_kepler_product(
+    orbits_ipc: &Bound<'_, PyBytes>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    out_dir: &str,
+    config_json: &str,
+) -> PyResult<Vec<Vec<f64>>> {
+    let orbits =
+        DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbits_ipc.as_bytes())?)
+            .map_err(ades_error)?;
+    benchmark_trials(reps, trials, warmup_reps, || {
+        openspace_orbital_product_core(Path::new(out_dir), &orbits, config_json)
+    })
+}
+
+fn safe_orbital_period(period: f64) -> f64 {
+    if period.is_nan() || period.is_infinite() {
+        10_000.0
+    } else {
+        period
+    }
+}
+
+fn trail_translation(
+    config: &JsonValue,
+    translation_type: &str,
+    object_id: &str,
+    kep: [f64; 6],
+    epoch: Epoch,
+    mu_sun: f64,
+) -> PyResult<JsonValue> {
+    if translation_type == "Spice" {
+        let mappings = config
+            .get("spice_id_mappings")
+            .and_then(JsonValue::as_object)
+            .ok_or_else(|| {
+                PyValueError::new_err("Spice ID mappings are required for Spice translation")
+            })?;
+        let target = mappings
+            .get(object_id)
+            .ok_or_else(|| PyKeyError::new_err(object_id.to_string()))?;
+        let target_node = match target.as_str() {
+            Some(value) => lua_string(value),
+            None => lua_raw(target.to_string()),
+        };
+        return Ok(lua_dict(vec![
+            ("type", lua_string("SpiceTranslation")),
+            ("observer", lua_string("SOLAR SYSTEM BARYCENTER")),
+            ("target", target_node),
+        ]));
+    }
+    let [a, e, i, raan, ap, mean_anomaly] = kep;
+    let epoch = adam_core_rs_coords::oem_io::format_epoch(epoch.days, epoch.nanos, TimeScale::Tdb)
+        .map_err(ades_error)?
+        .replace('T', " ");
+    let period = safe_orbital_period(adam_core_rs_coords::calc_period(a, mu_sun));
+    Ok(lua_dict(vec![
+        ("type", lua_string("KeplerTranslation")),
+        ("argument_of_periapsis", lua_raw(csv_float_field(ap))),
+        ("ascending_node", lua_raw(csv_float_field(raan))),
+        ("eccentricity", lua_raw(csv_float_field(e))),
+        ("epoch", lua_string(&epoch)),
+        ("inclination", lua_raw(csv_float_field(i))),
+        ("mean_anomaly", lua_raw(csv_float_field(mean_anomaly))),
+        ("period", lua_raw(csv_float_field(period * 86_400.0))),
+        (
+            "semi_major_axis",
+            lua_raw(csv_float_field(a * 149_597_870.7)),
+        ),
+    ]))
+}
+
+fn trail_asset_text(
+    out_dir: &Path,
+    orbits: &DataOrbitBatch,
+    config: &JsonValue,
+    keplerian_rows: &[[f64; 6]],
+    tdb: &TimeArray,
+    mu_sun: f64,
+) -> PyResult<String> {
+    let translation_type = config_required_str(config, "translation_type")?;
+    let trail_head = config
+        .get("trail_head")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(true);
+    let gui_path = config_required_str(config, "gui_path")?;
+    let color = config
+        .get("color")
+        .ok_or_else(|| PyValueError::new_err("OpenSpace option 'color' is required"))?;
+    let resolution = config
+        .get("resolution")
+        .ok_or_else(|| PyValueError::new_err("OpenSpace option 'resolution' is required"))?;
+    let mut text = String::new();
+    let mut assets = Vec::new();
+    let mut asset_number = 0_usize;
+
+    for (row, kep) in keplerian_rows.iter().enumerate() {
+        let object_id = orbits.object_id[row]
+            .as_ref()
+            .map(|value| value.0.as_str())
+            .unwrap_or(orbits.orbit_id[row].0.as_str());
+        let translation = trail_translation(
+            config,
+            translation_type,
+            object_id,
+            *kep,
+            tdb.epochs[row],
+            mu_sun,
+        )?;
+        let gui_trail = if trail_head {
+            lua_dict(vec![
+                ("name", lua_string(&format!("{object_id} Trail"))),
+                ("path", lua_string(&format!("{gui_path}/{object_id}"))),
+            ])
+        } else {
+            lua_dict(vec![
+                ("name", lua_string(object_id)),
+                ("path", lua_string(gui_path)),
+            ])
+        };
+        let computed_period = safe_orbital_period(adam_core_rs_coords::calc_period(kep[0], mu_sun));
+        let period_node = config_value(config, "period")
+            .map(|value| lua_raw(value.to_string()))
+            .unwrap_or_else(|| lua_raw(csv_float_field(computed_period)));
+        let mut renderable = vec![
+            ("type", lua_string("RenderableTrailOrbit")),
+            ("color", lua_tuple(color)?),
+            ("period", period_node),
+            ("resolution", lua_raw(resolution.to_string())),
+            ("translation", translation.clone()),
+        ];
+        // The legacy implementation accepted inherited Renderable options on
+        // this public function but did not pass them to RenderableTrailOrbit;
+        // preserve that observable omission.
+        push_optional_bool(&mut renderable, config, "enable_fade")?;
+        push_optional_raw(&mut renderable, config, "line_fade_amount");
+        push_optional_raw(&mut renderable, config, "line_length");
+        push_optional_raw(&mut renderable, config, "line_width");
+        push_optional_raw(&mut renderable, config, "point_size");
+        push_optional_string(&mut renderable, config, "rendering")?;
+        let asset = render_lua_dict(vec![
+            ("identifier", lua_string(&object_id.replace(' ', "_"))),
+            ("parent", lua_string("SunEclipJ2000")),
+            ("gui", gui_trail),
+            ("renderable", lua_dict(renderable)),
+        ])?;
+        let asset_id = format!("Object{asset_number:08}");
+        asset_number += 1;
+        assets.push(asset_id.clone());
+        text.push_str(&format!("local {asset_id} = {asset}\n\n"));
+
+        if trail_head {
+            let gui_head = lua_dict(vec![
+                ("name", lua_string(&format!("{object_id} Head"))),
+                ("path", lua_string(&format!("{gui_path}/{object_id}"))),
+            ]);
+            let head = render_lua_dict(vec![
+                (
+                    "identifier",
+                    lua_string(&format!("{}_Head", object_id.replace(' ', "_"))),
+                ),
+                ("parent", lua_string("SunEclipJ2000")),
+                ("gui", gui_head),
+                (
+                    "transform",
+                    lua_dict(vec![("translation", translation.clone())]),
+                ),
+            ])?;
+            let head_id = format!("Object{asset_number:08}");
+            asset_number += 1;
+            assets.push(head_id.clone());
+            text.push_str(&format!("local {head_id} = {head}\n\n"));
+        }
+    }
+    text.push_str(&adam_core_rs_coords::openspace_create_initialization(
+        &assets,
+    ));
+    if translation_type == "Spice" {
+        let kernel_path = config_required_str(config, "spice_kernel_path")?;
+        let relative = pathdiff::diff_paths(Path::new(kernel_path), out_dir)
+            .unwrap_or_else(|| PathBuf::from(kernel_path));
+        let relative = relative.to_string_lossy();
+        text.push_str("asset.onInitialize(function()\n");
+        text.push_str(&format!(
+            "  local kernelResource = openspace.resource('{relative}')\n"
+        ));
+        text.push_str("  openspace.spice.loadKernel(kernelResource)\n");
+        text.push_str("end)\nasset.onDeinitialize(function()\n");
+        text.push_str("  openspace.spice.unloadKernel(kernelResource)\nend)\n");
+    }
+    Ok(text)
+}
+
+fn openspace_trail_product_core(
+    out_dir: &Path,
+    orbits: &DataOrbitBatch,
+    config_json: &str,
+) -> PyResult<bool> {
+    let config = openspace_config(config_json)?;
+    let identifier = config_required_str(&config, "identifier")?;
+    let safe_identifier = identifier.replace(' ', "_");
+    let Some((keplerian_rows, tdb, mu_sun)) = openspace_keplerian_core(orbits)? else {
+        return Ok(false);
+    };
+    // Legacy validates the required SPICE kernel path before iterating mapping
+    // keys. Keep that exception ordering; mapping presence/type remains owned
+    // by `trail_translation` where it is actually consumed.
+    if config_required_str(&config, "translation_type")? == "Spice"
+        && config_value(&config, "spice_kernel_path").is_none()
+    {
+        return Err(PyValueError::new_err(
+            "Spice kernel path is required for Spice translation",
+        ));
+    }
+    let asset = trail_asset_text(out_dir, orbits, &config, &keplerian_rows, &tdb, mu_sun)?;
+    stage_product_files(out_dir, &[(format!("{safe_identifier}.asset"), asset)])?;
+    Ok(true)
+}
+
+#[pyfunction]
+fn openspace_create_trail_orbit_product(
+    out_dir: &str,
+    orbits_ipc: &Bound<'_, PyBytes>,
+    config_json: &str,
+) -> PyResult<bool> {
+    let orbits =
+        DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbits_ipc.as_bytes())?)
+            .map_err(ades_error)?;
+    openspace_trail_product_core(Path::new(out_dir), &orbits, config_json)
+}
+
+#[pyfunction]
+#[pyo3(signature = (orbits_ipc, reps, trials, warmup_reps=1, *, out_dir, config_json))]
+fn benchmark_openspace_create_trail_orbit_product(
+    orbits_ipc: &Bound<'_, PyBytes>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    out_dir: &str,
+    config_json: &str,
+) -> PyResult<Vec<Vec<f64>>> {
+    let orbits =
+        DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbits_ipc.as_bytes())?)
+            .map_err(ades_error)?;
+    benchmark_trials(reps, trials, warmup_reps, || {
+        openspace_trail_product_core(Path::new(out_dir), &orbits, config_json)
+    })
+}
+
 /// Python `repr(float)` (test oracle hook for the CSV float rendering).
 #[pyfunction]
 fn python_float_repr(value: f64) -> String {
     adam_core_rs_coords::openspace::py_float_repr(value)
+}
+
+#[pyfunction]
+fn openspace_pascal_case(value: &str) -> String {
+    adam_core_rs_coords::openspace::openspace_pascal_case(value)
 }
 
 /// OpenSpace Lua/dataclass renderer (bead personal-cmy.28): render a JSON
@@ -6029,6 +6542,19 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(benchmark_exposure_groups_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(openspace_write_sbdb_csv, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_openspace_write_sbdb_csv, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        openspace_create_orbital_kepler_product,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_openspace_create_orbital_kepler_product,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(openspace_create_trail_orbit_product, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_openspace_create_trail_orbit_product,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(python_float_repr, m)?)?;
     m.add_function(wrap_pyfunction!(oem_write_orbits_kvn, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_oem_write_orbits_kvn, m)?)?;
@@ -6087,6 +6613,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(benchmark_unpack_mpc_dates_isot, m)?)?;
     m.add_function(wrap_pyfunction!(oem_write_kvn, m)?)?;
     m.add_function(wrap_pyfunction!(oem_parse_kvn, m)?)?;
+    m.add_function(wrap_pyfunction!(openspace_pascal_case, m)?)?;
     m.add_function(wrap_pyfunction!(openspace_lua_to_string, m)?)?;
     m.add_function(wrap_pyfunction!(openspace_create_initialization, m)?)?;
     m.add_function(wrap_pyfunction!(query_neocc_parse_oef, m)?)?;

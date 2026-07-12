@@ -16,7 +16,9 @@ class LuaDict:
     """
 
     def to_pascal_case(self, s: str):
-        return "".join(word.capitalize() for word in s.split("_"))
+        from adam_core import _rust_native as _rn
+
+        return _rn.openspace_pascal_case(s)
 
     def _to_rust_payload(self):
         fields = []

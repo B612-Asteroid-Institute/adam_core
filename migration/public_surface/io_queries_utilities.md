@@ -69,7 +69,7 @@ query paths depend on them, but they are not counted as public API commitments.
 | SBDB | direct-payload normalization only | **Gap:** legacy astroquery client is Python; new client owns sessions, retries, backoff, concurrency/fair-use, filtering, JSON crossings, and table construction in Python |
 | ADES PSV | fused Rust writer/parser plus observation/context kernels | Public writer/parser each satisfy one crossing; Python only reconstructs compatibility dataclasses/quivr objects |
 | OEM | fused Rust product writer/reader plus KVN engine | Writer and reader each satisfy one crossing (ecliptic rotation, sort, metadata, unit/covariance conversion, orbit-id and table assembly in Rust); ITRF93 pre-transform stays on the Rust `transform_coordinates` crossing; propagated writer remains a declared propagator-provider boundary |
-| OpenSpace | Lua node and initialization text rendering | **Gap:** orbit transform, model graph, CSV generation, loops, path handling, and all asset file orchestration remain Python |
+| OpenSpace | fused SBDB CSV and orbital/trail asset products plus Lua/initialization rendering | Public products each satisfy one crossing: Rust owns transform, epochs/periods, model graph, CSV/Lua rendering, per-orbit loops, SPICE snippets, staged writes, and atomic publication; Python retains enum/default compatibility and an uncovered-case fallback |
 | SPK | low-level Rust DAF writer | **Gap:** propagation dispatch, transform, grouping, Chebyshev fit/windows, segment preparation, and final orchestration remain Python |
 | MPC | eight scalar pack/unpack functions and batched packed-date decode | Designation APIs and `convert_mpc_packed_dates` satisfy one Rust crossing; Astropy `Time` construction is the external compatibility boundary |
 | SPICE backend | kernel readers/writers and low-level backend methods | Low-level methods are thin; **gap:** high-level setup/data discovery, obscodes file read, Python cache/dedup, time/frame/unit conversion, and typed table assembly |
@@ -193,15 +193,18 @@ Module-public supporting surface includes `orbits_to_sbdb_file`,
 `create_initialization`, `LuaDict.to_string`, `Resource.to_string`, and the
 `Gui`, `Asset`, translation, renderable, resource, and rendering enum models.
 
-Only final Lua node rendering and initialization snippets are Rust-owned.
-Transforms, epoch and orbital-value construction, dataclass graph assembly,
-CSV serialization through pandas, directory creation, file writing/appending,
-per-orbit loops, SPICE resource paths, and load/unload snippets are Python.
-OpenSpace is a serialized visualization product, not plotting/display code, so
-it is not covered by the plotting exception.
-
-The Rust endpoint should own the complete multi-file product and use atomic
-commit semantics to avoid partial `.csv`/`.asset` sets.
+`orbits_to_sbdb_file`, `create_renderable_orbital_kepler`, and
+`create_renderable_trail_orbit` now each enter one fused Rust workflow. Rust
+owns the heliocentric/ecliptic Kepler transform, TDB epoch and period
+construction, pandas-compatible CSV bytes, Lua model ordering/rendering,
+nullable object-ID fallback, Kepler and SPICE translation branches, resource
+paths/load-unload snippets, per-orbit loops, staged file writes, and atomic
+publication. Python only converts public enum/default values into one option
+payload and retains the legacy composition for explicitly uncovered/error
+fallbacks. Frozen whole-directory legacy fixtures cover both asset products,
+including all options and SPICE mode; Rust-owned `Instant` timing covers the
+complete native products. `LuaDict.to_pascal_case`, inherited `to_string`, and
+`create_initialization` are likewise direct Rust formatting veneers.
 
 ### SPK products
 

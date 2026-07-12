@@ -154,6 +154,16 @@ def build_fixture() -> dict:
         "source_contract": "Legacy adam-core OpenSpace LuaDict/Resource/create_initialization Python renderer.",
         "cases": cases,
         "initialization": create_initialization(["Object00000000", "Object00000001"]),
+        "pascal_case": {
+            value: objects["gui"].to_pascal_case(value)
+            for value in (
+                "simple_name",
+                "alreadyPascal",
+                "MIXED_case_VALUE",
+                "leading__and_trailing_",
+                "",
+            )
+        },
     }
 
 
