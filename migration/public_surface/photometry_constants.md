@@ -19,24 +19,18 @@ Only plotting/display may remain Python. Generic quivr/dataclass behavior and st
 | `calculate_phase_angle` | one Rust NumPy crossing after compatible validation/extraction | selected | measured | Acceptable veneer |
 | `calculate_apparent_magnitude_v` | one Rust NumPy crossing after compatible validation/broadcast | selected | measured | Acceptable veneer |
 | `calculate_apparent_magnitude_v_and_phase_angle` | one Rust NumPy crossing | selected | measured | Acceptable veneer |
-| `predict_magnitudes` | **mixed**: filter validation, `Exposures.observers` multi-step workflow, mappings, and table extraction precede one Rust kernel | selected kernel/facade lane, but complete orchestration is not one crossing | measured kernel only | Rust facade gap |
-| `convert_magnitude` | Python/PyArrow mapping and NumPy arithmetic over Rust-owned tables | ordinary tests; native missing | missing | Rust gap |
-| `estimate_absolute_magnitude_v_from_detections` | **mixed** exposure join, band mapping, observer prediction, filtering, Rust row fit, and Python result assembly | selected row kernel only | row kernel measured | Rust facade gap |
-| `estimate_absolute_magnitude_v_from_detections_grouped` | **mixed** Python join/sort/group/output assembly around Rust grouped fit | selected grouped kernel only | grouped kernel measured | Rust facade gap |
+| `predict_magnitudes` | ordinary exposure path crosses once for midpoint observer states, filter indexing, reference/composition conversion, geometry validation, and prediction; explicit observer overrides retain a compatible provider fallback | selected facade and complete-path tests | complete Rust `Instant` sample | Complete |
+| `convert_magnitude` | one Rust crossing for validation, lookup, composition, and arithmetic | selected | measured | Complete |
+| `estimate_absolute_magnitude_v_from_detections` | one ordinary-path crossing owns exposure-ID join, midpoint observer states, band mapping, prediction, filtering, fit, nulls, and Arrow `PhysicalParameters` assembly | selected facade, complete join, and Arrow-schema tests | complete Rust `Instant` sample | Complete |
+| `estimate_absolute_magnitude_v_from_detections_grouped` | one ordinary-path crossing additionally owns null-ID filtering, lexical grouping/order, degenerate-group removal, and nested Arrow assembly | selected facade, grouped ordering, and nested-schema tests | complete Rust `Instant` sample | Complete |
 
-The six selected photometry kernel lanes now have Rust-owned `Instant` adapters. That evidence does not make the larger prediction/fitting facades one-crossing operations.
+The raw six photometry kernel lanes remain independently timed. A complete-facade adapter additionally times prediction, single fit, and grouped fit with Rust-owned observer generation and Arrow assembly inside each `Instant` sample and PyO3 conversion outside it.
 
 ## Runtime bandpass APIs
 
 The following already call Rust once for their substantive runtime algorithm, with Python argument/result adaptation: `map_to_canonical_filter_bands`, `assert_filter_ids_have_curves`, `get_integrals`, `compute_mix_integrals`, `bandpass_delta_mag`, `bandpass_color_terms`, and `register_custom_template`. Their compatible exception, cache, custom-registry, and numeric semantics still need complete manifest entries and facade parity.
 
-Remaining Python/mixed runtime surfaces:
-
-- `load_bandpass_curves`, `load_observatory_band_map`, `load_asteroid_templates`, and `load_template_integrals` perform package-data discovery and quivr Parquet loading in Python.
-- `bandpass_filter_id_table` performs Python package-data lookup, Arrow/table mapping, and caching around Rust data access.
-- `bandpass_integrals_for_composition`, `bandpass_composition_key`, `bandpass_delta_table_for_composition`, and its cached variant retain Python branching, normalization, cache policy, and output adaptation.
-
-Children of `personal-cmy.37.6` cover end-to-end prediction/fitting, magnitude/composition helpers, and Rust-owned bandpass loading/registry behavior.
+The four public loaders retain bounded Python cache policy but perform package-data Parquet I/O in one Rust crossing and directly wrap Rust Arrow batches. Filter discovery, mapping, integral lookup/mixing, delta/color terms, magnitude conversion, custom-template registration/clearing, validation, and the process-wide registry are Rust-owned. Private composition/cache helpers are bounded compatibility policy over those Rust operations, not independent public algorithms.
 
 ## Vendoring/product builders
 
@@ -48,4 +42,4 @@ No photometry API in this audited tree is plotting/display. Consequently there a
 
 ## Closure
 
-Photometry is numerically Rust-backed but not public-surface complete. Closure requires the four implementation children under `personal-cmy.37.6`, facade-level parity beyond raw kernels, explicit generic/static classifications, and Rust-Instant timing for every newly Rust-owned deterministic operation.
+All adam-core-owned non-plotting photometry operations are Rust-backed. Public Python code is limited to validation/broadcast compatibility, bounded cache policy, quivr wrapping, and explicit observer-provider fallback; static constants and generic schemas remain classified rather than counted as migration credit.

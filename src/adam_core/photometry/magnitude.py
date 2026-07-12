@@ -2,7 +2,6 @@ from typing import Union
 
 import numpy as np
 import numpy.typing as npt
-import pyarrow.compute as pc
 
 from .._rust.api import (
     calculate_apparent_magnitude_v_and_phase_angle_numpy as rust_calculate_apparent_magnitude_v_and_phase_angle_numpy,
@@ -11,20 +10,14 @@ from .._rust.api import (
     calculate_apparent_magnitude_v_numpy as rust_calculate_apparent_magnitude_v_numpy,
 )
 from .._rust.api import calculate_phase_angle_numpy as rust_calculate_phase_angle_numpy
-from .._rust.api import (
-    predict_magnitudes_bandpass_numpy as rust_predict_magnitudes_bandpass_numpy,
-)
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import OriginCodes
 from ..observations.exposures import Exposures
 from ..observers.observers import Observers
 from .bandpasses.api import _composition_args, _data_dir_str
-from .magnitude_common import BandpassComposition, assert_filter_ids_have_curves
-from .magnitude_common import bandpass_composition_key as _bandpass_composition_key
-from .magnitude_common import (
-    bandpass_delta_table_for_composition_cached as _bandpass_delta_table_for_composition_cached,
-)
-from .magnitude_common import bandpass_filter_id_table as _bandpass_filter_id_table
+from .magnitude_common import BandpassComposition
+
+_DEFAULT_EXPOSURES_OBSERVERS = Exposures.observers
 
 
 def _validate_hg_geometry(
@@ -352,70 +345,74 @@ def predict_magnitudes(
             f"object_coords length ({len(object_coords)}) must match exposures length ({len(exposures)})"
         )
 
-    # Contract: exposures.filter and reference_filter are canonical vendored filter IDs
-    # (call find_suggested_filter_bands first to map observatory bands).
-    assert_filter_ids_have_curves(exposures.filter)
-    assert_filter_ids_have_curves([reference_filter])
-
-    observers = exposures.observers()
-
     n = len(object_coords)
     object_pos = np.asarray(object_coords.r, dtype=np.float64)
-    observer_pos = np.asarray(observers.coordinates.r, dtype=np.float64)
-    _validate_hg_geometry(object_pos=object_pos, observer_pos=observer_pos)
-
-    H_arr = np.asarray(H, dtype=np.float64)
-    if H_arr.ndim == 0:
-        H_arr = np.full(n, float(H_arr), dtype=np.float64)
-    elif len(H_arr) != n:
-        raise ValueError(
-            f"H array length ({len(H_arr)}) must match object_coords length ({n})"
-        )
-
-    G_arr = np.asarray(G, dtype=np.float64)
-    if G_arr.ndim == 0:
-        G_arr = np.full(n, float(G_arr), dtype=np.float64)
-    elif len(G_arr) != n:
-        raise ValueError(
-            f"G array length ({len(G_arr)}) must match object_coords length ({n})"
-        )
-
-    # -------------------------------------------------------------------------
-    # Bandpass conversion: build delta table and map exposures -> target IDs
-    # -------------------------------------------------------------------------
-    filter_ids, filter_ids_arrow, filter_to_id, v_id = _bandpass_filter_id_table()
-    comp_key = _bandpass_composition_key(composition)
-    delta_table = _bandpass_delta_table_for_composition_cached(comp_key)
-    if int(delta_table.shape[0]) != len(filter_ids):
-        raise ValueError("Bandpass delta table length mismatch.")
-
-    # Convert H into V-band absolute magnitude for internal V-centric calculation.
-    if reference_filter == "V":
-        H_v_arr = H_arr
-    else:
-        ref_id = filter_to_id.get(str(reference_filter))
-        if ref_id is None:
+    broadcast_error: Exception | None = None
+    try:
+        H_arr = np.asarray(H, dtype=np.float64)
+        if H_arr.ndim == 0:
+            H_arr = np.full(n, float(H_arr), dtype=np.float64)
+        elif len(H_arr) != n:
             raise ValueError(
-                f"Unknown reference_filter for bandpass conversion: {reference_filter}"
+                f"H array length ({len(H_arr)}) must match object_coords length ({n})"
             )
-        H_v_arr = H_arr - float(delta_table[int(ref_id)])
+    except Exception as error:
+        broadcast_error = error
+        H_arr = np.zeros(n, dtype=np.float64)
 
-    # Map canonical filter_id -> integer ID.
-    tgt_idx = pc.index_in(exposures.filter, value_set=filter_ids_arrow)
-    tgt_idx = pc.fill_null(tgt_idx, -1)
-    target_ids = np.asarray(tgt_idx.to_numpy(zero_copy_only=False), dtype=np.int32)
-    if np.any(target_ids < 0):
-        target_raw = exposures.filter.to_numpy(zero_copy_only=False)
-        missing = np.unique(
-            np.asarray(target_raw, dtype=object)[target_ids < 0].astype(str)
-        )
-        raise ValueError(
-            "Unknown canonical filter_ids for bandpass prediction: "
-            + missing.tolist().__repr__()
-        )
+    try:
+        G_arr = np.asarray(G, dtype=np.float64)
+        if G_arr.ndim == 0:
+            G_arr = np.full(n, float(G_arr), dtype=np.float64)
+        elif len(G_arr) != n:
+            raise ValueError(
+                f"G array length ({len(G_arr)}) must match object_coords length ({n})"
+            )
+    except Exception as error:
+        if broadcast_error is None:
+            broadcast_error = error
+        G_arr = np.full(n, 0.15, dtype=np.float64)
 
-    delta_table_np = np.ascontiguousarray(np.asarray(delta_table, dtype=np.float64))
-    rust_out = rust_predict_magnitudes_bandpass_numpy(
-        H_v_arr, object_pos, observer_pos, G_arr, target_ids, delta_table_np
-    )
+    from adam_core import _rust_native
+
+    template_id, mix = _composition_args(composition)
+    observer_method = exposures.observers
+    if getattr(observer_method, "__func__", None) is _DEFAULT_EXPOSURES_OBSERVERS:
+        from .._rust.arrow import ensure_spice_backend
+
+        ensure_spice_backend()
+        rust_out = _rust_native.predict_magnitudes_complete_numpy(
+            _data_dir_str(),
+            np.ascontiguousarray(H_arr, dtype=np.float64),
+            np.ascontiguousarray(object_pos, dtype=np.float64),
+            np.ascontiguousarray(G_arr, dtype=np.float64),
+            [str(value) for value in exposures.filter.to_pylist()],
+            [str(value) for value in exposures.observatory_code.to_pylist()],
+            exposures.start_time.days.to_pylist(),
+            exposures.start_time.nanos.to_pylist(),
+            exposures.duration.to_pylist(),
+            exposures.start_time.scale,
+            str(reference_filter),
+            template_id,
+            mix,
+        )
+    else:
+        from .magnitude_common import assert_filter_ids_have_curves
+
+        assert_filter_ids_have_curves(exposures.filter)
+        assert_filter_ids_have_curves([reference_filter])
+        observers = observer_method()
+        rust_out = _rust_native.predict_magnitudes_fused_numpy(
+            _data_dir_str(),
+            np.ascontiguousarray(H_arr, dtype=np.float64),
+            np.ascontiguousarray(object_pos, dtype=np.float64),
+            np.ascontiguousarray(np.asarray(observers.coordinates.r, dtype=np.float64)),
+            np.ascontiguousarray(G_arr, dtype=np.float64),
+            [str(value) for value in exposures.filter.to_pylist()],
+            str(reference_filter),
+            template_id,
+            mix,
+        )
+    if broadcast_error is not None:
+        raise broadcast_error
     return np.ascontiguousarray(rust_out, dtype=np.float64)

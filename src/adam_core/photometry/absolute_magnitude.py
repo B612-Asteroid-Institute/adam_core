@@ -12,9 +12,10 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..observations.detections import PointSourceDetections
 from ..observations.exposures import Exposures
 from ..orbits.physical_parameters import PhysicalParameters
-from .bandpasses.api import map_to_canonical_filter_bands
-from .magnitude import predict_magnitudes
+from .bandpasses.api import _composition_args, _data_dir_str
 from .magnitude_common import BandpassComposition
+
+_DEFAULT_EXPOSURES_OBSERVERS = Exposures.observers
 
 
 class GroupedPhysicalParameters(qv.Table):
@@ -28,50 +29,70 @@ def _as_float64_nan(a: pa.Array | pa.ChunkedArray) -> npt.NDArray[np.float64]:
     return np.asarray(a.to_numpy(zero_copy_only=False), dtype=np.float64)
 
 
-def _mad_sigma(x: npt.NDArray[np.float64]) -> float:
-    # Robust scale estimate: 1.4826 * MAD for Gaussian-consistent sigma.
-    med = float(np.nanmedian(x))
-    mad = float(np.nanmedian(np.abs(x - med)))
-    return 1.4826 * mad
-
-
-def _fit_absolute_magnitude_rows(
+def _run_absolute_magnitude_fit(
+    detections: PointSourceDetections,
+    exposures: Exposures,
+    object_coords: CartesianCoordinates,
     *,
-    h_rows: npt.NDArray[np.float64],
-    sigma_rows: npt.NDArray[np.float64],
-) -> tuple[float, float | None, float | None, float | None, int]:
-    """
-    Fit H statistics for one grouped set of rows. Dispatches to the rust
-    kernel `fit_absolute_magnitude_rows_numpy` and translates NaN sentinels
-    in the result back to None.
+    composition: BandpassComposition,
+    G: float,
+    strict_band_mapping: bool,
+    object_ids: list[str | None] | None,
+):
+    from adam_core import _rust_native
 
-    Returns
-    -------
-    (H_hat, H_sigma, sigma_eff, chi2_red, n_used)
-    """
-    from .._rust import fit_absolute_magnitude_rows_numpy as _rust_fit
-
-    n_used = int(h_rows.size)
-    if n_used <= 0:
-        raise ValueError("h_rows must be non-empty")
-
-    out = _rust_fit(
-        np.ascontiguousarray(h_rows, dtype=np.float64),
-        np.ascontiguousarray(sigma_rows, dtype=np.float64),
+    template_id, mix = _composition_args(composition)
+    common = (
+        _data_dir_str(),
+        np.ascontiguousarray(_as_float64_nan(detections.mag)),
+        np.ascontiguousarray(_as_float64_nan(detections.mag_sigma)),
+        np.ascontiguousarray(np.asarray(object_coords.r, dtype=np.float64)),
     )
-    H_hat, H_sigma, sigma_eff, chi2_red, n_used_out = out
+    observer_method = exposures.observers
+    if getattr(observer_method, "__func__", None) is _DEFAULT_EXPOSURES_OBSERVERS:
+        from .._rust.arrow import ensure_spice_backend
 
-    if not np.isfinite(H_hat):
-        # Match legacy ValueError on degenerate input (all-NaN rows or
-        # weighted-mean wsum non-finite); rust returns NaN as sentinel.
-        raise ValueError("invalid weights derived from mag_sigma")
+        ensure_spice_backend()
+        return _rust_native.fit_absolute_magnitude_complete_numpy(
+            *common,
+            detections.exposure_id.to_pylist(),
+            [str(value) for value in exposures.id.to_pylist()],
+            [str(value) for value in exposures.observatory_code.to_pylist()],
+            [str(value) for value in exposures.filter.to_pylist()],
+            exposures.start_time.days.to_pylist(),
+            exposures.start_time.nanos.to_pylist(),
+            exposures.duration.to_pylist(),
+            exposures.start_time.scale,
+            float(G),
+            bool(strict_band_mapping),
+            template_id,
+            mix,
+            object_ids,
+        )
 
-    return (
-        float(H_hat),
-        None if not np.isfinite(H_sigma) else float(H_sigma),
-        None if not np.isfinite(sigma_eff) else float(sigma_eff),
-        None if not np.isfinite(chi2_red) else float(chi2_red),
-        int(n_used_out),
+    if pc.any(pc.is_null(detections.exposure_id)).as_py():
+        raise ValueError("detections.exposure_id must be non-null to link to exposures")
+    idx = pc.fill_null(pc.index_in(detections.exposure_id, value_set=exposures.id), -1)
+    idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
+    if np.any(idx_np < 0):
+        missing = np.unique(
+            np.asarray(
+                detections.exposure_id.to_numpy(zero_copy_only=False), dtype=object
+            )[idx_np < 0].astype(str)
+        ).tolist()
+        raise ValueError(f"detections reference unknown exposure_id(s): {missing}")
+    exposures_aligned = exposures.take(pa.array(idx_np, type=pa.int32()))
+    observers = exposures_aligned.observers()
+    return _rust_native.fit_absolute_magnitude_facade_numpy(
+        *common,
+        np.ascontiguousarray(np.asarray(observers.coordinates.r, dtype=np.float64)),
+        [str(value) for value in exposures_aligned.observatory_code.to_pylist()],
+        [str(value) for value in exposures_aligned.filter.to_pylist()],
+        float(G),
+        bool(strict_band_mapping),
+        template_id,
+        mix,
+        object_ids,
     )
 
 
@@ -124,61 +145,24 @@ def estimate_absolute_magnitude_v_from_detections(
             f"object_coords length ({len(object_coords)}) must match detections length ({n_det})"
         )
 
-    # ---------------------------------------------------------------------
-    # Align exposures to detections order (vectorized join by exposure_id).
-    # ---------------------------------------------------------------------
-    if pc.any(pc.is_null(detections.exposure_id)).as_py():
-        raise ValueError("detections.exposure_id must be non-null to link to exposures")
-
-    idx = pc.fill_null(pc.index_in(detections.exposure_id, value_set=exposures.id), -1)
-    idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
-    if np.any(idx_np < 0):
-        missing = np.unique(
-            np.asarray(
-                detections.exposure_id.to_numpy(zero_copy_only=False), dtype=object
-            )[idx_np < 0].astype(str)
-        ).tolist()
-        raise ValueError(f"detections reference unknown exposure_id(s): {missing}")
-
-    exposures_aligned = exposures.take(pa.array(idx_np, type=pa.int32()))
-
-    # Resolve (observatory_code, band/filter) -> canonical vendored filter_id.
-    canonical = map_to_canonical_filter_bands(
-        exposures_aligned.observatory_code,
-        exposures_aligned.filter,
-        allow_fallback_filters=not strict_band_mapping,
-    )
-    exposures_canon = exposures_aligned.set_column(
-        "filter", pa.array(canonical.tolist(), type=pa.large_string())
-    )
-
-    # ---------------------------------------------------------------------
-    # Forward model once at H=0 to get per-row offset, then solve H.
-    # ---------------------------------------------------------------------
-    m0 = predict_magnitudes(
-        H=0.0,
-        object_coords=object_coords,
-        exposures=exposures_canon,
-        G=G,
-        reference_filter="V",
+    fit_result = _run_absolute_magnitude_fit(
+        detections,
+        exposures,
+        object_coords,
         composition=composition,
+        G=G,
+        strict_band_mapping=strict_band_mapping,
+        object_ids=None,
     )
+    if isinstance(fit_result, pa.RecordBatch):
+        from .._rust.arrow import table_from_record_batch
 
-    mag = _as_float64_nan(detections.mag)
-    valid = np.isfinite(mag) & np.isfinite(m0)
-    n_used = int(np.count_nonzero(valid))
-    if n_used == 0:
-        raise ValueError(
-            "no valid rows: need finite detections.mag and forward-model magnitudes"
-        )
-
-    H_i = mag[valid] - np.asarray(m0, dtype=np.float64)[valid]
-    mag_sigma = _as_float64_nan(detections.mag_sigma)
-    sigma_used = mag_sigma[valid]
-    H_hat, H_sigma, sigma_eff, chi2_red, _ = _fit_absolute_magnitude_rows(
-        h_rows=np.asarray(H_i, dtype=np.float64),
-        sigma_rows=np.asarray(sigma_used, dtype=np.float64),
-    )
+        return table_from_record_batch(PhysicalParameters, fit_result)
+    _, h_values, h_sigma_values, sigma_eff_values, chi2_values, _ = fit_result
+    H_hat = h_values[0]
+    H_sigma = h_sigma_values[0]
+    sigma_eff = sigma_eff_values[0]
+    chi2_red = chi2_values[0]
 
     # Represent this as a 1-row PhysicalParameters table so callers can directly attach
     # to `Orbits.physical_parameters`.
@@ -249,95 +233,20 @@ def estimate_absolute_magnitude_v_from_detections_grouped(
             f"object_ids length ({ids_np.size}) must match detections length ({n_det})"
         )
 
-    if pc.any(pc.is_null(detections.exposure_id)).as_py():
-        raise ValueError("detections.exposure_id must be non-null to link to exposures")
-    idx = pc.fill_null(pc.index_in(detections.exposure_id, value_set=exposures.id), -1)
-    idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
-    if np.any(idx_np < 0):
-        missing = np.unique(
-            np.asarray(
-                detections.exposure_id.to_numpy(zero_copy_only=False), dtype=object
-            )[idx_np < 0].astype(str)
-        ).tolist()
-        raise ValueError(f"detections reference unknown exposure_id(s): {missing}")
-    exposures_aligned = exposures.take(pa.array(idx_np, type=pa.int32()))
-    canonical = map_to_canonical_filter_bands(
-        exposures_aligned.observatory_code,
-        exposures_aligned.filter,
-        allow_fallback_filters=not strict_band_mapping,
+    fit_result = _run_absolute_magnitude_fit(
+        detections,
+        exposures,
+        object_coords,
+        composition=composition,
+        G=G,
+        strict_band_mapping=strict_band_mapping,
+        object_ids=ids_arr.to_pylist(),
     )
-    exposures_canon = exposures_aligned.set_column(
-        "filter", pa.array(canonical.tolist(), type=pa.large_string())
-    )
+    if isinstance(fit_result, pa.RecordBatch):
+        from .._rust.arrow import table_from_record_batch
 
-    m0 = np.asarray(
-        predict_magnitudes(
-            H=0.0,
-            object_coords=object_coords,
-            exposures=exposures_canon,
-            G=G,
-            reference_filter="V",
-            composition=composition,
-        ),
-        dtype=np.float64,
-    )
-    mag = _as_float64_nan(detections.mag)
-    mag_sigma = _as_float64_nan(detections.mag_sigma)
-    valid = np.isfinite(mag) & np.isfinite(m0)
-    valid = valid & np.asarray([x is not None for x in ids_np], dtype=bool)
-    if not np.any(valid):
-        return GroupedPhysicalParameters.from_kwargs(
-            object_id=[],
-            physical_parameters=PhysicalParameters.empty(),
-            n_fit_detections=[],
-        )
-
-    ids_v = ids_np[valid].astype(str)
-    h_v = (mag - m0)[valid]
-    sig_v = mag_sigma[valid]
-
-    order = np.argsort(ids_v, kind="mergesort")
-    ids_v = ids_v[order]
-    h_v = h_v[order]
-    sig_v = sig_v[order]
-
-    # Compute group offsets in one O(N) pass over the sorted ids_v.
-    # ids_v is sorted; group breaks where consecutive ids differ.
-    n = int(ids_v.size)
-    if n == 0:
-        return GroupedPhysicalParameters.from_kwargs(
-            object_id=[],
-            physical_parameters=PhysicalParameters.empty(),
-            n_fit_detections=[],
-        )
-    breaks = np.concatenate(
-        [
-            [0],
-            np.flatnonzero(ids_v[1:] != ids_v[:-1]) + 1,
-            [n],
-        ]
-    ).astype(np.int64)
-
-    from .._rust import fit_absolute_magnitude_grouped_numpy as _rust_fit_grouped
-
-    fit_out = _rust_fit_grouped(
-        np.ascontiguousarray(h_v, dtype=np.float64),
-        np.ascontiguousarray(sig_v, dtype=np.float64),
-        breaks,
-    )
-    H_hat_arr, H_sig_arr, sig_eff_arr, chi2_arr, n_used_arr = fit_out
-
-    # Drop groups where the fit produced NaN H_hat (matches legacy's
-    # try/except continue: degenerate inputs are silently skipped).
-    keep = np.isfinite(H_hat_arr)
-    out_id = [str(ids_v[breaks[i]]) for i in range(len(breaks) - 1) if keep[i]]
-    out_H = H_hat_arr[keep].tolist()
-    out_H_sigma = [None if not np.isfinite(v) else float(v) for v in H_sig_arr[keep]]
-    out_sigma_eff = [
-        None if not np.isfinite(v) else float(v) for v in sig_eff_arr[keep]
-    ]
-    out_chi2_red = [None if not np.isfinite(v) else float(v) for v in chi2_arr[keep]]
-    out_n = [int(v) for v in n_used_arr[keep]]
+        return table_from_record_batch(GroupedPhysicalParameters, fit_result)
+    out_id, out_H, out_H_sigma, out_sigma_eff, out_chi2_red, out_n = fit_result
 
     physical_parameters = PhysicalParameters.from_kwargs(
         H_v=out_H,

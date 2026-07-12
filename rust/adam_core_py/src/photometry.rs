@@ -1,8 +1,16 @@
+use crate::coordinate_ops::bench_result;
+use crate::spice::observer_positions_from_exposures;
 use adam_core_rs_coords::{fit_absolute_magnitude_grouped, fit_absolute_magnitude_rows};
+use arrow::pyarrow::ToPyArrow;
+use arrow_array::{ArrayRef, Float64Array, Int64Array, LargeStringArray, RecordBatch, StructArray};
+use arrow_schema::{DataType, Field, Fields, Schema};
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::hint::black_box;
+use std::path::Path;
+use std::sync::Arc;
 use std::time::Instant;
 
 #[pyfunction]
@@ -215,6 +223,791 @@ fn calculate_apparent_magnitude_v_and_phase_angle_numpy<'py>(
         );
     }
     Ok((mag_out, alpha_out))
+}
+
+fn bandpass_error(err: adam_core_rs_coords::SchemaError) -> PyErr {
+    PyValueError::new_err(match err {
+        adam_core_rs_coords::SchemaError::InvalidRecordBatch(message) => message,
+        other => other.to_string(),
+    })
+}
+
+fn validate_photometry_geometry(object: &[f64], observer: &[f64], rows: usize) -> PyResult<()> {
+    let mut invalid = 0usize;
+    for row in 0..rows {
+        let base = row * 3;
+        let r = (object[base] * object[base]
+            + object[base + 1] * object[base + 1]
+            + object[base + 2] * object[base + 2])
+            .sqrt();
+        let dx = object[base] - observer[base];
+        let dy = object[base + 1] - observer[base + 1];
+        let dz = object[base + 2] - observer[base + 2];
+        let delta = (dx * dx + dy * dy + dz * dz).sqrt();
+        if !r.is_finite() || !delta.is_finite() || r <= 0.0 || delta <= 0.0 {
+            invalid += 1;
+        }
+    }
+    if invalid > 0 {
+        return Err(PyValueError::new_err(format!(
+            "Invalid photometry geometry for H-G model: {invalid} rows have non-finite or non-positive distances (r<=0 or delta<=0)."
+        )));
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn predict_magnitudes_core(
+    data_dir: &str,
+    h: &[f64],
+    object: &[f64],
+    observer: &[f64],
+    g: &[f64],
+    target_filter_ids: &[String],
+    reference_filter: &str,
+    template_id: Option<&str>,
+    mix: Option<(f64, f64)>,
+) -> PyResult<Vec<f64>> {
+    let n = h.len();
+    let data = adam_core_rs_coords::bandpass_data(Path::new(data_dir)).map_err(bandpass_error)?;
+    data.assert_filter_ids_have_curves(target_filter_ids)
+        .map_err(bandpass_error)?;
+    data.assert_filter_ids_have_curves(&[reference_filter.to_string()])
+        .map_err(bandpass_error)?;
+    let deltas = data.delta_table(template_id, mix).map_err(bandpass_error)?;
+    if deltas.len() != data.filter_ids.len() {
+        return Err(PyValueError::new_err(
+            "Bandpass delta table length mismatch.",
+        ));
+    }
+    let reference_id = data
+        .filter_ids
+        .iter()
+        .position(|value| value == reference_filter)
+        .ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "Unknown reference_filter for bandpass conversion: {reference_filter}"
+            ))
+        })?;
+    let target_ids: Vec<i32> = target_filter_ids
+        .iter()
+        .map(|filter| {
+            data.filter_ids
+                .iter()
+                .position(|value| value == filter)
+                .map(|index| index as i32)
+                .ok_or_else(|| {
+                    PyValueError::new_err(format!(
+                        "Unknown canonical filter_ids for bandpass prediction: ['{filter}']"
+                    ))
+                })
+        })
+        .collect::<PyResult<_>>()?;
+
+    let mut invalid = 0usize;
+    for row in 0..n {
+        let base = row * 3;
+        let r = (object[base] * object[base]
+            + object[base + 1] * object[base + 1]
+            + object[base + 2] * object[base + 2])
+            .sqrt();
+        let dx = object[base] - observer[base];
+        let dy = object[base + 1] - observer[base + 1];
+        let dz = object[base + 2] - observer[base + 2];
+        let delta = (dx * dx + dy * dy + dz * dz).sqrt();
+        if !r.is_finite() || !delta.is_finite() || r <= 0.0 || delta <= 0.0 {
+            invalid += 1;
+        }
+    }
+    if invalid > 0 {
+        return Err(PyValueError::new_err(format!(
+            "Invalid photometry geometry for H-G model: {invalid} rows have non-finite or non-positive distances (r<=0 or delta<=0)."
+        )));
+    }
+
+    let reference_delta = deltas[reference_id];
+    let h_v: Vec<f64> = h.iter().map(|value| value - reference_delta).collect();
+    let mut output = vec![0.0; n];
+    adam_core_rs_coords::predict_magnitudes_bandpass_into(
+        &h_v,
+        object,
+        observer,
+        g,
+        &target_ids,
+        &deltas,
+        &mut output,
+    );
+    Ok(output)
+}
+
+/// Complete post-observer prediction facade: Rust owns filter validation and
+/// indexing, composition/reference conversion, geometry validation, and the
+/// H-G + bandpass kernel. Python performs only scalar broadcasting and the
+/// separately-governed observer-state provider call.
+#[pyfunction]
+#[pyo3(signature = (data_dir, h, object_pos, observer_pos, g, target_filter_ids, reference_filter, template_id=None, mix=None))]
+#[allow(clippy::too_many_arguments)]
+fn predict_magnitudes_fused_numpy<'py>(
+    py: Python<'py>,
+    data_dir: &str,
+    h: PyReadonlyArray1<'py, f64>,
+    object_pos: PyReadonlyArray2<'py, f64>,
+    observer_pos: PyReadonlyArray2<'py, f64>,
+    g: PyReadonlyArray1<'py, f64>,
+    target_filter_ids: Vec<String>,
+    reference_filter: &str,
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let object = object_pos.as_array();
+    let observer = observer_pos.as_array();
+    let h = h.as_array();
+    let g = g.as_array();
+    if object.ncols() != 3 {
+        return Err(PyValueError::new_err("object_pos must have shape (N, 3)"));
+    }
+    let n = object.nrows();
+    if observer.nrows() != n || observer.ncols() != 3 {
+        return Err(PyValueError::new_err(
+            "observer_pos must have shape (N, 3) and match object_pos",
+        ));
+    }
+    if h.len() != n || g.len() != n || target_filter_ids.len() != n {
+        return Err(PyValueError::new_err(
+            "h, g, and target_filter_ids must each have length N",
+        ));
+    }
+    let object = object
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("object_pos must be contiguous"))?;
+    let observer = observer
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("observer_pos must be contiguous"))?;
+    let h = h
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("h must be contiguous"))?;
+    let g = g
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("g must be contiguous"))?;
+
+    let output = predict_magnitudes_core(
+        data_dir,
+        h,
+        object,
+        observer,
+        g,
+        &target_filter_ids,
+        reference_filter,
+        template_id.as_deref(),
+        mix,
+    )?;
+    Ok(ndarray::Array1::from_vec(output).into_pyarray(py))
+}
+
+/// End-to-end prediction crossing for the ordinary Exposures provider path.
+/// Exposure midpoint construction and ground/space observer state generation
+/// stay inside Rust with filter resolution and photometry.
+#[pyfunction]
+#[pyo3(signature = (data_dir, h, object_pos, g, target_filter_ids, observer_codes, days, nanos, duration, time_scale, reference_filter, template_id=None, mix=None))]
+#[allow(clippy::too_many_arguments)]
+fn predict_magnitudes_complete_numpy<'py>(
+    py: Python<'py>,
+    data_dir: &str,
+    h: PyReadonlyArray1<'py, f64>,
+    object_pos: PyReadonlyArray2<'py, f64>,
+    g: PyReadonlyArray1<'py, f64>,
+    target_filter_ids: Vec<String>,
+    observer_codes: Vec<String>,
+    days: Vec<i64>,
+    nanos: Vec<i64>,
+    duration: Vec<f64>,
+    time_scale: &str,
+    reference_filter: &str,
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let object = object_pos.as_array();
+    let h = h.as_array();
+    let g = g.as_array();
+    if object.ncols() != 3 {
+        return Err(PyValueError::new_err("object_pos must have shape (N, 3)"));
+    }
+    let n = object.nrows();
+    if h.len() != n
+        || g.len() != n
+        || target_filter_ids.len() != n
+        || observer_codes.len() != n
+        || days.len() != n
+        || nanos.len() != n
+        || duration.len() != n
+    {
+        return Err(PyValueError::new_err(
+            "complete prediction inputs must each have length N",
+        ));
+    }
+    let object = object
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("object_pos must be contiguous"))?;
+    let h = h
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("h must be contiguous"))?;
+    let g = g
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("g must be contiguous"))?;
+    let data = adam_core_rs_coords::bandpass_data(Path::new(data_dir)).map_err(bandpass_error)?;
+    data.assert_filter_ids_have_curves(&target_filter_ids)
+        .map_err(bandpass_error)?;
+    data.assert_filter_ids_have_curves(&[reference_filter.to_string()])
+        .map_err(bandpass_error)?;
+    let observer =
+        observer_positions_from_exposures(&observer_codes, &days, &nanos, &duration, time_scale)?;
+    let output = predict_magnitudes_core(
+        data_dir,
+        h,
+        object,
+        &observer,
+        g,
+        &target_filter_ids,
+        reference_filter,
+        template_id.as_deref(),
+        mix,
+    )?;
+    Ok(ndarray::Array1::from_vec(output).into_pyarray(py))
+}
+
+type FittedMagnitudeGroups = (
+    Vec<String>,
+    Vec<f64>,
+    Vec<Option<f64>>,
+    Vec<Option<f64>>,
+    Vec<Option<f64>>,
+    Vec<i64>,
+);
+
+#[allow(clippy::too_many_arguments)]
+fn fit_absolute_magnitude_core(
+    data_dir: &str,
+    magnitude: &[f64],
+    sigma: &[f64],
+    object: &[f64],
+    observer: &[f64],
+    observatory_codes: &[String],
+    bands: &[String],
+    g: f64,
+    strict_band_mapping: bool,
+    template_id: Option<&str>,
+    mix: Option<(f64, f64)>,
+    object_ids: Option<&[Option<String>]>,
+) -> PyResult<FittedMagnitudeGroups> {
+    let n = magnitude.len();
+    validate_photometry_geometry(object, observer, n)?;
+    let data = adam_core_rs_coords::bandpass_data(Path::new(data_dir)).map_err(bandpass_error)?;
+    let canonical = data
+        .map_to_canonical_filter_bands(observatory_codes, bands, !strict_band_mapping)
+        .map_err(bandpass_error)?;
+    let deltas = data.delta_table(template_id, mix).map_err(bandpass_error)?;
+    let targets: Vec<i32> = canonical
+        .iter()
+        .map(|filter| {
+            data.filter_ids
+                .iter()
+                .position(|value| value == filter)
+                .map(|index| index as i32)
+                .ok_or_else(|| {
+                    PyValueError::new_err(format!(
+                        "Unknown canonical filter_ids for bandpass prediction: ['{filter}']"
+                    ))
+                })
+        })
+        .collect::<PyResult<_>>()?;
+    let h0 = vec![0.0; n];
+    let g_rows = vec![g; n];
+    let mut modeled = vec![0.0; n];
+    adam_core_rs_coords::predict_magnitudes_bandpass_into(
+        &h0,
+        object,
+        observer,
+        &g_rows,
+        &targets,
+        &deltas,
+        &mut modeled,
+    );
+
+    let fit_group = |rows: &[usize]| {
+        let h_rows: Vec<f64> = rows
+            .iter()
+            .map(|&row| magnitude[row] - modeled[row])
+            .collect();
+        let sigma_rows: Vec<f64> = rows.iter().map(|&row| sigma[row]).collect();
+        fit_absolute_magnitude_rows(&h_rows, &sigma_rows)
+    };
+    let optional = |value: f64| value.is_finite().then_some(value);
+
+    if let Some(ids) = object_ids {
+        let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        for row in 0..n {
+            if magnitude[row].is_finite() && modeled[row].is_finite() {
+                if let Some(id) = &ids[row] {
+                    groups.entry(id.clone()).or_default().push(row);
+                }
+            }
+        }
+        let mut output: FittedMagnitudeGroups = Default::default();
+        for (id, rows) in groups {
+            let fit = fit_group(&rows);
+            if !fit.h_hat.is_finite() {
+                continue;
+            }
+            output.0.push(id);
+            output.1.push(fit.h_hat);
+            output.2.push(optional(fit.h_sigma));
+            output.3.push(optional(fit.sigma_eff));
+            output.4.push(optional(fit.chi2_red));
+            output.5.push(fit.n_used);
+        }
+        Ok(output)
+    } else {
+        let rows: Vec<usize> = (0..n)
+            .filter(|&row| magnitude[row].is_finite() && modeled[row].is_finite())
+            .collect();
+        if rows.is_empty() {
+            return Err(PyValueError::new_err(
+                "no valid rows: need finite detections.mag and forward-model magnitudes",
+            ));
+        }
+        let fit = fit_group(&rows);
+        if !fit.h_hat.is_finite() {
+            return Err(PyValueError::new_err(
+                "invalid weights derived from mag_sigma",
+            ));
+        }
+        Ok((
+            Vec::new(),
+            vec![fit.h_hat],
+            vec![optional(fit.h_sigma)],
+            vec![optional(fit.sigma_eff)],
+            vec![optional(fit.chi2_red)],
+            vec![fit.n_used],
+        ))
+    }
+}
+
+/// Fused post-observer absolute-magnitude fit. Rust owns canonical-band
+/// resolution, prediction, validity filtering, stable lexical grouping, all
+/// fits, and null-sentinel conversion.
+#[pyfunction]
+#[pyo3(signature = (data_dir, magnitude, magnitude_sigma, object_pos, observer_pos, observatory_codes, bands, g, strict_band_mapping, template_id=None, mix=None, object_ids=None))]
+#[allow(clippy::too_many_arguments)]
+fn fit_absolute_magnitude_facade_numpy(
+    data_dir: &str,
+    magnitude: PyReadonlyArray1<'_, f64>,
+    magnitude_sigma: PyReadonlyArray1<'_, f64>,
+    object_pos: PyReadonlyArray2<'_, f64>,
+    observer_pos: PyReadonlyArray2<'_, f64>,
+    observatory_codes: Vec<String>,
+    bands: Vec<String>,
+    g: f64,
+    strict_band_mapping: bool,
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+    object_ids: Option<Vec<Option<String>>>,
+) -> PyResult<FittedMagnitudeGroups> {
+    let object = object_pos.as_array();
+    let observer = observer_pos.as_array();
+    let magnitude = magnitude.as_array();
+    let sigma = magnitude_sigma.as_array();
+    let n = object.nrows();
+    if object.ncols() != 3 {
+        return Err(PyValueError::new_err("object_pos must have shape (N, 3)"));
+    }
+    if observer.nrows() != n || observer.ncols() != 3 {
+        return Err(PyValueError::new_err(
+            "observer_pos must have shape (N, 3) and match object_pos",
+        ));
+    }
+    if magnitude.len() != n
+        || sigma.len() != n
+        || observatory_codes.len() != n
+        || bands.len() != n
+        || object_ids.as_ref().is_some_and(|ids| ids.len() != n)
+    {
+        return Err(PyValueError::new_err(
+            "all absolute-magnitude fit inputs must have length N",
+        ));
+    }
+    let object = object
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("object_pos must be contiguous"))?;
+    let observer = observer
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("observer_pos must be contiguous"))?;
+    let magnitude = magnitude
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("magnitude must be contiguous"))?;
+    let sigma = sigma
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("magnitude_sigma must be contiguous"))?;
+
+    let data = adam_core_rs_coords::bandpass_data(Path::new(data_dir)).map_err(bandpass_error)?;
+    let canonical = data
+        .map_to_canonical_filter_bands(&observatory_codes, &bands, !strict_band_mapping)
+        .map_err(bandpass_error)?;
+    let deltas = data
+        .delta_table(template_id.as_deref(), mix)
+        .map_err(bandpass_error)?;
+    let targets: Vec<i32> = canonical
+        .iter()
+        .map(|filter| {
+            data.filter_ids
+                .iter()
+                .position(|value| value == filter)
+                .map(|index| index as i32)
+                .ok_or_else(|| {
+                    PyValueError::new_err(format!(
+                        "Unknown canonical filter_ids for bandpass prediction: ['{filter}']"
+                    ))
+                })
+        })
+        .collect::<PyResult<_>>()?;
+    let h0 = vec![0.0; n];
+    let g_rows = vec![g; n];
+    let mut modeled = vec![0.0; n];
+    adam_core_rs_coords::predict_magnitudes_bandpass_into(
+        &h0,
+        object,
+        observer,
+        &g_rows,
+        &targets,
+        &deltas,
+        &mut modeled,
+    );
+
+    let fit_group = |rows: &[usize]| {
+        let h_rows: Vec<f64> = rows
+            .iter()
+            .map(|&row| magnitude[row] - modeled[row])
+            .collect();
+        let sigma_rows: Vec<f64> = rows.iter().map(|&row| sigma[row]).collect();
+        fit_absolute_magnitude_rows(&h_rows, &sigma_rows)
+    };
+    let optional = |value: f64| value.is_finite().then_some(value);
+
+    if let Some(ids) = object_ids {
+        let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+        for row in 0..n {
+            if magnitude[row].is_finite() && modeled[row].is_finite() {
+                if let Some(id) = &ids[row] {
+                    groups.entry(id.clone()).or_default().push(row);
+                }
+            }
+        }
+        let mut output: FittedMagnitudeGroups = Default::default();
+        for (id, rows) in groups {
+            let fit = fit_group(&rows);
+            if !fit.h_hat.is_finite() {
+                continue;
+            }
+            output.0.push(id);
+            output.1.push(fit.h_hat);
+            output.2.push(optional(fit.h_sigma));
+            output.3.push(optional(fit.sigma_eff));
+            output.4.push(optional(fit.chi2_red));
+            output.5.push(fit.n_used);
+        }
+        Ok(output)
+    } else {
+        let rows: Vec<usize> = (0..n)
+            .filter(|&row| magnitude[row].is_finite() && modeled[row].is_finite())
+            .collect();
+        if rows.is_empty() {
+            return Err(PyValueError::new_err(
+                "no valid rows: need finite detections.mag and forward-model magnitudes",
+            ));
+        }
+        let fit = fit_group(&rows);
+        if !fit.h_hat.is_finite() {
+            return Err(PyValueError::new_err(
+                "invalid weights derived from mag_sigma",
+            ));
+        }
+        Ok((
+            Vec::new(),
+            vec![fit.h_hat],
+            vec![optional(fit.h_sigma)],
+            vec![optional(fit.sigma_eff)],
+            vec![optional(fit.chi2_red)],
+            vec![fit.n_used],
+        ))
+    }
+}
+
+fn fit_output_batch(output: FittedMagnitudeGroups, g: f64, grouped: bool) -> PyResult<RecordBatch> {
+    let (ids, h, h_sigma, sigma_eff, chi2_red, n_used) = output;
+    let rows = h.len();
+    let physical_fields = Fields::from(vec![
+        Field::new("H_v", DataType::Float64, true),
+        Field::new("H_v_sigma", DataType::Float64, true),
+        Field::new("G", DataType::Float64, true),
+        Field::new("G_sigma", DataType::Float64, true),
+        Field::new("sigma_eff", DataType::Float64, true),
+        Field::new("chi2_red", DataType::Float64, true),
+    ]);
+    let physical_arrays: Vec<ArrayRef> = vec![
+        Arc::new(Float64Array::from(h)),
+        Arc::new(Float64Array::from(h_sigma)),
+        Arc::new(Float64Array::from(vec![Some(g); rows])),
+        Arc::new(Float64Array::from(vec![None::<f64>; rows])),
+        Arc::new(Float64Array::from(sigma_eff)),
+        Arc::new(Float64Array::from(chi2_red)),
+    ];
+    if grouped {
+        let physical = StructArray::new(physical_fields.clone(), physical_arrays, None);
+        RecordBatch::try_new(
+            Arc::new(Schema::new(vec![
+                Field::new("object_id", DataType::LargeUtf8, false),
+                Field::new(
+                    "physical_parameters",
+                    DataType::Struct(physical_fields),
+                    false,
+                ),
+                Field::new("n_fit_detections", DataType::Int64, false),
+            ])),
+            vec![
+                Arc::new(LargeStringArray::from(ids)),
+                Arc::new(physical),
+                Arc::new(Int64Array::from(n_used)),
+            ],
+        )
+        .map_err(|err| PyValueError::new_err(err.to_string()))
+    } else {
+        RecordBatch::try_new(
+            Arc::new(Schema::new(vec![
+                Field::new("H_v", DataType::Float64, true),
+                Field::new("H_v_sigma", DataType::Float64, true),
+                Field::new("G", DataType::Float64, true),
+                Field::new("G_sigma", DataType::Float64, true),
+                Field::new("sigma_eff", DataType::Float64, true),
+                Field::new("chi2_red", DataType::Float64, true),
+            ])),
+            physical_arrays,
+        )
+        .map_err(|err| PyValueError::new_err(err.to_string()))
+    }
+}
+
+/// End-to-end absolute-magnitude crossing for the ordinary Exposures
+/// provider path. Rust owns exposure-id alignment, midpoint observer states,
+/// band mapping, prediction, grouping, and fitting.
+#[pyfunction]
+#[pyo3(signature = (data_dir, magnitude, magnitude_sigma, object_pos, detection_exposure_ids, exposure_ids, exposure_codes, exposure_bands, exposure_days, exposure_nanos, exposure_duration, time_scale, g, strict_band_mapping, template_id=None, mix=None, object_ids=None))]
+#[allow(clippy::too_many_arguments)]
+fn fit_absolute_magnitude_complete_numpy(
+    py: Python<'_>,
+    data_dir: &str,
+    magnitude: PyReadonlyArray1<'_, f64>,
+    magnitude_sigma: PyReadonlyArray1<'_, f64>,
+    object_pos: PyReadonlyArray2<'_, f64>,
+    detection_exposure_ids: Vec<Option<String>>,
+    exposure_ids: Vec<String>,
+    exposure_codes: Vec<String>,
+    exposure_bands: Vec<String>,
+    exposure_days: Vec<i64>,
+    exposure_nanos: Vec<i64>,
+    exposure_duration: Vec<f64>,
+    time_scale: &str,
+    g: f64,
+    strict_band_mapping: bool,
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+    object_ids: Option<Vec<Option<String>>>,
+) -> PyResult<PyObject> {
+    let grouped = object_ids.is_some();
+    let object = object_pos.as_array();
+    let magnitude = magnitude.as_array();
+    let sigma = magnitude_sigma.as_array();
+    let n = object.nrows();
+    let exposure_rows = exposure_ids.len();
+    if object.ncols() != 3 {
+        return Err(PyValueError::new_err("object_pos must have shape (N, 3)"));
+    }
+    if magnitude.len() != n
+        || sigma.len() != n
+        || detection_exposure_ids.len() != n
+        || object_ids.as_ref().is_some_and(|ids| ids.len() != n)
+    {
+        return Err(PyValueError::new_err(
+            "all absolute-magnitude fit inputs must have length N",
+        ));
+    }
+    if exposure_codes.len() != exposure_rows
+        || exposure_bands.len() != exposure_rows
+        || exposure_days.len() != exposure_rows
+        || exposure_nanos.len() != exposure_rows
+        || exposure_duration.len() != exposure_rows
+    {
+        return Err(PyValueError::new_err(
+            "all exposure-table inputs must have equal lengths",
+        ));
+    }
+    if detection_exposure_ids.iter().any(Option::is_none) {
+        return Err(PyValueError::new_err(
+            "detections.exposure_id must be non-null to link to exposures",
+        ));
+    }
+    let mut exposure_index: HashMap<&str, usize> = HashMap::new();
+    for (row, id) in exposure_ids.iter().enumerate() {
+        exposure_index.entry(id).or_insert(row);
+    }
+    let mut aligned = Vec::with_capacity(n);
+    let mut missing = BTreeSet::new();
+    for id in &detection_exposure_ids {
+        let id = id.as_deref().expect("nulls checked above");
+        if let Some(&row) = exposure_index.get(id) {
+            aligned.push(row);
+        } else {
+            missing.insert(id.to_string());
+        }
+    }
+    if !missing.is_empty() {
+        let values: Vec<String> = missing.into_iter().collect();
+        return Err(PyValueError::new_err(format!(
+            "detections reference unknown exposure_id(s): {values:?}"
+        )));
+    }
+    let codes: Vec<String> = aligned
+        .iter()
+        .map(|&row| exposure_codes[row].clone())
+        .collect();
+    let bands: Vec<String> = aligned
+        .iter()
+        .map(|&row| exposure_bands[row].clone())
+        .collect();
+    let days: Vec<i64> = aligned.iter().map(|&row| exposure_days[row]).collect();
+    let nanos: Vec<i64> = aligned.iter().map(|&row| exposure_nanos[row]).collect();
+    let duration: Vec<f64> = aligned.iter().map(|&row| exposure_duration[row]).collect();
+    adam_core_rs_coords::bandpass_data(Path::new(data_dir))
+        .map_err(bandpass_error)?
+        .map_to_canonical_filter_bands(&codes, &bands, !strict_band_mapping)
+        .map_err(bandpass_error)?;
+    let observers =
+        observer_positions_from_exposures(&codes, &days, &nanos, &duration, time_scale)?;
+    let object = object
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("object_pos must be contiguous"))?;
+    let magnitude = magnitude
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("magnitude must be contiguous"))?;
+    let sigma = sigma
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("magnitude_sigma must be contiguous"))?;
+    let output = fit_absolute_magnitude_core(
+        data_dir,
+        magnitude,
+        sigma,
+        object,
+        &observers,
+        &codes,
+        &bands,
+        g,
+        strict_band_mapping,
+        template_id.as_deref(),
+        mix,
+        object_ids.as_deref(),
+    )?;
+    fit_output_batch(output, g, grouped)?
+        .to_pyarrow(py)
+        .map_err(|err| PyValueError::new_err(err.to_string()))
+}
+
+/// Rust-owned timing for the three complete public photometry facades.
+/// Samples include observer-state generation, mapping, geometry, prediction,
+/// fitting/grouping, and Arrow table assembly; PyO3 conversion is excluded.
+#[pyfunction]
+#[pyo3(signature = (data_dir, reps, trials, warmup_reps=1))]
+fn benchmark_complete_photometry_facades(
+    data_dir: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<Vec<f64>>>> {
+    let rows = 64usize;
+    let codes = vec!["500".to_string(); rows];
+    let days = vec![60_000i64; rows];
+    let nanos = vec![0i64; rows];
+    let duration = vec![0.0; rows];
+    let filters = vec!["V".to_string(); rows];
+    let object: Vec<f64> = (0..rows).flat_map(|_| [2.0, 0.0, 0.0]).collect();
+    let h = vec![18.0; rows];
+    let g_rows = vec![0.15; rows];
+    let initial_observer =
+        observer_positions_from_exposures(&codes, &days, &nanos, &duration, "tdb")?;
+    let modeled = predict_magnitudes_core(
+        data_dir,
+        &h,
+        &object,
+        &initial_observer,
+        &g_rows,
+        &filters,
+        "V",
+        Some("C"),
+        None,
+    )?;
+    let sigma = vec![0.1; rows];
+    let grouped_ids: Vec<Option<String>> = (0..rows)
+        .map(|row| Some(format!("object-{:02}", row % 8)))
+        .collect();
+
+    let prediction = bench_result(reps, trials, warmup_reps, || {
+        let observer = observer_positions_from_exposures(&codes, &days, &nanos, &duration, "tdb")?;
+        predict_magnitudes_core(
+            data_dir,
+            &h,
+            &object,
+            &observer,
+            &g_rows,
+            &filters,
+            "V",
+            Some("C"),
+            None,
+        )
+    })?;
+    let single = bench_result(reps, trials, warmup_reps, || {
+        let observer = observer_positions_from_exposures(&codes, &days, &nanos, &duration, "tdb")?;
+        let output = fit_absolute_magnitude_core(
+            data_dir,
+            &modeled,
+            &sigma,
+            &object,
+            &observer,
+            &codes,
+            &filters,
+            0.15,
+            false,
+            Some("C"),
+            None,
+            None,
+        )?;
+        fit_output_batch(output, 0.15, false)
+    })?;
+    let grouped = bench_result(reps, trials, warmup_reps, || {
+        let observer = observer_positions_from_exposures(&codes, &days, &nanos, &duration, "tdb")?;
+        let output = fit_absolute_magnitude_core(
+            data_dir,
+            &modeled,
+            &sigma,
+            &object,
+            &observer,
+            &codes,
+            &filters,
+            0.15,
+            false,
+            Some("C"),
+            None,
+            Some(&grouped_ids),
+        )?;
+        fit_output_batch(output, 0.15, true)
+    })?;
+    Ok(vec![prediction, single, grouped])
 }
 
 #[pyfunction]
@@ -561,6 +1354,11 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         calculate_apparent_magnitude_v_and_phase_angle_numpy,
         m
     )?)?;
+    m.add_function(wrap_pyfunction!(predict_magnitudes_fused_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(predict_magnitudes_complete_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(fit_absolute_magnitude_facade_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(fit_absolute_magnitude_complete_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_complete_photometry_facades, m)?)?;
     m.add_function(wrap_pyfunction!(predict_magnitudes_bandpass_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_calculate_phase_angle_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(

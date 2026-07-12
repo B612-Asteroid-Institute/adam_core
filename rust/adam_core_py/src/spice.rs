@@ -19,6 +19,7 @@ use adam_core_rs_spice::{
 };
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
 use arrow_array::{Array, Float64Array, Int64Array, LargeStringArray, RecordBatch};
+use arrow_schema::{DataType, Field, Schema};
 use numpy::{IntoPyArray, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::{PyRuntimeError, PyValueError, PyZeroDivisionError};
 use pyo3::prelude::*;
@@ -103,6 +104,55 @@ fn perturber_states_record_batch(
         .map_err(|err| PyValueError::new_err(err.to_string()))
 }
 
+pub(crate) fn observer_positions_from_exposures(
+    codes: &[String],
+    days: &[i64],
+    nanos: &[i64],
+    duration: &[f64],
+    time_scale: &str,
+) -> PyResult<Vec<f64>> {
+    let rows = codes.len();
+    if days.len() != rows || nanos.len() != rows || duration.len() != rows {
+        return Err(PyValueError::new_err(
+            "observer exposure inputs must have equal lengths",
+        ));
+    }
+    let batch = RecordBatch::try_new(
+        std::sync::Arc::new(Schema::new(vec![
+            Field::new("code", DataType::LargeUtf8, false),
+            Field::new("days", DataType::Int64, false),
+            Field::new("nanos", DataType::Int64, false),
+            Field::new("duration", DataType::Float64, false),
+        ])),
+        vec![
+            std::sync::Arc::new(LargeStringArray::from(codes.to_vec())),
+            std::sync::Arc::new(Int64Array::from(days.to_vec())),
+            std::sync::Arc::new(Int64Array::from(nanos.to_vec())),
+            std::sync::Arc::new(Float64Array::from(duration.to_vec())),
+        ],
+    )
+    .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let scale =
+        TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let observer_batch = PyAdamCoreSpiceBackend.observer_states_from_codes_record_batch(
+        &batch,
+        scale,
+        DataFrame::Ecliptic,
+        OriginId::from_code("SUN"),
+    )?;
+    let observers = ObserverBatch::try_from_nested_record_batch(&observer_batch)
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    let states = observers
+        .coordinates
+        .values
+        .cartesian()
+        .ok_or_else(|| PyValueError::new_err("observer states must be Cartesian"))?;
+    Ok(states
+        .iter()
+        .flat_map(|state| state[..3].iter().copied())
+        .collect())
+}
+
 fn lock_err_to_py() -> PyErr {
     PyRuntimeError::new_err("adam-core SPICE backend lock is poisoned")
 }
@@ -125,7 +175,7 @@ impl PyAdamCoreSpiceBackend {
     /// Pure-Rust implementation behind the Arrow-native observers crossing.
     /// Both the public PyO3 method and the native-Rust benchmark hook call this
     /// function; no Python/PyO3 operation occurs inside it.
-    fn observer_states_from_codes_record_batch(
+    pub(crate) fn observer_states_from_codes_record_batch(
         &self,
         record_batch: &RecordBatch,
         scale: TimeScale,
