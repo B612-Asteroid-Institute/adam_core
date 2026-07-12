@@ -482,44 +482,21 @@ def departure_spherical_coordinates(
             "invalid value encountered in divide", RuntimeWarning, stacklevel=2
         )
 
-    # Create unit direction vectors from the velocity vectors in one Rust
-    # crossing (norm-then-divide order matches the legacy expression).
     from adam_core import _rust_native
+    from adam_core._rust.arrow import ensure_spice_backend, table_from_record_batch
 
-    directions = np.asarray(
-        _rust_native.row_unit3_numpy(
-            np.ascontiguousarray(np.column_stack([vx, vy, vz]), dtype=np.float64)
-        ),
-        dtype=np.float64,
+    ensure_spice_backend()
+    result = _rust_native.departure_spherical_coordinates_arrow(
+        departure_origin.name,
+        np.ascontiguousarray(times.days.to_numpy(), dtype=np.int64),
+        np.ascontiguousarray(times.nanos.to_numpy(), dtype=np.int64),
+        times.scale,
+        frame,
+        np.ascontiguousarray(vx, dtype=np.float64),
+        np.ascontiguousarray(vy, dtype=np.float64),
+        np.ascontiguousarray(vz, dtype=np.float64),
     )
-    direction_x = directions[:, 0]
-    direction_y = directions[:, 1]
-    direction_z = directions[:, 2]
-
-    # Create CartesianCoordinates with the direction as position (on unit sphere)
-    # and zero velocity since we only care about the direction
-    direction_coords = CartesianCoordinates.from_kwargs(
-        time=times,
-        x=direction_x,  # Unit vector pointing in velocity direction
-        y=direction_y,
-        z=direction_z,
-        vx=np.zeros_like(vx),  # No velocity needed for direction
-        vy=np.zeros_like(vy),
-        vz=np.zeros_like(vz),
-        # From our departing origin.
-        origin=Origin.from_OriginCodes(departure_origin, size=len(vx)),
-        frame=frame,
-    )
-
-    # Transform direction to equatorial frame for proper RA/Dec coordinates
-    # These are inertial celestial coordinates, suitable for any departure origin
-    spherical = transform_coordinates(
-        direction_coords,
-        SphericalCoordinates,
-        frame_out="equatorial",
-        origin_out=departure_origin,
-    )
-    return spherical
+    return table_from_record_batch(SphericalCoordinates, result)
 
 
 def prepare_and_propagate_orbits(

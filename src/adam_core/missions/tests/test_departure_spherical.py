@@ -326,3 +326,27 @@ class TestDepartureSphericalCoordinates:
             # Allow some tolerance for coordinate transformation approximations
             np.testing.assert_allclose(result_ra, target_ra, atol=0.1)
             np.testing.assert_allclose(result_dec, target_dec, atol=0.1)
+
+
+def test_departure_spherical_coordinates_rust_native_timing():
+    from adam_core import _rust_native
+    from adam_core._rust.arrow import ensure_spice_backend
+
+    ensure_spice_backend()
+    times = Timestamp.from_mjd([60000.0, 60001.0, 60002.0], scale="tdb")
+    samples = _rust_native.benchmark_departure_spherical_coordinates(
+        OriginCodes.EARTH.name,
+        np.ascontiguousarray(times.days.to_numpy()),
+        np.ascontiguousarray(times.nanos.to_numpy()),
+        times.scale,
+        "ecliptic",
+        np.ascontiguousarray([1.0, 0.0, 0.0]),
+        np.ascontiguousarray([0.0, 1.0, 0.0]),
+        np.ascontiguousarray([0.0, 0.0, 1.0]),
+        2,
+        2,
+        0,
+    )
+    assert len(samples) == 2
+    assert all(len(trial) == 2 for trial in samples)
+    assert all(sample >= 0 for trial in samples for sample in trial)

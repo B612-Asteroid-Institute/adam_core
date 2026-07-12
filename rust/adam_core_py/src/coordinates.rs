@@ -4796,6 +4796,151 @@ fn benchmark_ensure_input_origin_and_frame_arrow(
     })
 }
 
+fn departure_spherical_coordinates(
+    departure_origin: &str,
+    days: &[i64],
+    nanos: &[i64],
+    scale: &str,
+    frame: &str,
+    vx: &[f64],
+    vy: &[f64],
+    vz: &[f64],
+) -> PyResult<RecordBatch> {
+    let rows = vx.len();
+    if vy.len() != rows || vz.len() != rows || days.len() != rows || nanos.len() != rows {
+        return Err(pyo3::exceptions::PyAssertionError::new_err(
+            "All arrays must have the same length",
+        ));
+    }
+    if rows == 0 {
+        return Err(pyo3::exceptions::PyAssertionError::new_err(
+            "At least one departure vector is required",
+        ));
+    }
+    let epochs = days
+        .iter()
+        .zip(nanos)
+        .map(|(&days, &nanos)| Epoch::new(days, nanos))
+        .collect();
+    let times = TimeArray::new(TimeScale::parse(scale).map_err(time_value_error)?, epochs)
+        .map_err(time_value_error)?;
+    let origins = OriginArray::repeat(OriginId::from_code(departure_origin), rows);
+    let values = vx
+        .iter()
+        .zip(vy)
+        .zip(vz)
+        .flat_map(|((&vx, &vy), &vz)| {
+            let magnitude = (vx * vx + vy * vy + vz * vz).sqrt();
+            [
+                vx / magnitude,
+                vy / magnitude,
+                vz / magnitude,
+                0.0,
+                0.0,
+                0.0,
+            ]
+        })
+        .collect::<Vec<_>>();
+    let frame_in = parse_data_frame(frame)?;
+    let frame_out = DataFrame::Equatorial;
+    let backend = global_backend()
+        .lock()
+        .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
+    let output = backend
+        .transform_coordinates(
+            &values,
+            None,
+            CoordsRepresentation::Cartesian,
+            CoordsRepresentation::Spherical,
+            frame_in,
+            frame_out,
+            &origins,
+            None,
+            &times,
+            &vec![0.0; rows],
+            &vec![0.0; rows],
+            0.0,
+            0.0,
+            100,
+            1e-15,
+        )
+        .map_err(|err| PyRuntimeError::new_err(err.to_string()))?
+        .ok_or_else(|| PyRuntimeError::new_err("native departure transform fell back"))?;
+    drop(backend);
+    let values = transformed_coordinate_values(
+        output.values,
+        output.ncols,
+        rows,
+        DataRepresentation::Spherical,
+    )?;
+    DataCoordinateBatch::new(values, frame_out, origins, Some(times), None)
+        .map_err(|err| PyRuntimeError::new_err(err.to_string()))?
+        .into_nested_record_batch()
+        .map_err(|err| PyRuntimeError::new_err(err.to_string()))
+}
+
+#[pyfunction]
+fn departure_spherical_coordinates_arrow<'py>(
+    py: Python<'py>,
+    departure_origin: &str,
+    days: PyReadonlyArray1<'py, i64>,
+    nanos: PyReadonlyArray1<'py, i64>,
+    scale: &str,
+    frame: &str,
+    vx: PyReadonlyArray1<'py, f64>,
+    vy: PyReadonlyArray1<'py, f64>,
+    vz: PyReadonlyArray1<'py, f64>,
+) -> PyResult<PyObject> {
+    let output = departure_spherical_coordinates(
+        departure_origin,
+        days.as_slice()?,
+        nanos.as_slice()?,
+        scale,
+        frame,
+        vx.as_slice()?,
+        vy.as_slice()?,
+        vz.as_slice()?,
+    )?;
+    output.to_pyarrow(py).map_err(|err| {
+        PyRuntimeError::new_err(format!("failed to export departure coordinates: {err}"))
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (departure_origin, days, nanos, scale, frame, vx, vy, vz, reps, trials, warmup_reps=1))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_departure_spherical_coordinates(
+    departure_origin: &str,
+    days: PyReadonlyArray1<'_, i64>,
+    nanos: PyReadonlyArray1<'_, i64>,
+    scale: &str,
+    frame: &str,
+    vx: PyReadonlyArray1<'_, f64>,
+    vy: PyReadonlyArray1<'_, f64>,
+    vz: PyReadonlyArray1<'_, f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let days = days.as_slice()?.to_vec();
+    let nanos = nanos.as_slice()?.to_vec();
+    let vx = vx.as_slice()?.to_vec();
+    let vy = vy.as_slice()?.to_vec();
+    let vz = vz.as_slice()?.to_vec();
+    benchmark_trials(reps, trials, warmup_reps, || {
+        departure_spherical_coordinates(
+            departure_origin,
+            &days,
+            &nanos,
+            scale,
+            frame,
+            &vx,
+            &vy,
+            &vz,
+        )
+    })
+}
+
 /// Arrow-native `transform_coordinates`: one RecordBatch enters Rust and one
 /// transformed RecordBatch leaves Rust. PyArrow conversion is outside the
 /// Rust-owned implementation.
@@ -6637,6 +6782,11 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(ensure_input_origin_and_frame_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(
         benchmark_ensure_input_origin_and_frame_arrow,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(departure_spherical_coordinates_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_departure_spherical_coordinates,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(calculate_perturber_moids_native, m)?)?;
