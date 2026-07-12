@@ -65,3 +65,12 @@ def test_rust_backend_satisfies_contract() -> None:
     assert callable(prop.propagate_orbits)
     assert callable(prop.generate_ephemeris)
     assert callable(prop.detect_collisions)
+
+    # The public Python methods are veneers over one compiled PyO3 owner, not
+    # inherited composition from adam-core's abstract contracts.
+    native = prop._native
+    assert type(native).__name__ == "NativeAssistPropagator"
+    assert type(native).__module__ == "builtins"
+    assert callable(native.propagate_orbits)
+    assert callable(native.generate_ephemeris)
+    assert callable(native.detect_collisions)

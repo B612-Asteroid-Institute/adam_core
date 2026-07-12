@@ -64,7 +64,7 @@ The selected registry currently covers only 19 rows in these domains (including 
 | `ImpactProbabilities(...)` | quivr schema | no | N/A | Data-model classification. |
 | `CollisionConditions(...)`, `.default()` | quivr schema; Python default-row assembly | no | no | Default constructor parity/implementation gap is grouped with impacts. |
 | `CollisionEvent(...)`, `.preview()` | quivr schema; plotting preview | no | N/A | Schema retained; `preview` is plotting-exempt. |
-| `ImpactMixin.detect_collisions` | abstract single-crossing contract | downstream only | downstream only | Require concrete-backend evidence. |
+| `ImpactMixin.detect_collisions` | abstract single-crossing contract | frozen legacy/downstream parity | Rust-owned downstream timing | Complete as a provider contract: `adam_assist.ASSISTPropagator` delegates directly to compiled `NativeAssistPropagator.detect_collisions`; impact artifacts and the 26-lane ASSIST timing governance cover the concrete backend. |
 | `calculate_impacts` | Python variant sampling + backend collision call | no | no | Not 1x; implementation/parity/native-timing gap. |
 | `calculate_impact_probabilities` | Python loops, Arrow selection, NumPy reductions, row assembly | no | no | Implementation/parity/native-timing gap. |
 | `link_impacting_variants` | Python quivr linkage assembly | no | no | Implementation/parity/native-timing gap. |
@@ -77,11 +77,11 @@ The selected registry currently covers only 19 rows in these domains (including 
 
 | Public surface | Implementation | Parity / native timing | Disposition / gap |
 |---|---|---|---|
-| `EphemerisMixin()` / `generate_ephemeris(...)` | abstract backend contract | downstream evidence only | Contract is correctly free of Python composition. Add governed concrete-backend contract parity and direct timing. |
-| `Propagator()` / `propagate_orbits(...)` | abstract backend contract | downstream evidence only | Same. |
+| `EphemerisMixin()` / `generate_ephemeris(...)` | abstract backend contract | frozen legacy/downstream parity plus Rust-owned timing | Complete as a provider contract: `adam_assist.ASSISTPropagator` delegates directly to compiled `NativeAssistPropagator.generate_ephemeris`; governed fixtures cover mixed observers and UTC output. |
+| `Propagator()` / `propagate_orbits(...)` | abstract backend contract | frozen legacy/downstream parity plus Rust-owned timing | Complete as a provider contract: all four governed propagation cases delegate to compiled `NativeAssistPropagator.propagate_orbits`. |
 | `TimestampType`, `OrbitType`, `EphemerisType`, `ObserverType` | typing aliases | N/A | Retain. Package exports omit `TimestampType` and `ObserverType`, but they remain public from `propagator.types`/`propagator.propagator`. |
-| `ensure_input_time_scale` | Python quivr column replacement/rescale | none | Compatibility utility implementation/parity gap; native timing after a Rust owner exists. |
-| `ensure_input_origin_and_frame` | Python per-origin loop, selection, transform, concatenation | none | Not 1x; implementation/parity/native-timing gap. |
+| `ensure_input_time_scale` | one-crossing veneer over Rust `TimeArray` rescaling followed by quivr wrapping | frozen pinned-main parity and `benchmark_ensure_input_time_scale` | Complete for Rust-supported scales; the public Timestamp UT1 provider boundary remains Astropy-owned by design. |
+| `ensure_input_origin_and_frame` | one Arrow crossing owns first-appearance mixed-origin grouping, result-row membership/order, frame/origin transforms, and coordinate assembly | frozen pinned-main parity and `benchmark_ensure_input_origin_and_frame_arrow` | Complete; Python only wraps the returned coordinate batch and row indices. |
 
 The base-class constructors have no custom behavior. Abstract method signatures, accepted covariance methods, stable ordering, and one-crossing semantics are part of the public contract even though no computation can be timed on an abstract class.
 
@@ -156,6 +156,8 @@ The current native adapter map in `migration/parity/_native_rust_runner.py` cont
 - `dynamics.generate_porkchop_data`
 - `orbit_determination.gaussIOD`
 - `evaluate_orbits` through `benchmark_evaluate_orbits_numpy` (outside the selected 44-API registry)
+- `ensure_input_time_scale` and `ensure_input_origin_and_frame` through their dedicated Rust-owned benchmarks (outside the selected registry)
+- all concrete `adam_assist.ASSISTPropagator` propagation, ephemeris, covariance, and collision lanes through the downstream 26-lane Rust timing contract
 
 Consequently, current report rows for `add_light_time`, `calc_mean_motion`, `calculate_moid`, `solve_lambert`, Tisserand, raw propagation/MOID/porkchop kernels, `calcGibbs`, `calcHerrickGibbs`, and `calcGauss` explicitly show missing native samples. Rust-backed public helpers absent from the selected registry have no native-timing row at all. Direct timing for Python-owned OD/IOD/impact/mission utilities is blocked until a qualifying direct Rust entrypoint exists.
 
@@ -167,7 +169,7 @@ Children of `personal-cmy.37.3` cover every non-plotting gap above, grouped only
 |---|---|
 | `personal-cmy.37.3.1` | `calculate_c3` implementation plus missing scalar dynamics parity/native timing |
 | `personal-cmy.37.3.2` | Impact defaults, orchestration, probability reduction, linkage, and Mahalanobis distance |
-| `personal-cmy.37.3.3` | Propagator normalization utilities and concrete backend contract evidence |
+| `personal-cmy.37.3.3` | Propagator normalization utilities and concrete backend contract evidence (complete: one-crossing utilities, frozen parity, native timing, and compiled ASSIST delegation evidence) |
 | `personal-cmy.37.3.4` | All custom `LambertSolutions` methods |
 | `personal-cmy.37.3.5` | Mission departure-direction and body preparation/propagation orchestration |
 | `personal-cmy.37.3.6` | Fitted-orbit conversion/deduplication and outlier utilities |

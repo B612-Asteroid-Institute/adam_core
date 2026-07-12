@@ -3798,6 +3798,13 @@ fn timestamp_from_mjd<'py>(
     Ok(time_array_out(py, out))
 }
 
+fn ensure_input_time_scale(
+    times: &TimeArray,
+    to_scale: TimeScale,
+) -> Result<TimeArray, adam_core_rs_coords::SchemaError> {
+    times.rescale(to_scale)
+}
+
 #[pyfunction]
 fn timestamp_rescale<'py>(
     py: Python<'py>,
@@ -3806,11 +3813,30 @@ fn timestamp_rescale<'py>(
     from_scale: &str,
     to_scale: &str,
 ) -> PyResult<(Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>)> {
-    let from_scale = adam_core_rs_coords::TimeScale::parse(from_scale).map_err(time_value_error)?;
-    let to_scale = adam_core_rs_coords::TimeScale::parse(to_scale).map_err(time_value_error)?;
+    let from_scale = TimeScale::parse(from_scale).map_err(time_value_error)?;
+    let to_scale = TimeScale::parse(to_scale).map_err(time_value_error)?;
     let times = time_array_from(from_scale, days, nanos)?;
-    let out = times.rescale(to_scale).map_err(time_value_error)?;
+    let out = ensure_input_time_scale(&times, to_scale).map_err(time_value_error)?;
     Ok(time_array_out(py, out))
+}
+
+#[pyfunction]
+#[pyo3(signature = (days, nanos, from_scale, to_scale, reps, trials, warmup_reps=1))]
+fn benchmark_ensure_input_time_scale(
+    days: numpy::PyReadonlyArray1<'_, i64>,
+    nanos: numpy::PyReadonlyArray1<'_, i64>,
+    from_scale: &str,
+    to_scale: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let from_scale = TimeScale::parse(from_scale).map_err(time_value_error)?;
+    let to_scale = TimeScale::parse(to_scale).map_err(time_value_error)?;
+    let times = time_array_from(from_scale, days, nanos)?;
+    benchmark_trials(reps, trials, warmup_reps, || {
+        ensure_input_time_scale(&times, to_scale).map_err(time_value_error)
+    })
 }
 
 fn bandpass_value_error(err: adam_core_rs_coords::SchemaError) -> PyErr {
@@ -4625,6 +4651,149 @@ fn transform_coordinates_record_batch(
     .into_nested_record_batch()
     .map_err(|err| PyRuntimeError::new_err(err.to_string()))?;
     Ok(Some(output))
+}
+
+fn take_record_batch_rows(batch: &RecordBatch, rows: &[u32]) -> PyResult<RecordBatch> {
+    let indices = UInt32Array::from(rows.to_vec());
+    let columns = batch
+        .columns()
+        .iter()
+        .map(|column| {
+            arrow::compute::take(column.as_ref(), &indices, None)
+                .map_err(|err| PyRuntimeError::new_err(format!("failed to select rows: {err}")))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    RecordBatch::try_new(batch.schema(), columns)
+        .map_err(|err| PyRuntimeError::new_err(format!("failed to assemble selected rows: {err}")))
+}
+
+/// Rust owner for `propagator.utils.ensure_input_origin_and_frame`.
+///
+/// Input origin groups retain first-appearance order. Within each group,
+/// result rows retain their existing order, matching the legacy Arrow
+/// selection/concatenation contract (including duplicate orbit IDs).
+fn ensure_input_origin_and_frame(
+    coordinates: &RecordBatch,
+    input_orbit_ids: &[String],
+    input_origins: &[String],
+    result_orbit_ids: &[String],
+    frame_out: &str,
+) -> PyResult<Option<(RecordBatch, Vec<u32>)>> {
+    if input_orbit_ids.len() != input_origins.len() {
+        return Err(PyValueError::new_err(
+            "input orbit IDs and origins must have equal length",
+        ));
+    }
+    if coordinates.num_rows() != result_orbit_ids.len() {
+        return Err(PyValueError::new_err(
+            "result orbit IDs and coordinates must have equal length",
+        ));
+    }
+    let frame_out = parse_data_frame(frame_out)?;
+    let mut unique_origins = Vec::<String>::new();
+    let mut seen_origins = HashSet::<String>::new();
+    for origin in input_origins {
+        if seen_origins.insert(origin.clone()) {
+            unique_origins.push(origin.clone());
+        }
+    }
+    if unique_origins.is_empty() {
+        return Ok(None);
+    }
+
+    let mut transformed = Vec::with_capacity(unique_origins.len());
+    let mut output_rows = Vec::<u32>::new();
+    for origin in unique_origins {
+        let orbit_ids = input_orbit_ids
+            .iter()
+            .zip(input_origins)
+            .filter_map(|(orbit_id, input_origin)| (input_origin == &origin).then_some(orbit_id))
+            .collect::<HashSet<_>>();
+        let rows = result_orbit_ids
+            .iter()
+            .enumerate()
+            .filter(|(_, orbit_id)| orbit_ids.contains(orbit_id))
+            .map(|(row, _)| {
+                u32::try_from(row).map_err(|_| PyValueError::new_err("row index exceeds UInt32"))
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        let partial = take_record_batch_rows(coordinates, &rows)?;
+        let config = TransformArrowConfig {
+            representation_out: DataRepresentation::Cartesian,
+            frame_out,
+            target_origin: Some(OriginId::from_code(origin)),
+            a: 0.0,
+            f: 0.0,
+            max_iter: 100,
+            tol: 1e-15,
+        };
+        let partial = transform_coordinates_record_batch(&partial, &config)?
+            .ok_or_else(|| PyRuntimeError::new_err("native Cartesian transform fell back"))?;
+        transformed.push(partial);
+        output_rows.extend(rows);
+    }
+    let schema = transformed[0].schema();
+    let output = arrow::compute::concat_batches(&schema, transformed.iter()).map_err(|err| {
+        PyRuntimeError::new_err(format!(
+            "failed to concatenate transformed coordinates: {err}"
+        ))
+    })?;
+    Ok(Some((output, output_rows)))
+}
+
+#[pyfunction]
+fn ensure_input_origin_and_frame_arrow<'py>(
+    py: Python<'py>,
+    coordinate_batch: &Bound<'py, PyAny>,
+    input_orbit_ids: Vec<String>,
+    input_origins: Vec<String>,
+    result_orbit_ids: Vec<String>,
+    frame_out: &str,
+) -> PyResult<Option<(PyObject, Bound<'py, PyArray1<u32>>)>> {
+    let coordinates = RecordBatch::from_pyarrow_bound(coordinate_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid coordinate RecordBatch: {err}")))?;
+    ensure_input_origin_and_frame(
+        &coordinates,
+        &input_orbit_ids,
+        &input_origins,
+        &result_orbit_ids,
+        frame_out,
+    )?
+    .map(|(output, rows)| {
+        Ok((
+            output.to_pyarrow(py).map_err(|err| {
+                PyRuntimeError::new_err(format!("failed to export RecordBatch: {err}"))
+            })?,
+            rows.into_pyarray(py),
+        ))
+    })
+    .transpose()
+}
+
+#[pyfunction]
+#[pyo3(signature = (coordinate_batch, input_orbit_ids, input_origins, result_orbit_ids, frame_out, reps, trials, warmup_reps=1))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_ensure_input_origin_and_frame_arrow(
+    coordinate_batch: &Bound<'_, PyAny>,
+    input_orbit_ids: Vec<String>,
+    input_origins: Vec<String>,
+    result_orbit_ids: Vec<String>,
+    frame_out: &str,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let coordinates = RecordBatch::from_pyarrow_bound(coordinate_batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid coordinate RecordBatch: {err}")))?;
+    benchmark_trials(reps, trials, warmup_reps, || {
+        ensure_input_origin_and_frame(
+            &coordinates,
+            &input_orbit_ids,
+            &input_origins,
+            &result_orbit_ids,
+            frame_out,
+        )
+    })
 }
 
 /// Arrow-native `transform_coordinates`: one RecordBatch enters Rust and one
@@ -6465,6 +6634,11 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(benchmark_dynamical_class_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(transform_coordinates_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_transform_coordinates_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(ensure_input_origin_and_frame_arrow, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_ensure_input_origin_and_frame_arrow,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(calculate_perturber_moids_native, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_perturber_moids_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(
@@ -6602,6 +6776,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(timestamp_mjd, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_from_mjd, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_rescale, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_ensure_input_time_scale, m)?)?;
     m.add_function(wrap_pyfunction!(ades_obs_context_to_string, m)?)?;
     m.add_function(wrap_pyfunction!(ades_parse_obs_contexts, m)?)?;
     m.add_function(wrap_pyfunction!(ades_to_string_fused_ipc, m)?)?;
