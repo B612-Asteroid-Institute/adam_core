@@ -94,10 +94,10 @@ Private candidate functions (`_evaluate_residuals_2body_ipc_candidate`, `_fit_or
 
 | Public API | Implementation status | Parity status | Native timing | Disposition |
 |---|---|---|---|---|
-| `fit_chebyshev(coordinates, window_start, window_end, degree, mid_time=None, half_interval=None)` | **Python/NumPy**, including basis construction and six `lstsq` calls | no pinned legacy parity | missing | Gap |
-| `orbits_to_spk(orbits, output_file, start_time, end_time, propagator=None, max_processes=None, step_days=0.25, target_id_start=1000000, window_days=32, comment=..., kernel_type="w03")` | **Mixed/multi-crossing**: Python propagation/transform/group/sort/window orchestration; native writer receives each segment | functional readback test only; no byte/semantic legacy parity across w03/w09/options | missing | Gap |
-| `write_spkw03_segment(propagated_orbit, handle, target_id, start_time, end_time, window_seconds=86400, cheby_degree=15)` | Public compatibility shim into Python Type-3 fitting/orchestration and native writer | partial functional coverage via `orbits_to_spk` | missing | Gap |
-| `write_spkw09_segment(propagated_orbit, handle, target_id, start_time, end_time)` | Public compatibility shim; Python state/time conversion then native writer | partial functional coverage | missing | Gap |
+| `fit_chebyshev(coordinates, window_start, window_end, degree, mid_time=None, half_interval=None)` | one Rust IPC crossing; Rust owns selection, units, basis, and SVD minimum-norm fit | frozen pinned-legacy NumPy coefficients for over- and underdetermined windows | shared Rust fit/product timing | Complete veneer |
+| `orbits_to_spk(orbits, output_file, start_time, end_time, propagator=None, max_processes=None, step_days=0.25, target_id_start=1000000, window_days=32, comment=..., kernel_type="w03")` | one fused Rust product crossing without provider; optional propagation is one declared provider call followed by the same crossing | Type 3 ASSIST and Type 9 no-provider readback, mappings/order/errors, atomicity, and >25-segment DAF chain | Rust `Instant` p50 lanes | Complete veneer/provider boundary |
+| `write_spkw03_segment(propagated_orbit, handle, target_id, start_time, end_time, window_seconds=86400, cheby_degree=15)` | one Rust IPC crossing into native segment fit/writer | direct shim plus product Type 3 readback | shared native timing | Complete veneer |
+| `write_spkw09_segment(propagated_orbit, handle, target_id, start_time, end_time)` | one Rust IPC crossing into native state/time conversion and segment writer | direct shim and exact sampled-state readback | shared native timing | Complete veneer |
 | `DEFAULT_KERNELS`, `J2000_TDB_JD` | Public constants | N/A | N/Q | Retain |
 
 ## OEM helpers
@@ -180,8 +180,7 @@ Concrete implementation beads cover every non-plotting gap identified above:
 1. `personal-cmy.37.1.4`: core `Orbits` grouping/fused dynamical classification and classification native timing;
 2. `personal-cmy.37.1.2`: all VariantOrbits/VariantEphemeris linkage and collapse operations;
 3. `personal-cmy.37.1.3`: `Ephemeris.link_to_observers`;
-4. `personal-cmy.37.4.6`: SPK fitting, Type 3/9 segment writing, and end-to-end SPK facade;
-5. `personal-cmy.37.4.4`: OEM read/write/propagated facades;
+4. `personal-cmy.37.4.4`: OEM read/write/propagated facades;
 6. `personal-cmy.37.4.1`: Horizons facades;
 7. `personal-cmy.37.4.2`: NEOCC, SBDB legacy/new, Scout facades, and exception semantics;
 8. `personal-cmy.37.1.1`: package export compatibility.

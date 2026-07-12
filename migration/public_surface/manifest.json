@@ -40,10 +40,10 @@
     },
     "by_implementation_class": {
       "compatibility_data_or_external_generic": 129,
-      "mixed_rust_python_gap": 71,
+      "mixed_rust_python_gap": 73,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 256,
-      "rust_veneer_candidate_see_domain_audit": 95
+      "python_gap_or_external_boundary": 253,
+      "rust_veneer_candidate_see_domain_audit": 96
     },
     "plotting_exemption_candidates": 16,
     "unreviewed": 0
@@ -11119,7 +11119,7 @@
       "kind": "constant",
       "domain": "orbits",
       "source": "src/adam_core/orbits/spice_kernel.py",
-      "line": 22,
+      "line": 19,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11147,7 +11147,7 @@
       "kind": "constant",
       "domain": "orbits",
       "source": "src/adam_core/orbits/spice_kernel.py",
-      "line": 33,
+      "line": 30,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11175,23 +11175,23 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/spice_kernel.py",
-      "line": 44,
+      "line": 33,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
-        "python_loop": true,
+        "rust_reference": true,
+        "python_loop": false,
         "numpy_reference": true,
         "pyarrow_reference": false,
         "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.1",
       "audit_document": "migration/public_surface/orbits.md"
     },
@@ -11203,7 +11203,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/spice_kernel.py",
-      "line": 99,
+      "line": 76,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11231,12 +11231,12 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/spice_kernel.py",
-      "line": 315,
+      "line": 137,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": false,
         "pyarrow_reference": false,
@@ -11244,10 +11244,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.1",
       "audit_document": "migration/public_surface/orbits.md"
     },
@@ -11259,12 +11259,12 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/spice_kernel.py",
-      "line": 340,
+      "line": 163,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": false,
         "pyarrow_reference": false,
@@ -11272,10 +11272,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.1",
       "audit_document": "migration/public_surface/orbits.md"
     },

@@ -5,6 +5,8 @@
 //! thin wrappers over this Rust API so the same backend can be used by a
 //! future standalone `adam-core-rs` consumer without crossing Python.
 
+pub mod spk_product;
+
 use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::{self, Read};
@@ -31,7 +33,7 @@ use spicekit::{
 use thiserror::Error;
 
 pub use spicekit::spk_writer::{
-    SpkWriter, SpkWriterError, Type3Record, Type3Segment, Type9Segment,
+    SpkWriter, SpkWriterError, Type3Record, Type3Segment, Type9Segment, SPK_SUMMARIES_PER_RECORD,
 };
 pub use spicekit::{NaifFrame, PckError, PckFile, SpkError, SpkFile};
 

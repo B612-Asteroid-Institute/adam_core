@@ -1116,7 +1116,7 @@ fn tisserand_parameter_numpy<'py>(
     Ok(ndarray::Array1::from_vec(out).into_pyarray(py))
 }
 
-fn read_orbit_ipc(bytes: &[u8]) -> PyResult<RecordBatch> {
+pub(crate) fn read_orbit_ipc(bytes: &[u8]) -> PyResult<RecordBatch> {
     let mut reader = StreamReader::try_new(bytes, None)
         .map_err(|err| PyValueError::new_err(format!("invalid Arrow IPC stream: {err}")))?;
     let batch = reader

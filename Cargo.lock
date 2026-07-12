@@ -48,6 +48,7 @@ name = "adam_core_rs_spice"
 version = "0.1.0"
 dependencies = [
  "adam_core_rs_coords",
+ "faer",
  "rayon",
  "serde_json",
  "spicekit",

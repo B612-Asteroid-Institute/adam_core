@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 adam_core_rs_coords = { path = "../adam_core_rs_coords" }
 rayon = "1"
+faer = "0.22"
 serde_json = "1"
 spicekit = "0.2.2"
 thiserror = "2"

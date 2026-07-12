@@ -4,22 +4,37 @@ use std::sync::MutexGuard;
 use std::time::Instant;
 
 use adam_core_rs_coords::{
-    CoordinateBatch, DataFrame, IntoNestedRecordBatch, ObservatoryCode, ObserverBatch, OriginArray,
-    OriginId, TimeArray, TimeScale,
+    CoordinateBatch, DataFrame, IntoNestedRecordBatch, ObservatoryCode, ObserverBatch,
+    OrbitBatch as DataOrbitBatch, OriginArray, OriginId, TimeArray, TimeScale,
+    TryFromNestedRecordBatch,
 };
 use adam_core_rs_spice::{
     builtin_bodc2n, builtin_bodn2c, global_backend, parse_text_kernel_bindings, pck_sxform_matrix,
+    spk_product::{
+        fit_chebyshev, type3_segment, type9_segment, write_orbits_spk, write_spk_writers_atomic,
+        SpkKernelType, SpkProductOptions,
+    },
     AdamCoreSpiceBackend, NaifFrame, PckError, PckFile, SpiceBackendError, SpkError, SpkFile,
-    SpkWriter, SpkWriterError, Type3Record, Type3Segment, Type9Segment,
+    SpkWriter, SpkWriterError, Type3Record, Type3Segment, Type9Segment, SPK_SUMMARIES_PER_RECORD,
 };
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
 use arrow_array::{Array, Float64Array, Int64Array, LargeStringArray, RecordBatch};
 use numpy::{IntoPyArray, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 
 fn spice_err_to_py(err: SpiceBackendError) -> PyErr {
     PyRuntimeError::new_err(format!("{err}"))
+}
+
+fn spk_product_err_to_py(err: adam_core_rs_spice::spk_product::SpkProductError) -> PyErr {
+    match err {
+        adam_core_rs_spice::spk_product::SpkProductError::InvalidKernelType(value) => {
+            PyValueError::new_err(format!("Invalid kernel type: {value}"))
+        }
+        other => PyRuntimeError::new_err(other.to_string()),
+    }
 }
 
 /// Extract required int64 `days`/`nanos` columns from a pyarrow RecordBatch.
@@ -887,13 +902,157 @@ impl NaifPck {
     }
 }
 
+#[pyfunction]
+#[pyo3(signature = (coordinates_ipc, window_start, window_end, degree, mid_time=None, half_interval=None))]
+fn spk_fit_chebyshev<'py>(
+    py: Python<'py>,
+    coordinates_ipc: &Bound<'_, PyBytes>,
+    window_start: f64,
+    window_end: f64,
+    degree: usize,
+    mid_time: Option<f64>,
+    half_interval: Option<f64>,
+) -> PyResult<(Bound<'py, PyArray2<f64>>, f64, f64)> {
+    let batch = crate::coordinates::read_orbit_ipc(coordinates_ipc.as_bytes())?;
+    let coordinates = CoordinateBatch::try_from_nested_record_batch(&batch)
+        .map_err(|err| PyValueError::new_err(format!("failed to decode coordinates: {err}")))?;
+    let states = coordinates
+        .values
+        .cartesian()
+        .ok_or_else(|| PyValueError::new_err("fit_chebyshev requires Cartesian coordinates"))?;
+    let times = coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| PyValueError::new_err("fit_chebyshev requires coordinate times"))?;
+    let et = adam_core_rs_spice::et_seconds(times).map_err(spice_err_to_py)?;
+    let fit = fit_chebyshev(
+        states,
+        &et,
+        window_start,
+        window_end,
+        degree,
+        mid_time,
+        half_interval,
+    )
+    .map_err(spk_product_err_to_py)?;
+    let coefficients = ndarray::Array2::from_shape_vec((6, degree + 1), fit.coefficients)
+        .map_err(|err| PyRuntimeError::new_err(err.to_string()))?;
+    Ok((
+        coefficients.into_pyarray(py),
+        fit.mid_time,
+        fit.half_interval,
+    ))
+}
+
+fn decode_spk_orbits(bytes: &[u8]) -> PyResult<DataOrbitBatch> {
+    let batch = crate::coordinates::read_orbit_ipc(bytes)?;
+    DataOrbitBatch::try_from_nested_record_batch(&batch)
+        .map_err(|err| PyValueError::new_err(format!("failed to decode orbits: {err}")))
+}
+
+#[pyfunction]
+#[pyo3(signature = (orbits_ipc, output_file, target_id_start=1_000_000, window_days=32.0, kernel_type="w03"))]
+fn spk_write_orbits_product(
+    orbits_ipc: &Bound<'_, PyBytes>,
+    output_file: &str,
+    target_id_start: i32,
+    window_days: f64,
+    kernel_type: &str,
+) -> PyResult<Vec<(String, i32)>> {
+    let orbits = decode_spk_orbits(orbits_ipc.as_bytes())?;
+    let options = SpkProductOptions {
+        target_id_start,
+        window_seconds: window_days * 86_400.0,
+        kernel_type: SpkKernelType::parse(kernel_type).map_err(spk_product_err_to_py)?,
+    };
+    let backend = global_backend()
+        .lock()
+        .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
+    write_orbits_spk(
+        &backend,
+        &orbits,
+        std::path::Path::new(output_file),
+        &options,
+    )
+    .map_err(spk_product_err_to_py)
+}
+
+#[pyfunction]
+#[pyo3(signature = (orbits_ipc, reps, trials, warmup_reps=1, *, output_file, target_id_start=1_000_000, window_days=32.0, kernel_type="w03"))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_spk_write_orbits_product(
+    orbits_ipc: &Bound<'_, PyBytes>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    output_file: &str,
+    target_id_start: i32,
+    window_days: f64,
+    kernel_type: &str,
+) -> PyResult<Vec<Vec<f64>>> {
+    if reps == 0 || trials == 0 {
+        return Err(PyValueError::new_err("reps and trials must be >= 1"));
+    }
+    let orbits = decode_spk_orbits(orbits_ipc.as_bytes())?;
+    let options = SpkProductOptions {
+        target_id_start,
+        window_seconds: window_days * 86_400.0,
+        kernel_type: SpkKernelType::parse(kernel_type).map_err(spk_product_err_to_py)?,
+    };
+    let run_once = || -> PyResult<()> {
+        let mut backend = global_backend()
+            .lock()
+            .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
+        backend.clear_spkez_state_cache();
+        write_orbits_spk(
+            &backend,
+            &orbits,
+            std::path::Path::new(output_file),
+            &options,
+        )
+        .map_err(spk_product_err_to_py)?;
+        Ok(())
+    };
+    let mut sample_trials = Vec::with_capacity(trials);
+    for _ in 0..trials {
+        for _ in 0..warmup_reps {
+            black_box(run_once()?);
+        }
+        let mut samples = Vec::with_capacity(reps);
+        for _ in 0..reps {
+            let started = Instant::now();
+            black_box(run_once()?);
+            samples.push(started.elapsed().as_secs_f64());
+        }
+        sample_trials.push(samples);
+    }
+    Ok(sample_trials)
+}
+
 fn spk_writer_err_to_py(err: SpkWriterError) -> PyErr {
     PyRuntimeError::new_err(format!("{err}"))
 }
 
 #[pyclass]
 struct NaifSpkWriter {
-    inner: SpkWriter,
+    writers: Vec<SpkWriter>,
+    segment_count: usize,
+}
+
+impl NaifSpkWriter {
+    fn active_writer(&mut self) -> &mut SpkWriter {
+        if self.segment_count > 0
+            && self.segment_count.is_multiple_of(SPK_SUMMARIES_PER_RECORD)
+            && self.writers.len() == self.segment_count / SPK_SUMMARIES_PER_RECORD
+        {
+            self.writers.push(SpkWriter::new_spk("adam-core"));
+        }
+        self.writers.last_mut().expect("at least one SPK writer")
+    }
+
+    fn mark_segment_added(&mut self) {
+        self.segment_count += 1;
+    }
 }
 
 #[pymethods]
@@ -902,7 +1061,8 @@ impl NaifSpkWriter {
     #[pyo3(signature = (locifn = "adam-core"))]
     fn new(locifn: &str) -> Self {
         Self {
-            inner: SpkWriter::new_spk(locifn),
+            writers: vec![SpkWriter::new_spk(locifn)],
+            segment_count: 0,
         }
     }
 
@@ -951,7 +1111,7 @@ impl NaifSpkWriter {
                 vz: slice(2 + 5 * n_coef),
             });
         }
-        self.inner
+        self.active_writer()
             .add_type3(Type3Segment {
                 target,
                 center,
@@ -963,7 +1123,9 @@ impl NaifSpkWriter {
                 intlen,
                 records,
             })
-            .map_err(spk_writer_err_to_py)
+            .map_err(spk_writer_err_to_py)?;
+        self.mark_segment_added();
+        Ok(())
     }
 
     #[pyo3(signature = (target, center, frame_id, start_et, end_et, segment_id, degree, states, epochs))]
@@ -993,7 +1155,7 @@ impl NaifSpkWriter {
         for row in states_arr.rows() {
             flat.extend_from_slice(row.as_slice().unwrap_or(&row.to_vec()));
         }
-        self.inner
+        self.active_writer()
             .add_type9(Type9Segment {
                 target,
                 center,
@@ -1005,11 +1167,115 @@ impl NaifSpkWriter {
                 states: flat,
                 epochs: epochs_slice.to_vec(),
             })
-            .map_err(spk_writer_err_to_py)
+            .map_err(spk_writer_err_to_py)?;
+        self.mark_segment_added();
+        Ok(())
+    }
+
+    #[pyo3(signature = (orbits_ipc, target_id, start_time, end_time, window_seconds=86400.0, cheby_degree=15))]
+    #[allow(clippy::too_many_arguments)]
+    fn add_type3_orbits(
+        &mut self,
+        orbits_ipc: &Bound<'_, PyBytes>,
+        target_id: i32,
+        start_time: f64,
+        end_time: f64,
+        window_seconds: f64,
+        cheby_degree: usize,
+    ) -> PyResult<()> {
+        let orbits = decode_spk_orbits(orbits_ipc.as_bytes())?;
+        let states =
+            orbits.coordinates.values.cartesian().ok_or_else(|| {
+                PyValueError::new_err("SPK segment requires Cartesian coordinates")
+            })?;
+        let times = orbits
+            .coordinates
+            .times
+            .as_ref()
+            .ok_or_else(|| PyValueError::new_err("SPK segment requires coordinate times"))?;
+        let orbit_id = orbits
+            .orbit_id
+            .first()
+            .ok_or_else(|| PyValueError::new_err("SPK segment requires at least one orbit row"))?;
+        let origin = orbits
+            .coordinates
+            .origins
+            .origins
+            .first()
+            .ok_or_else(|| PyValueError::new_err("SPK segment requires an origin"))?;
+        let backend = global_backend()
+            .lock()
+            .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
+        let segment = type3_segment(
+            &backend,
+            &orbit_id.0,
+            states,
+            times,
+            origin,
+            orbits.coordinates.frame,
+            target_id,
+            start_time,
+            end_time,
+            window_seconds,
+            cheby_degree,
+        )
+        .map_err(spk_product_err_to_py)?;
+        self.active_writer()
+            .add_type3(segment)
+            .map_err(spk_writer_err_to_py)?;
+        self.mark_segment_added();
+        Ok(())
+    }
+
+    #[pyo3(signature = (orbits_ipc, target_id))]
+    fn add_type9_orbits(
+        &mut self,
+        orbits_ipc: &Bound<'_, PyBytes>,
+        target_id: i32,
+    ) -> PyResult<()> {
+        let orbits = decode_spk_orbits(orbits_ipc.as_bytes())?;
+        let states =
+            orbits.coordinates.values.cartesian().ok_or_else(|| {
+                PyValueError::new_err("SPK segment requires Cartesian coordinates")
+            })?;
+        let times = orbits
+            .coordinates
+            .times
+            .as_ref()
+            .ok_or_else(|| PyValueError::new_err("SPK segment requires coordinate times"))?;
+        let orbit_id = orbits
+            .orbit_id
+            .first()
+            .ok_or_else(|| PyValueError::new_err("SPK segment requires at least one orbit row"))?;
+        let origin = orbits
+            .coordinates
+            .origins
+            .origins
+            .first()
+            .ok_or_else(|| PyValueError::new_err("SPK segment requires an origin"))?;
+        let backend = global_backend()
+            .lock()
+            .map_err(|_| PyRuntimeError::new_err("SPICE backend lock is poisoned"))?;
+        let segment = type9_segment(
+            &backend,
+            &orbit_id.0,
+            states,
+            times,
+            origin,
+            orbits.coordinates.frame,
+            target_id,
+        )
+        .map_err(spk_product_err_to_py)?;
+        self.active_writer()
+            .add_type9(segment)
+            .map_err(spk_writer_err_to_py)?;
+        self.mark_segment_added();
+        Ok(())
     }
 
     fn write(&self, path: &str) -> PyResult<()> {
-        self.inner.write(path).map_err(spk_writer_err_to_py)
+        write_spk_writers_atomic(&self.writers, std::path::Path::new(path))
+            .map_err(spk_product_err_to_py)
     }
 }
 
@@ -1059,5 +1325,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(naif_spk_open, m)?)?;
     m.add_function(wrap_pyfunction!(naif_pck_open, m)?)?;
     m.add_function(wrap_pyfunction!(naif_spk_writer, m)?)?;
+    m.add_function(wrap_pyfunction!(spk_fit_chebyshev, m)?)?;
+    m.add_function(wrap_pyfunction!(spk_write_orbits_product, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_spk_write_orbits_product, m)?)?;
     Ok(())
 }

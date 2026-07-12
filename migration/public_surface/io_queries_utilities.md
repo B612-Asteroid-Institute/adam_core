@@ -70,7 +70,7 @@ query paths depend on them, but they are not counted as public API commitments.
 | ADES PSV | fused Rust writer/parser plus observation/context kernels | Public writer/parser each satisfy one crossing; Python only reconstructs compatibility dataclasses/quivr objects |
 | OEM | fused Rust product writer/reader plus KVN engine | Writer and reader each satisfy one crossing (ecliptic rotation, sort, metadata, unit/covariance conversion, orbit-id and table assembly in Rust); ITRF93 pre-transform stays on the Rust `transform_coordinates` crossing; propagated writer remains a declared propagator-provider boundary |
 | OpenSpace | fused SBDB CSV and orbital/trail asset products plus Lua/initialization rendering | Public products each satisfy one crossing: Rust owns transform, epochs/periods, model graph, CSV/Lua rendering, per-orbit loops, SPICE snippets, staged writes, and atomic publication; Python retains enum/default compatibility and an uncovered-case fallback |
-| SPK | low-level Rust DAF writer | **Gap:** propagation dispatch, transform, grouping, Chebyshev fit/windows, segment preparation, and final orchestration remain Python |
+| SPK | fused Rust fitting, Type 3/9 segment, multi-summary DAF, and product workflow | No-propagator products satisfy one crossing; optional propagation is the declared provider boundary followed by the same one product crossing. Rust owns transform/group/sort/IDs/windows/fits/units/segments and atomic output |
 | MPC | eight scalar pack/unpack functions and batched packed-date decode | Designation APIs and `convert_mpc_packed_dates` satisfy one Rust crossing; Astropy `Time` construction is the external compatibility boundary |
 | SPICE backend | kernel readers/writers and low-level backend methods | Low-level methods are thin; **gap:** high-level setup/data discovery, obscodes file read, Python cache/dedup, time/frame/unit conversion, and typed table assembly |
 | Chunk/LRU helpers | retired public-ish names | Unused numeric chunking module removed; LRU functions renamed private and retained only as the documented Python container cache-policy boundary around Rust semantic calls; private OD/query iterators remain tracked by their fused-workflow beads |
@@ -208,17 +208,23 @@ complete native products. `LuaDict.to_pascal_case`, inherited `to_string`, and
 
 ### SPK products
 
-Public-ish module functions are `fit_chebyshev`, `orbits_to_spk`,
-`write_spkw03_segment`, and `write_spkw09_segment`. The native DAF writer and
-atomic final write are already strong foundations. The public product still
-performs time-grid creation, optional Python propagation, coordinate transform,
-orbit grouping, sorting, ID assignment, Chebyshev matrix/least-squares fitting,
-windowing, unit conversion, and segment calls in Python.
+Public module functions are `fit_chebyshev`, `orbits_to_spk`,
+`write_spkw03_segment`, and `write_spkw09_segment`. All are direct Rust
+crossings. Rust owns inclusive window selection, Chebyshev basis construction,
+over/underdetermined SVD minimum-norm fitting, AU/day conversion order, SSB/J2000
+normalization, stable orbit grouping and epoch sorting, target IDs, Type 3/9
+segment preparation, multi-record DAF summary/name chaining and address
+relocation, and atomic output. Frozen legacy NumPy fit coefficients cover both
+least-squares shapes; Type 3 (ASSIST provider) and Type 9 (no provider) readback,
+late segments beyond the former 25-summary limit, errors, mappings, public
+segment shims, and Rust-owned timing are gated.
 
-`orbits_to_spk` needs one Rust workflow crossing. Optional propagation is an
-explicit dependency on a Rust propagator; the no-propagator path can close
-independently. Compatibility segment helpers should become one-crossing shims
-or be deliberately retired if they were never intended public.
+With `propagator=None`, `orbits_to_spk` is one product crossing. Optional
+propagation remains an explicit propagator-provider boundary: Python constructs
+the provider's requested time grid and calls it once, then passes the sampled
+`Orbits` through the same fused Rust product crossing. The compatibility
+`comment` remains accepted and intentionally unserialized, matching the current
+native writer contract.
 
 ### MPC serialization utilities
 
