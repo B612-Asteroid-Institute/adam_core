@@ -63,7 +63,7 @@ query paths depend on them, but they are not counted as public API commitments.
 
 | Family | Current Rust ownership | Closure under the one-crossing rule |
 |---|---|---|
-| Horizons | row normalization only | **Gap:** astroquery construction, HTTP, chunking, dataframe assembly/sort, repeated JSON crossings, and output table construction are Python |
+| Horizons | complete one-crossing Rust HTTP products | Rust owns API URLs, HTTP, 50-epoch chunking, CSV protocol parsing, target-name compatibility, ordering, element conversion, nulls, and nested Orbits/Ephemeris Arrow assembly; Python only projects time/code columns and wraps the returned batch |
 | NEOCC | OEF parser only | **Gap:** requests loop, policy/error handling, per-object assembly, coordinate conversion, and concatenation are Python |
 | Scout | orbit-row normalization only | **Gap:** both HTTP entrypoints, summary parsing, table construction, per-object loop, conversion, and concatenation are Python |
 | SBDB | direct-payload normalization only | **Gap:** legacy astroquery client is Python; new client owns sessions, retries, backoff, concurrency/fair-use, filtering, JSON crossings, and table construction in Python |
@@ -95,13 +95,7 @@ Additional module-public operation:
 
 - `query_horizons_ephemeris`
 
-The `_get_horizons_vectors`, `_get_horizons_elements`, and
-`_get_horizons_ephemeris` helpers are private but define the service boundary.
-They instantiate `astroquery.jplhorizons.Horizons`, issue requests, convert to
-pandas, and impose ordering in Python. The public methods then serialize records
-to JSON, cross into Rust normalization, and reconstruct quivr coordinate/orbit
-or ephemeris tables in Python. `query_horizons` also chunks and concatenates in
-Python. This is not a one-crossing veneer.
+Both exports are one-crossing veneers over the Rust Horizons client. Rust constructs the `horizons.api` protocol for vectors, elements, and observer ephemerides; rescale/sorts epochs; applies the 50-epoch request limit; performs HTTP; parses CSV service tables; preserves astroquery's observable 32-character target-name truncation; converts Keplerian/cometary elements to Cartesian with the canonical solar parameter; orders rows; and emits exact nested quivr-compatible Arrow. Verbatim vectors/elements/ephemerides recordings gate offline parity, a live integration gate checks the external service, and Rust-owned timing measures deterministic response processing only.
 
 Required endpoint: Rust owns request construction/protocol, service limits,
 chunking, response parsing, stable ordering, coordinate selection, and typed

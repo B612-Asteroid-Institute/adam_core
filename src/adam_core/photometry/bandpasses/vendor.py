@@ -12,10 +12,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, NoReturn
+from typing import Iterable
 
 import pyarrow as pa
 
+from ...utils.http import _raise_compatible_http_error
 from .tables import (
     AsteroidTemplates,
     BandpassCurves,
@@ -91,19 +92,6 @@ def _default_svo_bandpass_specs() -> tuple[_SvoBandpassSpec, ...]:
         _SvoBandpassSpec("ATLAS_c", "ATLAS", "c", "Misc/Atlas.cyan"),
         _SvoBandpassSpec("ATLAS_o", "ATLAS", "o", "Misc/Atlas.orange"),
     )
-
-
-def _raise_compatible_http_error(error: RuntimeError) -> NoReturn:
-    """Translate Rust transport failures to requests-compatible exception types."""
-    import requests
-
-    message = str(error)
-    lowered = message.lower()
-    if "timed out" in lowered or "timeout" in lowered:
-        raise requests.Timeout(message) from error
-    if "status code" in lowered:
-        raise requests.HTTPError(message) from error
-    raise requests.ConnectionError(message) from error
 
 
 def build_bandpass_curves(

@@ -10781,16 +10781,16 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/query/horizons.py",
-      "line": 257,
+      "line": 51,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
         "rust_reference": true,
         "python_loop": true,
-        "numpy_reference": true,
-        "pyarrow_reference": true,
-        "quivr_reference": true,
+        "numpy_reference": false,
+        "pyarrow_reference": false,
+        "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
@@ -10809,14 +10809,14 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/query/horizons.py",
-      "line": 196,
+      "line": 21,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
         "rust_reference": true,
         "python_loop": true,
-        "numpy_reference": true,
+        "numpy_reference": false,
         "pyarrow_reference": true,
         "quivr_reference": false,
         "external_io_reference": false
@@ -12153,7 +12153,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/vendor.py",
-      "line": 151,
+      "line": 139,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12181,7 +12181,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/vendor.py",
-      "line": 109,
+      "line": 97,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12209,7 +12209,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/vendor.py",
-      "line": 142,
+      "line": 130,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12237,7 +12237,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/vendor.py",
-      "line": 160,
+      "line": 148,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12265,7 +12265,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/bandpasses/vendor.py",
-      "line": 171,
+      "line": 159,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

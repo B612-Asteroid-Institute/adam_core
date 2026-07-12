@@ -10,6 +10,7 @@ mod bandpass_vendor;
 mod coordinate_ops;
 mod coordinates;
 mod dynamics;
+mod horizons;
 mod native_benchmarks;
 mod od_ops;
 mod orbit_determination;
@@ -24,6 +25,7 @@ fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     coordinate_ops::register(m)?;
     coordinates::register(m)?;
     dynamics::register(m)?;
+    horizons::register(m)?;
     native_benchmarks::register(m)?;
     od_ops::register(m)?;
     photometry::register(m)?;
