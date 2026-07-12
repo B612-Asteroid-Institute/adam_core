@@ -22,6 +22,61 @@ fn spice_err_to_py(err: SpiceBackendError) -> PyErr {
     PyRuntimeError::new_err(format!("{err}"))
 }
 
+/// Extract required int64 `days`/`nanos` columns from a pyarrow RecordBatch.
+fn read_days_nanos(record_batch: &RecordBatch) -> PyResult<(Vec<i64>, Vec<i64>)> {
+    let column = |name: &str| -> PyResult<Vec<i64>> {
+        let array = record_batch
+            .column_by_name(name)
+            .ok_or_else(|| PyValueError::new_err(format!("input batch missing '{name}' column")))?
+            .as_any()
+            .downcast_ref::<Int64Array>()
+            .ok_or_else(|| PyValueError::new_err(format!("'{name}' column must be int64")))?;
+        Ok((0..record_batch.num_rows())
+            .map(|row| array.value(row))
+            .collect())
+    };
+    Ok((column("days")?, column("nanos")?))
+}
+
+/// Map the adam-core frame string to the typed frame plus the SPICE frame
+/// name, with the exact legacy error message.
+fn adam_frame(frame: &str) -> PyResult<(DataFrame, &'static str)> {
+    match frame {
+        "ecliptic" => Ok((DataFrame::Ecliptic, "ECLIPJ2000")),
+        "equatorial" => Ok((DataFrame::Equatorial, "J2000")),
+        "itrf93" => Ok((DataFrame::Itrf93, "ITRF93")),
+        _ => Err(PyValueError::new_err(
+            "frame should be one of {'equatorial', 'ecliptic', 'itrf93'}",
+        )),
+    }
+}
+
+/// Assemble the fused perturber-state output batch: flat `N * 6` AU states
+/// plus the caller's original-scale times and repeated origin code.
+fn perturber_states_record_batch(
+    flat: &[f64],
+    frame: DataFrame,
+    origin_code: &str,
+    times: TimeArray,
+) -> PyResult<RecordBatch> {
+    let states: Vec<[f64; 6]> = flat
+        .chunks_exact(6)
+        .map(|c| [c[0], c[1], c[2], c[3], c[4], c[5]])
+        .collect();
+    let rows = states.len();
+    let coordinates = CoordinateBatch::cartesian(
+        states,
+        frame,
+        OriginArray::repeat(OriginId::from_code(origin_code), rows),
+        Some(times),
+        None,
+    )
+    .map_err(|err| PyValueError::new_err(err.to_string()))?;
+    coordinates
+        .into_nested_record_batch()
+        .map_err(|err| PyValueError::new_err(err.to_string()))
+}
+
 fn lock_err_to_py() -> PyErr {
     PyRuntimeError::new_err("adam-core SPICE backend lock is poisoned")
 }
@@ -397,6 +452,211 @@ impl PyAdamCoreSpiceBackend {
             trials_out.push(samples);
         }
         Ok(trials_out)
+    }
+
+    /// Fused legacy `get_perturber_state` crossing: days/nanos RecordBatch
+    /// plus scale in, one nested `CartesianCoordinates` RecordBatch out.
+    /// Rust owns the TDB rescale, epoch dedup, bounded forward/reverse state
+    /// cache, batched SPK lookup with legacy ET arithmetic, legacy
+    /// divide-by-unit conversion, and table assembly.
+    #[pyo3(signature = (batch, time_scale, target_id, origin_id, origin_code, frame, cache_maxsize))]
+    fn perturber_states_arrow<'py>(
+        &self,
+        py: Python<'py>,
+        batch: &Bound<'py, PyAny>,
+        time_scale: &str,
+        target_id: i32,
+        origin_id: i32,
+        origin_code: &str,
+        frame: &str,
+        cache_maxsize: usize,
+    ) -> PyResult<PyObject> {
+        let record_batch = RecordBatch::from_pyarrow_bound(batch)
+            .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
+        let (days, nanos) = read_days_nanos(&record_batch)?;
+        let scale =
+            TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let (frame_enum, frame_spice) = adam_frame(frame)?;
+        let times = TimeArray::from_parts(scale, days, nanos)
+            .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
+        let tdb = times
+            .clone()
+            .rescale(TimeScale::Tdb)
+            .map_err(|err| PyValueError::new_err(format!("cannot rescale times to TDB: {err}")))?;
+        let tdb_days: Vec<i64> = tdb.epochs.iter().map(|epoch| epoch.days).collect();
+        let tdb_nanos: Vec<i64> = tdb.epochs.iter().map(|epoch| epoch.nanos).collect();
+        let flat = self
+            .lock()?
+            .perturber_states_cached(
+                target_id,
+                origin_id,
+                frame_spice,
+                &tdb_days,
+                &tdb_nanos,
+                cache_maxsize,
+            )
+            .map_err(spice_err_to_py)?;
+        perturber_states_record_batch(&flat, frame_enum, origin_code, times)?.to_pyarrow(py)
+    }
+
+    #[pyo3(signature = (batch, time_scale, target_id, origin_id, origin_code, frame, cache_maxsize, reps, trials, warmup_reps=1))]
+    #[allow(clippy::too_many_arguments)]
+    fn benchmark_perturber_states_arrow_rust(
+        &self,
+        batch: &Bound<'_, PyAny>,
+        time_scale: &str,
+        target_id: i32,
+        origin_id: i32,
+        origin_code: &str,
+        frame: &str,
+        cache_maxsize: usize,
+        reps: usize,
+        trials: usize,
+        warmup_reps: usize,
+    ) -> PyResult<Vec<Vec<f64>>> {
+        if reps == 0 || trials == 0 {
+            return Err(PyValueError::new_err("reps and trials must be >= 1"));
+        }
+        let record_batch = RecordBatch::from_pyarrow_bound(batch)
+            .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
+        let (days, nanos) = read_days_nanos(&record_batch)?;
+        let scale =
+            TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let (frame_enum, frame_spice) = adam_frame(frame)?;
+        let times = TimeArray::from_parts(scale, days, nanos)
+            .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
+        let tdb = times
+            .clone()
+            .rescale(TimeScale::Tdb)
+            .map_err(|err| PyValueError::new_err(format!("cannot rescale times to TDB: {err}")))?;
+        let tdb_days: Vec<i64> = tdb.epochs.iter().map(|epoch| epoch.days).collect();
+        let tdb_nanos: Vec<i64> = tdb.epochs.iter().map(|epoch| epoch.nanos).collect();
+        let run_once = || -> PyResult<RecordBatch> {
+            // Semantic result cache cleared before every sample (cache policy).
+            let mut backend = self.lock()?;
+            backend.clear_spkez_state_cache();
+            let flat = backend
+                .perturber_states_cached(
+                    target_id,
+                    origin_id,
+                    frame_spice,
+                    &tdb_days,
+                    &tdb_nanos,
+                    cache_maxsize,
+                )
+                .map_err(spice_err_to_py)?;
+            drop(backend);
+            perturber_states_record_batch(&flat, frame_enum, origin_code, times.clone())
+        };
+        let mut sample_trials = Vec::with_capacity(trials);
+        for _ in 0..trials {
+            for _ in 0..warmup_reps {
+                black_box(run_once()?);
+            }
+            let mut samples = Vec::with_capacity(reps);
+            for _ in 0..reps {
+                let started = Instant::now();
+                black_box(run_once()?);
+                samples.push(started.elapsed().as_secs_f64());
+            }
+            sample_trials.push(samples);
+        }
+        Ok(sample_trials)
+    }
+
+    /// Fused legacy `get_spice_body_state` crossing: the shared
+    /// `state_batch` core (legacy ET arithmetic and `/KM *S_P_DAY`
+    /// conversion order) plus nested table assembly.
+    fn spice_body_states_arrow<'py>(
+        &self,
+        py: Python<'py>,
+        batch: &Bound<'py, PyAny>,
+        time_scale: &str,
+        body_id: i32,
+        origin_code: &str,
+        frame: &str,
+    ) -> PyResult<PyObject> {
+        let record_batch = RecordBatch::from_pyarrow_bound(batch)
+            .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
+        let (days, nanos) = read_days_nanos(&record_batch)?;
+        let scale =
+            TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let (frame_enum, _frame_spice) = adam_frame(frame)?;
+        let times = TimeArray::from_parts(scale, days, nanos)
+            .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
+        let coordinates = self
+            .lock()?
+            .state_batch(
+                &OriginId::Naif(body_id),
+                &OriginId::from_code(origin_code),
+                frame_enum,
+                &times,
+            )
+            .map_err(spice_err_to_py)?;
+        coordinates
+            .into_nested_record_batch()
+            .map_err(|err| PyValueError::new_err(err.to_string()))?
+            .to_pyarrow(py)
+    }
+
+    #[pyo3(signature = (batch, time_scale, body_id, origin_code, frame, reps, trials, warmup_reps=1))]
+    #[allow(clippy::too_many_arguments)]
+    fn benchmark_spice_body_states_arrow_rust(
+        &self,
+        batch: &Bound<'_, PyAny>,
+        time_scale: &str,
+        body_id: i32,
+        origin_code: &str,
+        frame: &str,
+        reps: usize,
+        trials: usize,
+        warmup_reps: usize,
+    ) -> PyResult<Vec<Vec<f64>>> {
+        if reps == 0 || trials == 0 {
+            return Err(PyValueError::new_err("reps and trials must be >= 1"));
+        }
+        let record_batch = RecordBatch::from_pyarrow_bound(batch)
+            .map_err(|err| PyValueError::new_err(format!("invalid pyarrow RecordBatch: {err}")))?;
+        let (days, nanos) = read_days_nanos(&record_batch)?;
+        let scale =
+            TimeScale::parse(time_scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
+        let (frame_enum, _frame_spice) = adam_frame(frame)?;
+        let times = TimeArray::from_parts(scale, days, nanos)
+            .map_err(|err| PyValueError::new_err(format!("invalid times: {err}")))?;
+        let target = OriginId::Naif(body_id);
+        let origin = OriginId::from_code(origin_code);
+        let run_once = || -> PyResult<RecordBatch> {
+            let coordinates = self
+                .lock()?
+                .state_batch(&target, &origin, frame_enum, &times)
+                .map_err(spice_err_to_py)?;
+            coordinates
+                .into_nested_record_batch()
+                .map_err(|err| PyValueError::new_err(err.to_string()))
+        };
+        let mut sample_trials = Vec::with_capacity(trials);
+        for _ in 0..trials {
+            for _ in 0..warmup_reps {
+                black_box(run_once()?);
+            }
+            let mut samples = Vec::with_capacity(reps);
+            for _ in 0..reps {
+                let started = Instant::now();
+                black_box(run_once()?);
+                samples.push(started.elapsed().as_secs_f64());
+            }
+            sample_trials.push(samples);
+        }
+        Ok(sample_trials)
+    }
+
+    fn clear_spkez_state_cache(&self) -> PyResult<()> {
+        self.lock()?.clear_spkez_state_cache();
+        Ok(())
+    }
+
+    fn spkez_state_cache_len(&self) -> PyResult<usize> {
+        Ok(self.lock()?.spkez_state_cache_len())
     }
 
     fn furnsh(&self, path: &str) -> PyResult<()> {

@@ -5,7 +5,7 @@
 //! thin wrappers over this Rust API so the same backend can be used by a
 //! future standalone `adam-core-rs` consumer without crossing Python.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs::File;
 use std::io::{self, Read};
 use std::path::Path;
@@ -129,6 +129,60 @@ pub struct AdamCoreSpiceBackend {
     kernels: Vec<Kernel>,
     custom_names: HashMap<String, i32>,
     obscodes: HashMap<String, GroundObserverSite>,
+    spkez_state_cache: SpkezStateCache,
+}
+
+/// Key of the fused perturber-state epoch cache: the Rust mirror of the
+/// legacy Python `_SpkezCacheKey` (target/observer NAIF ids, SPICE frame
+/// name, integer TDB epoch).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct SpkezStateKey {
+    target: i32,
+    observer: i32,
+    frame: String,
+    days: i64,
+    nanos: i64,
+}
+
+/// Bounded per-epoch state cache for the fused `get_perturber_state`
+/// crossing. Semantically transparent (values are deterministic reader
+/// outputs); the retention policy is bounded insertion-order eviction,
+/// which differs from the legacy Python LRU move-to-end only in *which*
+/// entries survive under pressure, never in returned values. It is a
+/// semantic result cache: cleared by `clear_spkez_cache()` and before every
+/// native benchmark sample.
+#[derive(Debug, Default)]
+struct SpkezStateCache {
+    map: HashMap<SpkezStateKey, [f64; 6]>,
+    order: VecDeque<SpkezStateKey>,
+}
+
+impl SpkezStateCache {
+    fn get(&self, key: &SpkezStateKey) -> Option<[f64; 6]> {
+        self.map.get(key).copied()
+    }
+
+    fn put(&mut self, key: SpkezStateKey, state: [f64; 6], maxsize: usize) {
+        if maxsize == 0 {
+            return;
+        }
+        if self.map.insert(key.clone(), state).is_none() {
+            self.order.push_back(key);
+            while self.map.len() > maxsize {
+                match self.order.pop_front() {
+                    Some(oldest) => {
+                        self.map.remove(&oldest);
+                    }
+                    None => break,
+                }
+            }
+        }
+    }
+
+    fn clear(&mut self) {
+        self.map.clear();
+        self.order.clear();
+    }
 }
 
 /// Process-global SPICE backend.
@@ -242,7 +296,141 @@ impl AdamCoreSpiceBackend {
             kernels: Vec::new(),
             custom_names: HashMap::new(),
             obscodes: HashMap::new(),
+            spkez_state_cache: SpkezStateCache::default(),
         }
+    }
+
+    /// Clear the fused perturber-state epoch cache (semantic result cache;
+    /// cleared by `adam_core.utils.spice.clear_spkez_cache` and before every
+    /// native benchmark sample per the cache policy).
+    pub fn clear_spkez_state_cache(&mut self) {
+        self.spkez_state_cache.clear();
+    }
+
+    /// Number of entries in the fused perturber-state epoch cache
+    /// (diagnostics/tests).
+    pub fn spkez_state_cache_len(&self) -> usize {
+        self.spkez_state_cache.map.len()
+    }
+
+    /// Fused legacy `get_perturber_state` core: dedup rows by integer TDB
+    /// epoch (first-appearance order), probe the bounded forward/reverse
+    /// state cache, run one batched SPK query for the misses using the exact
+    /// legacy ET arithmetic (`(mjd - J2000) * 86400`), convert km/km-s ->
+    /// AU/AU-day with the exact legacy divide-by-unit-vector operation order
+    /// (`x / KM_PER_AU`, `v / (KM_PER_AU / SECONDS_PER_DAY)`), fill both
+    /// forward and negated reverse cache entries, and gather to input row
+    /// order. Returns flat `N * 6` states.
+    pub fn perturber_states_cached(
+        &mut self,
+        target: i32,
+        observer: i32,
+        frame: &str,
+        days: &[i64],
+        nanos: &[i64],
+        cache_maxsize: usize,
+    ) -> Result<Vec<f64>, SpiceBackendError> {
+        let n = days.len();
+        let mut slot_of: HashMap<(i64, i64), usize> = HashMap::new();
+        let mut unique: Vec<(i64, i64)> = Vec::new();
+        let mut inverse: Vec<usize> = Vec::with_capacity(n);
+        for row in 0..n {
+            let key = (days[row], nanos[row]);
+            let slot = *slot_of.entry(key).or_insert_with(|| {
+                unique.push(key);
+                unique.len() - 1
+            });
+            inverse.push(slot);
+        }
+
+        let mut states: Vec<[f64; 6]> = vec![[0.0; 6]; unique.len()];
+        let mut missing: Vec<usize> = Vec::new();
+        for (slot, &(epoch_days, epoch_nanos)) in unique.iter().enumerate() {
+            let forward = SpkezStateKey {
+                target,
+                observer,
+                frame: frame.to_string(),
+                days: epoch_days,
+                nanos: epoch_nanos,
+            };
+            if let Some(state) = self.spkez_state_cache.get(&forward) {
+                states[slot] = state;
+                continue;
+            }
+            let reverse = SpkezStateKey {
+                target: observer,
+                observer: target,
+                frame: frame.to_string(),
+                days: epoch_days,
+                nanos: epoch_nanos,
+            };
+            if let Some(state) = self.spkez_state_cache.get(&reverse) {
+                let negated = [
+                    -state[0], -state[1], -state[2], -state[3], -state[4], -state[5],
+                ];
+                states[slot] = negated;
+                self.spkez_state_cache.put(forward, negated, cache_maxsize);
+                continue;
+            }
+            missing.push(slot);
+        }
+
+        if !missing.is_empty() {
+            let miss_times = TimeArray::from_parts(
+                TimeScale::Tdb,
+                missing.iter().map(|&slot| unique[slot].0).collect(),
+                missing.iter().map(|&slot| unique[slot].1).collect(),
+            )?;
+            let ets = miss_times.tdb_et_seconds()?;
+            let flat = self.spkez_batch(target, observer, frame, &ets)?;
+            // Legacy `batched / scale` conversion vector.
+            let unit = [
+                KM_PER_AU,
+                KM_PER_AU,
+                KM_PER_AU,
+                KM_PER_AU / SECONDS_PER_DAY,
+                KM_PER_AU / SECONDS_PER_DAY,
+                KM_PER_AU / SECONDS_PER_DAY,
+            ];
+            for (local, &slot) in missing.iter().enumerate() {
+                let mut state = [0.0_f64; 6];
+                for column in 0..6 {
+                    state[column] = flat[local * 6 + column] / unit[column];
+                }
+                states[slot] = state;
+                let (epoch_days, epoch_nanos) = unique[slot];
+                self.spkez_state_cache.put(
+                    SpkezStateKey {
+                        target,
+                        observer,
+                        frame: frame.to_string(),
+                        days: epoch_days,
+                        nanos: epoch_nanos,
+                    },
+                    state,
+                    cache_maxsize,
+                );
+                self.spkez_state_cache.put(
+                    SpkezStateKey {
+                        target: observer,
+                        observer: target,
+                        frame: frame.to_string(),
+                        days: epoch_days,
+                        nanos: epoch_nanos,
+                    },
+                    [
+                        -state[0], -state[1], -state[2], -state[3], -state[4], -state[5],
+                    ],
+                    cache_maxsize,
+                );
+            }
+        }
+
+        let mut out = Vec::with_capacity(n * 6);
+        for &slot in &inverse {
+            out.extend_from_slice(&states[slot]);
+        }
+        Ok(out)
     }
 
     /// Parse and cache MPC observatory parallax coefficients (the JSON shipped

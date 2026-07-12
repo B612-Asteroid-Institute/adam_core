@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import List, Literal, Optional, Set
 
 import numpy as np
+import pyarrow as pa
 import pyarrow.compute as pc
 from naif_de440 import de440
 from naif_earth_itrf93 import earth_itrf93
@@ -91,7 +92,11 @@ def clear_spkez_cache() -> None:
 
     This is primarily intended for testing and benchmarking.
     """
+    # Both the retained legacy Python cache and the Rust-side cache behind
+    # the fused get_perturber_state crossing are semantic result caches;
+    # clear them together.
     _SPKEZ_CACHE.clear()
+    get_backend().clear_spkez_state_cache()
 
 
 def _jd_tdb_to_et(jd_tdb: np.ndarray) -> np.ndarray:
@@ -206,13 +211,7 @@ def get_perturber_state(
         The state vectors of the perturber in the desired frame
         and measured from the desired origin.
     """
-    if frame == "ecliptic":
-        frame_spice = "ECLIPJ2000"
-    elif frame == "equatorial":
-        frame_spice = "J2000"
-    elif frame == "itrf93":
-        frame_spice = "ITRF93"
-    else:
+    if frame not in ("ecliptic", "equatorial", "itrf93"):
         err = "frame should be one of {'equatorial', 'ecliptic', 'itrf93'}"
         raise ValueError(err)
 
@@ -222,6 +221,65 @@ def get_perturber_state(
     N = int(len(times))
     if N == 0:
         return CartesianCoordinates.empty()
+
+    # One fused Rust crossing owns the TDB rescale, epoch dedup, bounded
+    # forward/reverse state cache, batched SPK lookup, unit conversion, and
+    # nested table assembly (bead personal-cmy.37.4.9). Coverage failures
+    # fall back to the retained legacy composition, which reproduces the
+    # exact legacy NotCovered/ValueError behavior from the same readers.
+    from .._rust.arrow import table_from_record_batch
+
+    try:
+        result = _rust_backend_perturber_states(perturber, times, frame, origin)
+    except (RuntimeError, ValueError):
+        return _get_perturber_state_legacy(perturber, times, frame, origin)
+    return table_from_record_batch(CartesianCoordinates, result)
+
+
+def _rust_backend_perturber_states(
+    perturber: OriginCodes,
+    times: Timestamp,
+    frame: str,
+    origin: OriginCodes,
+):
+    """Single fused crossing behind ``get_perturber_state`` (module-level so
+    tests can force the legacy fallback by monkeypatching it to raise)."""
+    time_table = times.table.combine_chunks()
+    batch = pa.RecordBatch.from_arrays(
+        [
+            time_table.column("days").chunk(0),
+            time_table.column("nanos").chunk(0),
+        ],
+        names=["days", "nanos"],
+    )
+    return get_backend().perturber_states_arrow(
+        batch,
+        times.scale,
+        int(perturber.value),
+        int(origin.value),
+        origin.name,
+        frame,
+        _SPKEZ_CACHE_MAXSIZE,
+    )
+
+
+def _get_perturber_state_legacy(
+    perturber: OriginCodes,
+    times: Timestamp,
+    frame: Literal["ecliptic", "equatorial", "itrf93"] = "ecliptic",
+    origin: OriginCodes = OriginCodes.SUN,
+) -> CartesianCoordinates:
+    """Retained legacy composition (Python epoch cache + batched backend
+    query); used when the fused Rust crossing reports a failure and by tests
+    that exercise the Python cache internals directly."""
+    if frame == "ecliptic":
+        frame_spice = "ECLIPJ2000"
+    elif frame == "equatorial":
+        frame_spice = "J2000"
+    else:
+        frame_spice = "ITRF93"
+
+    N = int(len(times))
 
     # Build stable time keys in TDB using integer (days,nanos).
     times_tdb = times.rescale("tdb")
@@ -401,17 +459,61 @@ def get_spice_body_state(
         If the body ID is not found in any loaded kernel or if state data
         cannot be retrieved for the requested times
     """
-    if frame == "ecliptic":
-        frame_spice = "ECLIPJ2000"
-    elif frame == "equatorial":
-        frame_spice = "J2000"
-    elif frame == "itrf93":
-        frame_spice = "ITRF93"
-    else:
+    if frame not in ("ecliptic", "equatorial", "itrf93"):
         raise ValueError("frame should be one of {'equatorial', 'ecliptic', 'itrf93'}")
 
     # Make sure SPICE is ready
     setup_SPICE()
+
+    # One fused Rust crossing owns ET conversion, the batched SPK lookup,
+    # the legacy unit-conversion order, and nested table assembly (bead
+    # personal-cmy.37.4.9). Failures fall back to the retained legacy
+    # composition, which reproduces the exact legacy wrapped ValueError from
+    # the same readers.
+    from .._rust.arrow import table_from_record_batch
+
+    try:
+        result = _rust_backend_spice_body_states(body_id, times, frame, origin)
+    except (RuntimeError, ValueError):
+        return _get_spice_body_state_legacy(body_id, times, frame, origin)
+    return table_from_record_batch(CartesianCoordinates, result)
+
+
+def _rust_backend_spice_body_states(
+    body_id: int,
+    times: Timestamp,
+    frame: str,
+    origin: OriginCodes,
+):
+    """Single fused crossing behind ``get_spice_body_state`` (module-level so
+    tests can force the legacy fallback by monkeypatching it to raise)."""
+    time_table = times.table.combine_chunks()
+    batch = pa.RecordBatch.from_arrays(
+        [
+            time_table.column("days").chunk(0),
+            time_table.column("nanos").chunk(0),
+        ],
+        names=["days", "nanos"],
+    )
+    return get_backend().spice_body_states_arrow(
+        batch, times.scale, int(body_id), origin.name, frame
+    )
+
+
+def _get_spice_body_state_legacy(
+    body_id: int,
+    times: Timestamp,
+    frame: Literal["ecliptic", "equatorial", "itrf93"] = "ecliptic",
+    origin: OriginCodes = OriginCodes.SUN,
+) -> CartesianCoordinates:
+    """Retained legacy composition; used when the fused Rust crossing
+    reports a failure so the public error contract stays byte-identical."""
+    if frame == "ecliptic":
+        frame_spice = "ECLIPJ2000"
+    elif frame == "equatorial":
+        frame_spice = "J2000"
+    else:
+        frame_spice = "ITRF93"
 
     # Convert epochs to ET in TDB
     epochs_et = times.et()

@@ -244,12 +244,25 @@ Additional module-public lifecycle/state APIs include `clear_spkez_cache`,
 kernel lifecycle, name lookup, transforms, body-state batches, and observer
 state batches.
 
-Most `RustBackend` methods are legitimate thin low-level veneers. High-level
-utilities are not: Python discovers package data, loops over kernel loads,
-reads obscodes JSON, owns an OrderedDict cache and reverse-state logic,
-deduplicates epochs, maps frames, converts time/units, and constructs coordinate
-tables. These operations must be fused into Rust public endpoints. Fixed-kernel
-integration tests should validate adam-core wiring while leaving CSPICE oracle
+Most `RustBackend` methods are legitimate thin low-level veneers.
+`get_perturber_state` is now one fused `perturber_states_arrow` crossing: Rust
+owns the TDB rescale, integer-epoch dedup, the bounded forward/reverse
+epoch-state cache (the Rust mirror of the legacy `_SpkezCacheKey` semantics;
+retention order is the only, values-neutral difference), batched SPK lookup
+with the legacy ET arithmetic, the legacy divide-by-unit conversion order, and
+nested `CartesianCoordinates` assembly. `get_spice_body_state` is one fused
+`spice_body_states_arrow` crossing over the shared `state_batch` core (legacy
+`/KM_P_AU` then `*S_P_DAY` order). Both veneers keep the legacy frame
+validation error, `setup_SPICE()` kernel lifecycle, and a retained legacy
+composition as the failure fallback so `NotCovered`/wrapped-`ValueError`
+contracts stay byte-identical; fused-vs-legacy bit-exact equality is asserted
+in tests, and both crossings have Rust-Instant timing with the cache cleared
+before every sample. `clear_spkez_cache` clears the retained Python cache and
+the Rust-side cache together. `setup_SPICE`/`setup_mpc_obscodes` remain
+Python package-data discovery loops over idempotent Rust loads (kernel
+lifecycle explicitly preserved; Rust-side lazy init tracked under
+personal-cmy.36.1, data provenance under personal-3uy). Fixed-kernel
+integration tests validate adam-core wiring while leaving CSPICE oracle
 breadth to spicekit.
 
 ### Generic utilities and execution

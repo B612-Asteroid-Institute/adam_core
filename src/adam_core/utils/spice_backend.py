@@ -198,6 +198,98 @@ class RustBackend:
                 batch, time_scale, reps, warmup, trials
             )
 
+    def perturber_states_arrow(
+        self,
+        batch,
+        time_scale: str,
+        target_id: int,
+        origin_id: int,
+        origin_code: str,
+        frame: str,
+        cache_maxsize: int,
+    ):
+        """Fused single-crossing ``get_perturber_state``: TDB rescale, epoch
+        dedup, bounded forward/reverse state cache, batched SPK lookup, unit
+        conversion, and nested CartesianCoordinates assembly in Rust."""
+        with self._lock:
+            return self._inner.perturber_states_arrow(
+                batch,
+                time_scale,
+                target_id,
+                origin_id,
+                origin_code,
+                frame,
+                cache_maxsize,
+            )
+
+    def benchmark_perturber_states_arrow_rust(
+        self,
+        batch,
+        time_scale: str,
+        target_id: int,
+        origin_id: int,
+        origin_code: str,
+        frame: str,
+        cache_maxsize: int,
+        reps: int,
+        trials: int,
+        warmup_reps: int = 1,
+    ) -> list[list[float]]:
+        with self._lock:
+            return self._inner.benchmark_perturber_states_arrow_rust(
+                batch,
+                time_scale,
+                target_id,
+                origin_id,
+                origin_code,
+                frame,
+                cache_maxsize,
+                reps,
+                trials,
+                warmup_reps,
+            )
+
+    def spice_body_states_arrow(
+        self, batch, time_scale: str, body_id: int, origin_code: str, frame: str
+    ):
+        """Fused single-crossing ``get_spice_body_state``."""
+        with self._lock:
+            return self._inner.spice_body_states_arrow(
+                batch, time_scale, body_id, origin_code, frame
+            )
+
+    def benchmark_spice_body_states_arrow_rust(
+        self,
+        batch,
+        time_scale: str,
+        body_id: int,
+        origin_code: str,
+        frame: str,
+        reps: int,
+        trials: int,
+        warmup_reps: int = 1,
+    ) -> list[list[float]]:
+        with self._lock:
+            return self._inner.benchmark_spice_body_states_arrow_rust(
+                batch,
+                time_scale,
+                body_id,
+                origin_code,
+                frame,
+                reps,
+                trials,
+                warmup_reps,
+            )
+
+    def clear_spkez_state_cache(self) -> None:
+        """Clear the Rust-side fused perturber-state epoch cache."""
+        with self._lock:
+            self._inner.clear_spkez_state_cache()
+
+    def spkez_state_cache_len(self) -> int:
+        with self._lock:
+            return int(self._inner.spkez_state_cache_len())
+
     def observer_states_from_exposures_arrow(
         self, batch, time_scale: str, frame: str, origin_code: str
     ):
