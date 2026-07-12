@@ -320,7 +320,9 @@ pub enum Representation {
 
 /// Apply the representation-in -> cartesian(frame_in) -> cartesian(frame_out) -> representation-out
 /// chain with `T: Scalar` so the same body is reused both for f64 value evaluation and
-/// Dual<6> Jacobian extraction. `t0`, `mu`, `a`, `f` are provided as `T::from_f64(...)` by the caller.
+/// Dual<6> Jacobian extraction. `mu_in` applies while converting the input
+/// representation to Cartesian; `mu_out` applies after any origin shift while
+/// converting Cartesian to the output representation.
 fn transform_chain<T: adam_core_rs_autodiff::Scalar>(
     coords: [T; 6],
     rep_in: Representation,
@@ -328,7 +330,8 @@ fn transform_chain<T: adam_core_rs_autodiff::Scalar>(
     frame_in: Frame,
     frame_out: Frame,
     t0: T,
-    mu: T,
+    mu_in: T,
+    mu_out: T,
     a: f64,
     f: f64,
     max_iter: usize,
@@ -338,8 +341,8 @@ fn transform_chain<T: adam_core_rs_autodiff::Scalar>(
     let cart_in = match rep_in {
         Representation::Cartesian => coords,
         Representation::Spherical => spherical_to_cartesian6::<T>(&coords),
-        Representation::Keplerian => keplerian_to_cartesian6::<T>(&coords, mu, max_iter, tol),
-        Representation::Cometary => cometary_to_cartesian6::<T>(&coords, t0, mu, max_iter, tol),
+        Representation::Keplerian => keplerian_to_cartesian6::<T>(&coords, mu_in, max_iter, tol),
+        Representation::Cometary => cometary_to_cartesian6::<T>(&coords, t0, mu_in, max_iter, tol),
         Representation::Geodetic => {
             // geodetic as input is not a supported rep-in for transforms in this pipeline
             // (matches legacy): mirror parse-level rejection by returning NaN.
@@ -384,9 +387,9 @@ fn transform_chain<T: adam_core_rs_autodiff::Scalar>(
         Representation::Geodetic => cartesian_to_geodetic6::<T>(&cart_out_frame, a, f),
         Representation::Keplerian => {
             // Legacy returns (a, e, i, raan, ap, M) — 6 elements.
-            cartesian_to_keplerian6::<T>(&cart_out_frame, mu)
+            cartesian_to_keplerian6::<T>(&cart_out_frame, mu_out)
         }
-        Representation::Cometary => cartesian_to_cometary6::<T>(&cart_out_frame, t0, mu),
+        Representation::Cometary => cartesian_to_cometary6::<T>(&cart_out_frame, t0, mu_out),
     }
 }
 
@@ -401,7 +404,8 @@ pub fn transform_row_with_jacobian(
     frame_in: Frame,
     frame_out: Frame,
     t0: f64,
-    mu: f64,
+    mu_in: f64,
+    mu_out: f64,
     a: f64,
     f: f64,
     max_iter: usize,
@@ -410,7 +414,8 @@ pub fn transform_row_with_jacobian(
 ) -> ([f64; 6], [[f64; 6]; 6]) {
     let seeded: [Dual<6>; 6] = Dual::seed(coords);
     let t0_d = Dual::<6>::constant(t0);
-    let mu_d = Dual::<6>::constant(mu);
+    let mu_in_d = Dual::<6>::constant(mu_in);
+    let mu_out_d = Dual::<6>::constant(mu_out);
     let translation_d = translation.map(|v| {
         [
             Dual::<6>::constant(v[0]),
@@ -428,7 +433,8 @@ pub fn transform_row_with_jacobian(
         frame_in,
         frame_out,
         t0_d,
-        mu_d,
+        mu_in_d,
+        mu_out_d,
         a,
         f,
         max_iter,
@@ -465,7 +471,8 @@ pub fn transform_with_covariance_flat6(
     frame_in: Frame,
     frame_out: Frame,
     t0: &[f64],
-    mu: &[f64],
+    mu_in: &[f64],
+    mu_out: &[f64],
     a: f64,
     f: f64,
     max_iter: usize,
@@ -484,7 +491,8 @@ pub fn transform_with_covariance_flat6(
         "covariance_flat length must be N * 36 for coords shape (N, 6)"
     );
     assert_eq!(t0.len(), n, "t0 length must match coords rows");
-    assert_eq!(mu.len(), n, "mu length must match coords rows");
+    assert_eq!(mu_in.len(), n, "mu_in length must match coords rows");
+    assert_eq!(mu_out.len(), n, "mu_out length must match coords rows");
     if let Some(t) = translation_flat {
         assert_eq!(
             t.len(),
@@ -536,7 +544,8 @@ pub fn transform_with_covariance_flat6(
                         frame_in,
                         frame_out,
                         t0[i],
-                        mu[i],
+                        mu_in[i],
+                        mu_out[i],
                         a,
                         f,
                         max_iter,
@@ -558,7 +567,8 @@ pub fn transform_with_covariance_flat6(
                 frame_in,
                 frame_out,
                 t0[i],
-                mu[i],
+                mu_in[i],
+                mu_out[i],
                 a,
                 f,
                 max_iter,
@@ -616,7 +626,8 @@ pub fn transform_values_flat6(
     frame_in: Frame,
     frame_out: Frame,
     t0: &[f64],
-    mu: &[f64],
+    mu_in: &[f64],
+    mu_out: &[f64],
     a: f64,
     f: f64,
     max_iter: usize,
@@ -630,7 +641,8 @@ pub fn transform_values_flat6(
     );
     let n = coords_flat.len() / 6;
     assert_eq!(t0.len(), n, "t0 length must match coords rows");
-    assert_eq!(mu.len(), n, "mu length must match coords rows");
+    assert_eq!(mu_in.len(), n, "mu_in length must match coords rows");
+    assert_eq!(mu_out.len(), n, "mu_out length must match coords rows");
     if let Some(t) = translation_flat {
         assert_eq!(
             t.len(),
@@ -643,8 +655,12 @@ pub fn transform_values_flat6(
     let mut cartesian = match rep_in {
         Representation::Cartesian => coords_flat.to_vec(),
         Representation::Spherical => spherical_to_cartesian_flat6(coords_flat),
-        Representation::Keplerian => keplerian_to_cartesian_flat6(coords_flat, mu, max_iter, tol),
-        Representation::Cometary => cometary_to_cartesian_flat6(coords_flat, t0, mu, max_iter, tol),
+        Representation::Keplerian => {
+            keplerian_to_cartesian_flat6(coords_flat, mu_in, max_iter, tol)
+        }
+        Representation::Cometary => {
+            cometary_to_cartesian_flat6(coords_flat, t0, mu_in, max_iter, tol)
+        }
         Representation::Geodetic => {
             return Err("geodetic input is not a supported transform source".to_string());
         }
@@ -673,8 +689,8 @@ pub fn transform_values_flat6(
             cartesian_to_geodetic_flat6(&cartesian, a, f, max_iter, tol),
             6,
         ),
-        Representation::Keplerian => (cartesian_to_keplerian_flat6(&cartesian, t0, mu), 13),
-        Representation::Cometary => (cartesian_to_cometary_flat6(&cartesian, t0, mu), 6),
+        Representation::Keplerian => (cartesian_to_keplerian_flat6(&cartesian, t0, mu_out), 13),
+        Representation::Cometary => (cartesian_to_cometary_flat6(&cartesian, t0, mu_out), 6),
     };
     Ok(out)
 }
@@ -1492,6 +1508,7 @@ mod orbital_public_tests {
             Frame::Ecliptic,
             &t0,
             &mu,
+            &mu,
             0.0,
             0.0,
             100,
@@ -1517,6 +1534,7 @@ mod orbital_public_tests {
                 Frame::Equatorial,
                 &t0,
                 &mu,
+                &mu,
                 0.0,
                 0.0,
                 100,
@@ -1532,6 +1550,7 @@ mod orbital_public_tests {
                 Frame::Ecliptic,
                 Frame::Equatorial,
                 &t0,
+                &mu,
                 &mu,
                 0.0,
                 0.0,
@@ -1556,6 +1575,7 @@ mod orbital_public_tests {
             Frame::Ecliptic,
             &t0,
             &mu,
+            &mu,
             0.0,
             0.0,
             100,
@@ -1573,6 +1593,7 @@ mod orbital_public_tests {
             Frame::Ecliptic,
             Frame::Itrf93,
             &t0,
+            &mu,
             &mu,
             0.0,
             0.0,

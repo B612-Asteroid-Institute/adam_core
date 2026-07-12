@@ -16,9 +16,9 @@ use adam_core_rs_coords::types::{
     TimeScale,
 };
 use adam_core_rs_coords::{
-    calculate_moid_batch, rotate_cartesian_time_varying_flat6, transform_values_flat6,
-    transform_with_covariance_flat6, Frame as KernelFrame, OriginTranslationProvider,
-    Representation,
+    calculate_moid_batch, origin_mu_au3_day2, rotate_cartesian_time_varying_flat6,
+    transform_values_flat6, transform_with_covariance_flat6, Frame as KernelFrame,
+    OriginTranslationProvider, Representation,
 };
 use spicekit::frame::{
     apply_sxform, invert_sxform, j2000_to_eclipj2000, pck_euler_rotation_and_derivative,
@@ -588,6 +588,26 @@ impl AdamCoreSpiceBackend {
             Frame::Unspecified => unreachable!("unspecified frames handled above"),
         };
 
+        // Input non-Cartesian conversion uses each row's input-origin mu.
+        // Keplerian/cometary output after an origin shift must instead use the
+        // target-origin mu (legacy translates Cartesian first, then constructs
+        // the output representation at the new origin).
+        let target_mu_values;
+        let mu_out = if matches!(
+            rep_out,
+            Representation::Keplerian | Representation::Cometary
+        ) {
+            match target_origin {
+                Some(target) => {
+                    target_mu_values = vec![origin_mu_au3_day2(target)?; times.len()];
+                    target_mu_values.as_slice()
+                }
+                None => mu,
+            }
+        } else {
+            mu
+        };
+
         // Origin-translation vectors (resolved in the INPUT frame), applied as
         // a constant offset before frame rotation. Skip when there is no origin
         // change.
@@ -640,7 +660,8 @@ impl AdamCoreSpiceBackend {
                         ktarget,
                         ktarget,
                         t0,
-                        mu,
+                        mu_out,
+                        mu_out,
                         a,
                         f,
                         max_iter,
@@ -661,7 +682,8 @@ impl AdamCoreSpiceBackend {
                         ktarget,
                         ktarget,
                         t0,
-                        mu,
+                        mu_out,
+                        mu_out,
                         a,
                         f,
                         max_iter,
@@ -693,6 +715,7 @@ impl AdamCoreSpiceBackend {
                 kframe_out,
                 t0,
                 mu,
+                mu_out,
                 a,
                 f,
                 max_iter,
@@ -713,6 +736,7 @@ impl AdamCoreSpiceBackend {
                 kframe_out,
                 t0,
                 mu,
+                mu_out,
                 a,
                 f,
                 max_iter,
@@ -1815,6 +1839,7 @@ mod tests {
             KernelFrame::Equatorial,
             &t0,
             &mu,
+            &mu,
             0.0,
             0.0,
             100,
@@ -1856,6 +1881,7 @@ mod tests {
             KernelFrame::Ecliptic,
             KernelFrame::Equatorial,
             &t0,
+            &mu,
             &mu,
             0.0,
             0.0,

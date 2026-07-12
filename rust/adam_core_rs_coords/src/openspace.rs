@@ -15,6 +15,55 @@ fn invalid(message: String) -> SchemaError {
     SchemaError::InvalidRecordBatch(message)
 }
 
+/// Python `repr(float)` / `str(float)`: shortest round-trip digits with
+/// Python's notation thresholds (fixed for decimal exponent in `[-4, 16)`,
+/// otherwise scientific with a signed, minimum-two-digit exponent) and the
+/// trailing `.0` on integral fixed-notation floats. Rust's shortest digits
+/// are the unique correctly-rounded shortest representation, identical to
+/// CPython's.
+pub fn py_float_repr(value: f64) -> String {
+    if value.is_nan() {
+        return "nan".to_string();
+    }
+    if value.is_infinite() {
+        return if value < 0.0 { "-inf" } else { "inf" }.to_string();
+    }
+    if value == 0.0 {
+        return if value.is_sign_negative() {
+            "-0.0".to_string()
+        } else {
+            "0.0".to_string()
+        };
+    }
+    let formatted = format!("{value:e}");
+    let (mantissa, exponent) = formatted.split_once('e').expect("exponent");
+    let exponent: i32 = exponent.parse().expect("exponent digits");
+    let sign = if mantissa.starts_with('-') { "-" } else { "" };
+    let digits: String = mantissa.chars().filter(|c| c.is_ascii_digit()).collect();
+    if (-4..16).contains(&exponent) {
+        if exponent >= 0 {
+            let point = (exponent + 1) as usize;
+            if digits.len() <= point {
+                let zeros = "0".repeat(point - digits.len());
+                format!("{sign}{digits}{zeros}.0")
+            } else {
+                format!("{sign}{}.{}", &digits[..point], &digits[point..])
+            }
+        } else {
+            let zeros = "0".repeat((-exponent - 1) as usize);
+            format!("{sign}0.{zeros}{digits}")
+        }
+    } else {
+        let mantissa_out = if digits.len() > 1 {
+            format!("{}.{}", &digits[..1], &digits[1..])
+        } else {
+            digits
+        };
+        let exponent_sign = if exponent < 0 { '-' } else { '+' };
+        format!("{sign}{mantissa_out}e{exponent_sign}{:02}", exponent.abs())
+    }
+}
+
 fn pascal_case(value: &str) -> String {
     value
         .split('_')

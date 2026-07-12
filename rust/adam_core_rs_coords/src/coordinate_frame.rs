@@ -77,6 +77,7 @@ impl CoordinateBatch {
                     to,
                     &zeros,
                     &zeros,
+                    &zeros,
                     0.0,
                     0.0,
                     100,

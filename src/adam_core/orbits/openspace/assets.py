@@ -55,6 +55,28 @@ class Asset(LuaDict):
 
 
 def orbits_to_sbdb_file(orbits: Orbits, path: str) -> str:
+    from adam_core import _rust_native as _rn
+
+    from ..arrow_bridge import orbits_to_ipc
+
+    # One fused Rust crossing owns the heliocentric-ecliptic Keplerian
+    # transform, astropy-identical epoch strings, pandas-identical CSV
+    # rendering, and the file write (bead personal-cmy.37.4.5). Transform
+    # combinations the native path does not cover fall back to the retained
+    # legacy composition below.
+    try:
+        written = _rn.openspace_write_sbdb_csv(str(path), orbits_to_ipc(orbits))
+    except (RuntimeError, ValueError):
+        written = False
+    if written:
+        # The legacy function returns None despite its annotation; preserved.
+        return
+    return _orbits_to_sbdb_file_legacy(orbits, path)
+
+
+def _orbits_to_sbdb_file_legacy(orbits: Orbits, path: str) -> str:
+    """Retained legacy composition (astropy epoch strings + pandas CSV);
+    used when the fused Rust crossing reports an uncovered transform."""
     # Convert to Keplerian elements in heliocentric ecliptic J2000 frame
     keplerian = transform_coordinates(
         orbits.coordinates,

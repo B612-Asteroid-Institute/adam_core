@@ -99,6 +99,16 @@ pub fn format_epoch(days: i64, nanos: i64, scale: TimeScale) -> SchemaResult<Str
     ))
 }
 
+/// astropy `Time(days, nanos/86400e9, format="mjd", scale=...).mjd` float:
+/// `TimeMJD.set_jds` runs `day_frac` and adds the MJD/JD offset to `jd1`;
+/// the `.mjd` float output subtracts the offset from `jd1` and sums with
+/// `jd2` in that order. Used by the OpenSpace SBDB epoch strings, whose
+/// fractional part is the fractional part of Python `repr(mjd)`.
+pub fn astropy_mjd_float(days: i64, nanos: i64) -> f64 {
+    let (day, frac) = day_frac(days as f64, nanos as f64 / NANOS_PER_DAY_F64);
+    ((day + MJD_JD_OFFSET) - MJD_JD_OFFSET) + frac
+}
+
 /// ISOT epoch string -> legacy `Timestamp.from_astropy` (days, nanos).
 fn parse_epoch(isot: &str, scale: TimeScale) -> SchemaResult<(i64, i64)> {
     let bad = |what: &str| invalid(format!("invalid OEM epoch {isot:?}: {what}"));

@@ -495,6 +495,7 @@ fn transform_coordinates_numpy<'py>(
         frame_out_value,
         t0_slice,
         mu_slice,
+        mu_slice,
         a_value,
         f_value,
         max_iter,
@@ -637,6 +638,7 @@ fn transform_coordinates_with_covariance_numpy<'py>(
         frame_in_value,
         frame_out_value,
         t0_slice,
+        mu_slice,
         mu_slice,
         a_value,
         f_value,
@@ -2873,6 +2875,143 @@ fn benchmark_oem_read_orbits(
     benchmark_trials(reps, trials, warmup_reps, || {
         adam_core_rs_coords::oem_io::oem_read_orbits(path).map_err(ades_error)
     })
+}
+
+/// pandas `to_csv` QUOTE_MINIMAL string field.
+fn csv_string_field(value: &str) -> String {
+    if value.contains(',') || value.contains('"') || value.contains('\n') || value.contains('\r') {
+        format!("\"{}\"", value.replace('"', "\"\""))
+    } else {
+        value.to_string()
+    }
+}
+
+/// pandas `to_csv` float field: Python `repr` shortest form, empty for NaN.
+fn csv_float_field(value: f64) -> String {
+    if value.is_nan() {
+        String::new()
+    } else {
+        adam_core_rs_coords::openspace::py_float_repr(value)
+    }
+}
+
+/// Fused legacy `orbits_to_sbdb_file` render (bead personal-cmy.37.4.5):
+/// heliocentric-ecliptic Keplerian transform through the shared native
+/// transform orchestrator, astropy-identical `epoch_cal` strings (ERFA date
+/// part + `repr(mjd)` fraction), Sun-mu periods, and pandas-identical CSV
+/// text. Returns `None` when the native transform does not cover the input
+/// (the Python veneer falls back to the retained legacy composition).
+fn openspace_sbdb_csv_core(orbits: &DataOrbitBatch) -> PyResult<Option<String>> {
+    let coordinates_batch = orbits
+        .coordinates
+        .clone()
+        .into_nested_record_batch()
+        .map_err(ades_error)?;
+    let config = TransformArrowConfig {
+        representation_out: DataRepresentation::Keplerian,
+        frame_out: DataFrame::Ecliptic,
+        target_origin: Some(OriginId::from_code("SUN")),
+        a: 0.0,
+        f: 0.0,
+        max_iter: 100,
+        tol: 1e-15,
+    };
+    let Some(transformed) = transform_coordinates_record_batch(&coordinates_batch, &config)? else {
+        return Ok(None);
+    };
+    let keplerian =
+        DataCoordinateBatch::try_from_nested_record_batch(&transformed).map_err(ades_error)?;
+    let CoordinateValues::Keplerian(keplerian_rows) = &keplerian.values else {
+        return Err(PyValueError::new_err("expected Keplerian transform output"));
+    };
+    let times = orbits
+        .coordinates
+        .times
+        .as_ref()
+        .ok_or_else(|| PyValueError::new_err("orbits must have coordinate times"))?;
+    let tdb = times
+        .clone()
+        .rescale(adam_core_rs_coords::TimeScale::Tdb)
+        .map_err(ades_error)?;
+    let mu_sun = adam_core_rs_coords::origin_mu_au3_day2(&OriginId::from_code("SUN"))
+        .map_err(|err| PyValueError::new_err(err.to_string()))?;
+
+    let mut out = String::from("full_name,epoch_cal,e,a,i,om,w,ma,per\n");
+    for (row, kep) in keplerian_rows.iter().enumerate() {
+        let epoch = tdb.epochs[row];
+        let date = adam_core_rs_coords::oem_io::format_epoch(
+            epoch.days,
+            epoch.nanos,
+            adam_core_rs_coords::TimeScale::Tdb,
+        )
+        .map_err(ades_error)?;
+        let mjd_repr = adam_core_rs_coords::openspace::py_float_repr(
+            adam_core_rs_coords::oem_io::astropy_mjd_float(epoch.days, epoch.nanos),
+        );
+        let fraction = mjd_repr
+            .split_once('.')
+            .map(|(_, fraction)| fraction)
+            .unwrap_or("0");
+        let epoch_cal = format!("{}.{fraction}", &date[..10]);
+
+        let [a, e, i, om, w, ma] = *kep;
+        let per = adam_core_rs_coords::calc_period(a, mu_sun);
+        let fields = [
+            csv_string_field(&orbits.orbit_id[row].0),
+            csv_string_field(&epoch_cal),
+            csv_float_field(e),
+            csv_float_field(a),
+            csv_float_field(i),
+            csv_float_field(om),
+            csv_float_field(w),
+            csv_float_field(ma),
+            csv_float_field(per),
+        ];
+        out.push_str(&fields.join(","));
+        out.push('\n');
+    }
+    Ok(Some(out))
+}
+
+#[pyfunction]
+fn openspace_write_sbdb_csv(path: &str, orbits_ipc: &Bound<'_, PyBytes>) -> PyResult<bool> {
+    let orbits =
+        DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbits_ipc.as_bytes())?)
+            .map_err(ades_error)?;
+    match openspace_sbdb_csv_core(&orbits)? {
+        None => Ok(false),
+        Some(text) => {
+            std::fs::write(path, text)
+                .map_err(|err| PyValueError::new_err(format!("failed to write {path}: {err}")))?;
+            Ok(true)
+        }
+    }
+}
+
+#[pyfunction]
+#[pyo3(signature = (path, orbits_ipc, reps, trials, warmup_reps=1))]
+fn benchmark_openspace_write_sbdb_csv(
+    path: &str,
+    orbits_ipc: &Bound<'_, PyBytes>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let orbits =
+        DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbits_ipc.as_bytes())?)
+            .map_err(ades_error)?;
+    benchmark_trials(reps, trials, warmup_reps, || {
+        let text = openspace_sbdb_csv_core(&orbits)?
+            .ok_or_else(|| PyValueError::new_err("native transform does not cover this input"))?;
+        std::fs::write(path, text)
+            .map_err(|err| PyValueError::new_err(format!("failed to write {path}: {err}")))
+    })
+}
+
+/// Python `repr(float)` (test oracle hook for the CSV float rendering).
+#[pyfunction]
+fn python_float_repr(value: f64) -> String {
+    adam_core_rs_coords::openspace::py_float_repr(value)
 }
 
 /// OpenSpace Lua/dataclass renderer (bead personal-cmy.28): render a JSON
@@ -5888,6 +6027,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(exposure_groups_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_exposure_groups_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(openspace_write_sbdb_csv, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_openspace_write_sbdb_csv, m)?)?;
+    m.add_function(wrap_pyfunction!(python_float_repr, m)?)?;
     m.add_function(wrap_pyfunction!(oem_write_orbits_kvn, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_oem_write_orbits_kvn, m)?)?;
     m.add_function(wrap_pyfunction!(oem_read_orbits_ipc, m)?)?;
