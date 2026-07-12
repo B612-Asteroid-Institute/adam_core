@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -326,6 +329,32 @@ class TestDepartureSphericalCoordinates:
             # Allow some tolerance for coordinate transformation approximations
             np.testing.assert_allclose(result_ra, target_ra, atol=0.1)
             np.testing.assert_allclose(result_dec, target_dec, atol=0.1)
+
+
+def test_departure_spherical_coordinates_frozen_legacy_parity():
+    fixture_path = (
+        Path(__file__).resolve().parents[4]
+        / "migration"
+        / "artifacts"
+        / "departure_spherical_fixture_2026-07-12.json"
+    )
+    fixture = json.loads(fixture_path.read_text())
+    times = Timestamp.from_mjd([60000.0, 60000.5, 60001.25], scale="tdb")
+    vx = np.asarray(fixture["vx"])
+    vy = np.asarray(fixture["vy"])
+    vz = np.asarray(fixture["vz"])
+    for case in fixture["cases"]:
+        output = departure_spherical_coordinates(
+            OriginCodes[case["origin"]], times, case["frame_in"], vx, vy, vz
+        )
+        np.testing.assert_allclose(
+            output.values, case["values"], rtol=1e-13, atol=1e-13
+        )
+        assert output.time.days.to_pylist() == case["days"]
+        assert output.time.nanos.to_pylist() == case["nanos"]
+        assert output.time.scale == case["scale"]
+        assert output.origin.code.to_pylist() == case["origins"]
+        assert output.frame == case["frame"]
 
 
 def test_departure_spherical_coordinates_rust_native_timing():
