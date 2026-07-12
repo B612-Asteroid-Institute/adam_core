@@ -3,12 +3,9 @@ from typing import Any, Dict, List, Literal, Union
 
 import numpy as np
 import numpy.typing as npt
-import quivr as qv
-import requests
 
-from ...coordinates import CoordinateCovariances, KeplerianCoordinates, Origin
 from ...orbits import Orbits
-from ...time import Timestamp
+from ...utils.http import _raise_compatible_http_error
 from ..physical_parameters import PhysicalParameters
 
 
@@ -125,70 +122,14 @@ def query_neocc(
     orbits : `~adam_core.orbits.Orbits`
         Orbits object containing the orbital elements of the specified NEOs.
     """
-    base_url = "https://neo.ssa.esa.int/PSDB-portlet/download"
+    from adam_core import _rust_native
 
-    if orbit_type == "eq":
-        raise NotImplementedError("Equinoctial elements are not supported yet.")
+    from ..._rust.arrow import table_from_record_batch
 
-    if orbit_epoch == "middle":
-        orbit_epoch = 0
-    elif orbit_epoch == "present-day":
-        orbit_epoch = 1
-    else:
-        raise ValueError(f"Invalid orbit epoch: {orbit_epoch}")
-
-    orbits_list: list[Orbits] = []
-
-    for object_id in object_ids:
-
-        # Clean object ID so that there are no spaces
-        object_id = object_id.replace(" ", "")
-
-        params = {"file": f"{object_id}.{orbit_type}{orbit_epoch}"}
-
-        response = requests.get(base_url, params=params)
-        response.raise_for_status()
-
-        data = _parse_oef(response.text)
-
-        if orbit_type == "ke" and "time_system" in data:
-            time_scale = data["time_system"]
-            if time_scale == "TDT":
-                time_scale = "tt"
-            else:
-                raise ValueError(f"Unsupported time scale: {time_scale}")
-
-            if data["header"]["refsys"] != "ECLM J2000":
-                raise ValueError(
-                    f"Unsupported reference system: {data['header']['refsys']}"
-                )
-
-            phys = _physical_parameters_from_neocc(data)
-
-            orbits_list.append(
-                Orbits.from_kwargs(
-                    orbit_id=[data["object_id"]],
-                    object_id=[data["object_id"]],
-                    coordinates=KeplerianCoordinates.from_kwargs(
-                        a=[data["elements"]["a"]],
-                        e=[data["elements"]["e"]],
-                        i=[data["elements"]["i"]],
-                        raan=[data["elements"]["node"]],
-                        ap=[data["elements"]["peri"]],
-                        M=[data["elements"]["M"]],
-                        time=Timestamp.from_mjd([data["epoch"]], scale=time_scale),
-                        covariance=CoordinateCovariances.from_matrix(
-                            data["covariance"].reshape(
-                                1,
-                                6,
-                                6,
-                            )
-                        ),
-                        frame="ecliptic",
-                        origin=Origin.from_kwargs(code=["SUN"]),
-                    ).to_cartesian(),
-                    physical_parameters=phys,
-                )
-            )
-
-    return qv.concatenate(orbits_list) if orbits_list else Orbits.empty()
+    try:
+        batch = _rust_native.query_neocc_arrow(
+            [str(value) for value in object_ids], orbit_type, orbit_epoch
+        )
+    except RuntimeError as error:
+        _raise_compatible_http_error(error)
+    return table_from_record_batch(Orbits, batch)

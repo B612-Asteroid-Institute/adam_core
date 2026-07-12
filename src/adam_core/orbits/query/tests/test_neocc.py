@@ -2,7 +2,11 @@ from pathlib import Path
 
 import numpy as np
 
-from ..neocc import _parse_oef, _physical_parameters_from_neocc, query_neocc
+from adam_core import _rust_native
+from adam_core._rust.arrow import table_from_record_batch
+from adam_core.orbits import Orbits
+
+from ..neocc import _parse_oef, _physical_parameters_from_neocc
 
 TESTDATA_DIR = Path(__file__).parent / "testdata" / "neocc"
 
@@ -105,98 +109,25 @@ def test__parse_oef_2022OB5_ke1():
     )  # Diagonal elements should be 1
 
 
-def test_query_neocc(mocker):
-    """Test query_neocc with both present-day and middle epochs (using saved test data)"""
-    import requests
-
-    # Setup mock responses for each test file
-    mock_responses = {}
-    for orbit_type in ["ke0", "ke1"]:
-        for obj in ["2024YR4", "2022OB5"]:
-            with open(TESTDATA_DIR / f"{obj}.{orbit_type}", "r") as f:
-                mock_responses[f"{obj}.{orbit_type}"] = f.read()
-
-    # Create mock response
-    def mock_get(url, params):
-        mock = mocker.MagicMock()
-        mock.status_code = 200
-        mock.text = mock_responses[params["file"]]
-        return mock
-
-    # Patch requests.get
-    mocker.patch("requests.get", side_effect=mock_get)
-
-    # Test querying multiple objects
+def test_query_neocc_recorded_products():
     object_ids = ["2024YR4", "2022OB5"]
-    orbits = query_neocc(object_ids, orbit_type="ke", orbit_epoch="present-day")
-
-    # Verify the results
-    assert orbits is not None
-    assert len(orbits) == 2
-
-    assert orbits.orbit_id[0].as_py() == "2024YR4"
-    assert orbits.object_id[0].as_py() == "2024YR4"
-    assert orbits.orbit_id[1].as_py() == "2022OB5"
-    assert orbits.object_id[1].as_py() == "2022OB5"
-    # present-day uses ke1 files; epochs from current fixtures
-    assert orbits.coordinates.time.days[0].as_py() == 61000
-    assert orbits.coordinates.time.days[1].as_py() == 61000
-    assert orbits.coordinates.time.scale == "tt"
-    assert np.all(~np.isnan(orbits.coordinates.values))
-    assert np.all(~np.isnan(orbits.coordinates.covariance.to_matrix()))
-    # Physical parameters from OEF MAG (H, G); no uncertainties in NEOCC OEF
-    assert orbits.physical_parameters is not None
-    assert orbits.physical_parameters.H_v[0].as_py() == 24.047
-    assert orbits.physical_parameters.G[0].as_py() == 0.150
-    assert orbits.physical_parameters.H_v[1].as_py() == 28.912
-    assert orbits.physical_parameters.G[1].as_py() == 0.150
-
-    # Verify the mock was called with correct parameters
-    requests.get.assert_has_calls(
-        [
-            mocker.call(
-                "https://neo.ssa.esa.int/PSDB-portlet/download",
-                params={"file": "2024YR4.ke1"},
-            ),
-            mocker.call(
-                "https://neo.ssa.esa.int/PSDB-portlet/download",
-                params={"file": "2022OB5.ke1"},
-            ),
+    for orbit_epoch, suffix, expected_days in [
+        ("present-day", "ke1", [61000, 61000]),
+        ("middle", "ke0", [60704, 60129]),
+    ]:
+        payloads = [
+            (TESTDATA_DIR / f"{obj}.{suffix}").read_text() for obj in object_ids
         ]
-    )
-
-    # Test querying multiple objects
-    object_ids = ["2024YR4", "2022OB5"]
-    orbits = query_neocc(object_ids, orbit_type="ke", orbit_epoch="middle")
-
-    # Verify the results
-    assert orbits is not None
-    assert len(orbits) == 2
-
-    assert orbits.orbit_id[0].as_py() == "2024YR4"
-    assert orbits.object_id[0].as_py() == "2024YR4"
-    assert orbits.orbit_id[1].as_py() == "2022OB5"
-    assert orbits.object_id[1].as_py() == "2022OB5"
-    # middle uses ke0 files; epochs from current fixtures
-    assert orbits.coordinates.time.days[0].as_py() == 60704
-    assert orbits.coordinates.time.days[1].as_py() == 60129
-    assert orbits.coordinates.time.scale == "tt"
-    assert np.all(~np.isnan(orbits.coordinates.values))
-    assert np.all(~np.isnan(orbits.coordinates.covariance.to_matrix()))
-
-    # Verify the mock was called with correct parameters
-    requests.get.assert_has_calls(
-        [
-            mocker.call(
-                "https://neo.ssa.esa.int/PSDB-portlet/download",
-                params={"file": "2024YR4.ke0"},
-            ),
-            mocker.call(
-                "https://neo.ssa.esa.int/PSDB-portlet/download",
-                params={"file": "2022OB5.ke0"},
-            ),
-        ]
-    )
+        batch = _rust_native.query_neocc_arrow(object_ids, "ke", orbit_epoch, payloads)
+        orbits = table_from_record_batch(Orbits, batch)
+        assert orbits.orbit_id.to_pylist() == object_ids
+        assert orbits.object_id.to_pylist() == object_ids
+        assert orbits.coordinates.time.days.to_pylist() == expected_days
+        assert orbits.coordinates.time.scale == "tt"
+        assert np.all(np.isfinite(orbits.coordinates.values))
+        assert np.all(np.isfinite(orbits.coordinates.covariance.to_matrix()))
+        assert orbits.physical_parameters.H_v.to_pylist() == [24.047, 28.912]
+        assert orbits.physical_parameters.G.to_pylist() == [0.15, 0.15]
 
 
 def test__physical_parameters_from_neocc_with_magnitude() -> None:
@@ -257,62 +188,16 @@ def test_real_neocc_oef_files_parse_without_error() -> None:
     ), "at least two real OEF files should parse (e.g. 2024YR4, 2022OB5)"
 
 
-def test_empty_response(mocker) -> None:
-    # Sometimes, e.g. "1416T-2", the response text is empty even though the
-    # HTTP code is 200. We should just skip those objects.
+def test_empty_response() -> None:
+    batch = _rust_native.query_neocc_arrow(["1416T-2"], "ke", "present-day", [""])
+    assert len(table_from_record_batch(Orbits, batch)) == 0
 
-    import requests
 
-    # Create mock response
-    def mock_get(url, params):
-        mock = mocker.MagicMock()
-        mock.status_code = 200
-        mock.text = ""
-        return mock
-
-    mocker.patch("requests.get", side_effect=mock_get)
-
-    object_ids = ["1416T-2"]
-    orbits = query_neocc(object_ids, orbit_type="ke", orbit_epoch="present-day")
-
-    # Verify the results
-    assert orbits is not None
-    assert len(orbits) == 0
-    requests.get.assert_has_calls(
-        [
-            mocker.call(
-                "https://neo.ssa.esa.int/PSDB-portlet/download",
-                params={"file": "1416T-2.ke1"},
-            ),
-        ]
+def test_28element_matrix() -> None:
+    batch = _rust_native.query_neocc_arrow(
+        ["2018 CW2"],
+        "ke",
+        "present-day",
+        [(TESTDATA_DIR / "2018CW2.ke1").read_text()],
     )
-
-
-def test_28element_matrix(mocker) -> None:
-    # Some objects have 28 elements upper triangular for covariance and correlation
-    import requests
-
-    # Create mock response
-    def mock_get(url, params):
-        mock = mocker.MagicMock()
-        mock.status_code = 200
-        with open(TESTDATA_DIR / "2018CW2.ke1", "r") as f:
-            mock.text = f.read()
-        return mock
-
-    mocker.patch("requests.get", side_effect=mock_get)
-
-    object_ids = ["2018 CW2"]
-    orbits = query_neocc(object_ids, orbit_type="ke", orbit_epoch="present-day")
-
-    # Verify the results
-    assert orbits is not None
-    assert len(orbits) == 1
-    requests.get.assert_has_calls(
-        [
-            mocker.call(
-                "https://neo.ssa.esa.int/PSDB-portlet/download",
-                params={"file": "2018CW2.ke1"},
-            ),
-        ]
-    )
+    assert len(table_from_record_batch(Orbits, batch)) == 1

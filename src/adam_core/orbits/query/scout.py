@@ -1,18 +1,8 @@
-import json
-import logging
-
-import numpy as np
 import numpy.typing as npt
-import pyarrow as pa
 import quivr as qv
-import requests
 
-from ...coordinates.cometary import CometaryCoordinates
-from ...coordinates.origin import Origin
-from ...time import Timestamp
+from ...utils.http import _raise_compatible_http_error
 from ..variants import VariantOrbits
-
-logger = logging.getLogger(__name__)
 
 
 class ScoutObjectSummary(qv.Table):
@@ -83,13 +73,15 @@ def get_scout_objects() -> ScoutObjectSummary:
     scout_objects : `~adam_core.orbits.query.scout.ScoutObjectSummary`
         Table containing the summary of all objects.
     """
-    url = "https://ssd-api.jpl.nasa.gov/scout.api"
-    response = requests.get(url)
-    response.raise_for_status()
-    data = response.json()
-    data = data["data"]
-    table = pa.Table.from_pylist(data, schema=ScoutObjectSummary.schema)
-    return ScoutObjectSummary.from_pyarrow(table)
+    from adam_core import _rust_native
+
+    from ..._rust.arrow import table_from_record_batch
+
+    try:
+        batch = _rust_native.get_scout_objects_arrow()
+    except RuntimeError as error:
+        _raise_compatible_http_error(error)
+    return table_from_record_batch(ScoutObjectSummary, batch)
 
 
 class ScoutOrbit(qv.Table):
@@ -151,36 +143,17 @@ def scout_orbits_to_variant_orbits(
     variant_orbits : `~adam_core.orbits.VariantOrbits`
         Table containing the variant orbits
     """
-    from adam_core import _rust_native as _rn
+    if len(scout_orbits) == 0:
+        return VariantOrbits.empty()
 
-    normalized = json.loads(
-        _rn.query_scout_normalize_orbits(
-            object_id, json.dumps(scout_orbits.table.to_pylist())
-        )
+    from adam_core import _rust_native
+
+    from ..._rust.arrow import table_from_record_batch
+
+    batch = _rust_native.scout_orbits_to_variants_arrow(
+        str(object_id), scout_orbits.table.to_batches()[0]
     )
-    coords = np.asarray(normalized["coords_cometary"], dtype=np.float64)
-    cometary_coords = CometaryCoordinates.from_kwargs(
-        q=coords[:, 0],
-        e=coords[:, 1],
-        i=coords[:, 2],
-        raan=coords[:, 3],
-        ap=coords[:, 4],
-        tp=coords[:, 5],
-        time=Timestamp.from_jd(pa.array(normalized["times_jd"], type=pa.float64())),
-        origin=Origin.from_kwargs(code=pa.repeat("SUN", len(scout_orbits))),
-        frame="ecliptic",
-    )
-
-    cartesian_coords = cometary_coords.to_cartesian()
-
-    variants = VariantOrbits.from_kwargs(
-        coordinates=cartesian_coords,
-        orbit_id=pa.array(normalized["orbit_id"], type=pa.large_string()),
-        variant_id=pa.array(normalized["variant_id"], type=pa.large_string()),
-        object_id=pa.array(normalized["object_id"], type=pa.large_string()),
-    )
-
-    return variants
+    return table_from_record_batch(VariantOrbits, batch)
 
 
 def query_scout(ids: npt.ArrayLike) -> VariantOrbits:
@@ -203,23 +176,12 @@ def query_scout(ids: npt.ArrayLike) -> VariantOrbits:
     orbits : `~adam_core.orbits.VariantOrbits`
         Table containing the orbits of the objects
     """
-    url = "https://ssd-api.jpl.nasa.gov/scout.api?tdes={}&orbits=1"
+    from adam_core import _rust_native
 
-    variant_orbits_list: list[VariantOrbits] = []
-    for object_id in ids:
-        response = requests.get(url.format(object_id))
-        response.raise_for_status()
-        data = response.json()
-        data = data["orbits"]["data"]
+    from ..._rust.arrow import table_from_record_batch
 
-        # Convert from list of rows to list of columns
-        data = list(map(list, zip(*data)))
-        table = pa.Table.from_arrays(data, schema=ScoutOrbit.schema)
-        scout_orbits = ScoutOrbit.from_pyarrow(table)
-        variant_orbits_list.append(
-            scout_orbits_to_variant_orbits(object_id, scout_orbits)
-        )
-
-    if not variant_orbits_list:
-        return VariantOrbits.empty()
-    return qv.concatenate(variant_orbits_list)
+    try:
+        batch = _rust_native.query_scout_arrow([str(value) for value in ids])
+    except RuntimeError as error:
+        _raise_compatible_http_error(error)
+    return table_from_record_batch(VariantOrbits, batch)

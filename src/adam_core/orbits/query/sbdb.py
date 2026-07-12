@@ -27,6 +27,7 @@ _SBDB_API_URL = "https://ssd-api.jpl.nasa.gov/sbdb.api"
 _SBDB_API_FAIR_USE_MAX_CONCURRENT_REQUESTS = 1
 
 _thread_local = threading.local()
+_DEFAULT_SBDB_QUERY = SBDB.query
 
 
 def _get_requests_session() -> requests.Session:
@@ -274,8 +275,24 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     ------
     NotFoundError: If any of the queries object IDs are not found.
     """
-    results = _get_sbdb_elements(ids)
-    return _orbits_from_sbdb_results(ids, results)
+    if SBDB.query is not _DEFAULT_SBDB_QUERY:
+        return _orbits_from_sbdb_results(ids, _get_sbdb_elements(ids))
+
+    from adam_core import _rust_native
+
+    from ..._rust.arrow import table_from_record_batch
+    from ...utils.http import _raise_compatible_http_error
+
+    object_ids = [str(value) for value in ids]
+    try:
+        batch = _rust_native.query_sbdb_arrow(object_ids, False, 60.0, 5, False, False)
+    except RuntimeError as error:
+        _raise_compatible_http_error(error)
+    except ValueError as error:
+        if str(error).startswith("__NOT_FOUND__:"):
+            raise NotFoundError("object {} was not found", str(error).split(":", 1)[1])
+        raise
+    return table_from_record_batch(Orbits, batch)
 
 
 def _sbdb_api_get_json(
@@ -338,6 +355,9 @@ def _sbdb_api_get_json(
         time.sleep(sleep_s)
 
     raise RuntimeError(f"SBDB query failed after {max_attempts} attempts: {last_err}")
+
+
+_DEFAULT_SBDB_API_GET_JSON = _sbdb_api_get_json
 
 
 def _sbdb_float(value: Any) -> float:
@@ -625,43 +645,68 @@ def query_sbdb_new(
         If True, set the returned `Orbits.orbit_id` values to the input IDs (after any missing
         filtering). This is useful when callers need to map rows back to the requested identifiers.
     """
-    # Normalize ids into a list of strings while preserving the caller's order.
+    from adam_core import _rust_native
+
+    from ..._rust.arrow import table_from_record_batch
+    from ...utils.http import _raise_compatible_http_error
+
     if isinstance(ids, (str, bytes)):
         obj_ids = [str(ids)]
     else:
         obj_ids = [str(x) for x in ids]
-
-    payloads = _get_sbdb_payloads_new(
-        obj_ids,
-        max_concurrent_requests=max_concurrent_requests,
-        timeout_s=timeout_s,
-        max_attempts=max_attempts,
-    )
-    if allow_missing:
-        kept_ids: list[str] = []
-        kept_payloads: list[dict[str, Any]] = []
-        for obj_id, payload in zip(obj_ids, payloads):
-            if "object" not in payload:
-                continue
-            kept_ids.append(obj_id)
-            kept_payloads.append(payload)
-
-        if not kept_ids:
-            return Orbits.empty()
-
-        orbits = _orbits_from_sbdb_payloads(kept_ids, kept_payloads)
+    if max_concurrent_requests <= 0:
+        raise ValueError("max_concurrent_requests must be > 0")
+    if _sbdb_api_get_json is not _DEFAULT_SBDB_API_GET_JSON:
+        payloads = _get_sbdb_payloads_new(
+            obj_ids,
+            max_concurrent_requests=max_concurrent_requests,
+            timeout_s=timeout_s,
+            max_attempts=max_attempts,
+        )
+        if allow_missing:
+            kept = [
+                (obj_id, payload)
+                for obj_id, payload in zip(obj_ids, payloads)
+                if "object" in payload
+            ]
+            if not kept:
+                return Orbits.empty()
+            kept_ids, kept_payloads = map(list, zip(*kept))
+            orbits = _orbits_from_sbdb_payloads(kept_ids, kept_payloads)
+            if orbit_id_from_input:
+                orbits = orbits.set_column(
+                    "orbit_id", pa.array(kept_ids, type=pa.large_string())
+                )
+            return orbits
+        orbits = _orbits_from_sbdb_payloads(obj_ids, payloads)
         if orbit_id_from_input:
             orbits = orbits.set_column(
-                "orbit_id", pa.array(kept_ids, type=pa.large_string())
+                "orbit_id", pa.array(obj_ids, type=pa.large_string())
             )
         return orbits
-
-    orbits = _orbits_from_sbdb_payloads(obj_ids, payloads)
-    if orbit_id_from_input:
-        orbits = orbits.set_column(
-            "orbit_id", pa.array(obj_ids, type=pa.large_string())
+    if max_concurrent_requests > 1:
+        logger.warning(
+            "query_sbdb_new is configured with max_concurrent_requests=%s. "
+            "JPL's SSD/CNEOS API fair use policy requests only one in-flight request at a time; "
+            "Rust will execute these requests sequentially.",
+            max_concurrent_requests,
         )
-    return orbits
+    try:
+        batch = _rust_native.query_sbdb_arrow(
+            obj_ids,
+            True,
+            float(timeout_s),
+            int(max_attempts),
+            bool(allow_missing),
+            bool(orbit_id_from_input),
+        )
+    except RuntimeError as error:
+        _raise_compatible_http_error(error)
+    except ValueError as error:
+        if str(error).startswith("__NOT_FOUND__:"):
+            raise NotFoundError("object {} was not found", str(error).split(":", 1)[1])
+        raise
+    return table_from_record_batch(Orbits, batch)
 
 
 class NotFoundError(Exception):

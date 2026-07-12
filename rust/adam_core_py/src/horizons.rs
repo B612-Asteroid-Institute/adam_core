@@ -1,3 +1,4 @@
+use crate::http::{get_text, percent_encode};
 use adam_core_rs_coords::{
     cometary_to_cartesian6, keplerian_to_cartesian6, CoordinateBatch, DataFrame, EphemerisBatch,
     IntoNestedRecordBatch, ObjectId, OrbitBatch, OrbitId, OriginArray, OriginId, TimeArray,
@@ -5,7 +6,7 @@ use adam_core_rs_coords::{
 };
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
 use arrow_array::{Array, Int64Array, LargeStringArray, RecordBatch, StructArray};
-use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::collections::BTreeMap;
 use std::hint::black_box;
@@ -31,18 +32,6 @@ struct ParsedTable {
 
 fn value_error(message: impl Into<String>) -> PyErr {
     PyValueError::new_err(message.into())
-}
-
-fn percent_encode(value: &str) -> String {
-    let mut output = String::with_capacity(value.len());
-    for byte in value.bytes() {
-        if byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~') {
-            output.push(byte as char);
-        } else {
-            output.push_str(&format!("%{byte:02X}"));
-        }
-    }
-    output
 }
 
 fn command(object_id: &str, id_type: Option<&str>) -> PyResult<String> {
@@ -137,19 +126,6 @@ fn request_url(
             .collect::<Vec<_>>()
             .join("&")
     ))
-}
-
-fn http_get(url: &str) -> PyResult<String> {
-    let agent = ureq::AgentBuilder::new()
-        .timeout(std::time::Duration::from_secs(120))
-        .build();
-    let response = agent
-        .get(url)
-        .call()
-        .map_err(|err| PyRuntimeError::new_err(format!("Horizons request failed: {err}")))?;
-    response
-        .into_string()
-        .map_err(|err| PyRuntimeError::new_err(format!("Horizons response read failed: {err}")))
 }
 
 fn target_name(response: &str) -> String {
@@ -272,7 +248,7 @@ fn next_response(responses: Option<&[String]>, cursor: &mut usize, url: &str) ->
         *cursor += 1;
         Ok(response)
     } else {
-        http_get(url)
+        get_text(url, std::time::Duration::from_secs(120), "Horizons")
     }
 }
 

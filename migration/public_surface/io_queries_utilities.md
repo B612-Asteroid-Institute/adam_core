@@ -64,9 +64,9 @@ query paths depend on them, but they are not counted as public API commitments.
 | Family | Current Rust ownership | Closure under the one-crossing rule |
 |---|---|---|
 | Horizons | complete one-crossing Rust HTTP products | Rust owns API URLs, HTTP, 50-epoch chunking, CSV protocol parsing, target-name compatibility, ordering, element conversion, nulls, and nested Orbits/Ephemeris Arrow assembly; Python only projects time/code columns and wraps the returned batch |
-| NEOCC | OEF parser only | **Gap:** requests loop, policy/error handling, per-object assembly, coordinate conversion, and concatenation are Python |
-| Scout | orbit-row normalization only | **Gap:** both HTTP entrypoints, summary parsing, table construction, per-object loop, conversion, and concatenation are Python |
-| SBDB | direct-payload normalization only | **Gap:** legacy astroquery client is Python; new client owns sessions, retries, backoff, concurrency/fair-use, filtering, JSON crossings, and table construction in Python |
+| NEOCC | complete one-crossing Rust HTTP product | Rust owns URL cleaning, HTTPS, OEF parsing, validation, covariance/state conversion, physical parameters, ordering, and nested Arrow assembly |
+| Scout | complete one-crossing Rust HTTP products | Rust owns summary and sampled-orbit HTTP, schema parsing, cometary conversion, variant IDs/order, and ScoutObjectSummary/VariantOrbits Arrow assembly |
+| SBDB | complete one-crossing Rust HTTP products | Both exports use the direct Rust client; Rust owns validation, fair-use sequential requests, timeout/retry/backoff, missing filtering, normalization, covariance/state conversion, physical parameters, order, and nested Arrow assembly |
 | ADES PSV | fused Rust writer/parser plus observation/context kernels | Public writer/parser each satisfy one crossing; Python only reconstructs compatibility dataclasses/quivr objects |
 | OEM | fused Rust product writer/reader plus KVN engine | Writer and reader each satisfy one crossing (ecliptic rotation, sort, metadata, unit/covariance conversion, orbit-id and table assembly in Rust); ITRF93 pre-transform stays on the Rust `transform_coordinates` crossing; propagated writer remains a declared propagator-provider boundary |
 | OpenSpace | fused SBDB CSV and orbital/trail asset products plus Lua/initialization rendering | Public products each satisfy one crossing: Rust owns transform, epochs/periods, model graph, CSV/Lua rendering, per-orbit loops, SPICE snippets, staged writes, and atomic publication; Python retains enum/default compatibility and an uncovered-case fallback |
@@ -104,35 +104,15 @@ opt-in live tests cover service compatibility and errors.
 
 #### NEOCC
 
-Public package export: `query_neocc`. `_parse_oef` is private but Rust-backed.
-The live requests loop, designation normalization, epoch option mapping, service
-errors, physical-parameter/table assembly, coordinate conversion, and
-concatenation remain Python. The HTTP/file-like download is a real migration
-gap, not an intentional boundary.
+Public package export `query_neocc` is a one-crossing veneer. Rust owns designation cleaning, epoch/type validation, HTTPS, OEF parsing, empty responses, reference/time-system errors, covariance-aware Keplerian conversion, physical parameters, row order, and nested Arrow assembly. Existing OEF fixtures gate complete products.
 
 #### Scout
 
-Public package export: `query_scout`. Module-public surfaces also include
-`get_scout_objects`, `scout_orbits_to_variant_orbits`, `ScoutObjectSummary`, and
-`ScoutOrbit`. Rust normalizes orbit rows, but requests, summary JSON parsing,
-Arrow construction, per-object fan-out, conversions, and concatenation remain
-Python. Both summary and sampled-orbit endpoints need a Rust client and typed
-output contract.
+Public package export `query_scout` and module-public `get_scout_objects`/`scout_orbits_to_variant_orbits` each cross once into Rust. Rust owns both Scout protocols, summary schema/null parsing, per-object sampled-orbit fan-out, cometary conversion, IDs/order, and exact ScoutObjectSummary/VariantOrbits Arrow assembly. The quivr classes remain generic schemas.
 
 #### SBDB
 
-Public package exports: `query_sbdb` and `query_sbdb_new`; `NotFoundError` is a
-public exception by module access. `query_sbdb` still delegates the entire
-client to astroquery. `query_sbdb_new` is more explicit but remains Python-owned:
-thread-local sessions, request parameters, timeout/retry/backoff, HTTP status
-classification, concurrency and fair-use warning, allow-missing filtering,
-and output assembly all occur outside Rust. Rust only normalizes already-fetched
-payloads.
-
-The two names should converge on one Rust client policy while preserving their
-published compatibility differences until deprecation is deliberate. JPL's
-one-in-flight fair-use default must be a tested Rust policy, not merely a Python
-warning.
+Public exports `query_sbdb` and `query_sbdb_new` now converge on one direct Rust client. Rust owns validation, request parameters, timeout/retry/backoff, sequential fair-use policy, allow-missing/input-ID behavior, raw payload normalization, covariance and cometary conversion, physical parameters, and nested Arrow assembly. `NotFoundError` remains the Python compatibility exception; explicitly monkeypatched historical HTTP/astroquery providers retain a provider fallback.
 
 ### ADES PSV
 

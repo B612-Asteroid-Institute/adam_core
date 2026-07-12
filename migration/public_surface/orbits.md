@@ -151,15 +151,15 @@ External services remain integration boundaries, but adam-core-owned request con
 
 | Public API | Implementation status | Parity status | Native timing | Disposition |
 |---|---|---|---|---|
-| `query_horizons_ephemeris(object_ids, observers)` | **Mixed**: astroquery/Pandas Python loops; one Rust JSON normalizer; Python finished `Ephemeris` assembly | offline parser/shape coverage partial; no complete public facade legacy parity | missing | Gap |
-| `query_horizons(object_ids, times, coordinate_type="cartesian", location="@sun", aberrations="geometric", id_type=None)` | **Mixed**: Python chunk/network/branch orchestration; Rust JSON normalization; Python coordinate/table conversion and final sort | parser tests partial; complete cartesian/keplerian/cometary facade parity absent | missing | Gap |
-| `query_neocc(object_ids, orbit_type="ke", orbit_epoch="present-day")` | **Mixed**: requests and Rust OEF parser, followed by substantial Python validation, physical-parameter and coordinate/table assembly | parser fixture partial; complete facade parity absent | missing | Gap |
-| `query_sbdb(ids)` | **Python legacy astroquery path**, including covariance/physical/table conversion | serves as current comparison oracle; no Rust public facade | missing | Gap (converge canonical public behavior) |
-| `query_sbdb_new(ids, *, max_concurrent_requests=1, timeout_s=60, max_attempts=5, allow_missing=False, orbit_id_from_input=False)` | **Mixed**: Python HTTP/retry/concurrency/options; Rust payload normalizer; Python finished coordinate/table assembly | normalized payload is bitwise/equivalence compared with legacy for recorded cases; option facade partial | missing | Gap |
-| `NotFoundError(message, object_id)`; properties `message`, `object_id`; `__str__` | Python exception/data behavior | unit behavior only | N/Q | Keep compatibility; include with SBDB gap tests |
-| `get_scout_objects()` | **Python** HTTP JSON-to-PyArrow-to-quivr construction | recorded/live shape tests only | missing | Gap |
-| `scout_orbits_to_variant_orbits(object_id, scout_orbits)` | **Mixed**: Rust JSON normalization, then Python coordinate conversion and `VariantOrbits` assembly | offline parser/shape tests partial | missing | Gap |
-| `query_scout(ids)` | **Mixed/Python** HTTP loops and table assembly around the converter | behavior tests; complete legacy parity absent | missing | Gap |
+| `query_horizons_ephemeris(object_ids, observers)` | one-crossing Rust HTTP/protocol/parser/typed Ephemeris product | recorded response and live integration | deterministic processing measured | Complete |
+| `query_horizons(object_ids, times, coordinate_type="cartesian", location="@sun", aberrations="geometric", id_type=None)` | one-crossing Rust HTTP, 50-epoch chunking, element conversion, sort, typed Orbits product | all three representations recorded + live chunk parity | deterministic processing measured | Complete |
+| `query_neocc(object_ids, orbit_type="ke", orbit_epoch="present-day")` | one-crossing Rust HTTP/OEF/covariance/physical/Arrow product | recorded complete products and errors | measured | Complete |
+| `query_sbdb(ids)` | one-crossing direct Rust SBDB client and typed product | recorded legacy-equivalent products | measured | Complete |
+| `query_sbdb_new(ids, *, max_concurrent_requests=1, timeout_s=60, max_attempts=5, allow_missing=False, orbit_id_from_input=False)` | same Rust client with timeout/retry/fair-use/missing options | recorded option/error/physical parity | measured | Complete |
+| `NotFoundError(message, object_id)`; properties `message`, `object_id`; `__str__` | Python compatibility exception over Rust missing-object signal | unit behavior | N/Q | Compatible veneer |
+| `get_scout_objects()` | one-crossing Rust HTTP/summary Arrow product | recorded/live | measured | Complete |
+| `scout_orbits_to_variant_orbits(object_id, scout_orbits)` | one-crossing Rust conversion and VariantOrbits assembly | recorded/synthetic | measured with Scout product | Complete |
+| `query_scout(ids)` | one-crossing Rust HTTP fan-out/conversion/typed product | recorded/live | measured | Complete |
 | `ScoutObjectSummary(...)`, `ScoutOrbit(...)` and columns | External/generic quivr schemas | schema tests | N/Q | Compatible data veneers |
 
 ## Plotting-only waiver
