@@ -323,7 +323,7 @@ fn normal_matrix(jac: &[f64], n: usize) -> [[f64; 6]; 6] {
 
 /// Solve `A x = b` for a 6x6 system via Gauss-Jordan with partial pivoting.
 #[allow(clippy::needless_range_loop)]
-fn solve_6x6(a: &[[f64; 6]; 6], b: &[f64; 6]) -> Option<[f64; 6]> {
+pub(crate) fn solve_6x6(a: &[[f64; 6]; 6], b: &[f64; 6]) -> Option<[f64; 6]> {
     let mut m = [[0.0_f64; 7]; 6];
     for i in 0..6 {
         m[i][..6].copy_from_slice(&a[i]);
@@ -362,7 +362,7 @@ fn solve_6x6(a: &[[f64; 6]; 6], b: &[f64; 6]) -> Option<[f64; 6]> {
 }
 
 /// Invert a 6x6 matrix (row-major output). Returns `None` if singular.
-fn inverse_6x6(a: &[[f64; 6]; 6]) -> Option<[f64; 36]> {
+pub(crate) fn inverse_6x6(a: &[[f64; 6]; 6]) -> Option<[f64; 36]> {
     let mut out = [0.0_f64; 36];
     for col in 0..6 {
         let mut e = [0.0_f64; 6];

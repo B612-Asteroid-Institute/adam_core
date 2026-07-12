@@ -24,7 +24,13 @@ pub use ephemeris::{
     EphemerisDiagnostics, EphemerisFailureCode, EphemerisOptions, EphemerisPhotometryOptions,
     EphemerisResult, EphemerisRowDiagnostic,
 };
-pub use od::fit_orbit_least_squares_barycentric;
+pub use od::{
+    evaluate_orbit_barycentric, fit_orbit_least_squares_barycentric,
+    fit_orbit_least_squares_evaluated_barycentric, od_fit_barycentric,
+    vallado_least_squares_barycentric, EvaluatedLeastSquaresFit, FitEvaluation, OdConfig, OdMethod,
+    OdOutput, ValladoConfig, ValladoIteration, ValladoResult, ValladoStatus,
+    INVALID_LIGHT_TIME_MESSAGE,
+};
 pub use pipeline::{OrbitRow, PropagationResult};
 pub use request::{
     CovariancePropagation, EpochOrder, EpochPolicy, PropagationInput, PropagationOptions,
