@@ -56,6 +56,15 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--workspace", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
+    parser.add_argument(
+        "--prebuilt-wheelhouse",
+        type=Path,
+        help=(
+            "Use exact wheels already built by a platform-native release builder "
+            "(for example a manylinux container) while retaining the same "
+            "clone/provenance/runtime/smoke driver."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -276,49 +285,70 @@ def main() -> int:
         )
         _write_report(report_path, report)
 
-        builder = workspace / "builder-venv"
-        venv.EnvBuilder(with_pip=True, clear=True).create(builder)
-        builder_python = _venv_python(builder)
-        _run(
-            "install_builder",
-            [builder_python, "-m", "pip", "install", "--upgrade", "build", "pip"],
-            cwd=workspace,
-            log_dir=log_dir,
-        )
-        _run(
-            "write_core_version",
-            [builder_python, "migration/scripts/write_maturin_version.py"],
-            cwd=core_source,
-            log_dir=log_dir,
-        )
-        _run(
-            "build_adam_core",
-            [
-                builder_python,
-                "-m",
-                "build",
-                "--wheel",
-                "--outdir",
-                wheelhouse,
-                core_source,
-            ],
-            cwd=workspace,
-            log_dir=log_dir,
-        )
-        _run(
-            "build_adam_assist",
-            [
-                builder_python,
-                "-m",
-                "build",
-                "--wheel",
-                "--outdir",
-                wheelhouse,
-                assist_source,
-            ],
-            cwd=workspace,
-            log_dir=log_dir,
-        )
+        if args.prebuilt_wheelhouse is not None:
+            prebuilt_wheelhouse = args.prebuilt_wheelhouse.resolve()
+            prebuilt_wheels = sorted(prebuilt_wheelhouse.glob("*.whl"))
+            if not prebuilt_wheels:
+                raise AssertionError(
+                    f"prebuilt wheelhouse contains no wheels: {prebuilt_wheelhouse}"
+                )
+            for wheel in prebuilt_wheels:
+                shutil.copy2(wheel, wheelhouse / wheel.name)
+            report["build_mode"] = "prebuilt-platform-wheels"
+            report["prebuilt_wheelhouse"] = str(prebuilt_wheelhouse)
+        else:
+            builder = workspace / "builder-venv"
+            venv.EnvBuilder(with_pip=True, clear=True).create(builder)
+            builder_python = _venv_python(builder)
+            _run(
+                "install_builder",
+                [
+                    builder_python,
+                    "-m",
+                    "pip",
+                    "install",
+                    "--upgrade",
+                    "build",
+                    "pip",
+                ],
+                cwd=workspace,
+                log_dir=log_dir,
+            )
+            _run(
+                "write_core_version",
+                [builder_python, "migration/scripts/write_maturin_version.py"],
+                cwd=core_source,
+                log_dir=log_dir,
+            )
+            _run(
+                "build_adam_core",
+                [
+                    builder_python,
+                    "-m",
+                    "build",
+                    "--wheel",
+                    "--outdir",
+                    wheelhouse,
+                    core_source,
+                ],
+                cwd=workspace,
+                log_dir=log_dir,
+            )
+            _run(
+                "build_adam_assist",
+                [
+                    builder_python,
+                    "-m",
+                    "build",
+                    "--wheel",
+                    "--outdir",
+                    wheelhouse,
+                    assist_source,
+                ],
+                cwd=workspace,
+                log_dir=log_dir,
+            )
+            report["build_mode"] = "pep517-source-build"
         core_wheel = _only_wheel(wheelhouse, "adam_core")
         assist_wheel = _only_wheel(wheelhouse, "adam_assist")
         report["wheels"] = {

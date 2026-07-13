@@ -66,11 +66,36 @@ jobs:
         shell: bash
         run: test "$(uname -s)-$(uname -m)" = "${{ matrix.platform.system }}"
 
+      - name: Build adam-core manylinux wheel
+        if: matrix.platform.name == 'manylinux-x86_64'
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: x86_64
+          manylinux: "2_17"
+          working-directory: .
+          args: --release -i python${{ matrix.python-version }} --out wheelhouse
+
+      - name: Build adam-assist manylinux wheel
+        if: matrix.platform.name == 'manylinux-x86_64'
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: x86_64
+          manylinux: "2_17"
+          working-directory: adam-assist
+          args: --release -i python${{ matrix.python-version }} --out ../wheelhouse
+
       - name: Run exact clean-room acceptance driver
         shell: bash
         run: |
           set -euo pipefail
+          PREBUILT_ARGS=()
+          if [[ "${{ matrix.platform.name }}" == "manylinux-x86_64" ]]; then
+            PREBUILT_ARGS=(--prebuilt-wheelhouse "$GITHUB_WORKSPACE/wheelhouse")
+          fi
           python migration/scripts/run_clean_room_artifact_acceptance.py \
+            "${PREBUILT_ARGS[@]}" \
             --adam-core-repo "$GITHUB_WORKSPACE" \
             --adam-core-ref HEAD \
             --adam-assist-repo "$GITHUB_WORKSPACE/adam-assist" \
