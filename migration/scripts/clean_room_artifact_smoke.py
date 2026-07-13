@@ -166,7 +166,13 @@ def main() -> int:
         import adam_core
         import adam_core._rust_native
 
-        forbidden_optional_distributions = ("astropy", "astroquery", "healpy")
+        forbidden_optional_distributions = (
+            "astropy",
+            "astroquery",
+            "healpy",
+            "timezonefinder",
+            "h3",
+        )
         unexpectedly_installed = []
         for distribution in forbidden_optional_distributions:
             try:

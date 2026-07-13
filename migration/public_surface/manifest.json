@@ -40,8 +40,8 @@
       "compatibility_data_or_external_generic": 126,
       "mixed_rust_python_gap": 88,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 212,
-      "rust_veneer_candidate_see_domain_audit": 103
+      "python_gap_or_external_boundary": 211,
+      "rust_veneer_candidate_see_domain_audit": 104
     },
     "plotting_exemption_candidates": 16,
     "unreviewed": 0
@@ -7757,7 +7757,7 @@
       "kind": "constant",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 20,
+      "line": 19,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -7841,7 +7841,7 @@
       "kind": "class",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 23,
+      "line": 22,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -7869,7 +7869,7 @@
       "kind": "method",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 30,
+      "line": 29,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -7897,23 +7897,23 @@
       "kind": "method",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 59,
+      "line": 58,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
-        "python_loop": true,
+        "rust_reference": true,
+        "python_loop": false,
         "numpy_reference": true,
         "pyarrow_reference": false,
         "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.2",
       "audit_document": "migration/public_surface/coordinates_time_observers.md"
     },
@@ -8037,7 +8037,7 @@
       "kind": "constant",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 18,
+      "line": 17,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8065,7 +8065,7 @@
       "kind": "constant",
       "domain": "observers",
       "source": "src/adam_core/observers/observers.py",
-      "line": 19,
+      "line": 18,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

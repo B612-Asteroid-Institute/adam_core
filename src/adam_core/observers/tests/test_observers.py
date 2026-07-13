@@ -7,7 +7,12 @@ from ...coordinates.origin import OriginCodes
 from ...time import Timestamp
 from ...utils.spice import get_perturber_state, get_spice_body_state
 from ...utils.spice_backend import NotCovered, get_backend
-from ..observers import OBSERVATORY_CODES, OBSERVATORY_PARALLAX_COEFFICIENTS, Observers
+from ..observers import (
+    E_EARTH,
+    OBSERVATORY_CODES,
+    OBSERVATORY_PARALLAX_COEFFICIENTS,
+    Observers,
+)
 from ..state import get_mpc_observer_state, get_observer_state
 
 
@@ -141,6 +146,31 @@ def test_ObservatoryParallaxCoeffiecients_timezone() -> None:
 
     F51 = OBSERVATORY_PARALLAX_COEFFICIENTS.select("code", "F51")
     assert F51.timezone() == "Pacific/Honolulu"
+
+
+def test_ObservatoryParallaxCoefficients_timezone_validity_and_timing() -> None:
+    from zoneinfo import ZoneInfo
+
+    from adam_core import _rust_native as _rn
+
+    coefficients = OBSERVATORY_PARALLAX_COEFFICIENTS
+    timezone_names = coefficients.timezone()
+    assert len(timezone_names) == len(coefficients)
+    for timezone_name in timezone_names:
+        if timezone_name != "None":
+            ZoneInfo(timezone_name)
+
+    samples = _rn.benchmark_observatory_timezones_numpy(
+        coefficients.longitude.to_numpy(zero_copy_only=False),
+        coefficients.cos_phi.to_numpy(zero_copy_only=False),
+        coefficients.sin_phi.to_numpy(zero_copy_only=False),
+        float(E_EARTH**2),
+        1,
+        2,
+        1,
+    )
+    assert len(samples) == 2
+    assert all(sample[0] >= 0.0 for sample in samples)
 
 
 def test_origincode_observer():

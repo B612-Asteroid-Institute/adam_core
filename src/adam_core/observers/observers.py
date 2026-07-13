@@ -7,7 +7,6 @@ import pandas as pd
 import pyarrow as pa
 import quivr as qv
 from mpc_obscodes import mpc_obscodes
-from timezonefinder import TimezoneFinder
 from typing_extensions import Self
 
 from ..constants import Constants as c
@@ -65,16 +64,17 @@ class ObservatoryParallaxCoefficients(qv.Table):
         timezone : np.ndarray
             The timezone of the observatories in hours.
         """
-        tf = TimezoneFinder()
-        lon, lat = self.lon_lat()
-        time_zones = np.array(
-            [
-                tz if not np.isnan(lon_i) else "None"
-                for lon_i, lat_i in zip(lon, lat)
-                for tz in [tf.timezone_at(lng=lon_i, lat=lat_i)]
-            ]
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.observatory_timezones_numpy(
+                self.longitude.to_numpy(zero_copy_only=False),
+                self.cos_phi.to_numpy(zero_copy_only=False),
+                self.sin_phi.to_numpy(zero_copy_only=False),
+                float(E_EARTH**2),
+            ),
+            dtype=np.str_,
         )
-        return time_zones
 
 
 # Read MPC extended observatory codes file

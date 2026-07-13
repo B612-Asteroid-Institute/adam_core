@@ -168,8 +168,8 @@ below. None of these generated constructors has a dedicated parity row.
 | Public API(s) | Classification | Parity | Native | Finding / gap |
 |---|---|---:|---:|---|
 | `ObservatoryParallaxCoefficients` columns `code`, `longitude`, `cos_phi`, `sin_phi`, `name` | external inheritance | no | n/a | Quivr schema/constructor. |
-| `ObservatoryParallaxCoefficients.lon_lat` | Python-only | no | no | NumPy geodetic conversion. |
-| `ObservatoryParallaxCoefficients.timezone` | Python-only / external data | no | no | Per-row `timezonefinder` lookup. |
+| `ObservatoryParallaxCoefficients.lon_lat` | one-crossing | dedicated geodesy coverage | through shared Rust kernel | Rust owns space-site NaN masking, geodetic latitude, and longitude wrapping. |
+| `ObservatoryParallaxCoefficients.timezone` | one-crossing | fixed legacy aliases, all-row validity/order, and downstream DST parity | yes | Rust owns geodesy, invalid/space-site handling, and bundled geographic IANA timezone-polygon lookup; the Python timezonefinder/H3 runtime stack is removed. The bundled data returns geographically specific IANA names where timezonefinder's reduced “same since now” dataset returned an equivalent representative alias. |
 | constants `R_EARTH_EQUATORIAL`, `R_EARTH_POLAR`, `E_EARTH`, `OBSCODES`, `OBSERVATORY_PARALLAX_COEFFICIENTS`, `OBSERVATORY_CODES` | Python-only data | no | n/a | Import-time pandas/data-package construction; data/discovery concern, not numeric Rust credit. |
 | `Observers` columns `code`, `coordinates` | external inheritance | no | n/a | Quivr schema/constructor. |
 | `Observers.from_codes` | one Arrow crossing for mixed ground MPC and loaded custom/space SPICE bodies; Rust owns code grouping, epoch conversion, site/body dispatch, state lookup, row scatter, and finished Observers assembly | yes, including frozen legacy JWST states and mixed ground/custom order | **yes** | Complete; invalid codes raise the legacy ValueError directly from the boundary. |

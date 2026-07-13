@@ -16,7 +16,9 @@ use numpy::{
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::hint::black_box;
+use std::sync::OnceLock;
 use std::time::Instant;
+use tzf_rs::DefaultFinder;
 
 const KM_P_AU: f64 = 149_597_870.7;
 const S_P_DAY: f64 = 86_400.0;
@@ -1659,19 +1661,14 @@ fn sample_covariance_random_numpy<'py>(
 
 type LonLatResult<'py> = (Bound<'py, PyArray1<f64>>, Bound<'py, PyArray1<f64>>);
 
-/// Observatory longitude/geodetic-latitude from MPC parallax coefficients,
-/// matching the legacy NumPy composition (NaN rows are space-based sites).
-#[pyfunction]
-fn observatory_lon_lat_numpy<'py>(
-    py: Python<'py>,
-    longitude: PyReadonlyArray1<'py, f64>,
-    cos_phi: PyReadonlyArray1<'py, f64>,
-    sin_phi: PyReadonlyArray1<'py, f64>,
+static TIMEZONE_FINDER: OnceLock<DefaultFinder> = OnceLock::new();
+
+fn observatory_lon_lat_values(
+    longitude: &[f64],
+    cos_phi: &[f64],
+    sin_phi: &[f64],
     e2: f64,
-) -> PyResult<LonLatResult<'py>> {
-    let longitude = scalars(&longitude, "longitude")?;
-    let cos_phi = scalars(&cos_phi, "cos_phi")?;
-    let sin_phi = scalars(&sin_phi, "sin_phi")?;
+) -> PyResult<(Vec<f64>, Vec<f64>)> {
     if cos_phi.len() != longitude.len() || sin_phi.len() != longitude.len() {
         return Err(PyValueError::new_err(
             "longitude, cos_phi, sin_phi must have equal length",
@@ -1694,7 +1691,80 @@ fn observatory_lon_lat_numpy<'py>(
         lon_out.push(lon);
         lat_out.push(latitude_geodetic.to_degrees());
     }
-    Ok((array1(py, lon_out), array1(py, lat_out)))
+    Ok((lon_out, lat_out))
+}
+
+fn observatory_timezone_values(
+    longitude: &[f64],
+    cos_phi: &[f64],
+    sin_phi: &[f64],
+    e2: f64,
+) -> PyResult<Vec<String>> {
+    let (longitude, latitude) = observatory_lon_lat_values(longitude, cos_phi, sin_phi, e2)?;
+    let finder = TIMEZONE_FINDER.get_or_init(DefaultFinder::new);
+    Ok(longitude
+        .iter()
+        .zip(latitude.iter())
+        .map(|(&longitude, &latitude)| {
+            if longitude.is_nan() || latitude.is_nan() {
+                "None".to_owned()
+            } else {
+                finder.get_tz_name(longitude, latitude).to_owned()
+            }
+        })
+        .collect())
+}
+
+/// Observatory longitude/geodetic-latitude from MPC parallax coefficients,
+/// matching the legacy NumPy composition (NaN rows are space-based sites).
+#[pyfunction]
+fn observatory_lon_lat_numpy<'py>(
+    py: Python<'py>,
+    longitude: PyReadonlyArray1<'py, f64>,
+    cos_phi: PyReadonlyArray1<'py, f64>,
+    sin_phi: PyReadonlyArray1<'py, f64>,
+    e2: f64,
+) -> PyResult<LonLatResult<'py>> {
+    let longitude = scalars(&longitude, "longitude")?;
+    let cos_phi = scalars(&cos_phi, "cos_phi")?;
+    let sin_phi = scalars(&sin_phi, "sin_phi")?;
+    let (longitude, latitude) = observatory_lon_lat_values(&longitude, &cos_phi, &sin_phi, e2)?;
+    Ok((array1(py, longitude), array1(py, latitude)))
+}
+
+/// Observatory IANA timezone names from MPC parallax coefficients in one Rust
+/// crossing; bundled polygon data replaces the Python timezonefinder/H3 stack.
+#[pyfunction]
+fn observatory_timezones_numpy(
+    longitude: PyReadonlyArray1<'_, f64>,
+    cos_phi: PyReadonlyArray1<'_, f64>,
+    sin_phi: PyReadonlyArray1<'_, f64>,
+    e2: f64,
+) -> PyResult<Vec<String>> {
+    let longitude = scalars(&longitude, "longitude")?;
+    let cos_phi = scalars(&cos_phi, "cos_phi")?;
+    let sin_phi = scalars(&sin_phi, "sin_phi")?;
+    observatory_timezone_values(&longitude, &cos_phi, &sin_phi, e2)
+}
+
+#[pyfunction]
+#[pyo3(signature = (longitude, cos_phi, sin_phi, e2, reps, trials, warmup_reps=1))]
+fn benchmark_observatory_timezones_numpy(
+    longitude: PyReadonlyArray1<'_, f64>,
+    cos_phi: PyReadonlyArray1<'_, f64>,
+    sin_phi: PyReadonlyArray1<'_, f64>,
+    e2: f64,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let longitude = scalars(&longitude, "longitude")?;
+    let cos_phi = scalars(&cos_phi, "cos_phi")?;
+    let sin_phi = scalars(&sin_phi, "sin_phi")?;
+    observatory_timezone_values(&longitude, &cos_phi, &sin_phi, e2)?;
+    bench_result(reps, trials, warmup_reps, || {
+        observatory_timezone_values(&longitude, &cos_phi, &sin_phi, e2)
+    })
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -1773,5 +1843,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sample_covariance_sigma_points_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(sample_covariance_random_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(observatory_lon_lat_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(observatory_timezones_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_observatory_timezones_numpy, m)?)?;
     Ok(())
 }
