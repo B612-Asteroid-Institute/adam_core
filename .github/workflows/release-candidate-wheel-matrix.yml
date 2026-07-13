@@ -86,16 +86,27 @@ jobs:
           working-directory: adam-assist
           args: --release -i python${{ matrix.python-version }} --out ../wheelhouse
 
-      - name: Run exact clean-room acceptance driver
+      - name: Run exact clean-room acceptance driver with manylinux wheels
+        if: matrix.platform.name == 'manylinux-x86_64'
         shell: bash
         run: |
           set -euo pipefail
-          PREBUILT_ARGS=()
-          if [[ "${{ matrix.platform.name }}" == "manylinux-x86_64" ]]; then
-            PREBUILT_ARGS=(--prebuilt-wheelhouse "$GITHUB_WORKSPACE/wheelhouse")
-          fi
           python migration/scripts/run_clean_room_artifact_acceptance.py \
-            "${PREBUILT_ARGS[@]}" \
+            --prebuilt-wheelhouse "$GITHUB_WORKSPACE/wheelhouse" \
+            --adam-core-repo "$GITHUB_WORKSPACE" \
+            --adam-core-ref HEAD \
+            --adam-assist-repo "$GITHUB_WORKSPACE/adam-assist" \
+            --adam-assist-ref HEAD \
+            --workspace "$RUNNER_TEMP/acceptance" \
+            --report "$RUNNER_TEMP/acceptance-report.json" \
+            --python "$(command -v python)"
+
+      - name: Run exact clean-room acceptance driver on macOS
+        if: matrix.platform.name == 'macos-arm64'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python migration/scripts/run_clean_room_artifact_acceptance.py \
             --adam-core-repo "$GITHUB_WORKSPACE" \
             --adam-core-ref HEAD \
             --adam-assist-repo "$GITHUB_WORKSPACE/adam-assist" \
