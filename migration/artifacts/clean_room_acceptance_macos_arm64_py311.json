@@ -1,12 +1,12 @@
 {
-  "builder_python": "/opt/homebrew/Cellar/python@3.13/3.13.3/Frameworks/Python.framework/Versions/3.13/bin/python3.13",
+  "builder_python": "/Library/Frameworks/Python.framework/Versions/3.11/bin/python3.11",
   "failed_stage": null,
   "runtime": {
-    "compiler_hidden_path": "/private/tmp/adam-clean-no-astropy-py313/runtime-venv/bin:/usr/bin:/bin",
+    "compiler_hidden_path": "/private/tmp/adam-clean-no-astropy-py311/runtime-venv/bin:/usr/bin:/bin",
     "pip_check": "No broken requirements found.",
     "pip_freeze": [
-      "adam-assist @ file:///private/tmp/adam-clean-no-astropy-py313/wheelhouse/adam_assist-0.4.0-cp313-cp313-macosx_11_0_arm64.whl#sha256=76a6dd417dc07bb5a39f8afae297591de78b2603083291d07006d9f80250878f",
-      "adam_core @ file:///private/tmp/adam-clean-no-astropy-py313/wheelhouse/adam_core-0.5.6-cp313-cp313-macosx_11_0_arm64.whl#sha256=9d42de298e3e75cbaf25b4b68b42a5a1759f50822cc9f9b5b9873a21a7201c90",
+      "adam-assist @ file:///private/tmp/adam-clean-no-astropy-py311/wheelhouse/adam_assist-0.4.0-cp311-cp311-macosx_11_0_arm64.whl#sha256=af23a921758a007f2adaff8cd371dee7d295d5a9ab04b13919f30d8512b3c3ed",
+      "adam_core @ file:///private/tmp/adam-clean-no-astropy-py311/wheelhouse/adam_core-0.5.6-cp311-cp311-macosx_11_0_arm64.whl#sha256=1ea8c39a86d669dfd4ca9006e29fe7b08e3fc388a79ee26d2825f8fb856828ef",
       "anyio==4.14.2",
       "anysqlite==0.0.5",
       "blinker==1.9.0",
@@ -35,7 +35,7 @@
       "naif_eop_historical==2024.8.28.1",
       "naif_eop_predict==2024.8.28.1",
       "naif_leapseconds==2025.4.22",
-      "numpy==2.5.1",
+      "numpy==2.4.6",
       "packaging==26.2",
       "pandas==3.0.3",
       "pbs-installer==2026.6.10",
@@ -52,7 +52,8 @@
       "requests==2.34.2",
       "resolvelib==1.2.1",
       "rich==15.0.0",
-      "scipy==1.18.0",
+      "scipy==1.17.1",
+      "setuptools==65.5.0",
       "shellingham==1.5.4",
       "six==1.17.0",
       "socksio==1.0.0",
@@ -63,43 +64,43 @@
       "urllib3==2.7.0",
       "virtualenv==21.6.1"
     ],
-    "python": "/private/tmp/adam-clean-no-astropy-py313/runtime-venv/bin/python",
+    "python": "/private/tmp/adam-clean-no-astropy-py311/runtime-venv/bin/python",
     "smoke": {
       "environment": {
         "assist_asteroids_override": null,
         "assist_planets_override": null,
-        "cwd": "/private/tmp/adam-clean-no-astropy-py313/invocation",
+        "cwd": "/private/tmp/adam-clean-no-astropy-py311/invocation",
         "forbidden_roots": [
-          "/private/tmp/adam-clean-no-astropy-py313/sources/adam-core",
-          "/private/tmp/adam-clean-no-astropy-py313/sources/adam-assist",
+          "/private/tmp/adam-clean-no-astropy-py311/sources/adam-core",
+          "/private/tmp/adam-clean-no-astropy-py311/sources/adam-assist",
           "/Users/aleck/Code/adam-core-rust-migration",
           "/Users/aleck/Code/.fleet/ws/019f4eee-f4b6-7345-bd4d-b0863c9ab798/adam-assist"
         ],
-        "kernel_cache": "/private/tmp/adam-clean-no-astropy-py313/kernel-cache",
+        "kernel_cache": "/private/tmp/adam-clean-no-astropy-py311/kernel-cache",
         "kernel_offline": "1",
         "kernel_python_override": null,
-        "path": "/private/tmp/adam-clean-no-astropy-py313/runtime-venv/bin:/usr/bin:/bin",
+        "path": "/private/tmp/adam-clean-no-astropy-py311/runtime-venv/bin:/usr/bin:/bin",
         "pythonpath": null
       },
       "failed_stage": null,
       "python": {
-        "executable": "/private/tmp/adam-clean-no-astropy-py313/runtime-venv/bin/python",
+        "executable": "/private/tmp/adam-clean-no-astropy-py311/runtime-venv/bin/python",
         "implementation": "CPython",
-        "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
-        "prefix": "/private/tmp/adam-clean-no-astropy-py313/runtime-venv",
+        "platform": "macOS-14.8.4-arm64-arm-64bit",
+        "prefix": "/private/tmp/adam-clean-no-astropy-py311/runtime-venv",
         "site_packages": [
-          "/private/tmp/adam-clean-no-astropy-py313/runtime-venv/lib/python3.13/site-packages"
+          "/private/tmp/adam-clean-no-astropy-py311/runtime-venv/lib/python3.11/site-packages"
         ],
-        "version": "3.13.3"
+        "version": "3.11.6"
       },
       "schema_version": 2,
       "stages": {
         "imports_and_provenance": {
           "module_paths": {
-            "adam_assist": "/private/tmp/adam-clean-no-astropy-py313/runtime-venv/lib/python3.13/site-packages/adam_assist/__init__.py",
-            "adam_assist._native": "/private/tmp/adam-clean-no-astropy-py313/runtime-venv/lib/python3.13/site-packages/adam_assist/_native.cpython-313-darwin.so",
-            "adam_core": "/private/tmp/adam-clean-no-astropy-py313/runtime-venv/lib/python3.13/site-packages/adam_core/__init__.py",
-            "adam_core._rust_native": "/private/tmp/adam-clean-no-astropy-py313/runtime-venv/lib/python3.13/site-packages/adam_core/_rust_native.cpython-313-darwin.so"
+            "adam_assist": "/private/tmp/adam-clean-no-astropy-py311/runtime-venv/lib/python3.11/site-packages/adam_assist/__init__.py",
+            "adam_assist._native": "/private/tmp/adam-clean-no-astropy-py311/runtime-venv/lib/python3.11/site-packages/adam_assist/_native.cpython-311-darwin.so",
+            "adam_core": "/private/tmp/adam-clean-no-astropy-py311/runtime-venv/lib/python3.11/site-packages/adam_core/__init__.py",
+            "adam_core._rust_native": "/private/tmp/adam-clean-no-astropy-py311/runtime-venv/lib/python3.11/site-packages/adam_core/_rust_native.cpython-311-darwin.so"
           },
           "optional_distributions_absent": [
             "astropy",
@@ -109,7 +110,7 @@
             "h3"
           ],
           "optional_modules_loaded": [],
-          "seconds": 0.5238740425556898,
+          "seconds": 0.5152953751385212,
           "status": "passed",
           "versions": {
             "adam-assist": "0.4.0",
@@ -121,7 +122,7 @@
         "kernel_cache_policy": {
           "cache_files": [],
           "installed_package_paths_used": true,
-          "seconds": 8.849985897541046e-05,
+          "seconds": 5.900021642446518e-05,
           "status": "passed"
         },
         "live_orbit_fetch": {
@@ -129,7 +130,7 @@
           "object_id": "99942 Apophis (2004 MN4)",
           "orbit_id": "99942 Apophis",
           "schema": "orbit_id: large_string not null\nobject_id: large_string\ncoordinates: struct<x: double, y: double, z: double, vx: double, vy: double, vz: double, time: struct<days: int64 (... 106 chars omitted)\n  child 0, x: double\n  child 1, y: double\n  child 2, z: double\n  child 3, vx: double\n  child 4, vy: double\n  child 5, vz: double\n  child 6, time: struct<days: int64, nanos: int64>\n      child 0, days: int64\n      child 1, nanos: int64\n  child 7, covariance: struct<values: large_list<item: double>>\n      child 0, values: large_list<item: double>\n          child 0, item: double\n  child 8, origin: struct<code: large_string>\n      child 0, code: large_string\nphysical_parameters: struct<H_v: double, H_v_sigma: double, G: double, G_sigma: double, sigma_eff: double, chi2_red: doub (... 3 chars omitted)\n  child 0, H_v: double\n  child 1, H_v_sigma: double\n  child 2, G: double\n  child 3, G_sigma: double\n  child 4, sigma_eff: double\n  child 5, chi2_red: double\n-- schema metadata --\ncoordinates.frame: 'ecliptic'\ncoordinates.time.scale: 'tdb'",
-          "seconds": 0.3238128749653697,
+          "seconds": 0.3499853750690818,
           "state": [
             -0.4098530841678254,
             0.9621648472038595,
@@ -175,7 +176,7 @@
           "observatory_code": "X05",
           "output_rows": 3,
           "output_time_scale": "utc",
-          "seconds": 0.005431166850030422,
+          "seconds": 0.00571016687899828,
           "status": "passed"
         },
         "optional_dependency_layering": {
@@ -189,7 +190,7 @@
             60378
           ],
           "optional_modules_loaded": [],
-          "seconds": 0.45015920884907246,
+          "seconds": 0.572086458094418,
           "status": "passed",
           "tai_mjd": [
             60379.417083333334,
@@ -198,8 +199,8 @@
         },
         "public_propagation": {
           "kernel_paths": {
-            "asteroids": "/private/tmp/adam-clean-no-astropy-py313/runtime-venv/lib/python3.13/site-packages/jpl_small_bodies_de441_n16/sb441-n16.bsp",
-            "planets": "/private/tmp/adam-clean-no-astropy-py313/runtime-venv/lib/python3.13/site-packages/naif_de440/de440.bsp"
+            "asteroids": "/private/tmp/adam-clean-no-astropy-py311/runtime-venv/lib/python3.11/site-packages/jpl_small_bodies_de441_n16/sb441-n16.bsp",
+            "planets": "/private/tmp/adam-clean-no-astropy-py311/runtime-venv/lib/python3.11/site-packages/naif_de440/de440.bsp"
           },
           "model_position_delta_au": [
             7.439037432929079e-09,
@@ -238,7 +239,7 @@
               0.00029799780717098103
             ]
           ],
-          "seconds": 0.013678750023245811,
+          "seconds": 0.0127251660451293,
           "status": "passed",
           "target_mjd_tdb": [
             59216.0,
@@ -281,26 +282,26 @@
           ],
           "max_identical_candidate_span": 0.0,
           "output_rows": 3,
-          "seconds": 0.002274041064083576,
+          "seconds": 0.0018987497314810753,
           "status": "passed"
         }
       },
       "status": "passed",
-      "total_seconds": 1.3193185841664672
+      "total_seconds": 1.4577602911740541
     },
-    "smoke_stdout_tail": "          -0.010352303789881797,\n          0.0002977898990782125\n        ]\n      ]\n    },\n    \"same_epoch_batch\": {\n      \"candidate_ids\": [\n        \"candidate-00\",\n        \"candidate-01\",\n        \"candidate-02\"\n      ],\n      \"max_identical_candidate_span\": 0.0,\n      \"output_rows\": 3,\n      \"seconds\": 0.002274041064083576,\n      \"status\": \"passed\"\n    }\n  },\n  \"status\": \"passed\",\n  \"total_seconds\": 1.3193185841664672\n}"
+    "smoke_stdout_tail": "          -0.010352303789881797,\n          0.0002977898990782125\n        ]\n      ]\n    },\n    \"same_epoch_batch\": {\n      \"candidate_ids\": [\n        \"candidate-00\",\n        \"candidate-01\",\n        \"candidate-02\"\n      ],\n      \"max_identical_candidate_span\": 0.0,\n      \"output_rows\": 3,\n      \"seconds\": 0.0018987497314810753,\n      \"status\": \"passed\"\n    }\n  },\n  \"status\": \"passed\",\n  \"total_seconds\": 1.4577602911740541\n}"
   },
   "schema_version": 2,
   "sources": {
     "adam_assist": {
-      "checkout": "/private/tmp/adam-clean-no-astropy-py313/sources/adam-assist",
+      "checkout": "/private/tmp/adam-clean-no-astropy-py311/sources/adam-assist",
       "commit": "618e6888c8ab2dabd17778eb58980341a554442c",
       "requested_ref": "618e6888c8ab2dabd17778eb58980341a554442c",
       "source": "/Users/aleck/Code/.fleet/ws/019f4eee-f4b6-7345-bd4d-b0863c9ab798/adam-assist",
       "tree": "54adbad9b807a93d3827c77a00d1445bc69325b7"
     },
     "adam_core": {
-      "checkout": "/private/tmp/adam-clean-no-astropy-py313/sources/adam-core",
+      "checkout": "/private/tmp/adam-clean-no-astropy-py311/sources/adam-core",
       "commit": "c57c81264548726d8769962187cbf5e4dcf1322f",
       "requested_ref": "c57c81264548726d8769962187cbf5e4dcf1322f",
       "source": "/Users/aleck/Code/adam-core-rust-migration",
@@ -310,27 +311,27 @@
   "status": "passed",
   "wheels": {
     "adam_assist": {
-      "bytes": 1045147,
-      "filename": "adam_assist-0.4.0-cp313-cp313-macosx_11_0_arm64.whl",
+      "bytes": 1047852,
+      "filename": "adam_assist-0.4.0-cp311-cp311-macosx_11_0_arm64.whl",
       "name": "adam-assist",
       "native_members": [
-        "adam_assist/_native.cpython-313-darwin.so"
+        "adam_assist/_native.cpython-311-darwin.so"
       ],
-      "path": "/private/tmp/adam-clean-no-astropy-py313/wheelhouse/adam_assist-0.4.0-cp313-cp313-macosx_11_0_arm64.whl",
-      "sha256": "76a6dd417dc07bb5a39f8afae297591de78b2603083291d07006d9f80250878f",
+      "path": "/private/tmp/adam-clean-no-astropy-py311/wheelhouse/adam_assist-0.4.0-cp311-cp311-macosx_11_0_arm64.whl",
+      "sha256": "af23a921758a007f2adaff8cd371dee7d295d5a9ab04b13919f30d8512b3c3ed",
       "version": "0.4.0"
     },
     "adam_core": {
-      "bytes": 13662207,
-      "filename": "adam_core-0.5.6-cp313-cp313-macosx_11_0_arm64.whl",
+      "bytes": 13678097,
+      "filename": "adam_core-0.5.6-cp311-cp311-macosx_11_0_arm64.whl",
       "name": "adam_core",
       "native_members": [
-        "adam_core/_rust_native.cpython-313-darwin.so"
+        "adam_core/_rust_native.cpython-311-darwin.so"
       ],
-      "path": "/private/tmp/adam-clean-no-astropy-py313/wheelhouse/adam_core-0.5.6-cp313-cp313-macosx_11_0_arm64.whl",
-      "sha256": "9d42de298e3e75cbaf25b4b68b42a5a1759f50822cc9f9b5b9873a21a7201c90",
+      "path": "/private/tmp/adam-clean-no-astropy-py311/wheelhouse/adam_core-0.5.6-cp311-cp311-macosx_11_0_arm64.whl",
+      "sha256": "1ea8c39a86d669dfd4ca9006e29fe7b08e3fc388a79ee26d2825f8fb856828ef",
       "version": "0.5.6"
     }
   },
-  "workspace": "/private/tmp/adam-clean-no-astropy-py313"
+  "workspace": "/private/tmp/adam-clean-no-astropy-py311"
 }
