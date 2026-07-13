@@ -1,6 +1,8 @@
 name: Release candidate wheel matrix
 
 on:
+  push:
+    branches: ["rust-migration-*"]
   pull_request:
     branches: [main, "v*"]
   workflow_dispatch:
