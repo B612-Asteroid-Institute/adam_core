@@ -1,0 +1,19 @@
+[package]
+name = "adam_core_rs_kernel_data"
+version = "0.1.0"
+edition = "2021"
+description = "Kernel/data-file resolution for adam-core Rust consumers: env override, installed-Python probe, cache, and checksummed PyPI-wheel fetch."
+license = "MIT OR Apache-2.0"
+
+[features]
+default = ["spice"]
+spice = ["dep:adam_core_rs_spice"]
+
+[dependencies]
+sha2 = "0.10"
+ureq = { version = "2.12", default-features = false, features = ["tls"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+adam_core_rs_spice = { path = "../adam_core_rs_spice", optional = true }
+
+[dev-dependencies]
+tempfile = "3"
