@@ -12,7 +12,6 @@ import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 import requests
-from astroquery.jplsbdb import SBDB
 
 from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.covariances import CoordinateCovariances, sigmas_to_covariances
@@ -27,7 +26,29 @@ _SBDB_API_URL = "https://ssd-api.jpl.nasa.gov/sbdb.api"
 _SBDB_API_FAIR_USE_MAX_CONCURRENT_REQUESTS = 1
 
 _thread_local = threading.local()
-_DEFAULT_SBDB_QUERY = SBDB.query
+
+
+class _SBDBCompatibilityShim:
+    """Patch target for legacy tests/callers without importing Astroquery.
+
+    The ordinary public path is Rust HTTP. Historical users that patched
+    ``adam_core.orbits.query.sbdb.SBDB.query`` can still supply processed
+    payloads; the default sentinel is never called.
+    """
+
+    @staticmethod
+    def clear_cache() -> None:
+        return None
+
+    @staticmethod
+    def query(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("legacy SBDB.query compatibility hook was not patched")
+
+
+_sbdb_compatibility = _SBDBCompatibilityShim
+globals()["SBDB"] = _sbdb_compatibility
+_DEFAULT_SBDB_QUERY = _sbdb_compatibility.query
 
 
 def _get_requests_session() -> requests.Session:
@@ -125,9 +146,9 @@ def _get_sbdb_elements(obj_ids: List[str]) -> List[OrderedDict]:
         List of dictionaries containing orbital elements and other object properties.
     """
     results = []
-    SBDB.clear_cache()  # Yikes!
+    _sbdb_compatibility.clear_cache()  # Yikes!
     for obj_id in obj_ids:
-        result = SBDB.query(
+        result = _sbdb_compatibility.query(
             obj_id,
             covariance="mat",
             id_type="search",
@@ -275,7 +296,7 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     ------
     NotFoundError: If any of the queries object IDs are not found.
     """
-    if SBDB.query is not _DEFAULT_SBDB_QUERY:
+    if _sbdb_compatibility.query is not _DEFAULT_SBDB_QUERY:
         return _orbits_from_sbdb_results(ids, _get_sbdb_elements(ids))
 
     from adam_core import _rust_native

@@ -14,6 +14,17 @@ ADAM Core is available on PyPI
 pip install adam_core
 ```
 
+Astropy, Astroquery, Healpy, and plotting libraries are explicit optional
+providers rather than default runtime dependencies. Install only the bridge
+you need:
+
+```bash
+pip install "adam_core[astropy]"      # Astropy Time and UT1/IERS bridges
+pip install "adam_core[legacy-sbdb]"  # Astroquery compatibility workflows
+pip install "adam_core[healpix]"      # Healpy-backed public helpers
+pip install "adam_core[plots]"        # Plotting and date-axis formatting
+```
+
 ## Usage
 
 ### Orbits

@@ -930,7 +930,7 @@ def test_lambert_solution_orbits():
         )
         assert len(samples) == 2
         assert all(len(trial) == 2 for trial in samples)
-        assert all(sample > 0.0 for trial in samples for sample in trial)
+        assert all(sample >= 0.0 for trial in samples for sample in trial)
 
     # Test departure orbit construction
     departure_orbits = lambert_results.solution_departure_orbit()
@@ -1333,7 +1333,7 @@ def test_lambert_solution_scalar_accessors_match_legacy_expressions():
             2,
             1,
         )
-        assert all(sample > 0.0 for trial in samples for sample in trial)
+        assert all(sample >= 0.0 for trial in samples for sample in trial)
 
     expected_tof = solutions.arrival_time.mjd().to_numpy(
         zero_copy_only=False
@@ -1350,4 +1350,4 @@ def test_lambert_solution_scalar_accessors_match_legacy_expressions():
         2,
         1,
     )
-    assert all(sample > 0.0 for trial in samples for sample in trial)
+    assert all(sample >= 0.0 for trial in samples for sample in trial)

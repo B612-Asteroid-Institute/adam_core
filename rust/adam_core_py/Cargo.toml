@@ -18,6 +18,8 @@ arrow-schema = "54"
 parquet = { version = "54", default-features = false, features = ["arrow", "zstd"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 pathdiff = "0.2"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+chrono-tz = "0.10"
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
 adam_core_rs_coords = { path = "../adam_core_rs_coords" }
 adam_core_rs_orbit_determination = { path = "../adam_core_rs_orbit_determination" }

@@ -1,8 +1,25 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 import numpy.typing as npt
-from astropy.time import Time
+
+if TYPE_CHECKING:
+    from astropy.time import Time
 
 BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 BASE62_MAP = {BASE62[i]: i for i in range(len(BASE62))}
+
+
+def _astropy_time_class():
+    try:
+        from astropy.time import Time
+    except ModuleNotFoundError as error:
+        raise ImportError(
+            "Astropy is required for MPC packed-date Time compatibility; "
+            "install adam-core[astropy]"
+        ) from error
+    return Time
 
 
 def _unpack_mpc_date(epoch_pf: str) -> Time:
@@ -15,7 +32,9 @@ def _unpack_mpc_date(epoch_pf: str) -> Time:
     # personal-cmy.26); astropy wraps the resulting ISOT string.
     from adam_core import _rust_native as _rn
 
-    return Time(_rn.unpack_mpc_date_isot(str(epoch_pf)), format="isot", scale="tt")
+    return _astropy_time_class()(
+        _rn.unpack_mpc_date_isot(str(epoch_pf)), format="isot", scale="tt"
+    )
 
 
 def convert_mpc_packed_dates(pf_tt: npt.ArrayLike) -> Time:
@@ -39,7 +58,7 @@ def convert_mpc_packed_dates(pf_tt: npt.ArrayLike) -> Time:
     # One Rust crossing decodes the complete input batch; Astropy remains the
     # external time-object compatibility boundary.
     isot_tt = _rn.unpack_mpc_dates_isot([str(epoch) for epoch in pf_tt])
-    return Time(isot_tt, format="isot", scale="tt")
+    return _astropy_time_class()(isot_tt, format="isot", scale="tt")
 
 
 def pack_numbered_designation(designation: str) -> str:

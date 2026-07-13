@@ -38,10 +38,10 @@
     },
     "by_implementation_class": {
       "compatibility_data_or_external_generic": 126,
-      "mixed_rust_python_gap": 87,
+      "mixed_rust_python_gap": 88,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 215,
-      "rust_veneer_candidate_see_domain_audit": 101
+      "python_gap_or_external_boundary": 212,
+      "rust_veneer_candidate_see_domain_audit": 103
     },
     "plotting_exemption_candidates": 16,
     "unreviewed": 0
@@ -6329,7 +6329,7 @@
       "kind": "class",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 227,
+      "line": 225,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6357,7 +6357,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 259,
+      "line": 257,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6385,7 +6385,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 317,
+      "line": 315,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6413,7 +6413,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 296,
+      "line": 294,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6441,7 +6441,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 255,
+      "line": 253,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6469,7 +6469,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 267,
+      "line": 265,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6497,7 +6497,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 263,
+      "line": 261,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6525,7 +6525,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 406,
+      "line": 404,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6553,7 +6553,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 374,
+      "line": 372,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6581,7 +6581,7 @@
       "kind": "method",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 338,
+      "line": 336,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6609,7 +6609,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 438,
+      "line": 436,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6637,7 +6637,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 128,
+      "line": 126,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6665,7 +6665,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 587,
+      "line": 585,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6693,7 +6693,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 47,
+      "line": 45,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -6721,7 +6721,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 650,
+      "line": 648,
       "explicit_export": null,
       "plotting_exemption_candidate": true,
       "signals": {
@@ -6749,7 +6749,7 @@
       "kind": "function",
       "domain": "missions",
       "source": "src/adam_core/missions/porkchop.py",
-      "line": 501,
+      "line": 499,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8261,12 +8261,12 @@
       "kind": "function",
       "domain": "observers",
       "source": "src/adam_core/observers/utils.py",
-      "line": 13,
+      "line": 11,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
         "pyarrow_reference": true,
@@ -8274,10 +8274,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "mixed_rust_python_gap",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.2",
       "audit_document": "migration/public_surface/coordinates_time_observers.md"
     },
@@ -10865,7 +10865,7 @@
       "kind": "class",
       "domain": "orbits",
       "source": "src/adam_core/orbits/query/sbdb.py",
-      "line": 712,
+      "line": 733,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10893,7 +10893,7 @@
       "kind": "constructor",
       "domain": "orbits",
       "source": "src/adam_core/orbits/query/sbdb.py",
-      "line": 713,
+      "line": 734,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10921,7 +10921,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/query/sbdb.py",
-      "line": 254,
+      "line": 275,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10949,7 +10949,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/query/sbdb.py",
-      "line": 617,
+      "line": 638,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12741,7 +12741,7 @@
       "kind": "constant",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 42,
+      "line": 46,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12769,7 +12769,7 @@
       "kind": "class",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 102,
+      "line": 118,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12797,7 +12797,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 583,
+      "line": 608,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12825,7 +12825,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 602,
+      "line": 627,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12853,7 +12853,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 564,
+      "line": 589,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12881,7 +12881,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 545,
+      "line": 570,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12909,7 +12909,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 484,
+      "line": 509,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12937,7 +12937,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 525,
+      "line": 550,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12965,7 +12965,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 175,
+      "line": 191,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12993,7 +12993,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 668,
+      "line": 693,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13021,7 +13021,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 625,
+      "line": 650,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13049,7 +13049,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 316,
+      "line": 342,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13077,7 +13077,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 341,
+      "line": 367,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13105,7 +13105,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 324,
+      "line": 350,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13133,7 +13133,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 215,
+      "line": 231,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13161,7 +13161,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 288,
+      "line": 314,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13189,7 +13189,7 @@
       "kind": "classmethod",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 406,
+      "line": 432,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13217,7 +13217,7 @@
       "kind": "classmethod",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 285,
+      "line": 311,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13245,23 +13245,23 @@
       "kind": "classmethod",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 250,
+      "line": 269,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
-        "python_loop": true,
-        "numpy_reference": false,
+        "rust_reference": true,
+        "python_loop": false,
+        "numpy_reference": true,
         "pyarrow_reference": true,
         "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.2",
       "audit_document": "migration/public_surface/coordinates_time_observers.md"
     },
@@ -13273,7 +13273,7 @@
       "kind": "classmethod",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 281,
+      "line": 307,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13301,7 +13301,7 @@
       "kind": "classmethod",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 259,
+      "line": 285,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13329,7 +13329,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 202,
+      "line": 218,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13357,7 +13357,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 133,
+      "line": 149,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13385,7 +13385,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 762,
+      "line": 787,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13413,7 +13413,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 367,
+      "line": 393,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13441,7 +13441,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 112,
+      "line": 128,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13469,7 +13469,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 115,
+      "line": 131,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13497,7 +13497,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 386,
+      "line": 412,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13525,7 +13525,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 189,
+      "line": 205,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13553,7 +13553,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 716,
+      "line": 741,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13581,7 +13581,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 699,
+      "line": 724,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13609,7 +13609,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 292,
+      "line": 318,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13637,7 +13637,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 118,
+      "line": 134,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13665,7 +13665,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 156,
+      "line": 172,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13693,7 +13693,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 472,
+      "line": 498,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13721,23 +13721,23 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 241,
+      "line": 257,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": false,
-        "numpy_reference": false,
+        "numpy_reference": true,
         "pyarrow_reference": true,
         "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.2",
       "audit_document": "migration/public_surface/coordinates_time_observers.md"
     },
@@ -13749,7 +13749,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 235,
+      "line": 251,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13777,7 +13777,7 @@
       "kind": "method",
       "domain": "time",
       "source": "src/adam_core/time/time.py",
-      "line": 686,
+      "line": 711,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13945,7 +13945,7 @@
       "kind": "constant",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 4,
+      "line": 10,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -13973,7 +13973,7 @@
       "kind": "constant",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 5,
+      "line": 11,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14001,7 +14001,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 21,
+      "line": 40,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14029,7 +14029,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 158,
+      "line": 177,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14057,7 +14057,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 45,
+      "line": 64,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14085,7 +14085,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 83,
+      "line": 102,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14113,7 +14113,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 125,
+      "line": 144,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14141,7 +14141,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 296,
+      "line": 315,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14169,7 +14169,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 187,
+      "line": 206,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14197,7 +14197,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 224,
+      "line": 243,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -14225,7 +14225,7 @@
       "kind": "function",
       "domain": "utils",
       "source": "src/adam_core/utils/mpc.py",
-      "line": 263,
+      "line": 282,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

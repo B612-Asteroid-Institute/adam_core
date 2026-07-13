@@ -25,7 +25,7 @@ from zipfile import ZipFile
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SMOKE_SCRIPT = REPO_ROOT / "migration" / "scripts" / "clean_room_artifact_smoke.py"
-REPORT_SCHEMA_VERSION = 1
+REPORT_SCHEMA_VERSION = 2
 
 
 class CommandFailed(RuntimeError):

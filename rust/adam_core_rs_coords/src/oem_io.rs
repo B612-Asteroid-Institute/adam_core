@@ -110,7 +110,10 @@ pub fn astropy_mjd_float(days: i64, nanos: i64) -> f64 {
 }
 
 /// ISOT epoch string -> legacy `Timestamp.from_astropy` (days, nanos).
-fn parse_epoch(isot: &str, scale: TimeScale) -> SchemaResult<(i64, i64)> {
+///
+/// Public so the Python timestamp veneer and fused OEM parser share exactly
+/// one ERFA-backed civil-time implementation.
+pub fn parse_epoch(isot: &str, scale: TimeScale) -> SchemaResult<(i64, i64)> {
     let bad = |what: &str| invalid(format!("invalid OEM epoch {isot:?}: {what}"));
     let (date, time) = isot.split_once('T').ok_or_else(|| bad("missing 'T'"))?;
     let mut date_parts = date.split('-');

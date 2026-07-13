@@ -3,15 +3,23 @@
 //! precision-tolerant equality, extrema, and uniquing. Scale/precision
 //! validation errors stay at the Python boundary with their legacy messages.
 
+use adam_core_rs_coords::oem_io::{format_epoch, parse_epoch};
 use adam_core_rs_coords::{Epoch, TimeArray, TimeScale};
+use chrono::{Offset, Utc};
+use chrono_tz::Tz;
 use numpy::{IntoPyArray, PyArray1, PyReadonlyArray1};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use std::collections::HashSet;
+use std::borrow::Cow;
+use std::collections::{HashMap, HashSet};
 use std::hint::black_box;
 use std::time::Instant;
 
 const NANOS_IN_DAY: i64 = 86_400_000_000_000;
+const NANOS_IN_SECOND: i64 = 1_000_000_000;
+const NANOS_IN_MICROSECOND: i64 = 1_000;
+const HALF_DAY_NANOS: i64 = NANOS_IN_DAY / 2;
+const UNIX_EPOCH_MJD: i64 = 40_587;
 const J2000_TDB_MJD: f64 = 51_544.5;
 const SECONDS_IN_DAY: f64 = 86_400.0;
 
@@ -83,6 +91,179 @@ where
         trial_samples.push(samples);
     }
     Ok(trial_samples)
+}
+
+fn parse_scale(scale: &str) -> PyResult<TimeScale> {
+    TimeScale::parse(scale).map_err(|err| PyValueError::new_err(err.to_string()))
+}
+
+fn format_iso_values(days: &[i64], nanos: &[i64], scale: TimeScale) -> PyResult<Vec<String>> {
+    days.iter()
+        .zip(nanos.iter())
+        .map(|(&day, &nano)| {
+            format_epoch(day, nano, scale).map_err(|err| PyValueError::new_err(err.to_string()))
+        })
+        .collect()
+}
+
+fn parse_iso_values(values: &[String], scale: TimeScale) -> PyResult<(Vec<i64>, Vec<i64>)> {
+    values
+        .iter()
+        .map(|value| {
+            let value = value.strip_suffix('Z').unwrap_or(value);
+            let value = if value.contains('T') {
+                Cow::Borrowed(value)
+            } else {
+                Cow::Owned(format!("{value}T00:00:00"))
+            };
+            parse_epoch(&value, scale).map_err(|err| PyValueError::new_err(err.to_string()))
+        })
+        .collect::<PyResult<Vec<_>>>()
+        .map(|parts| parts.into_iter().unzip())
+}
+
+fn parse_timezones(names: &[String]) -> PyResult<Vec<Tz>> {
+    let mut parsed = HashMap::<&str, Tz>::new();
+    names
+        .iter()
+        .map(|name| {
+            if let Some(timezone) = parsed.get(name.as_str()) {
+                return Ok(*timezone);
+            }
+            let timezone = name
+                .parse::<Tz>()
+                .map_err(|_| PyValueError::new_err(format!("unknown IANA timezone: {name}")))?;
+            parsed.insert(name.as_str(), timezone);
+            Ok(timezone)
+        })
+        .collect()
+}
+
+fn observing_nights(days: &[i64], nanos: &[i64], timezones: &[Tz]) -> PyResult<Vec<i64>> {
+    if days.len() != nanos.len() || days.len() != timezones.len() {
+        return Err(PyValueError::new_err(
+            "days, nanos, and timezones must have equal length",
+        ));
+    }
+    days.iter()
+        .zip(nanos.iter())
+        .zip(timezones.iter())
+        .map(|((&day, &nano), timezone)| {
+            // Legacy crossed through Astropy's Python `datetime`, whose
+            // nearest-microsecond conversion can carry into the next day.
+            let mut rounded_day = day;
+            let mut micros = nano.div_euclid(NANOS_IN_MICROSECOND);
+            let remainder = nano.rem_euclid(NANOS_IN_MICROSECOND);
+            if remainder > NANOS_IN_MICROSECOND / 2
+                || (remainder == NANOS_IN_MICROSECOND / 2 && micros % 2 != 0)
+            {
+                micros += 1;
+            }
+            let mut rounded_nano = micros * NANOS_IN_MICROSECOND;
+            if rounded_nano == NANOS_IN_DAY {
+                rounded_day += 1;
+                rounded_nano = 0;
+            }
+
+            let unix_seconds = rounded_day
+                .checked_sub(UNIX_EPOCH_MJD)
+                .and_then(|value| value.checked_mul(86_400))
+                .and_then(|value| value.checked_add(rounded_nano.div_euclid(NANOS_IN_SECOND)))
+                .ok_or_else(|| PyValueError::new_err("timestamp is outside datetime range"))?;
+            let subsecond_nanos = rounded_nano.rem_euclid(NANOS_IN_SECOND) as u32;
+            let utc = chrono::DateTime::<Utc>::from_timestamp(unix_seconds, subsecond_nanos)
+                .ok_or_else(|| PyValueError::new_err("timestamp is outside datetime range"))?;
+            let offset_seconds =
+                utc.with_timezone(timezone).offset().fix().local_minus_utc() as i64;
+            let local_noon_shift = rounded_nano
+                .checked_add(offset_seconds * NANOS_IN_SECOND)
+                .and_then(|value| value.checked_sub(HALF_DAY_NANOS))
+                .ok_or_else(|| PyValueError::new_err("timestamp arithmetic overflow"))?;
+            Ok(rounded_day + local_noon_shift.div_euclid(NANOS_IN_DAY))
+        })
+        .collect()
+}
+
+type TimeParts<'py> = (Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<i64>>);
+
+/// Rust/ERFA-owned ISO formatting at Astropy's legacy default millisecond
+/// precision.
+#[pyfunction]
+fn timestamp_to_iso8601_numpy(
+    days: PyReadonlyArray1<'_, i64>,
+    nanos: PyReadonlyArray1<'_, i64>,
+    scale: &str,
+) -> PyResult<Vec<String>> {
+    let days = int_column(&days, "days")?;
+    let nanos = int_column(&nanos, "nanos")?;
+    format_iso_values(&days, &nanos, parse_scale(scale)?)
+}
+
+/// Rust/ERFA-owned ISOT parsing with legacy half-even nanosecond rounding.
+#[pyfunction]
+fn timestamp_from_iso8601_numpy<'py>(
+    py: Python<'py>,
+    values: Vec<String>,
+    scale: &str,
+) -> PyResult<TimeParts<'py>> {
+    let (days, nanos) = parse_iso_values(&values, parse_scale(scale)?)?;
+    Ok((days.into_pyarray(py), nanos.into_pyarray(py)))
+}
+
+/// Observing-night integer MJD using IANA timezone offsets (including DST).
+#[pyfunction]
+fn calculate_observing_nights_numpy<'py>(
+    py: Python<'py>,
+    days: PyReadonlyArray1<'py, i64>,
+    nanos: PyReadonlyArray1<'py, i64>,
+    timezone_names: Vec<String>,
+) -> PyResult<Bound<'py, PyArray1<i64>>> {
+    let days = int_column(&days, "days")?;
+    let nanos = int_column(&nanos, "nanos")?;
+    let timezones = parse_timezones(&timezone_names)?;
+    Ok(observing_nights(&days, &nanos, &timezones)?.into_pyarray(py))
+}
+
+#[pyfunction]
+#[pyo3(signature = (days, nanos, scale, values, reps, trials, warmup_reps=1))]
+fn benchmark_timestamp_iso_numpy(
+    days: PyReadonlyArray1<'_, i64>,
+    nanos: PyReadonlyArray1<'_, i64>,
+    scale: &str,
+    values: Vec<String>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let days = int_column(&days, "days")?;
+    let nanos = int_column(&nanos, "nanos")?;
+    let scale = parse_scale(scale)?;
+    parse_iso_values(&values, scale)?;
+    format_iso_values(&days, &nanos, scale)?;
+    bench(reps, trials, warmup_reps, || {
+        let formatted = format_iso_values(&days, &nanos, scale).expect("validated ISO format");
+        let parsed = parse_iso_values(&values, scale).expect("validated ISO input");
+        (formatted, parsed)
+    })
+}
+
+#[pyfunction]
+#[pyo3(signature = (days, nanos, timezone_names, reps, trials, warmup_reps=1))]
+fn benchmark_observing_nights_numpy(
+    days: PyReadonlyArray1<'_, i64>,
+    nanos: PyReadonlyArray1<'_, i64>,
+    timezone_names: Vec<String>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+) -> PyResult<Vec<Vec<f64>>> {
+    let days = int_column(&days, "days")?;
+    let nanos = int_column(&nanos, "nanos")?;
+    let timezones = parse_timezones(&timezone_names)?;
+    observing_nights(&days, &nanos, &timezones)?;
+    bench(reps, trials, warmup_reps, || {
+        observing_nights(&days, &nanos, &timezones).expect("validated observing-night input")
+    })
 }
 
 #[pyfunction]
@@ -409,6 +590,11 @@ fn benchmark_timestamp_ops_numpy(
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(timestamp_to_iso8601_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(timestamp_from_iso8601_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(calculate_observing_nights_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_timestamp_iso_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(benchmark_observing_nights_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_unit_floor_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_rounded_nanos_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(timestamp_fractional_days_numpy, m)?)?;

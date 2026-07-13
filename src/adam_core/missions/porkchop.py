@@ -4,9 +4,7 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
-import plotly.graph_objects as go
 import quivr as qv
-from astropy.time import Time
 
 import pyarrow as pa
 
@@ -714,6 +712,17 @@ def plot_porkchop_plotly(
     fig : plotly.graph_objects.Figure
         The Plotly figure object.
     """
+    # Plotting libraries and Astropy date formatting are explicit provider
+    # boundaries rather than normal computation/runtime dependencies.
+    try:
+        import plotly.graph_objects as go
+        from astropy.time import Time
+    except ModuleNotFoundError as error:
+        raise ImportError(
+            "Plotly and Astropy are required for porkchop plotting; "
+            "install adam-core[plots]"
+        ) from error
+
     # --- Extract basic raw data ---
     c3_departure_au_d2 = porkchop_data.c3_departure()  # C3 departure in (AU/day)^2
     vinf_arrival_au_day = porkchop_data.vinf_arrival()  # V∞ arrival in AU/day

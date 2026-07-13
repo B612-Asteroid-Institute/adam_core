@@ -25,9 +25,6 @@ license = { file = "LICENSE.md" }
 keywords = ["astronomy", "orbital mechanics", "propagation"]
 
 dependencies = [
-  "astropy",
-  "astroquery",
-  "healpy",
   "numpy>=2.0.0",
   "pdm",
   "pyarrow>=13.0.0",
@@ -46,7 +43,17 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+astropy = [
+    "astropy",
+]
+legacy-sbdb = [
+    "astroquery",
+]
+healpix = [
+    "healpy",
+]
 plots = [
+    "astropy",
     "geopandas>=1.0.1",
     "plotly>=5.24.1",
     "nbformat>=4.2.0",
@@ -56,6 +63,7 @@ oem = [
     "oem>=0.4.5",
 ]
 docs = [
+    "astropy",
     "sphinx>=8.2.0,<9.0.0",
     "furo>=2024.8.6",
     "myst-nb>=1.3.0",
@@ -79,6 +87,9 @@ build-backend = "maturin"
 
 [dependency-groups]
 test = [
+    "astropy",
+    "astroquery",
+    "healpy",
     "pytest-benchmark",
     "pytest-cov",
     "pytest-doctestplus",
@@ -103,6 +114,7 @@ test = [
     "maturin>=1.7,<2",
 ]
 docs = [
+    "astropy",
     "sphinx>=8.2.0,<9.0.0",
     "furo>=2024.8.6",
     "myst-nb>=1.3.0",

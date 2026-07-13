@@ -24,7 +24,7 @@ import numpy as np
 import pyarrow as pa
 import quivr as qv
 
-REPORT_SCHEMA_VERSION = 1
+REPORT_SCHEMA_VERSION = 2
 OBJECT_ID = "99942 Apophis"
 TARGET_OFFSETS_DAYS = np.array([1.0, 7.0, 30.0], dtype=np.float64)
 
@@ -166,6 +166,32 @@ def main() -> int:
         import adam_core
         import adam_core._rust_native
 
+        forbidden_optional_distributions = ("astropy", "astroquery", "healpy")
+        unexpectedly_installed = []
+        for distribution in forbidden_optional_distributions:
+            try:
+                importlib.metadata.version(distribution)
+            except importlib.metadata.PackageNotFoundError:
+                continue
+            unexpectedly_installed.append(distribution)
+        if unexpectedly_installed:
+            raise AssertionError(
+                "default runtime installed optional providers: "
+                f"{unexpectedly_installed}"
+            )
+        eagerly_loaded = sorted(
+            name
+            for name in sys.modules
+            if name == "astropy"
+            or name.startswith("astropy.")
+            or name == "astroquery"
+            or name.startswith("astroquery.")
+            or name == "healpy"
+            or name.startswith("healpy.")
+        )
+        if eagerly_loaded:
+            raise AssertionError(f"optional providers were imported: {eagerly_loaded}")
+
         modules = {
             "adam_core": adam_core,
             "adam_core._rust_native": adam_core._rust_native,
@@ -211,6 +237,8 @@ def main() -> int:
                 )
             },
             "module_paths": {name: str(path) for name, path in module_paths.items()},
+            "optional_distributions_absent": list(forbidden_optional_distributions),
+            "optional_modules_loaded": eagerly_loaded,
         }
 
     _run_stage(
@@ -218,6 +246,68 @@ def main() -> int:
         report_path,
         "imports_and_provenance",
         imports_and_provenance,
+    )
+
+    def optional_dependency_layering() -> dict[str, Any]:
+        importlib.import_module("adam_core.missions.porkchop")
+        importlib.import_module("adam_core.orbits.query.sbdb")
+        importlib.import_module("adam_core.utils.mpc")
+        from adam_core.observers import calculate_observing_night
+        from adam_core.time import Timestamp
+
+        values = [
+            "2024-03-10T09:59:59.000",
+            "2024-03-10T10:00:00.000",
+        ]
+        times = Timestamp.from_iso8601(values, scale="utc")
+        if times.to_iso8601().to_pylist() != values:
+            raise AssertionError("Rust ISO round trip changed public values")
+        tai = times.rescale("tai")
+        if tai.scale != "tai" or len(tai) != len(times):
+            raise AssertionError("Astropy-free UTC-to-TAI rescale failed")
+        nights = calculate_observing_night(pa.array(["I41", "I41"]), times)
+        if len(nights) != len(times) or nights[0].as_py() != nights[1].as_py():
+            raise AssertionError("DST observing-night computation changed grouping")
+
+        try:
+            times.to_astropy()
+        except ImportError as error:
+            if "adam-core[astropy]" not in str(error):
+                raise AssertionError(
+                    "optional Astropy error lacks install guidance"
+                ) from error
+            astropy_boundary = str(error)
+        else:
+            raise AssertionError("to_astropy succeeded without the Astropy extra")
+
+        loaded_optional_modules = sorted(
+            name
+            for name in sys.modules
+            if name == "astropy"
+            or name.startswith("astropy.")
+            or name == "astroquery"
+            or name.startswith("astroquery.")
+            or name == "healpy"
+            or name.startswith("healpy.")
+        )
+        if loaded_optional_modules:
+            raise AssertionError(
+                "normal public APIs imported optional providers: "
+                f"{loaded_optional_modules}"
+            )
+        return {
+            "iso_values": times.to_iso8601().to_pylist(),
+            "tai_mjd": tai.mjd().to_pylist(),
+            "observing_nights": nights.to_pylist(),
+            "astropy_boundary": astropy_boundary,
+            "optional_modules_loaded": loaded_optional_modules,
+        }
+
+    _run_stage(
+        report,
+        report_path,
+        "optional_dependency_layering",
+        optional_dependency_layering,
     )
 
     def live_orbit_fetch() -> dict[str, Any]:

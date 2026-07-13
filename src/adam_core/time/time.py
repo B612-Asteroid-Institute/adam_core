@@ -33,11 +33,15 @@ in the expected tens-of-microseconds range (~14.6–21.8 µs for a sampled subse
 from __future__ import annotations
 
 import hashlib
-import astropy.time
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
+
+if TYPE_CHECKING:
+    import astropy.time
 
 SCALES = {
     "tai",
@@ -59,6 +63,18 @@ _TAI_TT_NS_CORRECTION = 32_184_000_000  # TT = TAI + 32.184s
 # Scales served by the Rust rescale backend (ut1 requires IERS tables and is
 # delegated to astropy; other scales are unsupported, matching legacy).
 _RUST_RESCALE_SCALES = {"tai", "tt", "utc", "tdb"}
+
+
+def _require_astropy_time():
+    """Load the explicit Astropy provider boundary only when requested."""
+    try:
+        import astropy.time
+    except ModuleNotFoundError as error:
+        raise ImportError(
+            "Astropy is required for Astropy Time conversion and UT1/IERS "
+            "rescaling; install adam-core[astropy]"
+        ) from error
+    return astropy.time
 
 
 def _int64_values(
@@ -239,21 +255,31 @@ class Timestamp(qv.Table):
         return self.rescale("tdb").mjd().to_numpy(False)
 
     def to_iso8601(self) -> pa.lib.StringArray:
-        """
-        Returns the times as ISO 8601 strings in a pyarrow array.
-        """
-        if len(self) == 0:
-            return pa.array([], type=pa.string())
-        return pa.array(self.to_astropy().isot, type=pa.string())
+        """Return legacy millisecond-precision ISO 8601 strings."""
+        from adam_core import _rust_native as _rn
+
+        values = _rn.timestamp_to_iso8601_numpy(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+            self.scale,
+        )
+        return pa.array(values, type=pa.string())
 
     @classmethod
     def from_iso8601(
-        cls, iso: pa.lib.StringArray | list[str], scale="utc"
+        cls, iso: pa.lib.StringArray | list[str] | str, scale="utc"
     ) -> Timestamp:
-        """
-        Create a Timestamp from ISO 8601 strings (for example, '2020-01-02T14:15:16').
-        """
-        return cls.from_astropy(astropy.time.Time(iso, format="isot", scale=scale))
+        """Create a Timestamp from ISO 8601 strings in one Rust crossing."""
+        from adam_core import _rust_native as _rn
+
+        if isinstance(iso, str):
+            values = [iso]
+        elif isinstance(iso, (pa.Array, pa.ChunkedArray)):
+            values = iso.to_pylist()
+        else:
+            values = list(iso)
+        days, nanos = _rn.timestamp_from_iso8601_numpy(values, scale)
+        return cls.from_kwargs(days=days, nanos=nanos, scale=scale)
 
     @classmethod
     def from_mjd(cls, mjd: pa.lib.DoubleArray, scale: str = "tai") -> Timestamp:
@@ -470,11 +496,10 @@ class Timestamp(qv.Table):
         )
 
     def to_astropy(self) -> astropy.time.Time:
-        """
-        Convert the timestamp to an astropy time.
-        """
+        """Convert to an Astropy Time through the optional provider boundary."""
+        astropy_time = _require_astropy_time()
         fractional_days = self.fractional_days()
-        return astropy.time.Time(
+        return astropy_time.Time(
             val=self.days,
             val2=fractional_days,
             format="mjd",

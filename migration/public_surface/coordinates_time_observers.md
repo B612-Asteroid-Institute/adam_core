@@ -152,13 +152,14 @@ below. None of these generated constructors has a dedicated parity row.
 | `Timestamp.key`, `signature`, `cache_digest` | Python-only | no | no | NumPy/hash/cache helpers. |
 | `Timestamp.mjd`, `from_mjd` | mixed | fixture/unit tests only | no | Dense input takes one Rust call; null-bearing input retains PyArrow fallback. |
 | `Timestamp.from_jd`, `from_et`, `et`, `to_numpy` | mixed | no | no | Python/PyArrow normalization around Rust-backed MJD/rescale operations. |
-| `Timestamp.to_iso8601`, `from_iso8601`, `from_astropy`, `to_astropy` | Python-only / external Astropy | no | no | Explicit external interoperability boundary; semantic parity still needs compatibility coverage, but direct Rust timing is not required. |
+| `Timestamp.to_iso8601`, `from_iso8601` | one-crossing | dedicated Astropy parity, scalar/Z/empty coverage | yes | Rust/ERFA owns civil-time parsing, leap seconds, half-even nanosecond splitting, and legacy millisecond formatting. |
+| `Timestamp.from_astropy`, `to_astropy` | lazy optional Astropy provider | dedicated compatibility coverage | n/a | Explicit interoperability boundary; importing and using ordinary timestamp APIs does not import or require Astropy. |
 | `Timestamp.rounded`, `equals`, `equals_scalar`, `equals_array` | mixed | no | no | PyArrow policy composed with Rust-backed differences. |
 | `Timestamp.max`, `min`, `unique` | Python-only | no | no | PyArrow reduction/grouping. |
 | `Timestamp.add_nanos`, `add_days`, `add_fractional_days`, `difference_scalar`, `difference` | one-crossing | fixture/unit tests only | no | Direct Rust integer-time kernels; completely absent from constitutional parity/native timing. |
 | `Timestamp.add_seconds`, `add_millis`, `add_micros` | one-crossing | no | no | PyArrow unit conversion followed by one Rust `add_nanos` call. |
-| `Timestamp.rescale` | mixed | frozen fixture only | no | Rust handles TAI/TT/UTC/TDB; UT1 delegates to Astropy/IERS. |
-| `Timestamp.rescale_astropy` | Python-only / external Astropy | no | no | Explicit oracle/fallback. |
+| `Timestamp.rescale` | mixed | frozen fixture plus all-scale parity | yes for Rust scales | Rust handles TAI/TT/UTC/TDB without Astropy; UT1 lazily delegates to the explicit Astropy/IERS provider. |
+| `Timestamp.rescale_astropy` | lazy optional Astropy provider | all-scale parity | n/a | Explicit oracle/provider boundary with install guidance when the extra is absent. |
 | `Timestamp.link` | Python-only / external quivr | no | no | Python rescale/round and `MultiKeyLinkage` construction. |
 | constants `SCALES` | Python-only data | no | n/a | Public module constant; compatibility data, not a hot numeric API. |
 
@@ -177,7 +178,7 @@ below. None of these generated constructors has a dedicated parity row.
 | `clear_observer_state_cache` | Python-only | no | no | Cache governance helper. |
 | `get_mpc_observer_state` | mixed | indirect via `Observers.from_codes` ground cases | no | Python geodetic/cache/frame orchestration around several Rust SPICE calls; not one crossing. |
 | `get_observer_state` | mixed | no dedicated row | no | Python dispatcher among perturber, MPC, and custom SPICE body paths. |
-| `calculate_observing_night` | Python-only / external Astropy/zoneinfo | no | no | Per-code Python loop, timezone lookup, datetime/Astropy conversion. Note: importable from `adam_core.observers`, but omitted from that package's `__all__`. |
+| `calculate_observing_night` | one-crossing | legacy parity including DST transitions and microsecond-boundary carry | yes | Python preserves observatory-code validation and ZoneInfo validation; Rust/chrono-tz owns ordered per-row timezone offsets, DST, legacy datetime microsecond rounding, noon shift, and integer MJD assembly. Note: importable from `adam_core.observers`, but omitted from that package's `__all__`. |
 
 ## Implementation beads created from this audit
 

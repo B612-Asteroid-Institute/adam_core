@@ -71,7 +71,7 @@ query paths depend on them, but they are not counted as public API commitments.
 | OEM | fused Rust product writer/reader plus KVN engine | Writer and reader each satisfy one crossing (ecliptic rotation, sort, metadata, unit/covariance conversion, orbit-id and table assembly in Rust); ITRF93 pre-transform stays on the Rust `transform_coordinates` crossing; propagated writer remains a declared propagator-provider boundary |
 | OpenSpace | fused SBDB CSV and orbital/trail asset products plus Lua/initialization rendering | Public products each satisfy one crossing: Rust owns transform, epochs/periods, model graph, CSV/Lua rendering, per-orbit loops, SPICE snippets, staged writes, and atomic publication; Python retains enum/default compatibility and an uncovered-case fallback |
 | SPK | fused Rust fitting, Type 3/9 segment, multi-summary DAF, and product workflow | No-propagator products satisfy one crossing; optional propagation is the declared provider boundary followed by the same one product crossing. Rust owns transform/group/sort/IDs/windows/fits/units/segments and atomic output |
-| MPC | eight scalar pack/unpack functions and batched packed-date decode | Designation APIs and `convert_mpc_packed_dates` satisfy one Rust crossing; Astropy `Time` construction is the external compatibility boundary |
+| MPC | eight scalar pack/unpack functions and batched packed-date decode | Designation APIs and `convert_mpc_packed_dates` satisfy one Rust crossing; Astropy `Time` construction is a lazy optional compatibility boundary |
 | SPICE backend | kernel readers/writers and low-level backend methods | Low-level methods are thin; **gap:** high-level setup/data discovery, obscodes file read, Python cache/dedup, time/frame/unit conversion, and typed table assembly |
 | Chunk/LRU helpers | retired public-ish names | Unused numeric chunking module removed; LRU functions renamed private and retained only as the documented Python container cache-policy boundary around Rust semantic calls; private OD/query iterators remain tracked by their fused-workflow beads |
 | Parallel/Ray | none | **Gap:** arbitrary Python callable/ObjectRef orchestration cannot be treated as a permanent exception; migrate callers to fused Rayon operations and retire, or define a Rust-owned replacement |
@@ -112,7 +112,7 @@ Public package export `query_scout` and module-public `get_scout_objects`/`scout
 
 #### SBDB
 
-Public exports `query_sbdb` and `query_sbdb_new` now converge on one direct Rust client. Rust owns validation, request parameters, timeout/retry/backoff, sequential fair-use policy, allow-missing/input-ID behavior, raw payload normalization, covariance and cometary conversion, physical parameters, and nested Arrow assembly. `NotFoundError` remains the Python compatibility exception; explicitly monkeypatched historical HTTP/astroquery providers retain a provider fallback.
+Public exports `query_sbdb` and `query_sbdb_new` now converge on one direct Rust client. Rust owns validation, request parameters, timeout/retry/backoff, sequential fair-use policy, allow-missing/input-ID behavior, raw payload normalization, covariance and cometary conversion, physical parameters, and nested Arrow assembly. `NotFoundError` remains the Python compatibility exception; a bounded in-module shim preserves the historical `SBDB.query` monkeypatch target without importing or requiring Astroquery, and explicitly patched providers retain the fallback.
 
 ### ADES PSV
 

@@ -1,0 +1,99 @@
+name: Release candidate wheel matrix
+
+on:
+  pull_request:
+    branches: [main, "v*"]
+  workflow_dispatch:
+    inputs:
+      adam_assist_ref:
+        description: adam-assist revision to test with this adam-core revision
+        required: true
+        default: rust-migration-assist
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-wheel-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref || 'rust-migration-assist' }}
+  PIP_ONLY_BINARY: ":all:"
+
+jobs:
+  artifact-acceptance:
+    name: ${{ matrix.platform.name }} / CPython ${{ matrix.python-version }}
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+        platform:
+          - name: manylinux-x86_64
+            runner: ubuntu-latest
+            system: Linux-x86_64
+            wheel_tag: manylinux*x86_64
+          - name: macos-arm64
+            runner: macos-14
+            system: Darwin-arm64
+            wheel_tag: macosx*arm64
+    steps:
+      - name: Checkout adam-core candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout adam-assist candidate
+        uses: actions/checkout@v4
+        with:
+          repository: B612-Asteroid-Institute/adam-assist
+          ref: ${{ env.ADAM_ASSIST_REF }}
+          path: adam-assist
+          fetch-depth: 0
+
+      - name: Set up CPython
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify runner architecture
+        shell: bash
+        run: test "$(uname -s)-$(uname -m)" = "${{ matrix.platform.system }}"
+
+      - name: Run exact clean-room acceptance driver
+        shell: bash
+        run: |
+          set -euo pipefail
+          python migration/scripts/run_clean_room_artifact_acceptance.py \
+            --adam-core-repo "$GITHUB_WORKSPACE" \
+            --adam-core-ref HEAD \
+            --adam-assist-repo "$GITHUB_WORKSPACE/adam-assist" \
+            --adam-assist-ref HEAD \
+            --workspace "$RUNNER_TEMP/acceptance" \
+            --report "$RUNNER_TEMP/acceptance-report.json" \
+            --python "$(command -v python)"
+
+      - name: Verify platform wheel tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          WHEELHOUSE="$RUNNER_TEMP/acceptance/wheelhouse"
+          test "$(find "$WHEELHOUSE" -maxdepth 1 -name 'adam_core-*.whl' | wc -l | tr -d ' ')" = 1
+          test "$(find "$WHEELHOUSE" -maxdepth 1 -name 'adam_assist-*.whl' | wc -l | tr -d ' ')" = 1
+          test "$(find "$WHEELHOUSE" -maxdepth 1 -name '*${{ matrix.platform.wheel_tag }}.whl' | wc -l | tr -d ' ')" = 2
+
+      - name: Upload wheel acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-acceptance-${{ matrix.platform.name }}-py${{ matrix.python-version }}
+          path: |
+            ${{ runner.temp }}/acceptance-report.json
+            ${{ runner.temp }}/acceptance/invocation/smoke-report.json
+            ${{ runner.temp }}/acceptance/wheelhouse/*.whl
+            ${{ runner.temp }}/acceptance/logs/*.log
+          if-no-files-found: error

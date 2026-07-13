@@ -257,6 +257,47 @@ class TestAstropyTime:
         have = self.empty.to_iso8601()
         assert len(have) == 0
 
+    @pytest.mark.parametrize("scale", ["tai", "tt", "utc", "tdb"])
+    def test_iso8601_rust_parity(self, scale):
+        values = [
+            "1858-11-17T00:00:00.000000000",
+            "1995-10-10T12:34:56.123456789",
+            (
+                "2016-12-31T23:59:60.000000000"
+                if scale == "utc"
+                else "2017-01-01T00:00:00.000000000"
+            ),
+            "2023-02-25T23:59:59.999999999",
+        ]
+        have = Timestamp.from_iso8601(values, scale=scale)
+        want = Timestamp.from_astropy(
+            astropy.time.Time(values, format="isot", scale=scale)
+        )
+        assert have == want
+        assert have.to_iso8601().to_pylist() == want.to_astropy().isot.tolist()
+
+    def test_iso8601_scalar_and_z_suffix(self):
+        have = Timestamp.from_iso8601("2022-01-01T00:00:00Z", scale="utc")
+        assert len(have) == 1
+        assert have.to_iso8601().to_pylist() == ["2022-01-01T00:00:00.000"]
+
+    def test_iso8601_native_timing(self):
+        from adam_core import _rust_native as _rn
+
+        values = ["2022-01-01T00:00:00.000", "2022-06-01T12:34:56.789"]
+        times = Timestamp.from_iso8601(values, scale="utc")
+        samples = _rn.benchmark_timestamp_iso_numpy(
+            times.days.to_numpy(zero_copy_only=False),
+            times.nanos.to_numpy(zero_copy_only=False),
+            "utc",
+            values,
+            1,
+            2,
+            1,
+        )
+        assert len(samples) == 2
+        assert all(sample[0] >= 0.0 for sample in samples)
+
 
 class TestTimeMath:
 
