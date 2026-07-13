@@ -12,6 +12,7 @@ from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...dynamics.exceptions import DynamicsNumericalError
 from ...orbits import Orbits
+from ...orbits.non_gravitational_parameters import NonGravitationalParameters
 from ...orbits.physical_parameters import PhysicalParameters
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
@@ -503,6 +504,103 @@ def test_propagate_2body_preserves_physical_parameters():
 
     np.testing.assert_allclose(have_H, expected_H)
     np.testing.assert_allclose(have_G, expected_G)
+
+
+def test_propagate_2body_rejects_non_gravitational_parameters():
+    t0 = Timestamp.from_mjd([60000.0, 60000.0], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1", "o2"],
+        object_id=["o1", "o2"],
+        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
+            source=["SBDB", "NEOCC"],
+            A1=[None, None],
+            A2=[-8.72e-14, -2.90e-14],
+            A3=[None, None],
+        ),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0, 1.2],
+            y=[0.0, 0.1],
+            z=[0.0, 0.0],
+            vx=[0.0, 0.0],
+            vy=[0.017, 0.015],
+            vz=[0.0, 0.0],
+            time=t0,
+            origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    times = Timestamp.from_mjd([60000.0, 60001.0], scale="tdb")
+    with pytest.raises(ValueError, match="does not support non-gravitational"):
+        propagate_2body(orbits, times)
+
+
+def test_propagate_2body_allows_zero_valued_non_gravitational_parameters():
+    # A parameter solved to exactly zero exerts no force, so gravity-only
+    # 2-body propagation of such an orbit is still exact and must not raise.
+    t0 = Timestamp.from_mjd([60000.0], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
+            source=["NEOCC"],
+            A1=[None],
+            A2=[0.0],
+            A3=[None],
+        ),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.017],
+            vz=[0.0],
+            time=t0,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    propagated = propagate_2body(
+        orbits, Timestamp.from_mjd([60000.0, 60001.0], scale="tdb")
+    )
+
+    assert len(propagated) == 2
+    assert propagated.non_gravitational_parameters.A2[0].as_py() == 0.0
+
+
+def test_propagate_2body_include_nongrav_false_strips_nongrav():
+    t0 = Timestamp.from_mjd([60000.0], scale="tdb")
+    orbits = Orbits.from_kwargs(
+        orbit_id=["o1"],
+        object_id=["o1"],
+        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
+            source=["SBDB"],
+            A1=[None],
+            A2=[-8.72e-14],
+            A3=[None],
+        ),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.017],
+            vz=[0.0],
+            time=t0,
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+    propagated = propagate_2body(
+        orbits,
+        Timestamp.from_mjd([60000.0, 60001.0], scale="tdb"),
+        include_nongrav=False,
+    )
+
+    assert propagated.non_gravitational_parameters.A2[0].as_py() is None
+    assert not propagated.coordinates.covariance.has_nongrav_block()
 
 
 def test_propagate_2body_does_not_include_padded_rows() -> None:

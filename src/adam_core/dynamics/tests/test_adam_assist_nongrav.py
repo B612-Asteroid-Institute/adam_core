@@ -1,0 +1,179 @@
+import json
+from pathlib import Path
+
+import numpy as np
+import pytest
+
+# NOTE: the underscore helpers are adam-assist private API and only exist in
+# versions with non-gravitational force support; the adam-assist minimum pin
+# in pyproject.toml should be bumped once such a release exists. The
+# helper-level tests in this file arguably belong in the adam-assist repo.
+assist_propagator = pytest.importorskip(
+    "adam_assist.propagator", reason="adam-assist is not installed"
+)
+ASSISTPropagator = assist_propagator.ASSISTPropagator
+_configure_assist_non_gravitational_forces = getattr(
+    assist_propagator, "_configure_assist_non_gravitational_forces", None
+)
+_extract_assist_particle_params = getattr(
+    assist_propagator, "_extract_assist_particle_params", None
+)
+if (
+    _configure_assist_non_gravitational_forces is None
+    or _extract_assist_particle_params is None
+):
+    pytest.skip(
+        "installed adam-assist does not include non-gravitational force support",
+        allow_module_level=True,
+    )
+
+from ...coordinates.cartesian import CartesianCoordinates  # noqa: E402
+from ...coordinates.origin import Origin  # noqa: E402
+from ...orbits import Orbits  # noqa: E402
+from ...orbits.non_gravitational_parameters import (  # noqa: E402
+    NonGravitationalParameters,
+)
+from ...orbits.query.neocc import (  # noqa: E402
+    _non_gravitational_parameters_from_neocc,
+    _parse_oef,
+)
+from ...orbits.query.sbdb import _orbits_from_sbdb_payloads  # noqa: E402
+from ...time import Timestamp  # noqa: E402
+
+TESTDATA_DIR = Path(__file__).parents[2] / "orbits" / "query" / "tests" / "testdata"
+
+
+class FakeExtras:
+    def __init__(self, forces):
+        self.forces = list(forces)
+        self.particle_params = None
+
+
+def make_orbits_with_nongrav(nongrav: NonGravitationalParameters) -> Orbits:
+    return Orbits.from_kwargs(
+        orbit_id=["o1", "o2"],
+        object_id=["o1", "o2"],
+        non_gravitational_parameters=nongrav,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0, 1.2],
+            y=[0.0, 0.1],
+            z=[0.0, 0.0],
+            vx=[0.0, 0.0],
+            vy=[0.017, 0.015],
+            vz=[0.0, 0.0],
+            time=Timestamp.from_mjd([60000.0, 60000.0], scale="tdb"),
+            origin=Origin.from_kwargs(code=["SUN", "SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+
+def test_extract_assist_particle_params_flattens_A1_A2_A3():
+    orbits = make_orbits_with_nongrav(
+        NonGravitationalParameters.from_kwargs(
+            source=["SBDB", "NEOCC"],
+            A1=[1.1e-13, None],
+            A2=[-8.72e-14, -2.90e-14],
+            A3=[None, 4.2e-15],
+        )
+    )
+
+    particle_params = _extract_assist_particle_params(orbits)
+
+    np.testing.assert_allclose(
+        particle_params,
+        np.array([1.1e-13, -8.72e-14, 0.0, 0.0, -2.90e-14, 4.2e-15]),
+    )
+
+
+def test_extract_assist_particle_params_treats_null_values_as_zero():
+    orbits = make_orbits_with_nongrav(
+        NonGravitationalParameters.from_kwargs(
+            source=["SBDB", "NEOCC"],
+            A1=[5.0e-13, None],
+            A2=[-2.9e-14, -4.6e-14],
+            A3=[None, None],
+        )
+    )
+
+    particle_params = _extract_assist_particle_params(orbits)
+
+    np.testing.assert_allclose(
+        particle_params,
+        np.array([5.0e-13, -2.9e-14, 0.0, 0.0, -4.6e-14, 0.0]),
+    )
+
+
+def test_configure_assist_non_gravitational_forces_appends_force_and_params():
+    orbits = make_orbits_with_nongrav(
+        NonGravitationalParameters.from_kwargs(
+            source=["SBDB", "SBDB"],
+            A1=[None, None],
+            A2=[-8.72e-14, -2.90e-14],
+            A3=[None, None],
+        )
+    )
+    extras = FakeExtras(["SUN", "PLANETS"])
+
+    _configure_assist_non_gravitational_forces(extras, orbits)
+
+    assert extras.forces == ["SUN", "PLANETS", "NON_GRAVITATIONAL"]
+    np.testing.assert_allclose(
+        extras.particle_params,
+        [0.0, -8.72e-14, 0.0, 0.0, -2.90e-14, 0.0],
+    )
+
+
+def test_assist_propagation_real_sbdb_99942_uses_nongrav_parameters():
+    payload = json.loads((TESTDATA_DIR / "sbdb" / "99942_phys.json").read_text())
+    orbit = _orbits_from_sbdb_payloads(["99942"], [payload])
+    orbit_zero = orbit.set_column("non_gravitational_parameters.A1", [0.0]).set_column(
+        "non_gravitational_parameters.A2", [0.0]
+    )
+
+    propagator = ASSISTPropagator()
+    times = Timestamp.from_mjd(
+        orbit.coordinates.time.mjd().to_numpy(zero_copy_only=False) + 3650.0,
+        scale=orbit.coordinates.time.scale,
+    )
+
+    propagated = propagator.propagate_orbits(orbit, times)
+    propagated_zero = propagator.propagate_orbits(orbit_zero, times)
+
+    diff = np.linalg.norm(
+        propagated.coordinates.values[0, :3] - propagated_zero.coordinates.values[0, :3]
+    )
+
+    assert diff > 1e-6
+    assert np.isclose(
+        propagated.non_gravitational_parameters.A2[0].as_py(),
+        orbit.non_gravitational_parameters.A2[0].as_py(),
+    )
+
+
+def test_assist_particle_params_from_real_neocc_99942():
+    data = _parse_oef((TESTDATA_DIR / "neocc" / "99942.ke1").read_text())
+    nongrav = _non_gravitational_parameters_from_neocc(data)
+
+    particle_params = _extract_assist_particle_params(
+        Orbits.from_kwargs(
+            orbit_id=["99942"],
+            object_id=["99942"],
+            non_gravitational_parameters=nongrav,
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=[1.0],
+                y=[0.0],
+                z=[0.0],
+                vx=[0.0],
+                vy=[0.017],
+                vz=[0.0],
+                time=Timestamp.from_mjd([60000.0], scale="tdb"),
+                origin=Origin.from_kwargs(code=["SUN"]),
+                frame="ecliptic",
+            ),
+        )
+    )
+
+    np.testing.assert_allclose(
+        particle_params, np.array([0.0, -2.90010329254113e-14, 0.0])
+    )

@@ -12,8 +12,10 @@ from astroquery.jplsbdb import SBDB
 from ..sbdb import (
     NotFoundError,
     _convert_SBDB_covariances,
+    _non_gravitational_parameters_from_sbdb,
     _orbits_from_sbdb_payloads,
     _physical_parameters_from_sbdb,
+    _sbdb_nongrav_row,
     _sbdb_phys_par_from_payload,
     query_sbdb,
     query_sbdb_new,
@@ -329,6 +331,23 @@ def test__physical_parameters_from_sbdb_two_rows() -> None:
     assert np.isnan(tbl.G_sigma[0].as_py()) and tbl.G_sigma[1].as_py() == 0.05
 
 
+def test__sbdb_nongrav_row_extracts_supported_fields() -> None:
+    payload = _load_sbdb_fixture_payload("99942_phys.json")
+    row = _sbdb_nongrav_row("99942", payload)
+    assert row["source"] == "SBDB"
+    assert row["A1"] == 5.0e-13
+    assert row["A2"] == -2.901766637153165e-14
+    assert row["A3"] is None
+    # Model parameters outside A1/A2/A3 (ALN, NK, NM, R0, ...) are not
+    # supported for storage and are dropped.
+    assert set(row) == {"source", "A1", "A2", "A3"}
+
+
+def test__non_gravitational_parameters_from_sbdb_empty() -> None:
+    tbl = _non_gravitational_parameters_from_sbdb([])
+    assert len(tbl) == 0
+
+
 def test_query_sbdb_new_physical_parameters_from_phys_par() -> None:
     # SBDB returns H, G (and optional sigmas) when phys-par=1; V-band per JPL/MPC convention.
     payload = _load_sbdb_fixture_payload("2001VB.json")
@@ -388,6 +407,77 @@ def test_query_sbdb_new_physical_parameters_missing_phys_par_fills_nan() -> None
     assert np.isnan(orbits.physical_parameters.G[0].as_py())
 
 
+def test_query_sbdb_new_populates_non_gravitational_parameters() -> None:
+    payload = _load_sbdb_fixture_payload("67P_phys.json")
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        orbits = query_sbdb_new(["67P"], timeout_s=1.0, max_attempts=1)
+
+    assert len(orbits) == 1
+    assert orbits.non_gravitational_parameters.source[0].as_py() == "SBDB"
+    assert orbits.non_gravitational_parameters.A1[0].as_py() == 1.042451026100725e-9
+    assert orbits.non_gravitational_parameters.A2[0].as_py() == -6.739627582388806e-11
+    assert orbits.non_gravitational_parameters.A3[0].as_py() == 2.960945433454094e-10
+    # 67P's SBDB covariance is 10-dimensional (A1, A2, A3, DT): the DT
+    # dimension is not supported for storage and is marginalized out,
+    # leaving the fixed 9x9 extended covariance.
+    assert orbits.coordinates.covariance.nongrav_block_mask().tolist() == [True]
+    full = orbits.coordinates.covariance.to_full_matrix()[0]
+    assert full.shape == (9, 9)
+    assert np.all(np.diag(full)[6:] > 0.0)
+
+
+def test_query_sbdb_new_extended_covariance_values() -> None:
+    payload = _load_sbdb_fixture_payload("99942_phys.json")
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        orbits = query_sbdb_new(["99942"], timeout_s=1.0, max_attempts=1)
+
+    assert orbits.coordinates.covariance.nongrav_block_mask().tolist() == [True]
+    full = orbits.coordinates.covariance.to_full_matrix()[0]
+    assert full.shape == (9, 9)
+    # The leading 6x6 block is the coordinate covariance by construction:
+    # the full 9x9 is transformed cometary -> Cartesian in one pass.
+    npt.assert_allclose(
+        full[:6, :6],
+        orbits.coordinates.covariance.to_matrix()[0],
+        rtol=0,
+        atol=0,
+    )
+    # The A1/A2 diagonal entries are invariant under the orbital-block
+    # Jacobian and must agree with the payload's own sigma fields, which SBDB
+    # reports in canonical au/d^2. 99942's solution estimates A1 and A2 only,
+    # so A3 is held fixed with a zero row.
+    npt.assert_allclose(np.sqrt(full[6, 6]), 4.892e-13, rtol=1e-3)
+    npt.assert_allclose(np.sqrt(full[7, 7]), 1.859e-16, rtol=1e-3)
+    assert np.all(full[8, :] == 0.0)
+    assert np.all(full[:, 8] == 0.0)
+
+
+def test_query_sbdb_new_include_nongrav_false_strips_nongrav() -> None:
+    payload = _load_sbdb_fixture_payload("67P_phys.json")
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        orbits = query_sbdb_new(
+            ["67P"], timeout_s=1.0, max_attempts=1, include_nongrav=False
+        )
+
+    assert orbits.non_gravitational_parameters.A1[0].as_py() is None
+    assert not orbits.coordinates.covariance.has_nongrav_block()
+
+
 def test_real_sbdb_payloads_parse_without_error() -> None:
     # Parse every *_phys.json in testdata; ensures real API response shapes don't break us.
     sbdb_dir = os.path.join(os.path.dirname(__file__), "testdata", "sbdb")
@@ -404,6 +494,11 @@ def test_real_sbdb_payloads_parse_without_error() -> None:
         assert len(orbits) == 1
         assert orbits.coordinates is not None
         assert orbits.physical_parameters is not None
+        # If the payload produced an extended covariance, its trailing block
+        # must be finite (zero rows for parameters held fixed are fine).
+        if orbits.coordinates.covariance.has_nongrav_block():
+            full = orbits.coordinates.covariance.to_full_matrix()[0]
+            assert np.isfinite(full).all()
 
 
 @contextmanager

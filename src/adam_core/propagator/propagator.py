@@ -287,6 +287,34 @@ def _uses_default_ephemeris_mixin(propagator: "Propagator") -> bool:
     return func is EphemerisMixin._generate_ephemeris
 
 
+def _warn_if_unsupported_nongrav(propagator, orbits) -> None:
+    """
+    Warn when orbits carrying a non-gravitational solution are handed to a
+    propagator that does not declare support for non-gravitational forces:
+    the backend would silently produce gravity-only trajectories while
+    preserving the parameter columns on its output. Triggers on non-zero
+    parameter values or on a non-gravitational covariance block, since a
+    zero-mean parameter can still carry uncertainty that covariance sampling
+    would otherwise silently drop.
+    """
+    if getattr(propagator, "supports_non_gravitational_forces", False):
+        return
+    if (
+        hasattr(orbits, "has_non_gravitational_parameters")
+        and orbits.has_non_gravitational_parameters()
+    ) or (
+        hasattr(orbits, "coordinates")
+        and orbits.coordinates.covariance.has_nongrav_block()
+    ):
+        logger.warning(
+            f"{type(propagator).__name__} does not declare support for "
+            "non-gravitational forces; the non-gravitational parameters on these "
+            "orbits may be silently ignored. Pass include_nongrav=False to strip "
+            "them explicitly, or set supports_non_gravitational_forces = True on "
+            "the propagator if its dynamics apply them."
+        )
+
+
 @ray.remote
 def propagation_worker_ray(
     idx: npt.NDArray[np.int64],
@@ -452,6 +480,10 @@ class EphemerisMixin:
         propagated_orbits_aberrated = Orbits.from_kwargs(
             orbit_id=propagated_orbits_barycentric.orbit_id,
             object_id=propagated_orbits_barycentric.object_id,
+            physical_parameters=propagated_orbits_barycentric.physical_parameters,
+            non_gravitational_parameters=(
+                propagated_orbits_barycentric.non_gravitational_parameters
+            ),
             coordinates=CartesianCoordinates.from_kwargs(
                 x=propagated_orbits_aberrated[:, 0],
                 y=propagated_orbits_aberrated[:, 1],
@@ -562,6 +594,7 @@ class EphemerisMixin:
         seed: Optional[int] = None,
         predict_magnitudes: bool = True,
         predict_phase_angle: bool = False,
+        include_nongrav: bool = True,
     ) -> Ephemeris:
         """
         Generate ephemerides for each orbit in orbits as observed by each observer
@@ -591,6 +624,11 @@ class EphemerisMixin:
             processes will be equal to the number of cores on the machine. If 1
             then no multiprocessing will be used. If "ray" is the parallel_backend and a ray instance
             is initialized already then this argument is ignored.
+        include_nongrav : bool, optional
+            If True (default), non-gravitational parameter columns are passed
+            through to the propagation backend (which applies them only if it
+            supports non-gravitational forces). If False, the columns are
+            stripped before propagation so the trajectories are gravity-only.
 
         Returns
         -------
@@ -604,6 +642,11 @@ class EphemerisMixin:
             isinstance(orbits, Orbits)
         ), "Covariance is not supported for VariantOrbits"
 
+        if not include_nongrav and isinstance(orbits, (Orbits, VariantOrbits)):
+            orbits = orbits.without_non_gravitational_parameters()
+        if not isinstance(orbits, ObjectRef):
+            _warn_if_unsupported_nongrav(self, orbits)
+
         # Check if we need to propagate orbit variants so we can propagate covariance
         # matrices
         ephemeris: Ephemeris = Ephemeris.empty()
@@ -616,6 +659,7 @@ class EphemerisMixin:
                 method=covariance_method,
                 num_samples=num_samples,
                 seed=seed,
+                include_nongrav=include_nongrav,
             )
 
         if max_processes is None:
@@ -642,6 +686,10 @@ class EphemerisMixin:
                 # check its length for chunking and determine
                 # if we need to propagate variants
                 orbits = ray.get(orbits_ref)
+                if not include_nongrav and isinstance(orbits, (Orbits, VariantOrbits)):
+                    orbits = orbits.without_non_gravitational_parameters()
+                    orbits_ref = ray.put(orbits)
+                _warn_if_unsupported_nongrav(self, orbits)
 
             # Create futures
             futures_inputs = []
@@ -845,6 +893,13 @@ class Propagator(ABC, EphemerisMixin):
     subclasses should not have any unpickleable attributes.
     """
 
+    # Subclasses whose dynamics apply non-gravitational forces (e.g. an
+    # ASSIST-backed propagator) should set this to True. Propagators that
+    # leave it False emit a warning when handed orbits carrying
+    # non-gravitational parameters, since the parameters would otherwise be
+    # silently ignored.
+    supports_non_gravitational_forces: bool = False
+
     @abstractmethod
     def _propagate_orbits(self, orbits: OrbitType, times: TimestampType) -> OrbitType:
         """
@@ -908,6 +963,7 @@ class Propagator(ABC, EphemerisMixin):
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
         seed: Optional[int] = None,
+        include_nongrav: bool = True,
     ) -> Union[Orbits, VariantOrbits]:
         """
         Propagate each orbit in orbits to each time in times.
@@ -939,6 +995,11 @@ class Propagator(ABC, EphemerisMixin):
             processes will be equal to the number of cores on the machine. If 1
             then no multiprocessing will be used. If "ray" is the parallel_backend and a ray instance
             is initialized already then this argument is ignored.
+        include_nongrav : bool, optional
+            If True (default), non-gravitational parameter columns are passed
+            through to the propagation backend (which applies them only if it
+            supports non-gravitational forces). If False, the columns are
+            stripped before propagation so the trajectories are gravity-only.
 
         Returns
         -------
@@ -971,6 +1032,8 @@ class Propagator(ABC, EphemerisMixin):
             times_ref = ray.put(times)
 
             if not isinstance(orbits, ObjectRef):
+                if not include_nongrav and isinstance(orbits, (Orbits, VariantOrbits)):
+                    orbits = orbits.without_non_gravitational_parameters()
                 input_is_variants = isinstance(orbits, VariantOrbits)
                 orbits_ref = ray.put(orbits)
             else:
@@ -979,7 +1042,12 @@ class Propagator(ABC, EphemerisMixin):
                 # check its length for chunking and determine
                 # if we need to propagate variants
                 orbits = ray.get(orbits_ref)
+                if not include_nongrav and isinstance(orbits, (Orbits, VariantOrbits)):
+                    orbits = orbits.without_non_gravitational_parameters()
+                    orbits_ref = ray.put(orbits)
                 input_is_variants = isinstance(orbits, VariantOrbits)
+
+            _warn_if_unsupported_nongrav(self, orbits)
 
             if covariance is True and input_is_variants:
                 raise AssertionError("Covariance is not supported for VariantOrbits")
@@ -1004,6 +1072,7 @@ class Propagator(ABC, EphemerisMixin):
                     method=covariance_method,
                     num_samples=num_samples,
                     seed=seed,
+                    include_nongrav=include_nongrav,
                 )
 
                 variants_ref = ray.put(variants)
@@ -1075,6 +1144,9 @@ class Propagator(ABC, EphemerisMixin):
                     propagated_variants = None
 
         else:
+            if not include_nongrav and isinstance(orbits, (Orbits, VariantOrbits)):
+                orbits = orbits.without_non_gravitational_parameters()
+            _warn_if_unsupported_nongrav(self, orbits)
             propagated = self._propagate_orbits(orbits, times)
 
             if covariance is True and not orbits.coordinates.covariance.is_all_nan():
@@ -1083,6 +1155,7 @@ class Propagator(ABC, EphemerisMixin):
                     method=covariance_method,
                     num_samples=num_samples,
                     seed=seed,
+                    include_nongrav=include_nongrav,
                 )
 
                 propagated_variants = self._propagate_orbits(variants, times)

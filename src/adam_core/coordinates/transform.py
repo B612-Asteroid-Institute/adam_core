@@ -89,9 +89,39 @@ CoordinatesClasses = (
     GeodeticCoordinates,
 )
 
-
 Z_AXIS = jnp.array([0.0, 0.0, 1.0])
 FLOAT_TOLERANCE = 1e-15
+
+
+def _spice_frame_name(frame: Literal["ecliptic", "equatorial", "itrf93"]) -> str:
+    if frame == "itrf93":
+        return "ITRF93"
+    if frame == "ecliptic":
+        return "ECLIPJ2000"
+    if frame == "equatorial":
+        return "J2000"
+    raise ValueError("Unsupported frame: {}".format(frame))
+
+
+def _sxform_rotation_matrix_aud(
+    frame_spice_in: str, frame_spice_out: str, et: float
+) -> np.ndarray:
+    """
+    Build the 6x6 state rotation between two SPICE frames at the given ephemeris
+    time. SPICE's sxform works in km and km/s while our states are in au and
+    au/d, so the matrix is conjugated by the unit conversion.
+    """
+    from ..constants import KM_P_AU, S_P_DAY
+
+    rotation_matrix_6x6_kms = sp.sxform(frame_spice_in, frame_spice_out, et)
+    rotation_unit_conversion = np.zeros((6, 6))
+    rotation_unit_conversion[:3, :3] = np.identity(3) * KM_P_AU
+    rotation_unit_conversion[3:, 3:] = np.identity(3) * KM_P_AU / S_P_DAY
+    return (
+        np.linalg.inv(rotation_unit_conversion)
+        @ rotation_matrix_6x6_kms
+        @ rotation_unit_conversion
+    )
 
 
 @jit
@@ -1648,27 +1678,8 @@ def apply_time_varying_rotation(
 
     assert len(pc.unique(coords.origin.code)) == 1
 
-    # Transform to geocentric coordinates in the input frame
-    if frame_out == "itrf93":
-        frame_spice_out = "ITRF93"
-    elif frame_out == "ecliptic":
-        frame_spice_out = "ECLIPJ2000"
-    elif frame_out == "equatorial":
-        frame_spice_out = "J2000"
-    else:
-        raise ValueError("Unsupported frame: {}".format(frame_out))
-
-    frame_in = coords.frame
-    if frame_in == "itrf93":
-        frame_spice_in = "ITRF93"
-    elif frame_in == "ecliptic":
-        frame_spice_in = "ECLIPJ2000"
-    elif frame_in == "equatorial":
-        frame_spice_in = "J2000"
-    else:
-        raise ValueError("Unsupported frame: {}".format(frame_in))
-
-    from ..constants import KM_P_AU, S_P_DAY
+    frame_spice_out = _spice_frame_name(frame_out)
+    frame_spice_in = _spice_frame_name(coords.frame)
 
     # Loop over unique times and then rotate each coordinate
     coords_rotated = CartesianCoordinates.empty()
@@ -1687,22 +1698,10 @@ def apply_time_varying_rotation(
         # Store the indices so we can use to sort the coordinates later
         indices.extend(indices_time.to_pylist())
 
-        # The units of the transformation matrix are km and km/s and while
-        # our states are in au and au/d. So we need to convert the transformation
-        # matrix to the correct units.
-        rotation_matrix_6x6_kms = sp.sxform(
-            frame_spice_in, frame_spice_out, time.et().to_numpy(zero_copy_only=False)[0]
-        )
-
-        # Compute unit conversion matrix to convert from km to au and km/s to au/d
-        rotation_unit_conversion = np.zeros((6, 6))
-        rotation_unit_conversion[:3, :3] = np.identity(3) * KM_P_AU
-        rotation_unit_conversion[3:, 3:] = np.identity(3) * KM_P_AU / S_P_DAY
-
-        rotation_matrix_6x6_aud = (
-            np.linalg.inv(rotation_unit_conversion)
-            @ rotation_matrix_6x6_kms
-            @ rotation_unit_conversion
+        rotation_matrix_6x6_aud = _sxform_rotation_matrix_aud(
+            frame_spice_in,
+            frame_spice_out,
+            time.et().to_numpy(zero_copy_only=False)[0],
         )
 
         # Rotate the coordinates
@@ -1764,6 +1763,12 @@ def transform_coordinates(
 
     Input coordinates may be defined from multiple origins but if origin_out is
     specified, all coordinates will be transformed to that origin.
+
+    Covariances are transformed alongside the coordinates. Rows carrying the
+    extended non-gravitational (A1, A2, A3) covariance block have their
+    coordinate block and cross-covariances transformed while the
+    non-gravitational block is preserved (see
+    `~adam_core.coordinates.covariances.CoordinateCovariances`).
 
     Parameters
     ----------

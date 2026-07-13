@@ -165,6 +165,7 @@ def _propagate_2body_serial(
     # Preserve physical parameters by repeating per-orbit rows across times.
     pp_idx = np.repeat(np.arange(n_orbits), n_times).tolist()
     physical_parameters_ = orbits.physical_parameters.take(pp_idx)
+    non_gravitational_parameters_ = orbits.non_gravitational_parameters.take(pp_idx)
 
     num_entries = n_orbits * n_times
     orbits_propagated = np.empty((num_entries, 6), dtype=np.float64)
@@ -221,7 +222,7 @@ def _propagate_2body_serial(
         )
 
     if not orbits.coordinates.covariance.is_all_nan():
-        cartesian_covariances = orbits.coordinates.covariance.to_matrix()
+        cartesian_covariances = orbits.coordinates.covariance.to_transform_matrix()
         covariances_array_ = np.repeat(cartesian_covariances, n_times, axis=0)
 
         cartesian_covariances = transform_covariances_jacobian(
@@ -248,6 +249,7 @@ def _propagate_2body_serial(
         orbit_id=orbit_ids_,
         object_id=object_ids_,
         physical_parameters=physical_parameters_,
+        non_gravitational_parameters=non_gravitational_parameters_,
         coordinates=CartesianCoordinates.from_kwargs(
             x=orbits_propagated[:, 0],
             y=orbits_propagated[:, 1],
@@ -288,6 +290,7 @@ def propagate_2body(
     max_iter: int = 1000,
     tol: float = 1e-14,
     *,
+    include_nongrav: bool = True,
     max_processes: Optional[int] = 1,
     chunk_size: int = 100,
 ) -> Orbits:
@@ -307,12 +310,31 @@ def propagate_2body(
     tol : float, optional
         Numerical tolerance to which to compute universal anomaly using the Newtown-Raphson
         method.
+    include_nongrav : bool, optional
+        If True (default), raise a ValueError when any orbit carries non-zero
+        non-gravitational parameters, since 2-body dynamics cannot apply them.
+        If False, strip the non-gravitational parameters (and the
+        non-gravitational covariance block) and propagate gravity-only.
 
     Returns
     -------
     orbits : `~adam_core.orbits.orbits.Orbits` (N*M)
-        Orbits propagated to each MJD.
+        Orbits propagated to each MJD. Covariances are propagated with the
+        2-body state-transition Jacobian; for orbits carrying the
+        non-gravitational (A1, A2, A3) covariance block, the block is carried
+        through as dynamically inert, consistent with the 2-body force model
+        (which admits no non-gravitational accelerations).
     """
+    if not include_nongrav:
+        orbits = orbits.without_non_gravitational_parameters()
+
+    if orbits.has_non_gravitational_parameters():
+        raise ValueError(
+            "propagate_2body does not support non-gravitational accelerations. "
+            "Use an n-body propagator such as adam_assist.ASSISTPropagator for "
+            "orbits with non-gravitational parameters."
+        )
+
     if max_processes is None:
         max_processes = mp.cpu_count()
 
