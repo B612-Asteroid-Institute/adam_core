@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 from importlib.resources import files
-from typing import Final, Iterable
+from typing import Final, Iterable, Literal
 
 import numpy as np
 import numpy.typing as npt
@@ -95,6 +95,7 @@ def map_to_canonical_filter_bands(
     bands: pa.Array | pa.ChunkedArray | npt.NDArray[np.object_] | Iterable[str],
     *,
     allow_fallback_filters: bool = True,
+    on_unknown: Literal["raise", "skip"] = "raise",
 ) -> npt.NDArray[np.object_]:
     """
     Suggest canonical (vendored) bandpass filter IDs for a set of observations.
@@ -120,12 +121,19 @@ def map_to_canonical_filter_bands(
         If True, allow generic-band fallbacks when no (observatory_code, band) mapping is
         available. If False, raise if any row would require those fallbacks. Canonical
         `filter_id` inputs are always passed through. Defaults to True.
+    on_unknown : {"raise", "skip"}, optional
+        Raise for unresolved rows by default. ``"skip"`` preserves unresolved rows as
+        ``None`` while retaining canonical pass-through and enabled generic fallbacks.
 
     Returns
     -------
     ndarray
-        Canonical vendored `filter_id` strings.
+        Canonical vendored `filter_id` strings, with optional ``None`` entries when
+        ``on_unknown="skip"``.
     """
+    if on_unknown not in ("raise", "skip"):
+        raise ValueError(f"on_unknown must be 'raise' or 'skip'; got {on_unknown!r}")
+
     from adam_core import _rust_native as _rn
 
     out = _rn.bandpasses_map_to_canonical(
@@ -133,6 +141,7 @@ def map_to_canonical_filter_bands(
         _to_string_list(observatory_codes),
         _to_string_list(bands),
         bool(allow_fallback_filters),
+        on_unknown == "skip",
     )
     return np.asarray(out, dtype=object)
 

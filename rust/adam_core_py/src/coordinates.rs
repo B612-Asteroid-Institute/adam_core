@@ -36,7 +36,7 @@ use pyo3::exceptions::{PyKeyError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyList};
 use serde_json::{json, Value as JsonValue};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::hint::black_box;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
@@ -3998,14 +3998,21 @@ fn bandpasses_color_terms(
 }
 
 #[pyfunction]
+#[pyo3(signature = (data_dir, observatory_codes, bands, allow_fallback_filters, skip_unknown=false))]
 fn bandpasses_map_to_canonical(
     data_dir: &str,
     observatory_codes: Vec<String>,
     bands: Vec<String>,
     allow_fallback_filters: bool,
-) -> PyResult<Vec<String>> {
+    skip_unknown: bool,
+) -> PyResult<Vec<Option<String>>> {
     bandpass_data_for(data_dir)?
-        .map_to_canonical_filter_bands(&observatory_codes, &bands, allow_fallback_filters)
+        .map_to_canonical_filter_bands_optional(
+            &observatory_codes,
+            &bands,
+            allow_fallback_filters,
+            skip_unknown,
+        )
         .map_err(bandpass_value_error)
 }
 
@@ -4084,11 +4091,11 @@ fn bandpasses_composition_key(
     Ok((normalized.template_id, normalized.mix))
 }
 
-fn convert_magnitudes_for_bandpasses(
+fn convert_magnitudes_for_bandpasses<S: AsRef<str>, T: AsRef<str>>(
     data: &adam_core_rs_coords::BandpassData,
     magnitudes: &[f64],
-    source_filter_ids: &[String],
-    target_filter_ids: &[String],
+    source_filter_ids: &[S],
+    target_filter_ids: &[T],
     composition: &NormalizedComposition,
 ) -> PyResult<Vec<f64>> {
     if source_filter_ids.len() != magnitudes.len() || target_filter_ids.len() != magnitudes.len() {
@@ -4096,10 +4103,20 @@ fn convert_magnitudes_for_bandpasses(
             "source_filter_id/target_filter_id must match magnitude length",
         ));
     }
-    data.assert_filter_ids_have_curves(source_filter_ids)
-        .map_err(bandpass_value_error)?;
-    data.assert_filter_ids_have_curves(target_filter_ids)
-        .map_err(bandpass_value_error)?;
+    let missing: BTreeSet<&str> = source_filter_ids
+        .iter()
+        .map(AsRef::as_ref)
+        .chain(target_filter_ids.iter().map(AsRef::as_ref))
+        .filter(|filter_id| !data.has_filter(filter_id))
+        .collect();
+    if !missing.is_empty() {
+        return Err(PyValueError::new_err(format!(
+            "Unknown filter_id(s) (no vendored bandpass curve): {:?}. Run \
+             map_to_canonical_filter_bands() first to map observatory bands to \
+             canonical filter_ids.",
+            missing.into_iter().collect::<Vec<_>>()
+        )));
+    }
     let deltas = data
         .delta_table(composition.template_id.as_deref(), composition.mix)
         .map_err(bandpass_value_error)?;
@@ -4115,7 +4132,7 @@ fn convert_magnitudes_for_bandpasses(
         .zip(target_filter_ids)
         .map(|((&magnitude, source), target)| {
             magnitude
-                + (deltas[filter_index[target.as_str()]] - deltas[filter_index[source.as_str()]])
+                + (deltas[filter_index[target.as_ref()]] - deltas[filter_index[source.as_ref()]])
         })
         .collect())
 }
@@ -4140,6 +4157,54 @@ fn bandpasses_convert_magnitude<'py>(
         &target_filter_ids,
         &composition,
     )?;
+    Ok(output.into_pyarray(py))
+}
+
+#[pyfunction]
+#[pyo3(signature = (data_dir, batch, template_id=None, mix=None))]
+fn bandpasses_convert_magnitude_arrow<'py>(
+    py: Python<'py>,
+    data_dir: &str,
+    batch: &Bound<'py, PyAny>,
+    template_id: Option<String>,
+    mix: Option<(f64, f64)>,
+) -> PyResult<Bound<'py, PyArray1<f64>>> {
+    let batch = RecordBatch::from_pyarrow_bound(batch)
+        .map_err(|err| PyValueError::new_err(format!("invalid magnitude RecordBatch: {err}")))?;
+    let magnitudes = batch
+        .column_by_name("magnitude")
+        .and_then(|column| column.as_any().downcast_ref::<Float64Array>())
+        .ok_or_else(|| PyValueError::new_err("magnitude must be a non-null float64 column"))?;
+    let source = batch
+        .column_by_name("source_filter_id")
+        .and_then(|column| column.as_any().downcast_ref::<LargeStringArray>())
+        .ok_or_else(|| {
+            PyValueError::new_err("source_filter_id must be a non-null large_string column")
+        })?;
+    let target = batch
+        .column_by_name("target_filter_id")
+        .and_then(|column| column.as_any().downcast_ref::<LargeStringArray>())
+        .ok_or_else(|| {
+            PyValueError::new_err("target_filter_id must be a non-null large_string column")
+        })?;
+    if magnitudes.null_count() != 0 || source.null_count() != 0 || target.null_count() != 0 {
+        return Err(PyValueError::new_err(
+            "magnitude and filter ID columns must not contain nulls",
+        ));
+    }
+    let source: Vec<&str> = source.iter().map(|value| value.unwrap()).collect();
+    let target: Vec<&str> = target.iter().map(|value| value.unwrap()).collect();
+    let composition = normalize_bandpass_composition(template_id, mix)?;
+    let data = bandpass_data_for(data_dir)?;
+    let output = py.allow_threads(|| {
+        convert_magnitudes_for_bandpasses(
+            data.as_ref(),
+            magnitudes.values(),
+            &source,
+            &target,
+            &composition,
+        )
+    })?;
     Ok(output.into_pyarray(py))
 }
 
@@ -6973,6 +7038,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(bandpasses_delta_table, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_composition_key, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_convert_magnitude, m)?)?;
+    m.add_function(wrap_pyfunction!(bandpasses_convert_magnitude_arrow, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_bandpasses_convert_magnitude, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_delta_mag, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_color_terms, m)?)?;

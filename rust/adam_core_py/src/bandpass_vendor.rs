@@ -75,9 +75,15 @@ fn band_map_batch() -> PyResult<RecordBatch> {
     for code in ["T08", "T05", "M22", "W68"] {
         rows.push((code.into(), "c".into(), "ATLAS_c".into()));
         rows.push((code.into(), "o".into(), "ATLAS_o".into()));
+        rows.push((code.into(), "Ac".into(), "ATLAS_c".into()));
+        rows.push((code.into(), "Ao".into(), "ATLAS_o".into()));
     }
     rows.push(("V00".into(), "g".into(), "BASS_g".into()));
     rows.push(("V00".into(), "r".into(), "BASS_r".into()));
+    for code in ["F51", "F52"] {
+        rows.push((code.into(), "w".into(), "PS1_w".into()));
+        rows.push((code.into(), "Pw".into(), "PS1_w".into()));
+    }
 
     let codes: Vec<&str> = rows.iter().map(|row| row.0.as_str()).collect();
     let bands: Vec<&str> = rows.iter().map(|row| row.1.as_str()).collect();

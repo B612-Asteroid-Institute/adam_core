@@ -2,6 +2,8 @@ from typing import Union
 
 import numpy as np
 import numpy.typing as npt
+import pyarrow as pa
+import pyarrow.compute as pc
 
 from .._rust.api import (
     calculate_apparent_magnitude_v_and_phase_angle_numpy as rust_calculate_apparent_magnitude_v_and_phase_angle_numpy,
@@ -186,14 +188,15 @@ def convert_magnitude(
     from adam_core import _rust_native as _rn
 
     template_id, mix = _composition_args(composition)
+    source = pc.fill_null(pa.array(src, type=pa.large_string()), "None")
+    target = pc.fill_null(pa.array(tgt, type=pa.large_string()), "None")
+    batch = pa.RecordBatch.from_arrays(
+        [pa.array(mags, type=pa.float64()), source, target],
+        names=["magnitude", "source_filter_id", "target_filter_id"],
+    )
     return np.asarray(
-        _rn.bandpasses_convert_magnitude(
-            _data_dir_str(),
-            np.ascontiguousarray(mags),
-            [str(value) for value in src.tolist()],
-            [str(value) for value in tgt.tolist()],
-            template_id,
-            mix,
+        _rn.bandpasses_convert_magnitude_arrow(
+            _data_dir_str(), batch, template_id, mix
         ),
         dtype=np.float64,
     )

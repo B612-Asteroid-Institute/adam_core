@@ -35,11 +35,30 @@ jobs:
           - name: manylinux-x86_64
             runner: ubuntu-latest
             system: Linux-x86_64
+            family: manylinux
+            target: x86_64
             wheel_tag: manylinux*x86_64
+          - name: manylinux-aarch64
+            runner: ubuntu-24.04-arm
+            system: Linux-aarch64
+            family: manylinux
+            target: aarch64
+            wheel_tag: manylinux*aarch64
           - name: macos-arm64
             runner: macos-14
             system: Darwin-arm64
+            family: native
             wheel_tag: macosx*arm64
+          - name: macos-x86_64
+            runner: macos-15-intel
+            system: Darwin-x86_64
+            family: native
+            wheel_tag: macosx*x86_64
+          - name: windows-x86_64
+            runner: windows-latest
+            system: Windows-AMD64
+            family: native
+            wheel_tag: win_amd64
     steps:
       - name: Checkout adam-core candidate
         uses: actions/checkout@v4
@@ -64,30 +83,37 @@ jobs:
 
       - name: Verify runner architecture
         shell: bash
-        run: test "$(uname -s)-$(uname -m)" = "${{ matrix.platform.system }}"
+        run: |
+          python - <<'PY'
+          import platform
+          expected = "${{ matrix.platform.system }}"
+          actual = f"{platform.system()}-{platform.machine()}"
+          if actual != expected:
+              raise SystemExit(f"runner architecture mismatch: {actual} != {expected}")
+          PY
 
       - name: Build adam-core manylinux wheel
-        if: matrix.platform.name == 'manylinux-x86_64'
+        if: matrix.platform.family == 'manylinux'
         uses: PyO3/maturin-action@v1
         with:
           command: build
-          target: x86_64
+          target: ${{ matrix.platform.target }}
           manylinux: "2_17"
           working-directory: .
           args: --release -i python${{ matrix.python-version }} --out wheelhouse
 
       - name: Build adam-assist manylinux wheel
-        if: matrix.platform.name == 'manylinux-x86_64'
+        if: matrix.platform.family == 'manylinux'
         uses: PyO3/maturin-action@v1
         with:
           command: build
-          target: x86_64
+          target: ${{ matrix.platform.target }}
           manylinux: "2_17"
           working-directory: adam-assist
           args: --release -i python${{ matrix.python-version }} --out ../wheelhouse
 
-      - name: Run exact clean-room acceptance driver with manylinux wheels
-        if: matrix.platform.name == 'manylinux-x86_64'
+      - name: Run exact clean-room acceptance with prebuilt manylinux wheels
+        if: matrix.platform.family == 'manylinux'
         shell: bash
         run: |
           set -euo pipefail
@@ -101,8 +127,8 @@ jobs:
             --report "$RUNNER_TEMP/acceptance-report.json" \
             --python "$(command -v python)"
 
-      - name: Run exact clean-room acceptance driver on macOS
-        if: matrix.platform.name == 'macos-arm64'
+      - name: Build and run exact clean-room acceptance on native platform
+        if: matrix.platform.family == 'native'
         shell: bash
         run: |
           set -euo pipefail
@@ -115,14 +141,28 @@ jobs:
             --report "$RUNNER_TEMP/acceptance-report.json" \
             --python "$(command -v python)"
 
-      - name: Verify platform wheel tags
+      - name: Verify platform wheel count and tags
         shell: bash
         run: |
-          set -euo pipefail
-          WHEELHOUSE="$RUNNER_TEMP/acceptance/wheelhouse"
-          test "$(find "$WHEELHOUSE" -maxdepth 1 -name 'adam_core-*.whl' | wc -l | tr -d ' ')" = 1
-          test "$(find "$WHEELHOUSE" -maxdepth 1 -name 'adam_assist-*.whl' | wc -l | tr -d ' ')" = 1
-          test "$(find "$WHEELHOUSE" -maxdepth 1 -name '*${{ matrix.platform.wheel_tag }}.whl' | wc -l | tr -d ' ')" = 2
+          python - <<'PY'
+          import fnmatch
+          import os
+          from pathlib import Path
+
+          wheelhouse = Path(os.environ["RUNNER_TEMP"]) / "acceptance" / "wheelhouse"
+          core = list(wheelhouse.glob("adam_core-*.whl"))
+          assist = list(wheelhouse.glob("adam_assist-*.whl"))
+          if len(core) != 1 or len(assist) != 1:
+              raise SystemExit(f"expected one wheel per package; got {core=} {assist=}")
+          pattern = "*${{ matrix.platform.wheel_tag }}.whl"
+          invalid = [
+              path.name
+              for path in core + assist
+              if not fnmatch.fnmatch(path.name, pattern)
+          ]
+          if invalid:
+              raise SystemExit(f"wheel tag mismatch for {pattern}: {invalid}")
+          PY
 
       - name: Upload wheel acceptance evidence
         if: always()

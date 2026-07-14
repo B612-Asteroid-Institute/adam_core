@@ -224,10 +224,13 @@ def _runtime_environment(
     environment.update(
         {
             "HOME": str(home),
+            "USERPROFILE": str(home),
+            "APPDATA": str(home / "AppData" / "Roaming"),
+            "LOCALAPPDATA": str(home / "AppData" / "Local"),
             "XDG_CACHE_HOME": str(home / ".cache"),
             "ADAM_CORE_KERNEL_CACHE": str(kernel_cache),
             "ADAM_CORE_KERNEL_OFFLINE": "1",
-            "PATH": os.pathsep.join([str(runtime_bin), "/usr/bin", "/bin"]),
+            "PATH": os.pathsep.join([str(runtime_bin), os.defpath]),
             "PIP_DISABLE_PIP_VERSION_CHECK": "1",
             "PYTHONNOUSERSITE": "1",
         }

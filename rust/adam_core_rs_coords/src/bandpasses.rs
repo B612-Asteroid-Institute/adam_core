@@ -574,13 +574,34 @@ impl BandpassData {
         )))
     }
 
-    /// Legacy `map_to_canonical_filter_bands`.
+    /// Legacy `map_to_canonical_filter_bands` with dense error-on-unknown output.
     pub fn map_to_canonical_filter_bands(
         &self,
         observatory_codes: &[String],
         bands: &[String],
         allow_fallback_filters: bool,
     ) -> SchemaResult<Vec<String>> {
+        self.map_to_canonical_filter_bands_optional(
+            observatory_codes,
+            bands,
+            allow_fallback_filters,
+            false,
+        )?
+        .into_iter()
+        .map(|value| {
+            value.ok_or_else(|| invalid("internal unresolved bandpass mapping".to_string()))
+        })
+        .collect()
+    }
+
+    /// Map reported bands while optionally preserving unknown rows as nulls.
+    pub fn map_to_canonical_filter_bands_optional(
+        &self,
+        observatory_codes: &[String],
+        bands: &[String],
+        allow_fallback_filters: bool,
+        skip_unknown: bool,
+    ) -> SchemaResult<Vec<Option<String>>> {
         if observatory_codes.len() != bands.len() {
             return Err(invalid(format!(
                 "observatory_codes length ({}) must match bands length ({})",
@@ -627,7 +648,7 @@ impl BandpassData {
         }
 
         let unresolved: Vec<usize> = (0..n).filter(|&row| out[row].is_none()).collect();
-        if !unresolved.is_empty() {
+        if !skip_unknown && !unresolved.is_empty() {
             let pairs: Vec<String> = unresolved
                 .iter()
                 .map(|&row| format!("{}|{}", observatory_codes[row], bands[row]))
@@ -639,21 +660,29 @@ impl BandpassData {
         }
 
         if !allow_fallback_filters && used_fallback.iter().any(|&used| used) {
-            let pairs: Vec<String> = (0..n)
-                .filter(|&row| used_fallback[row])
-                .map(|row| format!("{}|{}", observatory_codes[row], bands[row]))
-                .collect();
-            return Err(invalid(format!(
-                "No non-fallback mapping found for: {}. Set \
-                 allow_fallback_filters=True to allow SDSS/PS1 fallbacks.",
-                pairs.join(", ")
-            )));
+            if skip_unknown {
+                for row in 0..n {
+                    if used_fallback[row] {
+                        out[row] = None;
+                    }
+                }
+            } else {
+                let pairs: Vec<String> = (0..n)
+                    .filter(|&row| used_fallback[row])
+                    .map(|row| format!("{}|{}", observatory_codes[row], bands[row]))
+                    .collect();
+                return Err(invalid(format!(
+                    "No non-fallback mapping found for: {}. Set \
+                     allow_fallback_filters=True to allow SDSS/PS1 fallbacks.",
+                    pairs.join(", ")
+                )));
+            }
         }
 
-        let resolved: Vec<String> = out.into_iter().map(|value| value.unwrap()).collect();
-        // Final guarantee: every output has a curve.
-        let bad: BTreeSet<String> = resolved
+        // Final guarantee: every non-null output has a curve.
+        let bad: BTreeSet<String> = out
             .iter()
+            .filter_map(Option::as_ref)
             .filter(|filter_id| !self.has_filter(filter_id))
             .cloned()
             .collect();
@@ -664,7 +693,7 @@ impl BandpassData {
                 py_list_repr(&bad)
             )));
         }
-        Ok(resolved)
+        Ok(out)
     }
 }
 
