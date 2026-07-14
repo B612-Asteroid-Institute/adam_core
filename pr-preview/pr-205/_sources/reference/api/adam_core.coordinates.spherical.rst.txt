@@ -1,0 +1,7 @@
+adam\_core.coordinates.spherical module
+=======================================
+
+.. automodule:: adam_core.coordinates.spherical
+   :members:
+   :show-inheritance:
+   :undoc-members:
