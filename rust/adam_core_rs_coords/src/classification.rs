@@ -84,19 +84,12 @@ fn classify_row(a: f64, e: f64, q: f64, q_apo: f64) -> i32 {
     code
 }
 
-fn classify_orbits_serial(a: &[f64], e: &[f64], q: &[f64], q_apo: &[f64]) -> Vec<i32> {
-    let mut out = vec![0_i32; a.len()];
-    for i in 0..a.len() {
-        out[i] = classify_row(a[i], e[i], q[i], q_apo[i]);
-    }
-    out
-}
-
-/// Per-row classification. All input arrays must have equal length.
-pub fn classify_orbits_flat(a: &[f64], e: &[f64], q: &[f64], q_apo: &[f64]) -> Vec<i32> {
+/// Per-row classification into caller-owned output. All slices must have equal length.
+pub fn classify_orbits_into(a: &[f64], e: &[f64], q: &[f64], q_apo: &[f64], out: &mut [i32]) {
     assert_eq!(a.len(), e.len());
     assert_eq!(a.len(), q.len());
     assert_eq!(a.len(), q_apo.len());
+    assert_eq!(a.len(), out.len());
     let n = a.len();
     // Per-row classification is just 4 boolean comparisons (~3 ns); Rayon
     // spawn overhead is ~50 us, so the parallel path does not win until n is
@@ -104,10 +97,12 @@ pub fn classify_orbits_flat(a: &[f64], e: &[f64], q: &[f64], q_apo: &[f64]) -> V
     // and small-n lanes; the large-n lane (n=50000) still hits the parallel
     // path with comfortable margin.
     if n < 16_384 || rayon::current_num_threads() == 1 {
-        return classify_orbits_serial(a, e, q, q_apo);
+        for i in 0..n {
+            out[i] = classify_row(a[i], e[i], q[i], q_apo[i]);
+        }
+        return;
     }
 
-    let mut out = vec![0_i32; n];
     out.par_iter_mut()
         .zip(a.par_iter())
         .zip(e.par_iter())
@@ -116,6 +111,12 @@ pub fn classify_orbits_flat(a: &[f64], e: &[f64], q: &[f64], q_apo: &[f64]) -> V
         .for_each(|((((dst, &a_i), &e_i), &q_i), &q_apo_i)| {
             *dst = classify_row(a_i, e_i, q_i, q_apo_i);
         });
+}
+
+/// Per-row classification with an owned output vector.
+pub fn classify_orbits_flat(a: &[f64], e: &[f64], q: &[f64], q_apo: &[f64]) -> Vec<i32> {
+    let mut out = vec![0_i32; a.len()];
+    classify_orbits_into(a, e, q, q_apo, &mut out);
     out
 }
 

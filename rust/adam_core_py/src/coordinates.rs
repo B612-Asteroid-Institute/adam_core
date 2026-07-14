@@ -1085,8 +1085,23 @@ fn classify_orbits_numpy<'py>(
     let q_apo_s = q_apo_arr
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("Q must be contiguous"))?;
-    let codes = classify_orbits_flat(a_s, e_s, q_s, q_apo_s);
-    Ok(ndarray::Array1::from_vec(codes).into_pyarray(py))
+    // SAFETY: classify_orbits_into writes every element before Python can
+    // observe the array, avoiding a temporary Vec and output copy.
+    let codes = unsafe { PyArray1::<i32>::new(py, [n], false) };
+    {
+        let mut codes_rw = numpy::PyArrayMethods::readwrite(&codes);
+        let codes_slice = codes_rw
+            .as_slice_mut()
+            .map_err(|_| PyValueError::new_err("allocated class output must be contiguous"))?;
+        adam_core_rs_coords::classification::classify_orbits_into(
+            a_s,
+            e_s,
+            q_s,
+            q_apo_s,
+            codes_slice,
+        );
+    }
+    Ok(codes)
 }
 
 #[pyfunction]
