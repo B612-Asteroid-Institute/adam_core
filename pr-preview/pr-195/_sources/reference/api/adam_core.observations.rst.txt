@@ -13,6 +13,7 @@ Submodules
    :maxdepth: 4
 
    adam_core.observations.ades
+   adam_core.observations.arrow_bridge
    adam_core.observations.associations
    adam_core.observations.detections
    adam_core.observations.exposures

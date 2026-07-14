@@ -202,6 +202,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -216,6 +217,7 @@
 <li class="toctree-l2"><a class="reference internal" href="cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -271,6 +273,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -313,6 +316,7 @@
 <li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -331,24 +335,32 @@
 <li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -356,13 +368,13 @@
 <li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -370,8 +382,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -442,6 +452,8 @@
 
         <ul>
           <li><a href="reference/api/adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris.aberrated_coordinates">(adam_core.orbits.ephemeris.Ephemeris attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.aberrated_coordinates">(adam_core.orbits.VariantEphemeris attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.aberrated_coordinates">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
 </li>
@@ -687,6 +699,13 @@
 </li>
         </ul></li>
         <li>
+    adam_core.observations.arrow_bridge
+
+        <ul>
+          <li><a href="reference/api/adam_core.observations.arrow_bridge.html#module-adam_core.observations.arrow_bridge">module</a>
+</li>
+        </ul></li>
+        <li>
     adam_core.observations.associations
 
         <ul>
@@ -841,6 +860,13 @@
 </li>
         </ul></li>
         <li>
+    adam_core.orbits.arrow_bridge
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#module-adam_core.orbits.arrow_bridge">module</a>
+</li>
+        </ul></li>
+        <li>
     adam_core.orbits.classification
 
         <ul>
@@ -910,8 +936,6 @@
           <li><a href="reference/api/adam_core.orbits.physical_parameters.html#module-adam_core.orbits.physical_parameters">module</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li>
     adam_core.orbits.plots
 
@@ -919,6 +943,8 @@
           <li><a href="reference/api/adam_core.orbits.plots.html#module-adam_core.orbits.plots">module</a>
 </li>
         </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li>
     adam_core.orbits.query
 
@@ -966,13 +992,6 @@
 
         <ul>
           <li><a href="reference/api/adam_core.orbits.variants.html#module-adam_core.orbits.variants">module</a>
-</li>
-        </ul></li>
-        <li>
-    adam_core.parallel
-
-        <ul>
-          <li><a href="reference/api/adam_core.parallel.html#module-adam_core.parallel">module</a>
 </li>
         </ul></li>
         <li>
@@ -1025,6 +1044,13 @@
 </li>
         </ul></li>
         <li>
+    adam_core.photometry.lightcurve
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.lightcurve.html#module-adam_core.photometry.lightcurve">module</a>
+</li>
+        </ul></li>
+        <li>
     adam_core.photometry.magnitude
 
         <ul>
@@ -1036,6 +1062,34 @@
 
         <ul>
           <li><a href="reference/api/adam_core.photometry.magnitude_common.html#module-adam_core.photometry.magnitude_common">module</a>
+</li>
+        </ul></li>
+        <li>
+    adam_core.photometry.rotation
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.rotation.html#module-adam_core.photometry.rotation">module</a>
+</li>
+        </ul></li>
+        <li>
+    adam_core.photometry.rotation.core
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#module-adam_core.photometry.rotation.core">module</a>
+</li>
+        </ul></li>
+        <li>
+    adam_core.photometry.rotation.estimator
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.rotation.estimator.html#module-adam_core.photometry.rotation.estimator">module</a>
+</li>
+        </ul></li>
+        <li>
+    adam_core.photometry.rotation.wrappers
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.rotation.wrappers.html#module-adam_core.photometry.rotation.wrappers">module</a>
 </li>
         </ul></li>
         <li>
@@ -1067,13 +1121,6 @@
 </li>
         </ul></li>
         <li>
-    adam_core.ray_cluster
-
-        <ul>
-          <li><a href="reference/api/adam_core.ray_cluster.html#module-adam_core.ray_cluster">module</a>
-</li>
-        </ul></li>
-        <li>
     adam_core.time
 
         <ul>
@@ -1102,13 +1149,6 @@
 </li>
         </ul></li>
         <li>
-    adam_core.utils.chunking
-
-        <ul>
-          <li><a href="reference/api/adam_core.utils.chunking.html#module-adam_core.utils.chunking">module</a>
-</li>
-        </ul></li>
-        <li>
     adam_core.utils.helpers
 
         <ul>
@@ -1123,13 +1163,6 @@
 </li>
         </ul></li>
         <li>
-    adam_core.utils.helpers.data.get_test_data
-
-        <ul>
-          <li><a href="reference/api/adam_core.utils.helpers.data.get_test_data.html#module-adam_core.utils.helpers.data.get_test_data">module</a>
-</li>
-        </ul></li>
-        <li>
     adam_core.utils.helpers.observations
 
         <ul>
@@ -1141,6 +1174,13 @@
 
         <ul>
           <li><a href="reference/api/adam_core.utils.helpers.orbits.html#module-adam_core.utils.helpers.orbits">module</a>
+</li>
+        </ul></li>
+        <li>
+    adam_core.utils.http
+
+        <ul>
+          <li><a href="reference/api/adam_core.utils.http.html#module-adam_core.utils.http">module</a>
 </li>
         </ul></li>
         <li>
@@ -1244,20 +1284,34 @@
 </li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations">ADESObservations (class in adam_core.observations.ades)</a>
 </li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.alias_bucket">alias_bucket() (in module adam_core.photometry.rotation.core)</a>
+</li>
         <li><a href="reference/api/adam_core.dynamics.chi.html#adam_core.dynamics.chi.ChiDiagnostics.alpha">alpha (adam_core.dynamics.chi.ChiDiagnostics attribute)</a>
 
         <ul>
-          <li><a href="reference/api/adam_core.dynamics.propagation.html#adam_core.dynamics.propagation.ChiDiagnostics.alpha">(adam_core.dynamics.propagation.ChiDiagnostics attribute)</a>
-</li>
           <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Ephemeris.alpha">(adam_core.orbits.Ephemeris attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris.alpha">(adam_core.orbits.ephemeris.Ephemeris attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.alpha">(adam_core.orbits.VariantEphemeris attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.alpha">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
 </li>
         </ul></li>
         <li><a href="reference/api/adam_core.coordinates.geodetics.html#adam_core.coordinates.geodetics.GeodeticCoordinates.alt">alt (adam_core.coordinates.geodetics.GeodeticCoordinates attribute)</a>
 </li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.alternate_period_days">alternate_period_days (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.alternate_period_days">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.amplitude_snr">amplitude_snr (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.amplitude_snr">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.coordinates.cometary.html#adam_core.coordinates.cometary.CometaryCoordinates.ap">ap (adam_core.coordinates.cometary.CometaryCoordinates attribute)</a>
 
         <ul>
@@ -1332,8 +1386,6 @@
         </ul></li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.SoftwareObsContext.astrometry">astrometry (adam_core.observations.ades.SoftwareObsContext attribute)</a>
 </li>
-        <li><a href="reference/api/adam_core.propagator.propagator.html#adam_core.propagator.propagator.attach_magnitude_or_phase">attach_magnitude_or_phase() (in module adam_core.propagator.propagator)</a>
-</li>
         <li><a href="reference/api/adam_core.coordinates.units.html#adam_core.coordinates.units.au_per_day_to_km_per_s">au_per_day_to_km_per_s() (in module adam_core.coordinates.units)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.units.html#adam_core.coordinates.units.au_to_km">au_to_km() (in module adam_core.coordinates.units)</a>
@@ -1384,12 +1436,12 @@
           <li><a href="reference/api/adam_core.photometry.bandpasses.api.html#adam_core.photometry.bandpasses.api.bandpass_delta_mag">(in module adam_core.photometry.bandpasses.api)</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.photometry.magnitude_common.html#adam_core.photometry.magnitude_common.bandpass_delta_table_for_composition">bandpass_delta_table_for_composition() (in module adam_core.photometry.magnitude_common)</a>
 </li>
         <li><a href="reference/api/adam_core.photometry.magnitude_common.html#adam_core.photometry.magnitude_common.bandpass_delta_table_for_composition_cached">bandpass_delta_table_for_composition_cached() (in module adam_core.photometry.magnitude_common)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.photometry.magnitude_common.html#adam_core.photometry.magnitude_common.bandpass_filter_id_table">bandpass_filter_id_table() (in module adam_core.photometry.magnitude_common)</a>
 </li>
         <li><a href="reference/api/adam_core.photometry.magnitude_common.html#adam_core.photometry.magnitude_common.bandpass_integrals_for_composition">bandpass_integrals_for_composition() (in module adam_core.photometry.magnitude_common)</a>
@@ -1400,11 +1452,15 @@
           <li><a href="reference/api/adam_core.photometry.bandpasses.tables.html#adam_core.photometry.bandpasses.tables.BandpassCurves">(class in adam_core.photometry.bandpasses.tables)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.benchmark_observer_states_from_codes_arrow_rust">benchmark_observer_states_from_codes_arrow_rust() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.benchmark_observer_states_from_exposures_arrow_rust">benchmark_observer_states_from_exposures_arrow_rust() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.benchmark_perturber_states_arrow_rust">benchmark_perturber_states_arrow_rust() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.benchmark_spice_body_states_arrow_rust">benchmark_spice_body_states_arrow_rust() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
         <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.bodn2c">bodn2c() (adam_core.utils.spice_backend.RustBackend method)</a>
-</li>
-        <li><a href="reference/api/adam_core.utils.bounded_lru.html#adam_core.utils.bounded_lru.bounded_lru_get">bounded_lru_get() (in module adam_core.utils.bounded_lru)</a>
-</li>
-        <li><a href="reference/api/adam_core.utils.bounded_lru.html#adam_core.utils.bounded_lru.bounded_lru_put">bounded_lru_put() (in module adam_core.utils.bounded_lru)</a>
 </li>
         <li><a href="reference/api/adam_core.photometry.bandpasses.vendor.html#adam_core.photometry.bandpasses.vendor.build_asteroid_templates">build_asteroid_templates() (in module adam_core.photometry.bandpasses.vendor)</a>
 </li>
@@ -1412,6 +1468,12 @@
 </li>
         <li><a href="reference/api/adam_core.photometry.bandpasses.vendor.html#adam_core.photometry.bandpasses.vendor.build_observatory_band_map">build_observatory_band_map() (in module adam_core.photometry.bandpasses.vendor)</a>
 </li>
+        <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.build_rotation_period_observations_from_detections">build_rotation_period_observations_from_detections() (in module adam_core.photometry)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.rotation.wrappers.html#adam_core.photometry.rotation.wrappers.build_rotation_period_observations_from_detections">(in module adam_core.photometry.rotation.wrappers)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.photometry.bandpasses.vendor.html#adam_core.photometry.bandpasses.vendor.build_solar_spectrum">build_solar_spectrum() (in module adam_core.photometry.bandpasses.vendor)</a>
 </li>
         <li><a href="reference/api/adam_core.photometry.bandpasses.vendor.html#adam_core.photometry.bandpasses.vendor.build_template_bandpass_integrals">build_template_bandpass_integrals() (in module adam_core.photometry.bandpasses.vendor)</a>
@@ -1527,11 +1589,7 @@
 </li>
         </ul></li>
         <li><a href="reference/api/adam_core.dynamics.chi.html#adam_core.dynamics.chi.ChiDiagnostics.chi">chi (adam_core.dynamics.chi.ChiDiagnostics attribute)</a>
-
-        <ul>
-          <li><a href="reference/api/adam_core.dynamics.propagation.html#adam_core.dynamics.propagation.ChiDiagnostics.chi">(adam_core.dynamics.propagation.ChiDiagnostics attribute)</a>
 </li>
-        </ul></li>
         <li><a href="reference/api/adam_core.coordinates.residuals.html#adam_core.coordinates.residuals.Residuals.chi2">chi2 (adam_core.coordinates.residuals.Residuals attribute)</a>
 
         <ul>
@@ -1541,11 +1599,7 @@
         <li><a href="reference/api/adam_core.orbits.physical_parameters.html#adam_core.orbits.physical_parameters.PhysicalParameters.chi2_red">chi2_red (adam_core.orbits.physical_parameters.PhysicalParameters attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.dynamics.chi.html#adam_core.dynamics.chi.ChiDiagnostics">ChiDiagnostics (class in adam_core.dynamics.chi)</a>
-
-        <ul>
-          <li><a href="reference/api/adam_core.dynamics.propagation.html#adam_core.dynamics.propagation.ChiDiagnostics">(class in adam_core.dynamics.propagation)</a>
 </li>
-        </ul></li>
         <li><a href="reference/api/adam_core.photometry.bandpasses.html#adam_core.photometry.bandpasses.AsteroidTemplates.citation">citation (adam_core.photometry.bandpasses.AsteroidTemplates attribute)</a>
 
         <ul>
@@ -1554,9 +1608,13 @@
           <li><a href="reference/api/adam_core.photometry.bandpasses.tables.html#adam_core.photometry.bandpasses.tables.AsteroidTemplates.citation">(adam_core.photometry.bandpasses.tables.AsteroidTemplates attribute)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.clear">clear() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
         <li><a href="reference/api/adam_core.observers.state.html#adam_core.observers.state.clear_observer_state_cache">clear_observer_state_cache() (in module adam_core.observers.state)</a>
 </li>
         <li><a href="reference/api/adam_core.utils.spice.html#adam_core.utils.spice.clear_spkez_cache">clear_spkez_cache() (in module adam_core.utils.spice)</a>
+</li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.clear_spkez_state_cache">clear_spkez_state_cache() (adam_core.utils.spice_backend.RustBackend method)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.transform.html#adam_core.coordinates.transform.clear_translation_cache">clear_translation_cache() (in module adam_core.coordinates.transform)</a>
 </li>
@@ -1574,26 +1632,34 @@
 </li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ObsContext.collaborators">collaborators (adam_core.observations.ades.ObsContext attribute)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
-        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.collapse">collapse() (adam_core.orbits.VariantOrbits method)</a>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.collapse">collapse() (adam_core.orbits.VariantEphemeris method)</a>
 
         <ul>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.collapse">(adam_core.orbits.VariantOrbits method)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.collapse">(adam_core.orbits.variants.VariantEphemeris method)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.collapse">(adam_core.orbits.variants.VariantOrbits method)</a>
 </li>
         </ul></li>
-        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.collapse_by_object_id">collapse_by_object_id() (adam_core.orbits.VariantOrbits method)</a>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.collapse_by_object_id">collapse_by_object_id() (adam_core.orbits.VariantEphemeris method)</a>
 
         <ul>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.collapse_by_object_id">(adam_core.orbits.VariantOrbits method)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.collapse_by_object_id">(adam_core.orbits.variants.VariantEphemeris method)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.collapse_by_object_id">(adam_core.orbits.variants.VariantOrbits method)</a>
 </li>
         </ul></li>
-        <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.collapse_sigma_points_orbit_major">collapse_sigma_points_orbit_major() (adam_core.orbits.variants.VariantEphemeris method)</a>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.collapse_sigma_points_orbit_major">collapse_sigma_points_orbit_major() (adam_core.orbits.VariantEphemeris method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.collapse_sigma_points_orbit_major">(adam_core.orbits.variants.VariantEphemeris method)</a>
 </li>
+        </ul></li>
         <li><a href="reference/api/adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.CollisionEvent.collision_coordinates">collision_coordinates (adam_core.dynamics.impacts.CollisionEvent attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.CollisionConditions.collision_distance">collision_distance (adam_core.dynamics.impacts.CollisionConditions attribute)</a>
@@ -1638,6 +1704,12 @@
           <li><a href="reference/api/adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.ImpactProbabilities.condition_id">(adam_core.dynamics.impacts.ImpactProbabilities attribute)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.confidence_flags">confidence_flags (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.confidence_flags">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.dynamics.exceptions.html#adam_core.dynamics.exceptions.DynamicsNumericalError.context">context (adam_core.dynamics.exceptions.DynamicsNumericalError attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableOrbitalKepler.contiguous_mode">contiguous_mode (adam_core.orbits.openspace.renderable.RenderableOrbitalKepler attribute)</a>
@@ -1679,6 +1751,8 @@
 </li>
           <li><a href="reference/api/adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.coordinates">(adam_core.orbits.orbits.Orbits attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.coordinates">(adam_core.orbits.VariantEphemeris attribute)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.coordinates">(adam_core.orbits.VariantOrbits attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.coordinates">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
@@ -1694,6 +1768,8 @@
           <li><a href="reference/api/adam_core.observations.html#adam_core.observations.SourceCatalog.coordinates">(adam_core.observations.SourceCatalog method)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.coordinates_to_ipc">coordinates_to_ipc() (in module adam_core.orbits.arrow_bridge)</a>
+</li>
         <li><a href="reference/api/adam_core.coordinates.types.html#adam_core.coordinates.types.CoordinateType">CoordinateType (class in adam_core.coordinates.types)</a>
 </li>
         <li><a href="reference/api/adam_core.observers.observers.html#adam_core.observers.observers.ObservatoryParallaxCoefficients.cos_phi">cos_phi (adam_core.observers.observers.ObservatoryParallaxCoefficients attribute)</a>
@@ -1772,6 +1848,12 @@
         </ul></li>
         <li><a href="reference/api/adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.CollisionConditions.default">default() (adam_core.dynamics.impacts.CollisionConditions class method)</a>
 </li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations.delta_au">delta_au (adam_core.photometry.rotation.core.RotationPeriodObservations attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.delta_au">(adam_core.photometry.RotationPeriodObservations attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.missions.porkchop.html#adam_core.missions.porkchop.LambertSolutions.departure_body_id">departure_body_id (adam_core.missions.porkchop.LambertSolutions attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.missions.porkchop.html#adam_core.missions.porkchop.LambertSolutions.departure_body_orbit">departure_body_orbit() (adam_core.missions.porkchop.LambertSolutions method)</a>
@@ -1788,12 +1870,12 @@
 </li>
         <li><a href="reference/api/adam_core.missions.porkchop.html#adam_core.missions.porkchop.LambertSolutions.departure_body_z">departure_body_z (adam_core.missions.porkchop.LambertSolutions attribute)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.missions.porkchop.html#adam_core.missions.porkchop.departure_spherical_coordinates">departure_spherical_coordinates() (in module adam_core.missions.porkchop)</a>
 </li>
         <li><a href="reference/api/adam_core.missions.porkchop.html#adam_core.missions.porkchop.LambertSolutions.departure_time">departure_time (adam_core.missions.porkchop.LambertSolutions attribute)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.observations.html#adam_core.observations.Exposures.depth_5sigma">depth_5sigma (adam_core.observations.Exposures attribute)</a>
 
         <ul>
@@ -1839,11 +1921,7 @@
         <li><a href="reference/api/adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.drop_duplicate_orbits">drop_duplicate_orbits() (in module adam_core.orbit_determination.fitted_orbits)</a>
 </li>
         <li><a href="reference/api/adam_core.dynamics.chi.html#adam_core.dynamics.chi.ChiDiagnostics.dt">dt (adam_core.dynamics.chi.ChiDiagnostics attribute)</a>
-
-        <ul>
-          <li><a href="reference/api/adam_core.dynamics.propagation.html#adam_core.dynamics.propagation.ChiDiagnostics.dt">(adam_core.dynamics.propagation.ChiDiagnostics attribute)</a>
 </li>
-        </ul></li>
         <li><a href="reference/api/adam_core.observations.html#adam_core.observations.Exposures.duration">duration (adam_core.observations.Exposures attribute)</a>
 
         <ul>
@@ -1938,8 +2016,6 @@
           <li><a href="reference/api/adam_core.time.html#adam_core.time.Timestamp.equals_array">(adam_core.time.Timestamp method)</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.time.time.html#adam_core.time.time.Timestamp.equals_scalar">equals_scalar() (adam_core.time.time.Timestamp method)</a>
 
         <ul>
@@ -1952,10 +2028,36 @@
           <li><a href="reference/api/adam_core.photometry.absolute_magnitude.html#adam_core.photometry.absolute_magnitude.estimate_absolute_magnitude_v_from_detections">(in module adam_core.photometry.absolute_magnitude)</a>
 </li>
         </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.estimate_absolute_magnitude_v_from_detections_grouped">estimate_absolute_magnitude_v_from_detections_grouped() (in module adam_core.photometry)</a>
 
         <ul>
           <li><a href="reference/api/adam_core.photometry.absolute_magnitude.html#adam_core.photometry.absolute_magnitude.estimate_absolute_magnitude_v_from_detections_grouped">(in module adam_core.photometry.absolute_magnitude)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.estimate_rotation_period">estimate_rotation_period() (in module adam_core.photometry)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.rotation.estimator.html#adam_core.photometry.rotation.estimator.estimate_rotation_period">(in module adam_core.photometry.rotation.estimator)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.estimate_rotation_period_best_apparition">estimate_rotation_period_best_apparition() (in module adam_core.photometry)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.rotation.wrappers.html#adam_core.photometry.rotation.wrappers.estimate_rotation_period_best_apparition">(in module adam_core.photometry.rotation.wrappers)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.estimate_rotation_period_from_detections">estimate_rotation_period_from_detections() (in module adam_core.photometry)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.rotation.wrappers.html#adam_core.photometry.rotation.wrappers.estimate_rotation_period_from_detections">(in module adam_core.photometry.rotation.wrappers)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.estimate_rotation_period_from_detections_grouped">estimate_rotation_period_from_detections_grouped() (in module adam_core.photometry)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.rotation.wrappers.html#adam_core.photometry.rotation.wrappers.estimate_rotation_period_from_detections_grouped">(in module adam_core.photometry.rotation.wrappers)</a>
 </li>
         </ul></li>
         <li><a href="reference/api/adam_core.time.time.html#adam_core.time.time.Timestamp.et">et() (adam_core.time.time.Timestamp method)</a>
@@ -2037,6 +2139,10 @@
 </li>
           <li><a href="reference/api/adam_core.observations.html#adam_core.observations.SourceCatalog.filter">(adam_core.observations.SourceCatalog attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations.filter">(adam_core.photometry.rotation.core.RotationPeriodObservations attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.filter">(adam_core.photometry.RotationPeriodObservations attribute)</a>
+</li>
         </ul></li>
         <li><a href="reference/api/adam_core.photometry.bandpasses.html#adam_core.photometry.bandpasses.BandpassCurves.filter_id">filter_id (adam_core.photometry.bandpasses.BandpassCurves attribute)</a>
 
@@ -2053,11 +2159,7 @@
 </li>
         </ul></li>
         <li><a href="reference/api/adam_core.dynamics.chi.html#adam_core.dynamics.chi.ChiDiagnostics.finite">finite (adam_core.dynamics.chi.ChiDiagnostics attribute)</a>
-
-        <ul>
-          <li><a href="reference/api/adam_core.dynamics.propagation.html#adam_core.dynamics.propagation.ChiDiagnostics.finite">(adam_core.dynamics.propagation.ChiDiagnostics attribute)</a>
 </li>
-        </ul></li>
         <li><a href="reference/api/adam_core.orbits.spice_kernel.html#adam_core.orbits.spice_kernel.fit_chebyshev">fit_chebyshev() (in module adam_core.orbits.spice_kernel)</a>
 </li>
         <li><a href="reference/api/adam_core.orbit_determination.differential_correction.html#adam_core.orbit_determination.differential_correction.fit_least_squares">fit_least_squares() (in module adam_core.orbit_determination.differential_correction)</a>
@@ -2072,6 +2174,54 @@
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableOrbitalKepler.format">format (adam_core.orbits.openspace.renderable.RenderableOrbitalKepler attribute)</a>
 </li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.fourier_alternate_period_days">fourier_alternate_period_days (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_alternate_period_days">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.fourier_is_reliable">fourier_is_reliable (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_is_reliable">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.fourier_is_valid">fourier_is_valid (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_is_valid">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.fourier_order">fourier_order (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_order">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.fourier_period_days">fourier_period_days (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_period_days">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.fourier_phase_c1">fourier_phase_c1 (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_phase_c1">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.fourier_phase_c2">fourier_phase_c2 (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_phase_c2">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.fourier_sigma_threshold">fourier_sigma_threshold (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_sigma_threshold">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.time.time.html#adam_core.time.time.Timestamp.fractional_days">fractional_days() (adam_core.time.time.Timestamp method)</a>
 
         <ul>
@@ -2094,18 +2244,16 @@
           <li><a href="reference/api/adam_core.orbits.openspace.translation.html#adam_core.orbits.openspace.translation.SpiceTranslation.frame">(adam_core.orbits.openspace.translation.SpiceTranslation attribute)</a>
 </li>
         </ul></li>
-        <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.TelescopeObsContext.fRatio">fRatio (adam_core.observations.ades.TelescopeObsContext attribute)</a>
-</li>
-        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend.free">free() (adam_core.parallel.ParallelBackend method)</a>
-
-        <ul>
-          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend.free">(adam_core.parallel.RayBackend method)</a>
-</li>
-          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend.free">(adam_core.parallel.SequentialBackend method)</a>
-</li>
-        </ul></li>
     </ul></td>
     <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.TelescopeObsContext.fRatio">fRatio (adam_core.observations.ades.TelescopeObsContext attribute)</a>
+</li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.frequency_cycles_per_day">frequency_cycles_per_day (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.frequency_cycles_per_day">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.time.time.html#adam_core.time.time.Timestamp.from_astropy">from_astropy() (adam_core.time.time.Timestamp class method)</a>
 
         <ul>
@@ -2178,6 +2326,12 @@
         </ul></li>
         <li><a href="reference/api/adam_core.coordinates.origin.html#adam_core.coordinates.origin.Origin.from_OriginCodes">from_OriginCodes() (adam_core.coordinates.origin.Origin class method)</a>
 </li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations.from_point_source_observations">from_point_source_observations() (adam_core.photometry.rotation.core.RotationPeriodObservations class method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.from_point_source_observations">(adam_core.photometry.RotationPeriodObservations class method)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances.from_sigmas">from_sigmas() (adam_core.coordinates.covariances.CoordinateCovariances class method)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates.from_spherical">from_spherical() (adam_core.coordinates.cartesian.CartesianCoordinates class method)</a>
@@ -2236,20 +2390,8 @@
 </li>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutOrbit.geoEcc">geoEcc (adam_core.orbits.query.scout.ScoutOrbit attribute)</a>
 </li>
-        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend.get">get() (adam_core.parallel.ParallelBackend method)</a>
-
-        <ul>
-          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend.get">(adam_core.parallel.RayBackend method)</a>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.get_backend">get_backend() (in module adam_core.utils.spice_backend)</a>
 </li>
-          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend.get">(adam_core.parallel.SequentialBackend method)</a>
-</li>
-        </ul></li>
-        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.get_backend">get_backend() (in module adam_core.parallel)</a>
-
-        <ul>
-          <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.get_backend">(in module adam_core.utils.spice_backend)</a>
-</li>
-        </ul></li>
         <li><a href="reference/api/adam_core.photometry.bandpasses.html#adam_core.photometry.bandpasses.get_integrals">get_integrals() (in module adam_core.photometry.bandpasses)</a>
 
         <ul>
@@ -2258,8 +2400,6 @@
         </ul></li>
         <li><a href="reference/api/adam_core.utils.plots.logos.html#adam_core.utils.plots.logos.get_logo_base64">get_logo_base64() (in module adam_core.utils.plots.logos)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.observers.state.html#adam_core.observers.state.get_mpc_observer_state">get_mpc_observer_state() (in module adam_core.observers.state)</a>
 </li>
         <li><a href="reference/api/adam_core.observers.html#adam_core.observers.get_observer_state">get_observer_state() (in module adam_core.observers)</a>
@@ -2268,6 +2408,8 @@
           <li><a href="reference/api/adam_core.observers.state.html#adam_core.observers.state.get_observer_state">(in module adam_core.observers.state)</a>
 </li>
         </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.utils.html#adam_core.utils.get_perturber_state">get_perturber_state() (in module adam_core.utils)</a>
 
         <ul>
@@ -2316,6 +2458,12 @@
           <li><a href="reference/api/adam_core.photometry.absolute_magnitude.html#adam_core.photometry.absolute_magnitude.GroupedPhysicalParameters">(class in adam_core.photometry.absolute_magnitude)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.GroupedRotationPeriodResults">GroupedRotationPeriodResults (class in adam_core.photometry)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.GroupedRotationPeriodResults">(class in adam_core.photometry.rotation.core)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.orbits.openspace.assets.html#adam_core.orbits.openspace.assets.Asset.gui">gui (adam_core.orbits.openspace.assets.Asset attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.assets.html#adam_core.orbits.openspace.assets.Gui">Gui (class in adam_core.orbits.openspace.assets)</a>
@@ -2340,9 +2488,13 @@
 </li>
         <li><a href="reference/api/adam_core.orbits.physical_parameters.html#adam_core.orbits.physical_parameters.PhysicalParameters.H_v">H_v (adam_core.orbits.physical_parameters.PhysicalParameters attribute)</a>
 </li>
+        <li><a href="reference/api/adam_core.orbits.physical_parameters.html#adam_core.orbits.physical_parameters.PhysicalParameters.H_v_sigma">H_v_sigma (adam_core.orbits.physical_parameters.PhysicalParameters attribute)</a>
+</li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.harmonic_adjusted_error_pct">harmonic_adjusted_error_pct() (in module adam_core.photometry.rotation.core)</a>
+</li>
     </ul></td>
     <td style="width: 33%; vertical-align: top;"><ul>
-        <li><a href="reference/api/adam_core.orbits.physical_parameters.html#adam_core.orbits.physical_parameters.PhysicalParameters.H_v_sigma">H_v_sigma (adam_core.orbits.physical_parameters.PhysicalParameters attribute)</a>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.HARMONIC_FACTORS">HARMONIC_FACTORS (in module adam_core.photometry.rotation.core)</a>
 </li>
         <li><a href="reference/api/adam_core.observations.detections.html#adam_core.observations.detections.PointSourceDetections.healpixels">healpixels() (adam_core.observations.detections.PointSourceDetections method)</a>
 
@@ -2352,6 +2504,12 @@
           <li><a href="reference/api/adam_core.observations.source_catalog.html#adam_core.observations.source_catalog.SourceCatalog.healpixels">(adam_core.observations.source_catalog.SourceCatalog method)</a>
 </li>
           <li><a href="reference/api/adam_core.observations.html#adam_core.observations.SourceCatalog.healpixels">(adam_core.observations.SourceCatalog method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.hg_phase_correction">hg_phase_correction() (in module adam_core.photometry)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.magnitude_common.html#adam_core.photometry.magnitude_common.hg_phase_correction">(in module adam_core.photometry.magnitude_common)</a>
 </li>
         </ul></li>
     </ul></td>
@@ -2400,17 +2558,15 @@
 </li>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutOrbit.inc">inc (adam_core.orbits.query.scout.ScoutOrbit attribute)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbits.openspace.translation.html#adam_core.orbits.openspace.translation.KeplerTranslation.inclination">inclination (adam_core.orbits.openspace.translation.KeplerTranslation attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.variants.html#adam_core.coordinates.variants.VariantCoordinatesTable.index">index (adam_core.coordinates.variants.VariantCoordinatesTable property)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbit_determination.orbit_fitter.html#adam_core.orbit_determination.orbit_fitter.OrbitFitter.initial_fit">initial_fit() (adam_core.orbit_determination.orbit_fitter.OrbitFitter method)</a>
 </li>
         <li><a href="reference/api/adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.initial_orbit_determination">initial_orbit_determination() (in module adam_core.orbit_determination.iod)</a>
-</li>
-        <li><a href="reference/api/adam_core.ray_cluster.html#adam_core.ray_cluster.initialize_use_ray">initialize_use_ray() (in module adam_core.ray_cluster)</a>
 </li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.SubmitterObsContext.institution">institution (adam_core.observations.ades.SubmitterObsContext attribute)</a>
 </li>
@@ -2418,6 +2574,12 @@
 
         <ul>
           <li><a href="reference/api/adam_core.photometry.bandpasses.tables.html#adam_core.photometry.bandpasses.tables.BandpassCurves.instrument">(adam_core.photometry.bandpasses.tables.BandpassCurves attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.insufficiency_reasons">insufficiency_reasons (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.insufficiency_reasons">(adam_core.photometry.RotationPeriodResult attribute)</a>
 </li>
         </ul></li>
         <li><a href="reference/api/adam_core.photometry.bandpasses.tables.html#adam_core.photometry.bandpasses.tables.TemplateBandpassIntegrals.integral_photon">integral_photon (adam_core.photometry.bandpasses.tables.TemplateBandpassIntegrals attribute)</a>
@@ -2428,12 +2590,24 @@
         </ul></li>
         <li><a href="reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances.is_all_nan">is_all_nan() (adam_core.coordinates.covariances.CoordinateCovariances method)</a>
 </li>
-        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend.is_ref">is_ref() (adam_core.parallel.ParallelBackend method)</a>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.is_period_doubled">is_period_doubled (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
 
         <ul>
-          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend.is_ref">(adam_core.parallel.RayBackend method)</a>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.is_period_doubled">(adam_core.photometry.RotationPeriodResult attribute)</a>
 </li>
-          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend.is_ref">(adam_core.parallel.SequentialBackend method)</a>
+        </ul></li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.is_registered">is_registered() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.is_reliable">is_reliable (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.is_reliable">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.is_valid">is_valid (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.is_valid">(adam_core.photometry.RotationPeriodResult attribute)</a>
 </li>
         </ul></li>
         <li><a href="reference/api/adam_core.observers.html#adam_core.observers.Observers.iterate_codes">iterate_codes() (adam_core.observers.Observers method)</a>
@@ -2527,6 +2701,8 @@
         <ul>
           <li><a href="reference/api/adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris.light_time">(adam_core.orbits.ephemeris.Ephemeris attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.light_time">(adam_core.orbits.VariantEphemeris attribute)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.light_time">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
 </li>
         </ul></li>
@@ -2568,8 +2744,12 @@
         </ul></li>
     </ul></td>
     <td style="width: 33%; vertical-align: top;"><ul>
-        <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.link_to_ephemeris">link_to_ephemeris() (adam_core.orbits.variants.VariantEphemeris method)</a>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.link_to_ephemeris">link_to_ephemeris() (adam_core.orbits.VariantEphemeris method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.link_to_ephemeris">(adam_core.orbits.variants.VariantEphemeris method)</a>
 </li>
+        </ul></li>
         <li><a href="reference/api/adam_core.observations.detections.html#adam_core.observations.detections.PointSourceDetections.link_to_exposures">link_to_exposures() (adam_core.observations.detections.PointSourceDetections method)</a>
 
         <ul>
@@ -2602,6 +2782,8 @@
           <li><a href="reference/api/adam_core.photometry.bandpasses.api.html#adam_core.photometry.bandpasses.api.load_bandpass_curves">(in module adam_core.photometry.bandpasses.api)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.load_mpc_obscodes">load_mpc_obscodes() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
         <li><a href="reference/api/adam_core.photometry.bandpasses.html#adam_core.photometry.bandpasses.load_observatory_band_map">load_observatory_band_map() (in module adam_core.photometry.bandpasses)</a>
 
         <ul>
@@ -2655,6 +2837,10 @@
 </li>
           <li><a href="reference/api/adam_core.orbit_determination.evaluate.html#adam_core.orbit_determination.evaluate.OrbitDeterminationPhotometry.mag">(adam_core.orbit_determination.evaluate.OrbitDeterminationPhotometry attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations.mag">(adam_core.photometry.rotation.core.RotationPeriodObservations attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.mag">(adam_core.photometry.RotationPeriodObservations attribute)</a>
+</li>
         </ul></li>
         <li><a href="reference/api/adam_core.observations.detections.html#adam_core.observations.detections.PointSourceDetections.mag_sigma">mag_sigma (adam_core.observations.detections.PointSourceDetections attribute)</a>
 
@@ -2668,6 +2854,10 @@
           <li><a href="reference/api/adam_core.observations.source_catalog.html#adam_core.observations.source_catalog.SourceCatalog.mag_sigma">(adam_core.observations.source_catalog.SourceCatalog attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.observations.html#adam_core.observations.SourceCatalog.mag_sigma">(adam_core.observations.SourceCatalog attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations.mag_sigma">(adam_core.photometry.rotation.core.RotationPeriodObservations attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.mag_sigma">(adam_core.photometry.RotationPeriodObservations attribute)</a>
 </li>
         </ul></li>
         <li><a href="reference/api/adam_core.utils.helpers.html#adam_core.utils.helpers.make_observations">make_observations() (in module adam_core.utils.helpers)</a>
@@ -2694,14 +2884,6 @@
 
         <ul>
           <li><a href="reference/api/adam_core.photometry.bandpasses.api.html#adam_core.photometry.bandpasses.api.map_to_canonical_filter_bands">(in module adam_core.photometry.bandpasses.api)</a>
-</li>
-        </ul></li>
-        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend.map_unordered">map_unordered() (adam_core.parallel.ParallelBackend method)</a>
-
-        <ul>
-          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend.map_unordered">(adam_core.parallel.RayBackend method)</a>
-</li>
-          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend.map_unordered">(adam_core.parallel.SequentialBackend method)</a>
 </li>
         </ul></li>
         <li><a href="reference/api/adam_core.coordinates.origin.html#adam_core.coordinates.origin.OriginCodes.MARS">MARS (adam_core.coordinates.origin.OriginCodes attribute)</a>
@@ -2846,6 +3028,8 @@
 </li>
           <li><a href="reference/api/adam_core.observations.ades.html#module-adam_core.observations.ades">adam_core.observations.ades</a>
 </li>
+          <li><a href="reference/api/adam_core.observations.arrow_bridge.html#module-adam_core.observations.arrow_bridge">adam_core.observations.arrow_bridge</a>
+</li>
           <li><a href="reference/api/adam_core.observations.associations.html#module-adam_core.observations.associations">adam_core.observations.associations</a>
 </li>
           <li><a href="reference/api/adam_core.observations.detections.html#module-adam_core.observations.detections">adam_core.observations.detections</a>
@@ -2890,6 +3074,8 @@
 </li>
           <li><a href="reference/api/adam_core.orbits.html#module-adam_core.orbits">adam_core.orbits</a>
 </li>
+          <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#module-adam_core.orbits.arrow_bridge">adam_core.orbits.arrow_bridge</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.classification.html#module-adam_core.orbits.classification">adam_core.orbits.classification</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.ephemeris.html#module-adam_core.orbits.ephemeris">adam_core.orbits.ephemeris</a>
@@ -2926,8 +3112,6 @@
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#module-adam_core.orbits.variants">adam_core.orbits.variants</a>
 </li>
-          <li><a href="reference/api/adam_core.parallel.html#module-adam_core.parallel">adam_core.parallel</a>
-</li>
           <li><a href="reference/api/adam_core.photometry.html#module-adam_core.photometry">adam_core.photometry</a>
 </li>
           <li><a href="reference/api/adam_core.photometry.absolute_magnitude.html#module-adam_core.photometry.absolute_magnitude">adam_core.photometry.absolute_magnitude</a>
@@ -2942,9 +3126,19 @@
 </li>
           <li><a href="reference/api/adam_core.photometry.bandpasses.vendor.html#module-adam_core.photometry.bandpasses.vendor">adam_core.photometry.bandpasses.vendor</a>
 </li>
+          <li><a href="reference/api/adam_core.photometry.lightcurve.html#module-adam_core.photometry.lightcurve">adam_core.photometry.lightcurve</a>
+</li>
           <li><a href="reference/api/adam_core.photometry.magnitude.html#module-adam_core.photometry.magnitude">adam_core.photometry.magnitude</a>
 </li>
           <li><a href="reference/api/adam_core.photometry.magnitude_common.html#module-adam_core.photometry.magnitude_common">adam_core.photometry.magnitude_common</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.rotation.html#module-adam_core.photometry.rotation">adam_core.photometry.rotation</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#module-adam_core.photometry.rotation.core">adam_core.photometry.rotation.core</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.rotation.estimator.html#module-adam_core.photometry.rotation.estimator">adam_core.photometry.rotation.estimator</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.rotation.wrappers.html#module-adam_core.photometry.rotation.wrappers">adam_core.photometry.rotation.wrappers</a>
 </li>
           <li><a href="reference/api/adam_core.propagator.html#module-adam_core.propagator">adam_core.propagator</a>
 </li>
@@ -2954,8 +3148,6 @@
 </li>
           <li><a href="reference/api/adam_core.propagator.utils.html#module-adam_core.propagator.utils">adam_core.propagator.utils</a>
 </li>
-          <li><a href="reference/api/adam_core.ray_cluster.html#module-adam_core.ray_cluster">adam_core.ray_cluster</a>
-</li>
           <li><a href="reference/api/adam_core.time.html#module-adam_core.time">adam_core.time</a>
 </li>
           <li><a href="reference/api/adam_core.time.time.html#module-adam_core.time.time">adam_core.time.time</a>
@@ -2964,17 +3156,15 @@
 </li>
           <li><a href="reference/api/adam_core.utils.bounded_lru.html#module-adam_core.utils.bounded_lru">adam_core.utils.bounded_lru</a>
 </li>
-          <li><a href="reference/api/adam_core.utils.chunking.html#module-adam_core.utils.chunking">adam_core.utils.chunking</a>
-</li>
           <li><a href="reference/api/adam_core.utils.helpers.html#module-adam_core.utils.helpers">adam_core.utils.helpers</a>
 </li>
           <li><a href="reference/api/adam_core.utils.helpers.data.html#module-adam_core.utils.helpers.data">adam_core.utils.helpers.data</a>
 </li>
-          <li><a href="reference/api/adam_core.utils.helpers.data.get_test_data.html#module-adam_core.utils.helpers.data.get_test_data">adam_core.utils.helpers.data.get_test_data</a>
-</li>
           <li><a href="reference/api/adam_core.utils.helpers.observations.html#module-adam_core.utils.helpers.observations">adam_core.utils.helpers.observations</a>
 </li>
           <li><a href="reference/api/adam_core.utils.helpers.orbits.html#module-adam_core.utils.helpers.orbits">adam_core.utils.helpers.orbits</a>
+</li>
+          <li><a href="reference/api/adam_core.utils.http.html#module-adam_core.utils.http">adam_core.utils.http</a>
 </li>
           <li><a href="reference/api/adam_core.utils.iter.html#module-adam_core.utils.iter">adam_core.utils.iter</a>
 </li>
@@ -3007,14 +3197,12 @@
           <li><a href="reference/api/adam_core.coordinates.origin.html#adam_core.coordinates.origin.OriginGravitationalParameters.MOON">(adam_core.coordinates.origin.OriginGravitationalParameters attribute)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.mpc_obscodes_loaded">mpc_obscodes_loaded() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ObservatoryObsContext.mpcCode">mpcCode (adam_core.observations.ades.ObservatoryObsContext attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.dynamics.chi.html#adam_core.dynamics.chi.ChiDiagnostics.mu">mu (adam_core.dynamics.chi.ChiDiagnostics attribute)</a>
-
-        <ul>
-          <li><a href="reference/api/adam_core.dynamics.propagation.html#adam_core.dynamics.propagation.ChiDiagnostics.mu">(adam_core.dynamics.propagation.ChiDiagnostics attribute)</a>
 </li>
-        </ul></li>
         <li><a href="reference/api/adam_core.coordinates.origin.html#adam_core.coordinates.origin.Origin.mu">mu() (adam_core.coordinates.origin.Origin method)</a>
 </li>
     </ul></td>
@@ -3031,12 +3219,56 @@
           <li><a href="reference/api/adam_core.coordinates.keplerian.html#adam_core.coordinates.keplerian.KeplerianCoordinates.n">(adam_core.coordinates.keplerian.KeplerianCoordinates property)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.n_clipped">n_clipped (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_clipped">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.n_filters">n_filters (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_filters">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.photometry.absolute_magnitude.html#adam_core.photometry.absolute_magnitude.GroupedPhysicalParameters.n_fit_detections">n_fit_detections (adam_core.photometry.absolute_magnitude.GroupedPhysicalParameters attribute)</a>
 
         <ul>
           <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.GroupedPhysicalParameters.n_fit_detections">(adam_core.photometry.GroupedPhysicalParameters attribute)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.n_fit_observations">n_fit_observations (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_fit_observations">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.n_observations">n_observations (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_observations">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.n_rotations_spanned">n_rotations_spanned (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_rotations_spanned">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.n_sessions">n_sessions (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_sessions">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.n_significant_aliases">n_significant_aliases (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_significant_aliases">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ObservatoryObsContext.name">name (adam_core.observations.ades.ObservatoryObsContext attribute)</a>
 
         <ul>
@@ -3048,21 +3280,15 @@
 </li>
           <li><a href="reference/api/adam_core.orbits.openspace.assets.html#adam_core.orbits.openspace.assets.Gui.name">(adam_core.orbits.openspace.assets.Gui attribute)</a>
 </li>
-          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend.name">(adam_core.parallel.ParallelBackend attribute)</a>
-</li>
-          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend.name">(adam_core.parallel.RayBackend attribute)</a>
-</li>
-          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend.name">(adam_core.parallel.SequentialBackend attribute)</a>
-</li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.time.time.html#adam_core.time.time.Timestamp.nanos">nanos (adam_core.time.time.Timestamp attribute)</a>
 
         <ul>
           <li><a href="reference/api/adam_core.time.html#adam_core.time.Timestamp.nanos">(adam_core.time.Timestamp attribute)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.near_day_alias">near_day_alias() (in module adam_core.photometry.rotation.core)</a>
+</li>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutObjectSummary.neo1kmScore">neo1kmScore (adam_core.orbits.query.scout.ScoutObjectSummary attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutObjectSummary.neoScore">neoScore (adam_core.orbits.query.scout.ScoutObjectSummary attribute)</a>
@@ -3112,6 +3338,8 @@
 </li>
           <li><a href="reference/api/adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.object_id">(adam_core.orbits.orbits.Orbits attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.object_id">(adam_core.orbits.VariantEphemeris attribute)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.object_id">(adam_core.orbits.VariantOrbits attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.object_id">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
@@ -3122,6 +3350,10 @@
 </li>
           <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.GroupedPhysicalParameters.object_id">(adam_core.photometry.GroupedPhysicalParameters attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.GroupedRotationPeriodResults.object_id">(adam_core.photometry.GroupedRotationPeriodResults attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.GroupedRotationPeriodResults.object_id">(adam_core.photometry.rotation.core.GroupedRotationPeriodResults attribute)</a>
+</li>
         </ul></li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.SoftwareObsContext.objectDetection">objectDetection (adam_core.observations.ades.SoftwareObsContext attribute)</a>
 </li>
@@ -3130,6 +3362,10 @@
         <li><a href="reference/api/adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers.obs_id">obs_id (adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ObsContext">ObsContext (class in adam_core.observations.ades)</a>
+</li>
+        <li><a href="reference/api/adam_core.observations.arrow_bridge.html#adam_core.observations.arrow_bridge.observations_from_ipc">observations_from_ipc() (in module adam_core.observations.arrow_bridge)</a>
+</li>
+        <li><a href="reference/api/adam_core.observations.arrow_bridge.html#adam_core.observations.arrow_bridge.observations_to_ipc">observations_to_ipc() (in module adam_core.observations.arrow_bridge)</a>
 </li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ObsContext.observatory">observatory (adam_core.observations.ades.ObsContext attribute)</a>
 </li>
@@ -3159,6 +3395,12 @@
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.translation.html#adam_core.orbits.openspace.translation.SpiceTranslation.observer">observer (adam_core.orbits.openspace.translation.SpiceTranslation attribute)</a>
 </li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.observer_states_from_codes">observer_states_from_codes() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.observer_states_from_codes_arrow">observer_states_from_codes_arrow() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.observer_states_from_exposures_arrow">observer_states_from_exposures_arrow() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ObsContext.observers">observers (adam_core.observations.ades.ObsContext attribute)</a>
 
         <ul>
@@ -3181,10 +3423,18 @@
           <li><a href="reference/api/adam_core.observations.html#adam_core.observations.SourceCatalog.observers">(adam_core.observations.SourceCatalog method)</a>
 </li>
         </ul></li>
-        <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations.obsSubID">obsSubID (adam_core.observations.ades.ADESObservations attribute)</a>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.observers_from_ipc">observers_from_ipc() (in module adam_core.orbits.arrow_bridge)</a>
+</li>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.observers_to_ipc">observers_to_ipc() (in module adam_core.orbits.arrow_bridge)</a>
 </li>
     </ul></td>
     <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.observers_to_record_batch">observers_to_record_batch() (in module adam_core.orbits.arrow_bridge)</a>
+</li>
+        <li><a href="reference/api/adam_core.propagator.propagator.html#adam_core.propagator.propagator.ObserverType">ObserverType (in module adam_core.propagator.propagator)</a>
+</li>
+        <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations.obsSubID">obsSubID (adam_core.observations.ades.ADESObservations attribute)</a>
+</li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations.obsTime">obsTime (adam_core.observations.ades.ADESObservations attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutOrbit.om">om (adam_core.orbits.query.scout.ScoutOrbit attribute)</a>
@@ -3216,6 +3466,8 @@
 </li>
           <li><a href="reference/api/adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.orbit_id">(adam_core.orbits.orbits.Orbits attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.orbit_id">(adam_core.orbits.VariantEphemeris attribute)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.orbit_id">(adam_core.orbits.VariantOrbits attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.orbit_id">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
@@ -3239,6 +3491,14 @@
           <li><a href="reference/api/adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits">(class in adam_core.orbits.orbits)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.orbits_from_ipc">orbits_from_ipc() (in module adam_core.orbits.arrow_bridge)</a>
+</li>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.orbits_from_record_batch">orbits_from_record_batch() (in module adam_core.orbits.arrow_bridge)</a>
+</li>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.orbits_to_ipc">orbits_to_ipc() (in module adam_core.orbits.arrow_bridge)</a>
+</li>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.orbits_to_record_batch">orbits_to_record_batch() (in module adam_core.orbits.arrow_bridge)</a>
+</li>
         <li><a href="reference/api/adam_core.orbits.openspace.assets.html#adam_core.orbits.openspace.assets.orbits_to_sbdb_file">orbits_to_sbdb_file() (in module adam_core.orbits.openspace.assets)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.spice_kernel.html#adam_core.orbits.spice_kernel.orbits_to_spk">orbits_to_spk() (in module adam_core.orbits.spice_kernel)</a>
@@ -3307,10 +3567,6 @@
 </li>
         <li><a href="reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_survey_designation">pack_survey_designation() (in module adam_core.utils.mpc)</a>
 </li>
-        <li><a href="reference/api/adam_core.utils.chunking.html#adam_core.utils.chunking.pad_to_fixed_size">pad_to_fixed_size() (in module adam_core.utils.chunking)</a>
-</li>
-        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend">ParallelBackend (class in adam_core.parallel)</a>
-</li>
         <li><a href="reference/api/adam_core.orbits.openspace.assets.html#adam_core.orbits.openspace.assets.Asset.parent">parent (adam_core.orbits.openspace.assets.Asset attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.assets.html#adam_core.orbits.openspace.assets.Gui.path">path (adam_core.orbits.openspace.assets.Gui attribute)</a>
@@ -3327,14 +3583,58 @@
           <li><a href="reference/api/adam_core.orbits.openspace.translation.html#adam_core.orbits.openspace.translation.KeplerTranslation.period">(adam_core.orbits.openspace.translation.KeplerTranslation attribute)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.period_days">period_days (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.period_days">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.period_hours">period_hours (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.period_hours">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.period_lower_days">period_lower_days (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.period_lower_days">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.period_upper_days">period_upper_days (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.period_upper_days">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.period_verdict">period_verdict (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.period_verdict">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations.permID">permID (adam_core.observations.ades.ADESObservations attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.dynamics.moid.html#adam_core.dynamics.moid.PerturberMOIDs.perturber">perturber (adam_core.dynamics.moid.PerturberMOIDs attribute)</a>
+</li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.perturber_states_arrow">perturber_states_arrow() (adam_core.utils.spice_backend.RustBackend method)</a>
 </li>
         <li><a href="reference/api/adam_core.dynamics.moid.html#adam_core.dynamics.moid.PerturberMOIDs">PerturberMOIDs (class in adam_core.dynamics.moid)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutObjectSummary.phaScore">phaScore (adam_core.orbits.query.scout.ScoutObjectSummary attribute)</a>
 </li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations.phase_angle_deg">phase_angle_deg (adam_core.photometry.rotation.core.RotationPeriodObservations attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.phase_angle_deg">(adam_core.photometry.RotationPeriodObservations attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.phase_coverage_fraction">phase_coverage_fraction (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.phase_coverage_fraction">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations.photCat">photCat (adam_core.observations.ades.ADESObservations attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.SoftwareObsContext.photometry">photometry (adam_core.observations.ades.SoftwareObsContext attribute)</a>
@@ -3355,6 +3655,8 @@
           <li><a href="reference/api/adam_core.observations.html#adam_core.observations.SourceCatalog.photometry">(adam_core.observations.SourceCatalog method)</a>
 </li>
         </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Orbits.physical_parameters">physical_parameters (adam_core.orbits.Orbits attribute)</a>
 
         <ul>
@@ -3371,8 +3673,6 @@
         </ul></li>
         <li><a href="reference/api/adam_core.orbits.physical_parameters.html#adam_core.orbits.physical_parameters.PhysicalParameters">PhysicalParameters (class in adam_core.orbits.physical_parameters)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.TelescopeObsContext.pixelSize">pixelSize (adam_core.observations.ades.TelescopeObsContext attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.dynamics.plots.html#adam_core.dynamics.plots.plot_impact_simulation">plot_impact_simulation() (in module adam_core.dynamics.plots)</a>
@@ -3420,6 +3720,8 @@
         <ul>
           <li><a href="reference/api/adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris.predicted_magnitude_v">(adam_core.orbits.ephemeris.Ephemeris attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.predicted_magnitude_v">(adam_core.orbits.VariantEphemeris attribute)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.predicted_magnitude_v">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
 </li>
         </ul></li>
@@ -3437,8 +3739,12 @@
         </ul></li>
         <li><a href="reference/api/adam_core.coordinates.residuals.html#adam_core.coordinates.residuals.Residuals.probability">probability (adam_core.coordinates.residuals.Residuals attribute)</a>
 </li>
-        <li><a href="reference/api/adam_core.utils.chunking.html#adam_core.utils.chunking.process_in_chunks">process_in_chunks() (in module adam_core.utils.chunking)</a>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.profile">profile (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.profile">(adam_core.photometry.RotationPeriodResult attribute)</a>
 </li>
+        </ul></li>
         <li><a href="reference/api/adam_core.dynamics.propagation.html#adam_core.dynamics.propagation.propagate_2body">propagate_2body() (in module adam_core.dynamics.propagation)</a>
 </li>
         <li><a href="reference/api/adam_core.propagator.html#adam_core.propagator.Propagator.propagate_orbits">propagate_orbits() (adam_core.propagator.Propagator method)</a>
@@ -3447,8 +3753,6 @@
           <li><a href="reference/api/adam_core.propagator.propagator.html#adam_core.propagator.propagator.Propagator.propagate_orbits">(adam_core.propagator.propagator.Propagator method)</a>
 </li>
         </ul></li>
-        <li><a href="reference/api/adam_core.propagator.propagator.html#adam_core.propagator.propagator.propagation_worker">propagation_worker() (in module adam_core.propagator.propagator)</a>
-</li>
         <li><a href="reference/api/adam_core.propagator.html#adam_core.propagator.Propagator">Propagator (class in adam_core.propagator)</a>
 
         <ul>
@@ -3457,14 +3761,6 @@
         </ul></li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations.provID">provID (adam_core.observations.ades.ADESObservations attribute)</a>
 </li>
-        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.ParallelBackend.put">put() (adam_core.parallel.ParallelBackend method)</a>
-
-        <ul>
-          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend.put">(adam_core.parallel.RayBackend method)</a>
-</li>
-          <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend.put">(adam_core.parallel.SequentialBackend method)</a>
-</li>
-        </ul></li>
         <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.pxform_batch">pxform_batch() (adam_core.utils.spice_backend.RustBackend method)</a>
 </li>
     </ul></td>
@@ -3511,6 +3807,12 @@
     <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates.r">r (adam_core.coordinates.cartesian.CartesianCoordinates property)</a>
 </li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations.r_au">r_au (adam_core.photometry.rotation.core.RotationPeriodObservations attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.r_au">(adam_core.photometry.RotationPeriodObservations attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates.r_hat">r_hat (adam_core.coordinates.cartesian.CartesianCoordinates property)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates.r_km">r_km (adam_core.coordinates.cartesian.CartesianCoordinates property)</a>
@@ -3518,11 +3820,7 @@
         <li><a href="reference/api/adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates.r_mag">r_mag (adam_core.coordinates.cartesian.CartesianCoordinates property)</a>
 </li>
         <li><a href="reference/api/adam_core.dynamics.chi.html#adam_core.dynamics.chi.ChiDiagnostics.r_norm">r_norm (adam_core.dynamics.chi.ChiDiagnostics attribute)</a>
-
-        <ul>
-          <li><a href="reference/api/adam_core.dynamics.propagation.html#adam_core.dynamics.propagation.ChiDiagnostics.r_norm">(adam_core.dynamics.propagation.ChiDiagnostics attribute)</a>
 </li>
-        </ul></li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations.ra">ra (adam_core.observations.ades.ADESObservations attribute)</a>
 
         <ul>
@@ -3563,12 +3861,16 @@
 </li>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutObjectSummary.rating">rating (adam_core.orbits.query.scout.ScoutObjectSummary attribute)</a>
 </li>
-        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.RayBackend">RayBackend (class in adam_core.parallel)</a>
-</li>
         <li><a href="reference/api/adam_core.dynamics.exceptions.html#adam_core.dynamics.exceptions.DynamicsNumericalError.reason">reason (adam_core.dynamics.exceptions.DynamicsNumericalError attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits.reduced_chi2">reduced_chi2 (adam_core.orbit_determination.fitted_orbits.FittedOrbits attribute)</a>
 </li>
+        <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.reduced_magnitude">reduced_magnitude() (in module adam_core.photometry)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.lightcurve.html#adam_core.photometry.lightcurve.reduced_magnitude">(in module adam_core.photometry.lightcurve)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.photometry.bandpasses.html#adam_core.photometry.bandpasses.AsteroidTemplates.reflectance">reflectance (adam_core.photometry.bandpasses.AsteroidTemplates attribute)</a>
 
         <ul>
@@ -3583,6 +3885,22 @@
         </ul></li>
         <li><a href="reference/api/adam_core.utils.spice.html#adam_core.utils.spice.register_spice_kernel">register_spice_kernel() (in module adam_core.utils.spice)</a>
 </li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.registered_kernels">registered_kernels() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.relative_error_pct">relative_error_pct() (in module adam_core.photometry.rotation.core)</a>
+</li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.relative_period_uncertainty">relative_period_uncertainty (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.relative_period_uncertainty">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.reliability_code">reliability_code (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.reliability_code">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations.remarks">remarks (adam_core.observations.ades.ADESObservations attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbit_determination.outliers.html#adam_core.orbit_determination.outliers.remove_lowest_probability_observation">remove_lowest_probability_observation() (in module adam_core.orbit_determination.outliers)</a>
@@ -3595,12 +3913,12 @@
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.Renderable">Renderable (class in adam_core.orbits.openspace.renderable)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableOrbitalKepler">RenderableOrbitalKepler (class in adam_core.orbits.openspace.renderable)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableOrbitalKeplerFormat">RenderableOrbitalKeplerFormat (class in adam_core.orbits.openspace.renderable)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableOrbitalKeplerRendering">RenderableOrbitalKeplerRendering (class in adam_core.orbits.openspace.renderable)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableTrailOrbit">RenderableTrailOrbit (class in adam_core.orbits.openspace.renderable)</a>
@@ -3639,16 +3957,26 @@
         </ul></li>
         <li><a href="reference/api/adam_core.orbit_determination.differential_correction.html#adam_core.orbit_determination.differential_correction.residual_function">residual_function() (in module adam_core.orbit_determination.differential_correction)</a>
 </li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.residual_sigma_mag">residual_sigma_mag (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.residual_sigma_mag">(adam_core.photometry.RotationPeriodResult attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers.residuals">residuals (adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.residuals.html#adam_core.coordinates.residuals.Residuals">Residuals (class in adam_core.coordinates.residuals)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableTrailOrbit.resolution">resolution (adam_core.orbits.openspace.renderable.RenderableTrailOrbit attribute)</a>
 </li>
-        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.resolve_max_processes">resolve_max_processes() (in module adam_core.parallel)</a>
-</li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.Resource">Resource (class in adam_core.orbits.openspace.renderable)</a>
 </li>
+        <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.GroupedRotationPeriodResults.result">result (adam_core.photometry.GroupedRotationPeriodResults attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.GroupedRotationPeriodResults.result">(adam_core.photometry.rotation.core.GroupedRotationPeriodResults attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.coordinates.spherical.html#adam_core.coordinates.spherical.SphericalCoordinates.rho">rho (adam_core.coordinates.spherical.SphericalCoordinates attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates.ric3_matrix">ric3_matrix (adam_core.coordinates.cartesian.CartesianCoordinates property)</a>
@@ -3670,6 +3998,26 @@
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations.rmsTime">rmsTime (adam_core.observations.ades.ADESObservations attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates.rotate">rotate() (adam_core.coordinates.cartesian.CartesianCoordinates method)</a>
+</li>
+        <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations">RotationPeriodObservations (class in adam_core.photometry)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations">(class in adam_core.photometry.rotation.core)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult">RotationPeriodResult (class in adam_core.photometry)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult">(class in adam_core.photometry.rotation.core)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.observations.arrow_bridge.html#adam_core.observations.arrow_bridge.round_trip_observations">round_trip_observations() (in module adam_core.observations.arrow_bridge)</a>
+</li>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.round_trip_observers">round_trip_observers() (in module adam_core.orbits.arrow_bridge)</a>
+</li>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.round_trip_orbits">round_trip_orbits() (in module adam_core.orbits.arrow_bridge)</a>
+</li>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.round_trip_orbits_zero_copy">round_trip_orbits_zero_copy() (in module adam_core.orbits.arrow_bridge)</a>
 </li>
         <li><a href="reference/api/adam_core.time.time.html#adam_core.time.time.Timestamp.rounded">rounded() (adam_core.time.time.Timestamp method)</a>
 
@@ -3706,7 +4054,11 @@
 </li>
         </ul></li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableOrbitalKeplerFormat.SBDB">SBDB (adam_core.orbits.openspace.renderable.RenderableOrbitalKeplerFormat attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.query.sbdb.html#adam_core.orbits.query.sbdb.SBDB">(in module adam_core.orbits.query.sbdb)</a>
 </li>
+        </ul></li>
         <li><a href="reference/api/adam_core.time.time.html#adam_core.time.time.Timestamp.scale">scale (adam_core.time.time.Timestamp attribute)</a>
 
         <ul>
@@ -3790,6 +4142,8 @@
 </li>
           <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutOrbit.schema">(adam_core.orbits.query.scout.ScoutOrbit attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.schema">(adam_core.orbits.VariantEphemeris attribute)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.schema">(adam_core.orbits.VariantOrbits attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.schema">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
@@ -3815,6 +4169,18 @@
           <li><a href="reference/api/adam_core.photometry.bandpasses.html#adam_core.photometry.bandpasses.TemplateBandpassIntegrals.schema">(adam_core.photometry.bandpasses.TemplateBandpassIntegrals attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.GroupedPhysicalParameters.schema">(adam_core.photometry.GroupedPhysicalParameters attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.GroupedRotationPeriodResults.schema">(adam_core.photometry.GroupedRotationPeriodResults attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.GroupedRotationPeriodResults.schema">(adam_core.photometry.rotation.core.GroupedRotationPeriodResults attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations.schema">(adam_core.photometry.rotation.core.RotationPeriodObservations attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.schema">(adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.schema">(adam_core.photometry.RotationPeriodObservations attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.schema">(adam_core.photometry.RotationPeriodResult attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.time.time.html#adam_core.time.time.Timestamp.schema">(adam_core.time.time.Timestamp attribute)</a>
 </li>
@@ -3845,7 +4211,13 @@
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.translation.html#adam_core.orbits.openspace.translation.KeplerTranslation.semi_major_axis">semi_major_axis (adam_core.orbits.openspace.translation.KeplerTranslation attribute)</a>
 </li>
-        <li><a href="reference/api/adam_core.parallel.html#adam_core.parallel.SequentialBackend">SequentialBackend (class in adam_core.parallel)</a>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations.session_id">session_id (adam_core.photometry.rotation.core.RotationPeriodObservations attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.session_id">(adam_core.photometry.RotationPeriodObservations attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.utils.spice.html#adam_core.utils.spice.setup_mpc_obscodes">setup_mpc_obscodes() (in module adam_core.utils.spice)</a>
 </li>
         <li><a href="reference/api/adam_core.utils.html#adam_core.utils.setup_SPICE">setup_SPICE() (in module adam_core.utils)</a>
 
@@ -3855,6 +4227,8 @@
         </ul></li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableTrailTrajectory.show_full_trail">show_full_trail (adam_core.orbits.openspace.renderable.RenderableTrailTrajectory attribute)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.coordinates.keplerian.html#adam_core.coordinates.keplerian.KeplerianCoordinates.sigma_a">sigma_a (adam_core.coordinates.keplerian.KeplerianCoordinates property)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.geodetics.html#adam_core.coordinates.geodetics.GeodeticCoordinates.sigma_alt">sigma_alt (adam_core.coordinates.geodetics.GeodeticCoordinates property)</a>
@@ -3865,8 +4239,6 @@
           <li><a href="reference/api/adam_core.coordinates.keplerian.html#adam_core.coordinates.keplerian.KeplerianCoordinates.sigma_ap">(adam_core.coordinates.keplerian.KeplerianCoordinates property)</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.coordinates.cometary.html#adam_core.coordinates.cometary.CometaryCoordinates.sigma_e">sigma_e (adam_core.coordinates.cometary.CometaryCoordinates property)</a>
 
         <ul>
@@ -3951,6 +4323,12 @@
         </ul></li>
         <li><a href="reference/api/adam_core.observers.observers.html#adam_core.observers.observers.ObservatoryParallaxCoefficients.sin_phi">sin_phi (adam_core.observers.observers.ObservatoryParallaxCoefficients attribute)</a>
 </li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.single_insufficient">single_insufficient() (adam_core.photometry.rotation.core.RotationPeriodResult class method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.single_insufficient">(adam_core.photometry.RotationPeriodResult class method)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ObsContext.software">software (adam_core.observations.ades.ObsContext attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.SoftwareObsContext">SoftwareObsContext (class in adam_core.observations.ades)</a>
@@ -3999,11 +4377,15 @@
 </li>
         <li><a href="reference/api/adam_core.coordinates.spherical.html#adam_core.coordinates.spherical.SphericalCoordinates">SphericalCoordinates (class in adam_core.coordinates.spherical)</a>
 </li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.spice_body_states_arrow">spice_body_states_arrow() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
         <li><a href="reference/api/adam_core.orbits.openspace.translation.html#adam_core.orbits.openspace.translation.SpiceTranslation">SpiceTranslation (class in adam_core.orbits.openspace.translation)</a>
 </li>
         <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.spkez">spkez() (adam_core.utils.spice_backend.RustBackend method)</a>
 </li>
         <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.spkez_batch">spkez_batch() (adam_core.utils.spice_backend.RustBackend method)</a>
+</li>
+        <li><a href="reference/api/adam_core.utils.spice_backend.html#adam_core.utils.spice_backend.RustBackend.spkez_state_cache_len">spkez_state_cache_len() (adam_core.utils.spice_backend.RustBackend method)</a>
 </li>
         <li><a href="reference/api/adam_core.dynamics.exceptions.html#adam_core.dynamics.exceptions.DynamicsNumericalError.stage">stage (adam_core.dynamics.exceptions.DynamicsNumericalError attribute)</a>
 </li>
@@ -4072,6 +4454,8 @@
 </li>
           <li><a href="reference/api/adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.table">(adam_core.orbits.orbits.Orbits attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.table">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.table">(adam_core.orbits.variants.VariantOrbits attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.photometry.absolute_magnitude.html#adam_core.photometry.absolute_magnitude.GroupedPhysicalParameters.table">(adam_core.photometry.absolute_magnitude.GroupedPhysicalParameters attribute)</a>
@@ -4083,6 +4467,12 @@
           <li><a href="reference/api/adam_core.photometry.bandpasses.tables.html#adam_core.photometry.bandpasses.tables.ObservatoryBandMap.table">(adam_core.photometry.bandpasses.tables.ObservatoryBandMap attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.photometry.bandpasses.tables.html#adam_core.photometry.bandpasses.tables.TemplateBandpassIntegrals.table">(adam_core.photometry.bandpasses.tables.TemplateBandpassIntegrals attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.GroupedRotationPeriodResults.table">(adam_core.photometry.rotation.core.GroupedRotationPeriodResults attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations.table">(adam_core.photometry.rotation.core.RotationPeriodObservations attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.table">(adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.time.time.html#adam_core.time.time.Timestamp.table">(adam_core.time.time.Timestamp attribute)</a>
 </li>
@@ -4150,6 +4540,10 @@
 </li>
           <li><a href="reference/api/adam_core.observations.html#adam_core.observations.SourceCatalog.time">(adam_core.observations.SourceCatalog attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations.time">(adam_core.photometry.rotation.core.RotationPeriodObservations attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.time">(adam_core.photometry.RotationPeriodObservations attribute)</a>
+</li>
         </ul></li>
         <li><a href="reference/api/adam_core.missions.porkchop.html#adam_core.missions.porkchop.LambertSolutions.time_of_flight">time_of_flight() (adam_core.missions.porkchop.LambertSolutions method)</a>
 </li>
@@ -4161,12 +4555,14 @@
           <li><a href="reference/api/adam_core.time.time.html#adam_core.time.time.Timestamp">(class in adam_core.time.time)</a>
 </li>
         </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference/api/adam_core.propagator.propagator.html#adam_core.propagator.propagator.TimestampType">TimestampType (in module adam_core.propagator.propagator)</a>
+</li>
         <li><a href="reference/api/adam_core.observers.observers.html#adam_core.observers.observers.ObservatoryParallaxCoefficients.timezone">timezone() (adam_core.observers.observers.ObservatoryParallaxCoefficients method)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutObjectSummary.tisserandScore">tisserandScore (adam_core.orbits.query.scout.ScoutObjectSummary attribute)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableOrbitalKeplerFormat.TLE">TLE (adam_core.orbits.openspace.renderable.RenderableOrbitalKeplerFormat attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.residuals.html#adam_core.coordinates.residuals.Residuals.to_array">to_array() (adam_core.coordinates.residuals.Residuals method)</a>
@@ -4309,10 +4705,10 @@
 </li>
         <li><a href="reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_mpc_designation">unpack_mpc_designation() (in module adam_core.utils.mpc)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_numbered_designation">unpack_numbered_designation() (in module adam_core.utils.mpc)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_provisional_designation">unpack_provisional_designation() (in module adam_core.utils.mpc)</a>
 </li>
         <li><a href="reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_survey_designation">unpack_survey_designation() (in module adam_core.utils.mpc)</a>
@@ -4325,6 +4721,12 @@
 
         <ul>
           <li><a href="reference/api/adam_core.coordinates.origin.html#adam_core.coordinates.origin.OriginGravitationalParameters.URANUS_BARYCENTER">(adam_core.coordinates.origin.OriginGravitationalParameters attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.used_session_offsets">used_session_offsets (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.used_session_offsets">(adam_core.photometry.RotationPeriodResult attribute)</a>
 </li>
         </ul></li>
     </ul></td>
@@ -4344,11 +4746,7 @@
         <li><a href="reference/api/adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates.v_mag">v_mag (adam_core.coordinates.cartesian.CartesianCoordinates property)</a>
 </li>
         <li><a href="reference/api/adam_core.dynamics.chi.html#adam_core.dynamics.chi.ChiDiagnostics.v_norm">v_norm (adam_core.dynamics.chi.ChiDiagnostics attribute)</a>
-
-        <ul>
-          <li><a href="reference/api/adam_core.dynamics.propagation.html#adam_core.dynamics.propagation.ChiDiagnostics.v_norm">(adam_core.dynamics.propagation.ChiDiagnostics attribute)</a>
 </li>
-        </ul></li>
         <li><a href="reference/api/adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates.values">values (adam_core.coordinates.cartesian.CartesianCoordinates property)</a>
 
         <ul>
@@ -4370,6 +4768,8 @@
         <li><a href="reference/api/adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.CollisionEvent.variant_id">variant_id (adam_core.dynamics.impacts.CollisionEvent attribute)</a>
 
         <ul>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.variant_id">(adam_core.orbits.VariantEphemeris attribute)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.variant_id">(adam_core.orbits.VariantOrbits attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.variant_id">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
@@ -4379,17 +4779,29 @@
         </ul></li>
         <li><a href="reference/api/adam_core.coordinates.variants.html#adam_core.coordinates.variants.VariantCoordinatesTable">VariantCoordinatesTable (class in adam_core.coordinates.variants)</a>
 </li>
-        <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris">VariantEphemeris (class in adam_core.orbits.variants)</a>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris">VariantEphemeris (class in adam_core.orbits)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris">(class in adam_core.orbits.variants)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
+        </ul></li>
         <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits">VariantOrbits (class in adam_core.orbits)</a>
 
         <ul>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits">(class in adam_core.orbits.variants)</a>
 </li>
         </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.ImpactProbabilities.variants">variants (adam_core.dynamics.impacts.ImpactProbabilities attribute)</a>
+</li>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.variants_from_ipc">variants_from_ipc() (in module adam_core.orbits.arrow_bridge)</a>
+</li>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.variants_from_record_batch">variants_from_record_batch() (in module adam_core.orbits.arrow_bridge)</a>
+</li>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.variants_to_ipc">variants_to_ipc() (in module adam_core.orbits.arrow_bridge)</a>
+</li>
+        <li><a href="reference/api/adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.variants_to_record_batch">variants_to_record_batch() (in module adam_core.orbits.arrow_bridge)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.geodetics.html#adam_core.coordinates.geodetics.GeodeticCoordinates.veast">veast (adam_core.coordinates.geodetics.GeodeticCoordinates attribute)</a>
 </li>
@@ -4477,22 +4889,28 @@
 </li>
         <li><a href="reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.weighted_mean">weighted_mean() (in module adam_core.coordinates.covariances)</a>
 </li>
-        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.weights">weights (adam_core.orbits.VariantOrbits attribute)</a>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.weights">weights (adam_core.orbits.VariantEphemeris attribute)</a>
 
         <ul>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.weights">(adam_core.orbits.VariantOrbits attribute)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.weights">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.weights">(adam_core.orbits.variants.VariantOrbits attribute)</a>
 </li>
         </ul></li>
-        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.weights_cov">weights_cov (adam_core.orbits.VariantOrbits attribute)</a>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantEphemeris.weights_cov">weights_cov (adam_core.orbits.VariantEphemeris attribute)</a>
 
         <ul>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.weights_cov">(adam_core.orbits.VariantOrbits attribute)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.weights_cov">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.weights_cov">(adam_core.orbits.variants.VariantOrbits attribute)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.within_tolerance">within_tolerance() (in module adam_core.photometry.rotation.core)</a>
+</li>
         <li><a href="reference/api/adam_core.orbits.spice_kernel.html#adam_core.orbits.spice_kernel.write_spkw03_segment">write_spkw03_segment() (in module adam_core.orbits.spice_kernel)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.spice_kernel.html#adam_core.orbits.spice_kernel.write_spkw09_segment">write_spkw09_segment() (in module adam_core.orbits.spice_kernel)</a>
@@ -4549,7 +4967,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

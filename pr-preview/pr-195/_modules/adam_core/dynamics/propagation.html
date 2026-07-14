@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -415,237 +425,50 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for adam_core.dynamics.propagation</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">propagate_2body_arc_batch_numpy</span> <span class="k">as</span> <span class="n">rust_propagate_2body_arc_batch_numpy</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust</span><span class="w"> </span><span class="kn">import</span> <span class="n">propagate_2body_numpy</span> <span class="k">as</span> <span class="n">rust_propagate_2body_numpy</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">propagate_2body_with_covariance_numpy</span> <span class="k">as</span> <span class="n">rust_propagate_2body_with_covariance_numpy</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoordinateCovariances</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust</span><span class="w"> </span><span class="kn">import</span> <span class="n">propagate_orbits_arrow</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbits_from_record_batch</span><span class="p">,</span> <span class="n">orbits_to_record_batch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..parallel</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_backend</span><span class="p">,</span> <span class="n">resolve_max_processes</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.iter</span><span class="w"> </span><span class="kn">import</span> <span class="n">_iterate_chunks</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsNumericalError</span>
 
-
-<div class="viewcode-block" id="ChiDiagnostics">
-<a class="viewcode-back" href="../../../reference/api/adam_core.dynamics.propagation.html#adam_core.dynamics.propagation.ChiDiagnostics">[docs]</a>
-<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">ChiDiagnostics</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Lightweight diagnostic snapshot for fail-fast error reporting.</span>
-
-<span class="sd">    `chi` is reported as NaN here — the universal-anomaly value is computed</span>
-<span class="sd">    inside the Rust kernel and is not surfaced through the FFI for diagnostic</span>
-<span class="sd">    use. The other fields are sufficient to triage stiff / non-physical</span>
-<span class="sd">    propagation inputs (alpha sign indicates orbit type; finite checks catch</span>
-<span class="sd">    NaN/Inf upstream).</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span>
-    <span class="n">mu</span><span class="p">:</span> <span class="nb">float</span>
-    <span class="n">r_norm</span><span class="p">:</span> <span class="nb">float</span>
-    <span class="n">v_norm</span><span class="p">:</span> <span class="nb">float</span>
-    <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span>
-    <span class="n">chi</span><span class="p">:</span> <span class="nb">float</span>
-    <span class="n">finite</span><span class="p">:</span> <span class="nb">bool</span></div>
+<span class="n">_PROPAGATION_FAILURE_PREFIX</span> <span class="o">=</span> <span class="s2">&quot;propagation row failure:&quot;</span>
 
 
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_calc_chi_diagnostics</span><span class="p">(</span>
-    <span class="n">r</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">v</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">mu</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ChiDiagnostics</span><span class="p">:</span>
-    <span class="n">r_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">v_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">r_norm</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">r_arr</span><span class="p">))</span>
-    <span class="n">v_norm</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">v_arr</span><span class="p">))</span>
-    <span class="n">alpha</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="o">-</span><span class="p">(</span><span class="n">v_norm</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="n">mu</span> <span class="o">+</span> <span class="mf">2.0</span> <span class="o">/</span> <span class="n">r_norm</span><span class="p">)</span> <span class="k">if</span> <span class="n">r_norm</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)</span>
-    <span class="n">finite</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">r_norm</span><span class="p">)</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">v_norm</span><span class="p">)</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">alpha</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">ChiDiagnostics</span><span class="p">(</span>
-        <span class="n">dt</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">dt</span><span class="p">),</span>
-        <span class="n">mu</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">mu</span><span class="p">),</span>
-        <span class="n">r_norm</span><span class="o">=</span><span class="n">r_norm</span><span class="p">,</span>
-        <span class="n">v_norm</span><span class="o">=</span><span class="n">v_norm</span><span class="p">,</span>
-        <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span>
-        <span class="n">chi</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">),</span>
-        <span class="n">finite</span><span class="o">=</span><span class="n">finite</span><span class="p">,</span>
-    <span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_target_times_record_batch</span><span class="p">(</span><span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">RecordBatch</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Expose target epochs as one metadata-stamped Arrow RecordBatch.&quot;&quot;&quot;</span>
+    <span class="n">table</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">combine_chunks</span><span class="p">()</span>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">metadata</span> <span class="ow">or</span> <span class="p">{})</span>
+    <span class="n">metadata</span><span class="p">[</span><span class="sa">b</span><span class="s2">&quot;adam_core_time_scale&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">encode</span><span class="p">()</span>
+    <span class="n">table</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">replace_schema_metadata</span><span class="p">(</span><span class="n">metadata</span><span class="p">)</span>
+    <span class="n">arrays</span> <span class="o">=</span> <span class="p">[</span><span class="n">column</span><span class="o">.</span><span class="n">combine_chunks</span><span class="p">()</span> <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">columns</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">RecordBatch</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span><span class="n">arrays</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_first_non_finite_row</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
-    <span class="n">finite_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">values</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">bad</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="o">~</span><span class="n">finite_mask</span><span class="p">)</span>
-    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">bad</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="n">bad</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_raise_non_finite_propagation_error</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">stage</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">absolute_idx</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">orbit_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">object_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">orbit_row</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">t0</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">t1</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">mu</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">tol</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="n">diag</span> <span class="o">=</span> <span class="n">_calc_chi_diagnostics</span><span class="p">(</span>
-        <span class="n">orbit_row</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span>
-        <span class="n">orbit_row</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span>
-        <span class="n">t1</span> <span class="o">-</span> <span class="n">t0</span><span class="p">,</span>
-        <span class="n">mu</span><span class="o">=</span><span class="n">mu</span><span class="p">,</span>
-    <span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_raise_propagation_row_failure</span><span class="p">(</span><span class="n">error</span><span class="p">:</span> <span class="ne">RuntimeError</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="n">message</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">message</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="n">_PROPAGATION_FAILURE_PREFIX</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">error</span>
+    <span class="n">fields</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">removeprefix</span><span class="p">(</span><span class="n">_PROPAGATION_FAILURE_PREFIX</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;;&quot;</span><span class="p">):</span>
+        <span class="n">key</span><span class="p">,</span> <span class="n">separator</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;=&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">separator</span><span class="p">:</span>
+            <span class="n">fields</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+    <span class="n">reason</span> <span class="o">=</span> <span class="n">fields</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;reason&quot;</span><span class="p">,</span> <span class="s2">&quot;non_finite_output_state&quot;</span><span class="p">)</span>
+    <span class="n">context</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;rust_error&quot;</span><span class="p">:</span> <span class="n">message</span><span class="p">}</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">fields</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">context</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="n">context</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
     <span class="k">raise</span> <span class="n">DynamicsNumericalError</span><span class="p">(</span>
-        <span class="n">stage</span><span class="o">=</span><span class="n">stage</span><span class="p">,</span>
+        <span class="n">stage</span><span class="o">=</span><span class="s2">&quot;propagation&quot;</span><span class="p">,</span>
         <span class="n">reason</span><span class="o">=</span><span class="n">reason</span><span class="p">,</span>
-        <span class="n">context</span><span class="o">=</span><span class="p">{</span>
-            <span class="s2">&quot;row_index&quot;</span><span class="p">:</span> <span class="n">absolute_idx</span><span class="p">,</span>
-            <span class="s2">&quot;orbit_id&quot;</span><span class="p">:</span> <span class="n">orbit_id</span><span class="p">,</span>
-            <span class="s2">&quot;object_id&quot;</span><span class="p">:</span> <span class="n">object_id</span><span class="p">,</span>
-            <span class="s2">&quot;t0&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">t0</span><span class="p">),</span>
-            <span class="s2">&quot;t1&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">t1</span><span class="p">),</span>
-            <span class="s2">&quot;dt&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">t1</span> <span class="o">-</span> <span class="n">t0</span><span class="p">),</span>
-            <span class="s2">&quot;mu&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">mu</span><span class="p">),</span>
-            <span class="s2">&quot;r_norm&quot;</span><span class="p">:</span> <span class="n">diag</span><span class="o">.</span><span class="n">r_norm</span><span class="p">,</span>
-            <span class="s2">&quot;v_norm&quot;</span><span class="p">:</span> <span class="n">diag</span><span class="o">.</span><span class="n">v_norm</span><span class="p">,</span>
-            <span class="s2">&quot;alpha&quot;</span><span class="p">:</span> <span class="n">diag</span><span class="o">.</span><span class="n">alpha</span><span class="p">,</span>
-            <span class="s2">&quot;chi&quot;</span><span class="p">:</span> <span class="n">diag</span><span class="o">.</span><span class="n">chi</span><span class="p">,</span>
-            <span class="s2">&quot;chi_finite&quot;</span><span class="p">:</span> <span class="n">diag</span><span class="o">.</span><span class="n">finite</span><span class="p">,</span>
-            <span class="s2">&quot;max_iter&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">max_iter</span><span class="p">),</span>
-            <span class="s2">&quot;tol&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">tol</span><span class="p">),</span>
-        <span class="p">},</span>
-    <span class="p">)</span>
-
-
-<span class="c1"># Rough crossover from microbenchmark (Apple M1, 2026-04-25): below this</span>
-<span class="c1"># n_times the warm-started serial arc per orbit beats the rayon-parallel</span>
-<span class="c1"># batched cold-start path. Above it, parallel batch wins.</span>
-<span class="n">_ARC_PATH_DTS_THRESHOLD</span> <span class="o">=</span> <span class="mi">500</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_can_use_arc_path</span><span class="p">(</span><span class="n">num_entries</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">n_times</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;Decide whether the warm-started arc API is preferable to the</span>
-<span class="sd">    rayon-parallel batched path for this propagation shape.</span>
-
-<span class="sd">    Conditions:</span>
-<span class="sd">      * we have ≥ 2 dts to amortize chi warm-starting,</span>
-<span class="sd">      * n_times stays under the rayon crossover, AND</span>
-<span class="sd">      * the total entry count divides evenly into per-orbit chunks</span>
-<span class="sd">        (it always does in our flow, but assert it as a guard).</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">n_times</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">n_times</span> <span class="o">&gt;=</span> <span class="n">_ARC_PATH_DTS_THRESHOLD</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">False</span>
-    <span class="k">if</span> <span class="n">num_entries</span> <span class="o">%</span> <span class="n">n_times</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">False</span>
-    <span class="k">return</span> <span class="kc">True</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_run_2body_propagate</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">orbits_array_</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">t0_</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">t1_</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">mu_</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">cov_in_flat</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span>
-    <span class="n">n_times</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">orbit_ids_</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">object_ids_</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">tol</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Propagate a flattened (orbit x time) batch using Rust when available,</span>
-<span class="sd">    falling back to the legacy JAX chunked path. Raises</span>
-<span class="sd">    `DynamicsNumericalError` with the same context/diagnostics as the legacy</span>
-<span class="sd">    path on non-finite input or output.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">num_entries</span> <span class="o">=</span> <span class="n">orbits_array_</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">dt_</span> <span class="o">=</span> <span class="n">t1_</span> <span class="o">-</span> <span class="n">t0_</span>
-
-    <span class="n">bad_input</span> <span class="o">=</span> <span class="n">_first_non_finite_row</span><span class="p">(</span><span class="n">orbits_array_</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">bad_input</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">_raise_non_finite_propagation_error</span><span class="p">(</span>
-            <span class="n">stage</span><span class="o">=</span><span class="s2">&quot;propagation&quot;</span><span class="p">,</span>
-            <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;non_finite_input_state&quot;</span><span class="p">,</span>
-            <span class="n">absolute_idx</span><span class="o">=</span><span class="n">bad_input</span><span class="p">,</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">orbit_ids_</span><span class="p">[</span><span class="n">bad_input</span><span class="p">]),</span>
-            <span class="n">object_id</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">object_ids_</span><span class="p">[</span><span class="n">bad_input</span><span class="p">]),</span>
-            <span class="n">orbit_row</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">orbits_array_</span><span class="p">[</span><span class="n">bad_input</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-            <span class="n">t0</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">t0_</span><span class="p">[</span><span class="n">bad_input</span><span class="p">]),</span>
-            <span class="n">t1</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">t1_</span><span class="p">[</span><span class="n">bad_input</span><span class="p">]),</span>
-            <span class="n">mu</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">mu_</span><span class="p">[</span><span class="n">bad_input</span><span class="p">]),</span>
-            <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
-            <span class="n">tol</span><span class="o">=</span><span class="n">tol</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="n">cov_out_flat</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="n">cov_in_flat</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="c1"># cov_in_flat is per-orbit (n_orbits, 36); broadcast to per-entry.</span>
-        <span class="n">cov_per_entry</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">cov_in_flat</span><span class="p">,</span> <span class="n">n_times</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-        <span class="n">rust_result</span> <span class="o">=</span> <span class="n">rust_propagate_2body_with_covariance_numpy</span><span class="p">(</span>
-            <span class="n">orbits_array_</span><span class="p">,</span> <span class="n">cov_per_entry</span><span class="p">,</span> <span class="n">dt_</span><span class="p">,</span> <span class="n">mu_</span><span class="p">,</span> <span class="n">max_iter</span><span class="p">,</span> <span class="n">tol</span>
-        <span class="p">)</span>
-        <span class="n">orbits_propagated</span><span class="p">,</span> <span class="n">cov_out_flat</span> <span class="o">=</span> <span class="n">rust_result</span>
-        <span class="n">orbits_propagated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">orbits_propagated</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">cov_out_flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">cov_out_flat</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="n">_can_use_arc_path</span><span class="p">(</span><span class="n">num_entries</span><span class="p">,</span> <span class="n">n_times</span><span class="p">):</span>
-        <span class="c1"># Single-orbit / many-dts pattern: the Rust arc API computes</span>
-        <span class="c1"># orbit-only constants once per orbit and warm-starts the chi</span>
-        <span class="c1"># solver from the previous dt&#39;s converged value. Rayon parallel</span>
-        <span class="c1"># ACROSS orbits + serial warm-start WITHIN orbit. Wins 3-10× over</span>
-        <span class="c1"># the rayon-parallel cold-start batched path when the per-orbit</span>
-        <span class="c1"># n_times is small (~&lt; 500).</span>
-        <span class="n">n_orbits</span> <span class="o">=</span> <span class="n">num_entries</span> <span class="o">//</span> <span class="n">n_times</span>
-        <span class="c1"># Per-orbit base orbit and mu — the ((n_orbits, n_times, 6)</span>
-        <span class="c1"># ordered) input has all n_times rows of orbit-i identical.</span>
-        <span class="n">base_orbits</span> <span class="o">=</span> <span class="n">orbits_array_</span><span class="p">[::</span><span class="n">n_times</span><span class="p">]</span>
-        <span class="n">base_mus</span> <span class="o">=</span> <span class="n">mu_</span><span class="p">[::</span><span class="n">n_times</span><span class="p">]</span>
-        <span class="n">dts_per_orbit</span> <span class="o">=</span> <span class="n">dt_</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n_orbits</span><span class="p">,</span> <span class="n">n_times</span><span class="p">)</span>
-        <span class="n">arc_out</span> <span class="o">=</span> <span class="n">rust_propagate_2body_arc_batch_numpy</span><span class="p">(</span>
-            <span class="n">base_orbits</span><span class="p">,</span> <span class="n">dts_per_orbit</span><span class="p">,</span> <span class="n">base_mus</span><span class="p">,</span> <span class="n">max_iter</span><span class="p">,</span> <span class="n">tol</span>
-        <span class="p">)</span>
-        <span class="n">orbits_propagated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">arc_out</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">rust_result</span> <span class="o">=</span> <span class="n">rust_propagate_2body_numpy</span><span class="p">(</span><span class="n">orbits_array_</span><span class="p">,</span> <span class="n">dt_</span><span class="p">,</span> <span class="n">mu_</span><span class="p">,</span> <span class="n">max_iter</span><span class="p">,</span> <span class="n">tol</span><span class="p">)</span>
-        <span class="n">orbits_propagated</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">rust_result</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-
-    <span class="n">bad_output</span> <span class="o">=</span> <span class="n">_first_non_finite_row</span><span class="p">(</span><span class="n">orbits_propagated</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">bad_output</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">_raise_non_finite_propagation_error</span><span class="p">(</span>
-            <span class="n">stage</span><span class="o">=</span><span class="s2">&quot;propagation&quot;</span><span class="p">,</span>
-            <span class="n">reason</span><span class="o">=</span><span class="s2">&quot;non_finite_output_state&quot;</span><span class="p">,</span>
-            <span class="n">absolute_idx</span><span class="o">=</span><span class="n">bad_output</span><span class="p">,</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">orbit_ids_</span><span class="p">[</span><span class="n">bad_output</span><span class="p">]),</span>
-            <span class="n">object_id</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">object_ids_</span><span class="p">[</span><span class="n">bad_output</span><span class="p">]),</span>
-            <span class="n">orbit_row</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">orbits_array_</span><span class="p">[</span><span class="n">bad_output</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-            <span class="n">t0</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">t0_</span><span class="p">[</span><span class="n">bad_output</span><span class="p">]),</span>
-            <span class="n">t1</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">t1_</span><span class="p">[</span><span class="n">bad_output</span><span class="p">]),</span>
-            <span class="n">mu</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">mu_</span><span class="p">[</span><span class="n">bad_output</span><span class="p">]),</span>
-            <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
-            <span class="n">tol</span><span class="o">=</span><span class="n">tol</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">orbits_propagated</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">num_entries</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Internal error: expected </span><span class="si">{</span><span class="n">num_entries</span><span class="si">}</span><span class="s2"> propagated rows, got </span><span class="si">{</span><span class="n">orbits_propagated</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">orbits_propagated</span><span class="p">,</span> <span class="n">cov_out_flat</span>
+        <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">,</span>
+    <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_propagate_2body_serial</span><span class="p">(</span>
@@ -654,99 +477,23 @@
     <span class="o">*</span><span class="p">,</span>
     <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
     <span class="n">tol</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">thread_limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Serial (single-process) implementation of 2-body propagation.</span>
-
-<span class="sd">    The Ray backend uses this function inside each worker.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># Extract and prepare data</span>
-    <span class="n">cartesian_orbits</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span>
-    <span class="n">t0</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span>
-    <span class="n">t1</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span>
-    <span class="n">mu</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">mu</span><span class="p">()</span>
-    <span class="n">orbit_ids</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">object_ids</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">object_id</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-
-    <span class="n">n_orbits</span> <span class="o">=</span> <span class="n">cartesian_orbits</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">n_times</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">)</span>
-    <span class="n">orbit_ids_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">orbit_ids</span><span class="p">,</span> <span class="n">n_times</span><span class="p">)</span>
-    <span class="n">object_ids_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">object_ids</span><span class="p">,</span> <span class="n">n_times</span><span class="p">)</span>
-    <span class="n">orbits_array_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">cartesian_orbits</span><span class="p">,</span> <span class="n">n_times</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
-    <span class="n">mu_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">n_times</span><span class="p">)</span>
-    <span class="n">t0_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">t0</span><span class="p">,</span> <span class="n">n_times</span><span class="p">)</span>
-    <span class="n">t1_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tile</span><span class="p">(</span><span class="n">t1</span><span class="p">,</span> <span class="n">n_orbits</span><span class="p">)</span>
-
-    <span class="c1"># Preserve physical parameters by repeating per-orbit rows across times.</span>
-    <span class="n">pp_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n_orbits</span><span class="p">),</span> <span class="n">n_times</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
-    <span class="n">physical_parameters_</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">physical_parameters</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">pp_idx</span><span class="p">)</span>
-
-    <span class="n">has_cov</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">is_all_nan</span><span class="p">()</span>
-    <span class="n">cov_in_flat</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n_orbits</span><span class="p">,</span> <span class="mi">36</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">has_cov</span>
-        <span class="k">else</span> <span class="kc">None</span>
-    <span class="p">)</span>
-
-    <span class="n">orbits_propagated</span><span class="p">,</span> <span class="n">cov_out_flat</span> <span class="o">=</span> <span class="n">_run_2body_propagate</span><span class="p">(</span>
-        <span class="n">orbits_array_</span><span class="o">=</span><span class="n">orbits_array_</span><span class="p">,</span>
-        <span class="n">t0_</span><span class="o">=</span><span class="n">t0_</span><span class="p">,</span>
-        <span class="n">t1_</span><span class="o">=</span><span class="n">t1_</span><span class="p">,</span>
-        <span class="n">mu_</span><span class="o">=</span><span class="n">mu_</span><span class="p">,</span>
-        <span class="n">cov_in_flat</span><span class="o">=</span><span class="n">cov_in_flat</span><span class="p">,</span>
-        <span class="n">n_times</span><span class="o">=</span><span class="n">n_times</span><span class="p">,</span>
-        <span class="n">orbit_ids_</span><span class="o">=</span><span class="n">orbit_ids_</span><span class="p">,</span>
-        <span class="n">object_ids_</span><span class="o">=</span><span class="n">object_ids_</span><span class="p">,</span>
-        <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
-        <span class="n">tol</span><span class="o">=</span><span class="n">tol</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">has_cov</span><span class="p">:</span>
-        <span class="n">cartesian_covariances</span> <span class="o">=</span> <span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
-            <span class="n">cov_out_flat</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;One-crossing Arrow-native 2-body propagation implementation.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="n">propagate_orbits_arrow</span><span class="p">(</span>
+            <span class="n">orbits_to_record_batch</span><span class="p">(</span><span class="n">orbits</span><span class="p">),</span>
+            <span class="n">_target_times_record_batch</span><span class="p">(</span><span class="n">times</span><span class="p">),</span>
+            <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
+            <span class="n">tol</span><span class="o">=</span><span class="n">tol</span><span class="p">,</span>
+            <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+            <span class="n">thread_limit</span><span class="o">=</span><span class="n">thread_limit</span><span class="p">,</span>
         <span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">cartesian_covariances</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="n">origin_code</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span>
-        <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">n_times</span>
-    <span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbit_ids_</span><span class="p">,</span>
-        <span class="n">object_id</span><span class="o">=</span><span class="n">object_ids_</span><span class="p">,</span>
-        <span class="n">physical_parameters</span><span class="o">=</span><span class="n">physical_parameters_</span><span class="p">,</span>
-        <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">x</span><span class="o">=</span><span class="n">orbits_propagated</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-            <span class="n">y</span><span class="o">=</span><span class="n">orbits_propagated</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-            <span class="n">z</span><span class="o">=</span><span class="n">orbits_propagated</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-            <span class="n">vx</span><span class="o">=</span><span class="n">orbits_propagated</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
-            <span class="n">vy</span><span class="o">=</span><span class="n">orbits_propagated</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
-            <span class="n">vz</span><span class="o">=</span><span class="n">orbits_propagated</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
-            <span class="n">covariance</span><span class="o">=</span><span class="n">cartesian_covariances</span><span class="p">,</span>
-            <span class="n">time</span><span class="o">=</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span><span class="n">t1_</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">),</span>
-            <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="n">origin_code</span><span class="p">),</span>
-            <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-        <span class="p">),</span>
-    <span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_propagate_2body_chunk_worker</span><span class="p">(</span>
-    <span class="n">start</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">idx_chunk</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
-    <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">,</span>
-    <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">tol</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Orbits</span><span class="p">]:</span>
-    <span class="n">orbits_chunk</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">)</span>
-    <span class="n">propagated</span> <span class="o">=</span> <span class="n">_propagate_2body_serial</span><span class="p">(</span>
-        <span class="n">orbits_chunk</span><span class="p">,</span>
-        <span class="n">times</span><span class="p">,</span>
-        <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
-        <span class="n">tol</span><span class="o">=</span><span class="n">tol</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">start</span><span class="p">,</span> <span class="n">propagated</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="n">_raise_propagation_row_failure</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+        <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span><span class="s2">&quot;unreachable&quot;</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+    <span class="k">return</span> <span class="n">orbits_from_record_batch</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="propagate_2body">
@@ -760,61 +507,48 @@
     <span class="n">max_processes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
     <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Propagate orbits using the 2-body universal anomaly formalism.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Propagate Cartesian orbits with two-body universal-anomaly dynamics.</span>
+
+<span class="sd">    The complete orbit×epoch cross product runs in Rust behind one</span>
+<span class="sd">    PyArrow→Rust→PyArrow crossing. Rust owns time-scale conversion, origin-mu</span>
+<span class="sd">    lookup, Rayon chunking, covariance transport, physical-parameter</span>
+<span class="sd">    repetition, stable row ordering, and output RecordBatch assembly. Python</span>
+<span class="sd">    only materializes the two input RecordBatches and directly wraps the output.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    orbits : `~adam_core.orbits.orbits.Orbits` (N)</span>
-<span class="sd">        Cartesian orbits with position in units of au and velocity in units of au per day.</span>
-<span class="sd">    times : Timestamp (M)</span>
-<span class="sd">        Epochs to which to propagate each orbit. If a single epoch is given, all orbits are propagated to this</span>
-<span class="sd">        epoch. If multiple epochs are given, then each orbit to will be propagated to each epoch.</span>
+<span class="sd">        Cartesian orbits in au and au/day.</span>
+<span class="sd">    times : `~adam_core.time.Timestamp` (M)</span>
+<span class="sd">        Epochs to which every orbit is propagated. Output is orbit-major with</span>
+<span class="sd">        target epoch order preserved within each orbit.</span>
 <span class="sd">    max_iter : int, optional</span>
-<span class="sd">        Maximum number of iterations over which to converge. If number of iterations is</span>
-<span class="sd">        exceeded, will return the value of the universal anomaly at the last iteration.</span>
+<span class="sd">        Maximum universal-anomaly solver iterations.</span>
 <span class="sd">    tol : float, optional</span>
-<span class="sd">        Numerical tolerance to which to compute universal anomaly using the Newtown-Raphson</span>
-<span class="sd">        method.</span>
+<span class="sd">        Universal-anomaly convergence tolerance.</span>
+<span class="sd">    max_processes : int, optional</span>
+<span class="sd">        Retained compatibility control for callers that previously selected an</span>
+<span class="sd">        outer process count. No Python/Ray compute fan-out occurs; local</span>
+<span class="sd">        parallelism remains owned by Rust&#39;s warmed global Rayon pool.</span>
+<span class="sd">    chunk_size : int, optional</span>
+<span class="sd">        Number of input orbits per Rust propagation chunk.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
-<span class="sd">    orbits : `~adam_core.orbits.orbits.Orbits` (N*M)</span>
-<span class="sd">        Orbits propagated to each MJD.</span>
+<span class="sd">    `~adam_core.orbits.orbits.Orbits` (N*M)</span>
+<span class="sd">        Fully assembled propagated orbit table.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">resolve_max_processes</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">_propagate_2body_serial</span><span class="p">(</span>
-            <span class="n">orbits</span><span class="p">,</span>
-            <span class="n">times</span><span class="p">,</span>
-            <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
-            <span class="n">tol</span><span class="o">=</span><span class="n">tol</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="n">backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span>
-    <span class="n">orbits_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
-    <span class="n">times_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">times</span><span class="p">)</span>
-
-    <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-    <span class="n">args_iter</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="p">(</span>
-            <span class="nb">int</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">)</span> <span class="k">else</span> <span class="mi">0</span><span class="p">,</span>
-            <span class="n">idx_chunk</span><span class="p">,</span>
-            <span class="n">orbits_ref</span><span class="p">,</span>
-            <span class="n">times_ref</span><span class="p">,</span>
-            <span class="n">max_iter</span><span class="p">,</span>
-            <span class="n">tol</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">for</span> <span class="n">idx_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
-    <span class="p">)</span>
-
-    <span class="n">results</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Orbits</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="k">for</span> <span class="n">start_i</span><span class="p">,</span> <span class="n">propagated_i</span> <span class="ow">in</span> <span class="n">backend</span><span class="o">.</span><span class="n">map_unordered</span><span class="p">(</span>
-        <span class="n">_propagate_2body_chunk_worker</span><span class="p">,</span> <span class="n">args_iter</span>
-    <span class="p">):</span>
-        <span class="n">results</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">start_i</span><span class="p">)]</span> <span class="o">=</span> <span class="n">propagated_i</span>
-
-    <span class="n">chunks</span> <span class="o">=</span> <span class="p">[</span><span class="n">results</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">results</span><span class="o">.</span><span class="n">keys</span><span class="p">())]</span>
-    <span class="k">return</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">chunks</span><span class="p">)</span> <span class="k">if</span> <span class="n">chunks</span> <span class="k">else</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span></div>
+    <span class="c1"># The retired Python process-count option is accepted but ignored; warmed</span>
+    <span class="c1"># local parallelism belongs to Rust&#39;s process-global Rayon pool.</span>
+    <span class="k">del</span> <span class="n">max_processes</span>
+    <span class="k">return</span> <span class="n">_propagate_2body_serial</span><span class="p">(</span>
+        <span class="n">orbits</span><span class="p">,</span>
+        <span class="n">times</span><span class="p">,</span>
+        <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
+        <span class="n">tol</span><span class="o">=</span><span class="n">tol</span><span class="p">,</span>
+        <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+        <span class="n">thread_limit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span></div>
 
 </pre></div>
         </article>
@@ -834,7 +568,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -420,7 +430,6 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">astropy</span><span class="w"> </span><span class="kn">import</span> <span class="n">units</span> <span class="k">as</span> <span class="n">u</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">naif_de440</span><span class="w"> </span><span class="kn">import</span> <span class="n">de440</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">naif_earth_itrf93</span><span class="w"> </span><span class="kn">import</span> <span class="n">earth_itrf93</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">naif_eop_high_prec</span><span class="w"> </span><span class="kn">import</span> <span class="n">eop_high_prec</span>
@@ -428,10 +437,8 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">naif_eop_predict</span><span class="w"> </span><span class="kn">import</span> <span class="n">eop_predict</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">naif_leapseconds</span><span class="w"> </span><span class="kn">import</span> <span class="n">leapseconds</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust</span><span class="w"> </span><span class="kn">import</span> <span class="n">naif_spk_writer</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust</span><span class="w"> </span><span class="kn">import</span> <span class="n">naif_spk_writer</span> <span class="k">as</span> <span class="n">naif_spk_writer</span>  <span class="c1"># noqa: F401</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">OriginCodes</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.transform</span><span class="w"> </span><span class="kn">import</span> <span class="n">transform_coordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
@@ -448,14 +455,6 @@
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
 <span class="n">J2000_TDB_JD</span> <span class="o">=</span> <span class="mf">2451545.0</span>
-
-<span class="c1"># NAIF frame IDs as stored in SPK segment summaries. CSPICE&#39;s</span>
-<span class="c1"># `sp.spkw03`/`sp.spkw09` accept a frame name and translate internally;</span>
-<span class="c1"># our writer serializes the DAF directly so we do the translation here.</span>
-<span class="n">_NAIF_FRAME_IDS</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">&quot;J2000&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
-    <span class="s2">&quot;ECLIPJ2000&quot;</span><span class="p">:</span> <span class="mi">17</span><span class="p">,</span>
-<span class="p">}</span>
 
 
 <div class="viewcode-block" id="fit_chebyshev">
@@ -489,30 +488,18 @@
 <span class="sd">    -------</span>
 <span class="sd">    coefficients : (6, degree+1) ndarray, mid_time : float, half_interval : float</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">et_times</span> <span class="o">=</span> <span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">et</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
-    <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">et_times</span> <span class="o">&gt;=</span> <span class="n">window_start</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">et_times</span> <span class="o">&lt;=</span> <span class="n">window_end</span><span class="p">)</span>
-    <span class="n">states</span> <span class="o">=</span> <span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-    <span class="n">states</span><span class="p">[:,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span> <span class="o">*=</span> <span class="mf">149597870.7</span>  <span class="c1"># au -&gt; km</span>
-    <span class="n">states</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">:]</span> <span class="o">*=</span> <span class="mf">149597870.7</span> <span class="o">/</span> <span class="mf">86400.0</span>  <span class="c1"># au/day -&gt; km/s</span>
-    <span class="n">times</span> <span class="o">=</span> <span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">et</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()[</span><span class="n">mask</span><span class="p">]</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
-    <span class="k">if</span> <span class="n">mid_time</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">mid_time</span> <span class="o">=</span> <span class="p">(</span><span class="n">window_end</span> <span class="o">+</span> <span class="n">window_start</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
-    <span class="k">if</span> <span class="n">half_interval</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">half_interval</span> <span class="o">=</span> <span class="p">(</span><span class="n">window_end</span> <span class="o">-</span> <span class="n">window_start</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
-    <span class="n">scaled_times</span> <span class="o">=</span> <span class="p">(</span><span class="n">times</span> <span class="o">-</span> <span class="n">mid_time</span><span class="p">)</span> <span class="o">/</span> <span class="n">half_interval</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">coordinates_to_ipc</span>
 
-    <span class="n">T</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">),</span> <span class="n">degree</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
-    <span class="n">T</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
-    <span class="n">T</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">scaled_times</span>
-    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">degree</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
-        <span class="n">T</span><span class="p">[:,</span> <span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">scaled_times</span> <span class="o">*</span> <span class="n">T</span><span class="p">[:,</span> <span class="n">i</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">T</span><span class="p">[:,</span> <span class="n">i</span> <span class="o">-</span> <span class="mi">2</span><span class="p">]</span>
-
-    <span class="n">coefficients</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">6</span><span class="p">,</span> <span class="n">degree</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))</span>
-    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">):</span>
-        <span class="n">coefficients</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">lstsq</span><span class="p">(</span><span class="n">T</span><span class="p">,</span> <span class="n">states</span><span class="p">[:,</span> <span class="n">i</span><span class="p">],</span> <span class="n">rcond</span><span class="o">=</span><span class="kc">None</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-
-    <span class="k">return</span> <span class="n">coefficients</span><span class="p">,</span> <span class="n">mid_time</span><span class="p">,</span> <span class="n">half_interval</span></div>
+    <span class="k">return</span> <span class="n">_rn</span><span class="o">.</span><span class="n">spk_fit_chebyshev</span><span class="p">(</span>
+        <span class="n">coordinates_to_ipc</span><span class="p">(</span><span class="n">coordinates</span><span class="p">,</span> <span class="s2">&quot;cartesian&quot;</span><span class="p">),</span>
+        <span class="n">window_start</span><span class="p">,</span>
+        <span class="n">window_end</span><span class="p">,</span>
+        <span class="n">degree</span><span class="p">,</span>
+        <span class="n">mid_time</span><span class="p">,</span>
+        <span class="n">half_interval</span><span class="p">,</span>
+    <span class="p">)</span></div>
 
 
 
@@ -548,191 +535,36 @@
     <span class="p">)</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Kernel type: </span><span class="si">{</span><span class="n">kernel_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="n">writer</span> <span class="o">=</span> <span class="n">naif_spk_writer</span><span class="p">(</span><span class="s2">&quot;adam-core&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">writer</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-            <span class="s2">&quot;adam-core native SPK writer unavailable; SPK writing requires &quot;</span>
-            <span class="s2">&quot;the compiled adam_core._rust_native extension.&quot;</span>
-        <span class="p">)</span>
-
-    <span class="n">cheby_degree</span> <span class="o">=</span> <span class="mi">15</span>
-
-    <span class="n">start_mjd</span> <span class="o">=</span> <span class="n">start_time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
-    <span class="n">end_mjd</span> <span class="o">=</span> <span class="n">end_time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
-    <span class="n">num_steps</span> <span class="o">=</span> <span class="nb">int</span><span class="p">((</span><span class="n">end_mjd</span> <span class="o">-</span> <span class="n">start_mjd</span><span class="p">)</span> <span class="o">/</span> <span class="n">step_days</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
-    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Generated </span><span class="si">{</span><span class="n">num_steps</span><span class="si">}</span><span class="s2"> time steps with step size </span><span class="si">{</span><span class="n">step_days</span><span class="si">}</span><span class="s2"> days&quot;</span><span class="p">)</span>
-
-    <span class="n">times</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
-        <span class="p">[</span><span class="n">start_time</span><span class="o">.</span><span class="n">add_fractional_days</span><span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="n">step_days</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_steps</span><span class="p">)]</span>
-    <span class="p">)</span>
     <span class="k">if</span> <span class="n">propagator</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">start_mjd</span> <span class="o">=</span> <span class="n">start_time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="n">end_mjd</span> <span class="o">=</span> <span class="n">end_time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">item</span><span class="p">()</span>
+        <span class="n">num_steps</span> <span class="o">=</span> <span class="nb">int</span><span class="p">((</span><span class="n">end_mjd</span> <span class="o">-</span> <span class="n">start_mjd</span><span class="p">)</span> <span class="o">/</span> <span class="n">step_days</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Generated </span><span class="si">{</span><span class="n">num_steps</span><span class="si">}</span><span class="s2"> time steps with step size </span><span class="si">{</span><span class="n">step_days</span><span class="si">}</span><span class="s2"> days&quot;</span>
+        <span class="p">)</span>
+        <span class="n">times</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">start_time</span><span class="o">.</span><span class="n">add_fractional_days</span><span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="n">step_days</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_steps</span><span class="p">)]</span>
+        <span class="p">)</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Propagating orbits...&quot;</span><span class="p">)</span>
         <span class="n">orbits</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">propagate_orbits</span><span class="p">(</span>
             <span class="n">orbits</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">max_processes</span><span class="o">=</span><span class="n">max_processes</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="mi">1</span>
         <span class="p">)</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Orbit propagation complete&quot;</span><span class="p">)</span>
 
-    <span class="n">ssb_coordinates</span> <span class="o">=</span> <span class="n">transform_coordinates</span><span class="p">(</span>
-        <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-        <span class="n">frame_out</span><span class="o">=</span><span class="s2">&quot;equatorial&quot;</span><span class="p">,</span>
-        <span class="n">origin_out</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SOLAR_SYSTEM_BARYCENTER</span><span class="p">,</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbits_to_ipc</span>
+
+    <span class="n">mappings</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">spk_write_orbits_product</span><span class="p">(</span>
+        <span class="n">orbits_to_ipc</span><span class="p">(</span><span class="n">orbits</span><span class="p">),</span>
+        <span class="n">output_file</span><span class="p">,</span>
+        <span class="n">target_id_start</span><span class="p">,</span>
+        <span class="n">window_days</span><span class="p">,</span>
+        <span class="n">kernel_type</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="n">orbits</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">&quot;coordinates&quot;</span><span class="p">,</span> <span class="n">ssb_coordinates</span><span class="p">)</span>
-
-    <span class="n">target_id_mappings</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-
-    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">orbit_id</span><span class="p">,</span> <span class="n">orbit</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">orbits</span><span class="o">.</span><span class="n">group_by_orbit_id</span><span class="p">()):</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Processing orbit </span><span class="si">{</span><span class="n">orbit_id</span><span class="si">}</span><span class="s2"> (</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> / (</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">unique</span><span class="p">())</span><span class="si">}</span><span class="s2">)&quot;</span>
-        <span class="p">)</span>
-        <span class="n">orbit</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">sort_by</span><span class="p">([</span><span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span> <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">])</span>
-
-        <span class="n">target_id</span> <span class="o">=</span> <span class="n">target_id_start</span> <span class="o">+</span> <span class="n">i</span>
-        <span class="n">target_id_mappings</span><span class="p">[</span><span class="n">orbit_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">target_id</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Orbit </span><span class="si">{</span><span class="n">orbit_id</span><span class="si">}</span><span class="s2"> -&gt; Target ID: </span><span class="si">{</span><span class="n">target_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-        <span class="n">orbit_start</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">min</span><span class="p">()</span><span class="o">.</span><span class="n">et</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
-        <span class="n">orbit_end</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="o">.</span><span class="n">et</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
-
-        <span class="k">if</span> <span class="n">kernel_type</span> <span class="o">==</span> <span class="s2">&quot;w03&quot;</span><span class="p">:</span>
-            <span class="n">_add_type3_segment</span><span class="p">(</span>
-                <span class="n">writer</span><span class="p">,</span>
-                <span class="n">orbit</span><span class="p">,</span>
-                <span class="n">target_id</span><span class="p">,</span>
-                <span class="n">orbit_start</span><span class="p">,</span>
-                <span class="n">orbit_end</span><span class="p">,</span>
-                <span class="n">window_days</span> <span class="o">*</span> <span class="mf">86400.0</span><span class="p">,</span>
-                <span class="n">cheby_degree</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">elif</span> <span class="n">kernel_type</span> <span class="o">==</span> <span class="s2">&quot;w09&quot;</span><span class="p">:</span>
-            <span class="n">_add_type9_segment</span><span class="p">(</span><span class="n">writer</span><span class="p">,</span> <span class="n">orbit</span><span class="p">,</span> <span class="n">target_id</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid kernel type: </span><span class="si">{</span><span class="n">kernel_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-    <span class="n">writer</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">output_file</span><span class="p">)</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Successfully created SPK file: </span><span class="si">{</span><span class="n">output_file</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span><span class="n">mappings</span><span class="p">)</span></div>
 
-    <span class="k">return</span> <span class="n">target_id_mappings</span></div>
-
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_frame_id_for</span><span class="p">(</span><span class="n">frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
-    <span class="n">spice_name</span> <span class="o">=</span> <span class="s2">&quot;J2000&quot;</span> <span class="k">if</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;equatorial&quot;</span> <span class="k">else</span> <span class="s2">&quot;ECLIPJ2000&quot;</span>
-    <span class="k">return</span> <span class="n">_NAIF_FRAME_IDS</span><span class="p">[</span><span class="n">spice_name</span><span class="p">]</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_segment_id_for</span><span class="p">(</span><span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span> <span class="n">start_time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">end_time</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-    <span class="n">segment_id</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="nb">str</span><span class="p">(</span><span class="n">orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">())</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">start_time</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">end_time</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="c1"># SPICE has a 40-byte limit on segment IDs; preserve legacy truncation.</span>
-    <span class="k">return</span> <span class="n">segment_id</span><span class="p">[:</span><span class="mi">40</span><span class="p">]</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_add_type3_segment</span><span class="p">(</span>
-    <span class="n">writer</span><span class="p">,</span>
-    <span class="n">propagated_orbit</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
-    <span class="n">target_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">start_time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">end_time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">window_seconds</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">cheby_degree</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Writing SPK type 03 segment for target ID </span><span class="si">{</span><span class="n">target_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="k">assert</span> <span class="n">propagated_orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
-
-    <span class="n">frame_id</span> <span class="o">=</span> <span class="n">_frame_id_for</span><span class="p">(</span><span class="n">propagated_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">frame</span><span class="p">)</span>
-    <span class="n">segment_id</span> <span class="o">=</span> <span class="n">_segment_id_for</span><span class="p">(</span><span class="n">propagated_orbit</span><span class="p">,</span> <span class="n">start_time</span><span class="p">,</span> <span class="n">end_time</span><span class="p">)</span>
-
-    <span class="n">num_windows</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">((</span><span class="n">end_time</span> <span class="o">-</span> <span class="n">start_time</span><span class="p">)</span> <span class="o">/</span> <span class="n">window_seconds</span><span class="p">))</span>
-    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Fitting </span><span class="si">{</span><span class="n">num_windows</span><span class="si">}</span><span class="s2"> Chebyshev windows&quot;</span><span class="p">)</span>
-
-    <span class="n">n_coef</span> <span class="o">=</span> <span class="n">cheby_degree</span> <span class="o">+</span> <span class="mi">1</span>
-    <span class="n">row_len</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">+</span> <span class="mi">6</span> <span class="o">*</span> <span class="n">n_coef</span>
-    <span class="n">records_coeffs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="n">num_windows</span><span class="p">,</span> <span class="n">row_len</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-
-    <span class="k">for</span> <span class="n">w</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_windows</span><span class="p">):</span>
-        <span class="n">start_time_window</span> <span class="o">=</span> <span class="n">start_time</span> <span class="o">+</span> <span class="n">w</span> <span class="o">*</span> <span class="n">window_seconds</span>
-        <span class="n">end_time_window</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">start_time_window</span> <span class="o">+</span> <span class="n">window_seconds</span><span class="p">,</span> <span class="n">end_time</span><span class="p">)</span>
-
-        <span class="c1"># CSPICE&#39;s spkw03 stores MID / RADIUS per record derived from</span>
-        <span class="c1"># INIT + INTLEN, not the clipped fit window. Use the same</span>
-        <span class="c1"># convention for both the fit&#39;s time scaling and the on-disk</span>
-        <span class="c1"># record so readback evaluates the polynomial at the same</span>
-        <span class="c1"># scaled time the fitter saw.</span>
-        <span class="n">record_mid</span> <span class="o">=</span> <span class="n">start_time</span> <span class="o">+</span> <span class="p">(</span><span class="n">w</span> <span class="o">+</span> <span class="mf">0.5</span><span class="p">)</span> <span class="o">*</span> <span class="n">window_seconds</span>
-        <span class="n">record_half</span> <span class="o">=</span> <span class="n">window_seconds</span> <span class="o">/</span> <span class="mf">2.0</span>
-        <span class="n">coeffs</span><span class="p">,</span> <span class="n">_mid</span><span class="p">,</span> <span class="n">_half</span> <span class="o">=</span> <span class="n">fit_chebyshev</span><span class="p">(</span>
-            <span class="n">propagated_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-            <span class="n">start_time_window</span><span class="p">,</span>
-            <span class="n">end_time_window</span><span class="p">,</span>
-            <span class="n">cheby_degree</span><span class="p">,</span>
-            <span class="n">mid_time</span><span class="o">=</span><span class="n">record_mid</span><span class="p">,</span>
-            <span class="n">half_interval</span><span class="o">=</span><span class="n">record_half</span><span class="p">,</span>
-        <span class="p">)</span>
-
-        <span class="n">records_coeffs</span><span class="p">[</span><span class="n">w</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">record_mid</span>
-        <span class="n">records_coeffs</span><span class="p">[</span><span class="n">w</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">record_half</span>
-        <span class="c1"># `coeffs` has shape (6, degree+1). Emit x, y, z, vx, vy, vz blocks</span>
-        <span class="c1"># in that order to match the on-disk SPK Type 3 record layout.</span>
-        <span class="k">for</span> <span class="n">comp</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">6</span><span class="p">):</span>
-            <span class="n">col_start</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">+</span> <span class="n">comp</span> <span class="o">*</span> <span class="n">n_coef</span>
-            <span class="n">records_coeffs</span><span class="p">[</span><span class="n">w</span><span class="p">,</span> <span class="n">col_start</span> <span class="p">:</span> <span class="n">col_start</span> <span class="o">+</span> <span class="n">n_coef</span><span class="p">]</span> <span class="o">=</span> <span class="n">coeffs</span><span class="p">[</span><span class="n">comp</span><span class="p">]</span>
-
-    <span class="n">center_code</span> <span class="o">=</span> <span class="n">propagated_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">as_OriginCodes</span><span class="p">()</span><span class="o">.</span><span class="n">value</span>
-
-    <span class="n">writer</span><span class="o">.</span><span class="n">add_type3</span><span class="p">(</span>
-        <span class="nb">int</span><span class="p">(</span><span class="n">target_id</span><span class="p">),</span>
-        <span class="nb">int</span><span class="p">(</span><span class="n">center_code</span><span class="p">),</span>
-        <span class="nb">int</span><span class="p">(</span><span class="n">frame_id</span><span class="p">),</span>
-        <span class="nb">float</span><span class="p">(</span><span class="n">start_time</span><span class="p">),</span>
-        <span class="nb">float</span><span class="p">(</span><span class="n">end_time</span><span class="p">),</span>
-        <span class="n">segment_id</span><span class="p">,</span>
-        <span class="nb">float</span><span class="p">(</span><span class="n">start_time</span><span class="p">),</span>
-        <span class="nb">float</span><span class="p">(</span><span class="n">window_seconds</span><span class="p">),</span>
-        <span class="n">records_coeffs</span><span class="p">,</span>
-    <span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_add_type9_segment</span><span class="p">(</span>
-    <span class="n">writer</span><span class="p">,</span>
-    <span class="n">propagated_orbit</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
-    <span class="n">target_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Writing SPK type 09 segment for target ID </span><span class="si">{</span><span class="n">target_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-    <span class="k">assert</span> <span class="n">propagated_orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
-
-    <span class="n">frame_id</span> <span class="o">=</span> <span class="n">_frame_id_for</span><span class="p">(</span><span class="n">propagated_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">frame</span><span class="p">)</span>
-
-    <span class="n">epochs_tdb</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">propagated_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
-        <span class="o">.</span><span class="n">jd</span><span class="p">()</span>
-        <span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="c1"># ET == seconds since J2000 TDB; pure-arithmetic equivalent of</span>
-    <span class="c1"># sp.str2et(f&quot;JD {jd_tdb} TDB&quot;) and avoids a per-epoch CSPICE round-trip.</span>
-    <span class="n">epochs_et</span> <span class="o">=</span> <span class="p">(</span><span class="n">epochs_tdb</span> <span class="o">-</span> <span class="n">J2000_TDB_JD</span><span class="p">)</span> <span class="o">*</span> <span class="mf">86400.0</span>
-
-    <span class="n">states</span> <span class="o">=</span> <span class="n">propagated_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
-    <span class="n">states</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">:</span><span class="mi">6</span><span class="p">]</span> <span class="o">*=</span> <span class="n">u</span><span class="o">.</span><span class="n">au</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">km</span><span class="p">)</span>
-    <span class="n">states</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">:</span><span class="mi">6</span><span class="p">]</span> <span class="o">/=</span> <span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">d</span><span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">u</span><span class="o">.</span><span class="n">s</span><span class="p">)</span>
-
-    <span class="n">segment_id</span> <span class="o">=</span> <span class="n">_segment_id_for</span><span class="p">(</span>
-        <span class="n">propagated_orbit</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">epochs_et</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">float</span><span class="p">(</span><span class="n">epochs_et</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
-    <span class="p">)</span>
-    <span class="n">center_code</span> <span class="o">=</span> <span class="n">propagated_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">as_OriginCodes</span><span class="p">()</span><span class="o">.</span><span class="n">value</span>
-
-    <span class="n">writer</span><span class="o">.</span><span class="n">add_type9</span><span class="p">(</span>
-        <span class="nb">int</span><span class="p">(</span><span class="n">target_id</span><span class="p">),</span>
-        <span class="nb">int</span><span class="p">(</span><span class="n">center_code</span><span class="p">),</span>
-        <span class="nb">int</span><span class="p">(</span><span class="n">frame_id</span><span class="p">),</span>
-        <span class="nb">float</span><span class="p">(</span><span class="n">epochs_et</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span>
-        <span class="nb">float</span><span class="p">(</span><span class="n">epochs_et</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
-        <span class="n">segment_id</span><span class="p">,</span>
-        <span class="mi">15</span><span class="p">,</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">states</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">epochs_et</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-    <span class="p">)</span>
 
 
 <div class="viewcode-block" id="write_spkw03_segment">
@@ -751,9 +583,10 @@
 <span class="sd">    The `handle` parameter is accepted for API compatibility with the</span>
 <span class="sd">    legacy CSPICE-backed helper and must be a native `NaifSpkWriter` instance.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">_add_type3_segment</span><span class="p">(</span>
-        <span class="n">handle</span><span class="p">,</span>
-        <span class="n">propagated_orbit</span><span class="p">,</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbits_to_ipc</span>
+
+    <span class="n">handle</span><span class="o">.</span><span class="n">add_type3_orbits</span><span class="p">(</span>
+        <span class="n">orbits_to_ipc</span><span class="p">(</span><span class="n">propagated_orbit</span><span class="p">),</span>
         <span class="n">target_id</span><span class="p">,</span>
         <span class="n">start_time</span><span class="p">,</span>
         <span class="n">end_time</span><span class="p">,</span>
@@ -773,7 +606,9 @@
     <span class="n">end_time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Backward-compat shim for callers that passed a writer-like handle.&quot;&quot;&quot;</span>
-    <span class="n">_add_type9_segment</span><span class="p">(</span><span class="n">handle</span><span class="p">,</span> <span class="n">propagated_orbit</span><span class="p">,</span> <span class="n">target_id</span><span class="p">)</span></div>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbits_to_ipc</span>
+
+    <span class="n">handle</span><span class="o">.</span><span class="n">add_type9_orbits</span><span class="p">(</span><span class="n">orbits_to_ipc</span><span class="p">(</span><span class="n">propagated_orbit</span><span class="p">),</span> <span class="n">target_id</span><span class="p">)</span></div>
 
 </pre></div>
         </article>
@@ -793,7 +628,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

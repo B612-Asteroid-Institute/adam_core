@@ -204,6 +204,7 @@
 <ul class="current">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -218,6 +219,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -273,6 +275,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -315,6 +318,7 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -333,24 +337,32 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 current has-children"><a class="reference internal" href="adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" checked="" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
-<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 current has-children"><a class="reference internal" href="adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" checked="" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -358,13 +370,13 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5 current current-page"><a class="current reference internal" href="#">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -372,8 +384,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -429,7 +439,7 @@
 <span id="adam-core-utils-mpc-module"></span><h1>adam_core.utils.mpc module<a class="headerlink" href="#module-adam_core.utils.mpc" title="Link to this heading">¶</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.utils.mpc.convert_mpc_packed_dates">
-<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">convert_mpc_packed_dates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pf_tt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.astropy.org/en/stable/api/astropy.time.Time.html#astropy.time.Time" title="(in Astropy v7.2)"><span class="pre">Time</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#convert_mpc_packed_dates"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.convert_mpc_packed_dates" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">convert_mpc_packed_dates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pf_tt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">npt.ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Time</span></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#convert_mpc_packed_dates"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.convert_mpc_packed_dates" title="Link to this definition">¶</a></dt>
 <dd><p>Convert MPC packed form dates (in the TT time scale) to
 MJDs in TT. See: <a class="reference external" href="https://minorplanetcenter.net/iau/info/PackedDates.html">https://minorplanetcenter.net/iau/info/PackedDates.html</a>
 for details on the packed date format.</p>
@@ -450,6 +460,7 @@ for details on the packed date format.</p>
 <dt class="sig sig-object py" id="adam_core.utils.mpc.pack_numbered_designation">
 <span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_numbered_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_numbered_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_numbered_designation" title="Link to this definition">¶</a></dt>
 <dd><p>Pack a numbered MPC designation.</p>
+<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
 <dl class="simple">
 <dt>Examples of numbered designations:</dt><dd><p>Numbered      Packed
 3202          03202
@@ -481,6 +492,7 @@ for details on the packed date format.</p>
 <dt class="sig sig-object py" id="adam_core.utils.mpc.pack_provisional_designation">
 <span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_provisional_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_provisional_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_provisional_designation" title="Link to this definition">¶</a></dt>
 <dd><p>Pack a provisional MPC designation.</p>
+<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
 <dl class="simple">
 <dt>Examples of provisional designations:</dt><dd><p>Provisional   Packed
 1995 XA       J95X00A
@@ -516,6 +528,7 @@ for details on the packed date format.</p>
 <dt class="sig sig-object py" id="adam_core.utils.mpc.pack_survey_designation">
 <span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_survey_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_survey_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_survey_designation" title="Link to this definition">¶</a></dt>
 <dd><p>Pack a survey MPC designation.</p>
+<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
 <dl class="simple">
 <dt>Examples of survey designations:</dt><dd><p>Survey       Packed
 2040 P-L     PLS2040
@@ -544,6 +557,7 @@ for details on the packed date format.</p>
 <dd><p>Pack a unpacked MPC designation. For example, provisional
 designation 1998 SS162 will be packed to J98SG2S. Permanent
 designation 323 will be packed to 00323.</p>
+<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
 <p>TODO: add support for comet and natural satellite designations</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -563,6 +577,7 @@ designation 323 will be packed to 00323.</p>
 <dt class="sig sig-object py" id="adam_core.utils.mpc.unpack_numbered_designation">
 <span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_numbered_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_numbered_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_numbered_designation" title="Link to this definition">¶</a></dt>
 <dd><p>Unpack a numbered MPC designation.</p>
+<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
 <dl class="simple">
 <dt>Examples of numbered designations:</dt><dd><p>Numbered      Unpacked
 03202         3202
@@ -587,13 +602,14 @@ K3289         203289
 <dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
 </dd>
 </dl>
-<p>:raises ValueError : If the numbered designation cannot be unpacked.: The packed numbered designation is not at least 4 characters long.</p>
+<p>:raises ValueError : If the numbered designation cannot be unpacked.:</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.utils.mpc.unpack_provisional_designation">
 <span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_provisional_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_provisional_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_provisional_designation" title="Link to this definition">¶</a></dt>
 <dd><p>Unpack a provisional MPC designation.</p>
+<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
 <dl class="simple">
 <dt>Examples of provisional designations:</dt><dd><p>Provisional   Unpacked
 J95X00A       1995 XA
@@ -626,6 +642,7 @@ K07Tf8A       2007 TA418</p>
 <dt class="sig sig-object py" id="adam_core.utils.mpc.unpack_survey_designation">
 <span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_survey_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_survey_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_survey_designation" title="Link to this definition">¶</a></dt>
 <dd><p>Unpack a survey MPC designation.</p>
+<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
 <dl class="simple">
 <dt>Examples of survey designations:</dt><dd><p>Survey       Packed
 PLS2040      2040 P-L
@@ -654,6 +671,7 @@ T3S4101      4101 T-3</p>
 <dd><p>Unpack a packed MPC designation. For example, provisional
 designation J98SG2S will be unpacked to 1998 SS162. Permanent
 designation 00323 will be unpacked to 323.</p>
+<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
 <p>TODO: add support for comet and natural satellite designations</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
@@ -706,7 +724,7 @@ designation 00323 will be unpacked to 323.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

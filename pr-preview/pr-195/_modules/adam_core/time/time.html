@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -450,14 +460,15 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">astropy.time</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">erfa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
+
+<span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">astropy.time</span>
 
 <span class="n">SCALES</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">&quot;tai&quot;</span><span class="p">,</span>
@@ -476,11 +487,59 @@
 <span class="n">_NANOS_IN_DAY_F64</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">_NANOS_IN_DAY</span><span class="p">)</span>  <span class="c1"># for pyarrow float division</span>
 <span class="n">_TAI_TT_NS_CORRECTION</span> <span class="o">=</span> <span class="mi">32_184_000_000</span>  <span class="c1"># TT = TAI + 32.184s</span>
 
-<span class="c1"># ERFA converters used by `_leap_seconds_correction`:</span>
-<span class="c1"># They accept full-day and fractional-day JD arrays and return the converted pair.</span>
-<span class="n">_ErfaDayFracConverter</span> <span class="o">=</span> <span class="n">Callable</span><span class="p">[</span>
-    <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span>
-<span class="p">]</span>
+<span class="c1"># Scales served by the Rust rescale backend (ut1 requires IERS tables and is</span>
+<span class="c1"># delegated to astropy; other scales are unsupported, matching legacy).</span>
+<span class="n">_RUST_RESCALE_SCALES</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;tai&quot;</span><span class="p">,</span> <span class="s2">&quot;tt&quot;</span><span class="p">,</span> <span class="s2">&quot;utc&quot;</span><span class="p">,</span> <span class="s2">&quot;tdb&quot;</span><span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_require_astropy_time</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Load the explicit Astropy provider boundary only when requested.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">astropy.time</span>
+    <span class="k">except</span> <span class="ne">ModuleNotFoundError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;Astropy is required for Astropy Time conversion and UT1/IERS &quot;</span>
+            <span class="s2">&quot;rescaling; install adam-core[astropy]&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+    <span class="k">return</span> <span class="n">astropy</span><span class="o">.</span><span class="n">time</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_int64_values</span><span class="p">(</span>
+    <span class="n">values</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">Int64Array</span> <span class="o">|</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="nb">int</span><span class="p">,</span> <span class="n">length</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a scalar or array delta argument to a contiguous int64 array.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">Scalar</span><span class="p">):</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">length</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">values</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">)):</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_float64_values</span><span class="p">(</span>
+    <span class="n">values</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">DoubleArray</span> <span class="o">|</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="nb">float</span><span class="p">,</span> <span class="n">length</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Normalize a scalar or array argument to a contiguous float64 array.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">Scalar</span><span class="p">):</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">floating</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">integer</span><span class="p">)):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">length</span><span class="p">,</span> <span class="nb">float</span><span class="p">(</span><span class="n">values</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">)):</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="n">values</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_has_nulls</span><span class="p">(</span><span class="o">*</span><span class="n">values</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;True when any pyarrow argument carries nulls. The Rust fast paths</span>
+<span class="sd">    operate on dense arrays; null-carrying inputs take the retained pyarrow</span>
+<span class="sd">    expressions so legacy null propagation is preserved.&quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">values</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">))</span> <span class="ow">and</span> <span class="n">value</span><span class="o">.</span><span class="n">null_count</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">Scalar</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">value</span><span class="o">.</span><span class="n">is_valid</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">return</span> <span class="kc">False</span>
 
 
 <div class="viewcode-block" id="Timestamp">
@@ -498,20 +557,32 @@
 <div class="viewcode-block" id="Timestamp.micros">
 <a class="viewcode-back" href="../../../reference/api/adam_core.time.time.html#adam_core.time.Timestamp.micros">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">micros</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">Int64Array</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">pc</span><span class="o">.</span><span class="n">divide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span> <span class="mi">1_000</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unit_floor</span><span class="p">(</span><span class="mi">1_000</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.millis">
 <a class="viewcode-back" href="../../../reference/api/adam_core.time.time.html#adam_core.time.Timestamp.millis">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">millis</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">Int64Array</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">pc</span><span class="o">.</span><span class="n">divide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span> <span class="mi">1_000_000</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unit_floor</span><span class="p">(</span><span class="mi">1_000_000</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.seconds">
 <a class="viewcode-back" href="../../../reference/api/adam_core.time.time.html#adam_core.time.Timestamp.seconds">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">seconds</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">Int64Array</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">pc</span><span class="o">.</span><span class="n">divide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span> <span class="mi">1_000_000_000</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_unit_floor</span><span class="p">(</span><span class="mi">1_000_000_000</span><span class="p">)</span></div>
 
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_unit_floor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">divisor</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">Int64Array</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">_has_nulls</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">pc</span><span class="o">.</span><span class="n">divide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span> <span class="n">divisor</span><span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+            <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_unit_floor_numpy</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">divisor</span>
+            <span class="p">),</span>
+            <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">(),</span>
+        <span class="p">)</span>
 
 <div class="viewcode-block" id="Timestamp.key">
 <a class="viewcode-back" href="../../../reference/api/adam_core.time.time.html#adam_core.time.Timestamp.key">[docs]</a>
@@ -525,10 +596,18 @@
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
 
-        <span class="n">t</span> <span class="o">=</span> <span class="bp">self</span> <span class="k">if</span> <span class="n">scale</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="n">scale</span><span class="p">)</span>
-        <span class="n">days</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-        <span class="n">nanos</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">days</span> <span class="o">*</span> <span class="n">_NANOS_IN_DAY</span> <span class="o">+</span> <span class="n">nanos</span></div>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="c1"># One Rust crossing owns the optional rescale plus key assembly.</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+            <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_key_numpy</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+                <span class="n">scale</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+        <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.signature">
@@ -539,15 +618,18 @@
 
 <span class="sd">        The signature is (n, first_key, last_key, sum_mod) where keys are produced by `key()`.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
-        <span class="k">if</span> <span class="n">n</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">return</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span>
 
-        <span class="n">key</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">key</span><span class="p">(</span><span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span>
-        <span class="n">first</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">key</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-        <span class="n">last</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">key</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
-        <span class="n">sum_mod</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">(</span><span class="mh">0x7FFF_FFFF_FFFF_FFFF</span><span class="p">))</span>
-        <span class="k">return</span> <span class="n">n</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">last</span><span class="p">,</span> <span class="n">sum_mod</span></div>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="n">n</span><span class="p">,</span> <span class="n">first</span><span class="p">,</span> <span class="n">last</span><span class="p">,</span> <span class="n">sum_mod</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_signature_numpy</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+            <span class="n">scale</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">first</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">last</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">sum_mod</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.cache_digest">
@@ -570,13 +652,33 @@
 <div class="viewcode-block" id="Timestamp.mjd">
 <a class="viewcode-back" href="../../../reference/api/adam_core.time.time.html#adam_core.time.Timestamp.mjd">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">mjd</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">DoubleArray</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">pc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fractional_days</span><span class="p">())</span></div>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="k">if</span> <span class="n">_has_nulls</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">pc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">fractional_days</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+            <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_mjd</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="p">),</span>
+            <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">(),</span>
+        <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.jd">
 <a class="viewcode-back" href="../../../reference/api/adam_core.time.time.html#adam_core.time.Timestamp.jd">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">jd</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">DoubleArray</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">pc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mjd</span><span class="p">(),</span> <span class="mf">2400000.5</span><span class="p">)</span></div>
+        <span class="k">if</span> <span class="n">_has_nulls</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">pc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">mjd</span><span class="p">(),</span> <span class="mf">2400000.5</span><span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+            <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_jd_numpy</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="p">),</span>
+            <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">(),</span>
+        <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.et">
@@ -585,6 +687,18 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Returns the times as ET seconds in a pyarrow array.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="ow">in</span> <span class="n">_RUST_RESCALE_SCALES</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">_has_nulls</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">):</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+            <span class="c1"># Fused rescale-to-TDB plus ET conversion in one crossing.</span>
+            <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+                <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_et_numpy</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">(),</span>
+            <span class="p">)</span>
         <span class="n">tdb</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
         <span class="n">mjd</span> <span class="o">=</span> <span class="n">tdb</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">pc</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="n">mjd</span><span class="p">,</span> <span class="n">_J2000_TDB_MJD</span><span class="p">),</span> <span class="n">_SECONDS_IN_DAY</span><span class="p">)</span></div>
@@ -602,35 +716,57 @@
 <div class="viewcode-block" id="Timestamp.to_iso8601">
 <a class="viewcode-back" href="../../../reference/api/adam_core.time.time.html#adam_core.time.Timestamp.to_iso8601">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">to_iso8601</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">StringArray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Returns the times as ISO 8601 strings in a pyarrow array.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([],</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">string</span><span class="p">())</span>
-        <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_astropy</span><span class="p">()</span><span class="o">.</span><span class="n">isot</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">string</span><span class="p">())</span></div>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return legacy millisecond-precision ISO 8601 strings.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="n">values</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_to_iso8601_numpy</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">string</span><span class="p">())</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.from_iso8601">
 <a class="viewcode-back" href="../../../reference/api/adam_core.time.time.html#adam_core.time.Timestamp.from_iso8601">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_iso8601</span><span class="p">(</span>
-        <span class="bp">cls</span><span class="p">,</span> <span class="n">iso</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">StringArray</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;utc&quot;</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">iso</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">StringArray</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">|</span> <span class="nb">str</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;utc&quot;</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Timestamp</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Create a Timestamp from ISO 8601 strings (for example, &#39;2020-01-02T14:15:16&#39;).</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_astropy</span><span class="p">(</span><span class="n">astropy</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">Time</span><span class="p">(</span><span class="n">iso</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;isot&quot;</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">))</span></div>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Create a Timestamp from ISO 8601 strings in one Rust crossing.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">iso</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="p">[</span><span class="n">iso</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">iso</span><span class="p">,</span> <span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">)):</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">iso</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">iso</span><span class="p">)</span>
+        <span class="n">days</span><span class="p">,</span> <span class="n">nanos</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_from_iso8601_numpy</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">scale</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="n">days</span><span class="p">,</span> <span class="n">nanos</span><span class="o">=</span><span class="n">nanos</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.from_mjd">
 <a class="viewcode-back" href="../../../reference/api/adam_core.time.time.html#adam_core.time.Timestamp.from_mjd">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">from_mjd</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">mjd</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">DoubleArray</span><span class="p">,</span> <span class="n">scale</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;tai&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Timestamp</span><span class="p">:</span>
-        <span class="n">days</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">mjd</span><span class="p">)</span>
-        <span class="n">fractional_days</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="n">mjd</span><span class="p">,</span> <span class="n">days</span><span class="p">)</span>
-        <span class="n">days</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">days</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">())</span>
-        <span class="n">nanos</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">fractional_days</span><span class="p">,</span> <span class="n">_NANOS_IN_DAY</span><span class="p">)),</span> <span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">()</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mjd</span><span class="p">,</span> <span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">))</span> <span class="ow">and</span> <span class="n">mjd</span><span class="o">.</span><span class="n">null_count</span><span class="p">:</span>
+            <span class="c1"># Null-propagation compatibility path (legacy pyarrow kernels).</span>
+            <span class="n">days</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">mjd</span><span class="p">)</span>
+            <span class="n">fractional_days</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="n">mjd</span><span class="p">,</span> <span class="n">days</span><span class="p">)</span>
+            <span class="n">days</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">days</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">())</span>
+            <span class="n">nanos</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span>
+                <span class="n">pc</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">fractional_days</span><span class="p">,</span> <span class="n">_NANOS_IN_DAY</span><span class="p">)),</span> <span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">()</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="n">days</span><span class="p">,</span> <span class="n">nanos</span><span class="o">=</span><span class="n">nanos</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">mjd</span><span class="p">,</span> <span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">)):</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">mjd</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">values</span> <span class="o">=</span> <span class="n">mjd</span>
+        <span class="n">days</span><span class="p">,</span> <span class="n">nanos</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_from_mjd</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="n">days</span><span class="p">,</span> <span class="n">nanos</span><span class="o">=</span><span class="n">nanos</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span></div>
 
@@ -662,13 +798,24 @@
         <span class="k">if</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;ns&quot;</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span>
         <span class="k">elif</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;us&quot;</span><span class="p">:</span>
-            <span class="n">nanos</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">micros</span><span class="p">(),</span> <span class="mi">1_000</span><span class="p">)</span>
+            <span class="n">divisor</span> <span class="o">=</span> <span class="mi">1_000</span>
         <span class="k">elif</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;ms&quot;</span><span class="p">:</span>
-            <span class="n">nanos</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">millis</span><span class="p">(),</span> <span class="mi">1_000_000</span><span class="p">)</span>
+            <span class="n">divisor</span> <span class="o">=</span> <span class="mi">1_000_000</span>
         <span class="k">elif</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;s&quot;</span><span class="p">:</span>
-            <span class="n">nanos</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">seconds</span><span class="p">(),</span> <span class="mi">1_000_000_000</span><span class="p">)</span>
+            <span class="n">divisor</span> <span class="o">=</span> <span class="mi">1_000_000_000</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported precision: </span><span class="si">{</span><span class="n">precision</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">_has_nulls</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">):</span>
+            <span class="n">nanos</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">divide</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span> <span class="n">divisor</span><span class="p">),</span> <span class="n">divisor</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+            <span class="n">nanos</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+                <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_rounded_nanos_numpy</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">divisor</span>
+                <span class="p">),</span>
+                <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">(),</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">&quot;nanos&quot;</span><span class="p">,</span> <span class="n">nanos</span><span class="p">)</span></div>
 
 
@@ -688,18 +835,19 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">equals_scalar</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span> <span class="n">days</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">nanos</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">precision</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;ns&quot;</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">BooleanArray</span><span class="p">:</span>
-        <span class="n">delta_days</span><span class="p">,</span> <span class="n">delta_nanos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">difference_scalar</span><span class="p">(</span><span class="n">days</span><span class="p">,</span> <span class="n">nanos</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;ns&quot;</span><span class="p">:</span>
-            <span class="n">max_deviation</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="k">elif</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;us&quot;</span><span class="p">:</span>
-            <span class="n">max_deviation</span> <span class="o">=</span> <span class="mi">999</span>
-        <span class="k">elif</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;ms&quot;</span><span class="p">:</span>
-            <span class="n">max_deviation</span> <span class="o">=</span> <span class="mi">999_999</span>
-        <span class="k">elif</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;s&quot;</span><span class="p">:</span>
-            <span class="n">max_deviation</span> <span class="o">=</span> <span class="mi">999_999_999</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported precision: </span><span class="si">{</span><span class="n">precision</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">_duration_arrays_within_tolerance</span><span class="p">(</span><span class="n">delta_days</span><span class="p">,</span> <span class="n">delta_nanos</span><span class="p">,</span> <span class="n">max_deviation</span><span class="p">)</span></div>
+        <span class="n">max_deviation</span> <span class="o">=</span> <span class="n">_precision_max_deviation</span><span class="p">(</span><span class="n">precision</span><span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+            <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_equals_numpy</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                <span class="n">_int64_values</span><span class="p">(</span><span class="n">days</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+                <span class="n">_int64_values</span><span class="p">(</span><span class="n">nanos</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+                <span class="n">max_deviation</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">bool_</span><span class="p">(),</span>
+        <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.equals_array">
@@ -716,18 +864,19 @@
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">other</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Timestamps must have the same length&quot;</span><span class="p">)</span>
 
-        <span class="n">delta_days</span><span class="p">,</span> <span class="n">delta_nanos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">difference</span><span class="p">(</span><span class="n">other</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;ns&quot;</span><span class="p">:</span>
-            <span class="n">max_deviation</span> <span class="o">=</span> <span class="mi">0</span>
-        <span class="k">elif</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;us&quot;</span><span class="p">:</span>
-            <span class="n">max_deviation</span> <span class="o">=</span> <span class="mi">999</span>
-        <span class="k">elif</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;ms&quot;</span><span class="p">:</span>
-            <span class="n">max_deviation</span> <span class="o">=</span> <span class="mi">999_999</span>
-        <span class="k">elif</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;s&quot;</span><span class="p">:</span>
-            <span class="n">max_deviation</span> <span class="o">=</span> <span class="mi">999_999_999</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported precision: </span><span class="si">{</span><span class="n">precision</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">_duration_arrays_within_tolerance</span><span class="p">(</span><span class="n">delta_days</span><span class="p">,</span> <span class="n">delta_nanos</span><span class="p">,</span> <span class="n">max_deviation</span><span class="p">)</span></div>
+        <span class="n">max_deviation</span> <span class="o">=</span> <span class="n">_precision_max_deviation</span><span class="p">(</span><span class="n">precision</span><span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+            <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_equals_numpy</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                <span class="n">other</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                <span class="n">other</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                <span class="n">max_deviation</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">bool_</span><span class="p">(),</span>
+        <span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.max">
@@ -742,15 +891,14 @@
 <span class="sd">            The maximum time. If there are multiple maximum times,</span>
 <span class="sd">            one of them is returned.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Compute the maximum day</span>
-        <span class="n">max_day</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">)</span>
-        <span class="n">days_mask</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="n">max_day</span><span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
-        <span class="c1"># Compute the maximum nanos for the maximum day</span>
-        <span class="n">max_nanos</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">days_mask</span><span class="p">))</span>
-        <span class="n">nanos_mask</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span> <span class="n">max_nanos</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">and_</span><span class="p">(</span><span class="n">days_mask</span><span class="p">,</span> <span class="n">nanos_mask</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span></div>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_extremum_index_numpy</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="p">[</span><span class="n">index</span> <span class="p">:</span> <span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.min">
@@ -765,15 +913,14 @@
 <span class="sd">            The minimum time. If there are multiple minimum times,</span>
 <span class="sd">            one of them is returned.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Compute the minimum day</span>
-        <span class="n">min_day</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">)</span>
-        <span class="n">days_mask</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="n">min_day</span><span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
-        <span class="c1"># Compute the minimum nanos for the minimum day</span>
-        <span class="n">min_nanos</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">days_mask</span><span class="p">))</span>
-        <span class="n">nanos_mask</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span> <span class="n">min_nanos</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">and_</span><span class="p">(</span><span class="n">days_mask</span><span class="p">,</span> <span class="n">nanos_mask</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span></div>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_extremum_index_numpy</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="kc">False</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="p">[</span><span class="n">index</span> <span class="p">:</span> <span class="n">index</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.from_astropy">
@@ -849,11 +996,10 @@
 <div class="viewcode-block" id="Timestamp.to_astropy">
 <a class="viewcode-back" href="../../../reference/api/adam_core.time.time.html#adam_core.time.Timestamp.to_astropy">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">to_astropy</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">astropy</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">Time</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Convert the timestamp to an astropy time.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert to an Astropy Time through the optional provider boundary.&quot;&quot;&quot;</span>
+        <span class="n">astropy_time</span> <span class="o">=</span> <span class="n">_require_astropy_time</span><span class="p">()</span>
         <span class="n">fractional_days</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">fractional_days</span><span class="p">()</span>
-        <span class="k">return</span> <span class="n">astropy</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">Time</span><span class="p">(</span>
+        <span class="k">return</span> <span class="n">astropy_time</span><span class="o">.</span><span class="n">Time</span><span class="p">(</span>
             <span class="n">val</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span>
             <span class="n">val2</span><span class="o">=</span><span class="n">fractional_days</span><span class="p">,</span>
             <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;mjd&quot;</span><span class="p">,</span>
@@ -892,28 +1038,16 @@
                 <span class="p">)</span><span class="o">.</span><span class="n">as_py</span><span class="p">():</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Nanoseconds out of range&quot;</span><span class="p">)</span>
 
-        <span class="n">nanos</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">add_checked</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span> <span class="n">nanos</span><span class="p">)</span>
-        <span class="n">overflows</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">greater_equal</span><span class="p">(</span><span class="n">nanos</span><span class="p">,</span> <span class="n">_NANOS_IN_DAY</span><span class="p">)</span>
-        <span class="n">underflows</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">less</span><span class="p">(</span><span class="n">nanos</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
-        <span class="n">mask</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">StructArray</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span>
-            <span class="p">[</span><span class="n">overflows</span><span class="p">,</span> <span class="n">underflows</span><span class="p">],</span> <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;overflows&quot;</span><span class="p">,</span> <span class="s2">&quot;underflows&quot;</span><span class="p">]</span>
+        <span class="n">days_out</span><span class="p">,</span> <span class="n">nanos_out</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_add_nanos</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="n">_int64_values</span><span class="p">(</span><span class="n">nanos</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)),</span>
+            <span class="kc">False</span><span class="p">,</span>  <span class="c1"># range validated above with legacy pyarrow semantics</span>
         <span class="p">)</span>
-        <span class="n">nanos</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">case_when</span><span class="p">(</span>
-            <span class="n">mask</span><span class="p">,</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="n">nanos</span><span class="p">,</span> <span class="n">_NANOS_IN_DAY</span><span class="p">),</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">nanos</span><span class="p">,</span> <span class="n">_NANOS_IN_DAY</span><span class="p">),</span>
-            <span class="n">nanos</span><span class="p">,</span>
-        <span class="p">)</span>
-
-        <span class="n">days</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">case_when</span><span class="p">(</span>
-            <span class="n">mask</span><span class="p">,</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">v1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">&quot;days&quot;</span><span class="p">,</span> <span class="n">days</span><span class="p">)</span>
-        <span class="n">v2</span> <span class="o">=</span> <span class="n">v1</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">&quot;nanos&quot;</span><span class="p">,</span> <span class="n">nanos</span><span class="p">)</span>
+        <span class="n">v1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">&quot;days&quot;</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">days_out</span><span class="p">))</span>
+        <span class="n">v2</span> <span class="o">=</span> <span class="n">v1</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">&quot;nanos&quot;</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">nanos_out</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">v2</span></div>
 
 
@@ -996,7 +1130,14 @@
 <span class="sd">            subtract days.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">&quot;days&quot;</span><span class="p">,</span> <span class="n">pc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="n">days</span><span class="p">))</span></div>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="n">days_out</span><span class="p">,</span> <span class="n">_nanos_out</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_add_days</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="n">_int64_values</span><span class="p">(</span><span class="n">days</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">&quot;days&quot;</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">days_out</span><span class="p">))</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.add_fractional_days">
@@ -1013,15 +1154,16 @@
 <span class="sd">            or an array of the same length as the timestamp. Use</span>
 <span class="sd">            negative values to subtract fractional days.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">day_part</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">fractional_days</span><span class="p">)</span>
-        <span class="n">nano_part</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="n">fractional_days</span><span class="p">,</span> <span class="n">day_part</span><span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
-        <span class="n">days</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">day_part</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">())</span>
-        <span class="n">nanos</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">multiply</span><span class="p">(</span><span class="n">nano_part</span><span class="p">,</span> <span class="n">_NANOS_IN_DAY</span><span class="p">),</span>
-            <span class="n">options</span><span class="o">=</span><span class="n">pc</span><span class="o">.</span><span class="n">CastOptions</span><span class="p">(</span><span class="n">target_type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">(),</span> <span class="n">allow_float_truncate</span><span class="o">=</span><span class="kc">True</span><span class="p">),</span>
+        <span class="n">days_out</span><span class="p">,</span> <span class="n">nanos_out</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_add_fractional_days</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="n">_float64_values</span><span class="p">(</span><span class="n">fractional_days</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)),</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_days</span><span class="p">(</span><span class="n">days</span><span class="p">)</span><span class="o">.</span><span class="n">add_nanos</span><span class="p">(</span><span class="n">nanos</span><span class="p">)</span></div>
+        <span class="n">v1</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">&quot;days&quot;</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">days_out</span><span class="p">))</span>
+        <span class="n">v2</span> <span class="o">=</span> <span class="n">v1</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">&quot;nanos&quot;</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">nanos_out</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">v2</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.difference_scalar">
@@ -1059,26 +1201,15 @@
 <span class="sd">        [100, 86399999999900, 0]</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">days1</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="n">days</span><span class="p">)</span>
-        <span class="n">nanos1</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span> <span class="n">nanos</span><span class="p">)</span>
-        <span class="n">overflows</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">greater_equal</span><span class="p">(</span><span class="n">nanos1</span><span class="p">,</span> <span class="n">_NANOS_IN_DAY</span><span class="p">)</span>
-        <span class="n">underflows</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">less</span><span class="p">(</span><span class="n">nanos1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-        <span class="n">mask</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">StructArray</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span>
-            <span class="p">[</span><span class="n">overflows</span><span class="p">,</span> <span class="n">underflows</span><span class="p">],</span> <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;overflows&quot;</span><span class="p">,</span> <span class="s2">&quot;underflows&quot;</span><span class="p">]</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="n">days_out</span><span class="p">,</span> <span class="n">nanos_out</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_difference</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="n">_int64_values</span><span class="p">(</span><span class="n">days</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)),</span>
+            <span class="n">_int64_values</span><span class="p">(</span><span class="n">nanos</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)),</span>
         <span class="p">)</span>
-        <span class="n">nanos2</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">case_when</span><span class="p">(</span>
-            <span class="n">mask</span><span class="p">,</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="n">nanos1</span><span class="p">,</span> <span class="n">_NANOS_IN_DAY</span><span class="p">),</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">nanos1</span><span class="p">,</span> <span class="n">_NANOS_IN_DAY</span><span class="p">),</span>
-            <span class="n">nanos1</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">days2</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">case_when</span><span class="p">(</span>
-            <span class="n">mask</span><span class="p">,</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">days1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="n">days1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-            <span class="n">days1</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">days2</span><span class="p">,</span> <span class="n">nanos2</span></div>
+        <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">days_out</span><span class="p">),</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">nanos_out</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.difference">
@@ -1091,27 +1222,15 @@
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">&quot;Cannot compute difference between timestamps with different scales&quot;</span>
             <span class="p">)</span>
-        <span class="n">days1</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">days</span><span class="p">)</span>
-        <span class="n">nanos1</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">nanos</span><span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
-        <span class="n">overflows</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">greater_equal</span><span class="p">(</span><span class="n">nanos1</span><span class="p">,</span> <span class="n">_NANOS_IN_DAY</span><span class="p">)</span>
-        <span class="n">underflows</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">less</span><span class="p">(</span><span class="n">nanos1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-        <span class="n">mask</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">StructArray</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span>
-            <span class="p">[</span><span class="n">overflows</span><span class="p">,</span> <span class="n">underflows</span><span class="p">],</span> <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;overflows&quot;</span><span class="p">,</span> <span class="s2">&quot;underflows&quot;</span><span class="p">]</span>
+        <span class="n">days_out</span><span class="p">,</span> <span class="n">nanos_out</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_difference</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="n">other</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="n">other</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="n">nanos2</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">case_when</span><span class="p">(</span>
-            <span class="n">mask</span><span class="p">,</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="n">nanos1</span><span class="p">,</span> <span class="n">_NANOS_IN_DAY</span><span class="p">),</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">nanos1</span><span class="p">,</span> <span class="n">_NANOS_IN_DAY</span><span class="p">),</span>
-            <span class="n">nanos1</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">days2</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">case_when</span><span class="p">(</span>
-            <span class="n">mask</span><span class="p">,</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">days1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-            <span class="n">pc</span><span class="o">.</span><span class="n">subtract</span><span class="p">(</span><span class="n">days1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
-            <span class="n">days1</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">days2</span><span class="p">,</span> <span class="n">nanos2</span></div>
+        <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">days_out</span><span class="p">),</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">nanos_out</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.unique">
@@ -1121,9 +1240,13 @@
 <span class="sd">        elements from self. Order is not necessarily preserved.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">uniqued</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">group_by</span><span class="p">([</span><span class="s2">&quot;days&quot;</span><span class="p">,</span> <span class="s2">&quot;nanos&quot;</span><span class="p">])</span><span class="o">.</span><span class="n">aggregate</span><span class="p">([])</span>
-        <span class="n">uniqued</span> <span class="o">=</span> <span class="n">uniqued</span><span class="o">.</span><span class="n">replace_schema_metadata</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">metadata</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_pyarrow</span><span class="p">(</span><span class="n">uniqued</span><span class="p">)</span></div>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="n">days</span><span class="p">,</span> <span class="n">nanos</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_unique_numpy</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="n">days</span><span class="p">,</span> <span class="n">nanos</span><span class="o">=</span><span class="n">nanos</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="Timestamp.rescale_astropy">
@@ -1145,55 +1268,6 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unknown scale: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">new_scale</span><span class="p">))</span></div>
 
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_tt_tdb_correction</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">positive</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span> <span class="n">correction</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="nb">int</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute correction from TT to TDB in nanoseconds.</span>
-
-<span class="sd">        Correction in nanoseconds is used to bring the self value to TT from wherever it is.</span>
-<span class="sd">        Otherwise we can get a few nanoseconds difference in roundtrip.</span>
-
-<span class="sd">        If positive is False, add a minus sign to get TDB to TT correction.</span>
-<span class="sd">        Math from</span>
-<span class="sd">        gssc.esa.int/navipedia/index.php/Transformations_between_Time_Systems</span>
-
-<span class="sd">        Note that astropy/ERFA use a different algorithm that is based on</span>
-<span class="sd">        the location on Earth, but also seems to use a few approximations.</span>
-<span class="sd">        As a result the difference can be in some tens of microseconds.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Going into numpy and then back is considerably faster than doing the</span>
-        <span class="c1"># same calculation using pyarrow. The result is the same if delta is</span>
-        <span class="c1"># rounded before astype. As written, delta is truncated, which may produce</span>
-        <span class="c1"># a 1ns difference.</span>
-        <span class="n">days</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span> <span class="o">-</span> <span class="mi">51_545</span>
-        <span class="n">fracs</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span> <span class="o">+</span> <span class="n">correction</span><span class="p">)</span> <span class="o">/</span> <span class="n">_NANOS_IN_DAY</span> <span class="o">+</span> <span class="mf">0.5</span>
-        <span class="n">centuries</span> <span class="o">=</span> <span class="p">(</span><span class="n">days</span> <span class="o">+</span> <span class="n">fracs</span><span class="p">)</span> <span class="o">/</span> <span class="mi">36_525</span>
-        <span class="n">g</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="mf">35999.050</span> <span class="o">*</span> <span class="n">centuries</span> <span class="o">+</span> <span class="mf">357.528</span><span class="p">)</span>
-        <span class="n">delta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">g</span> <span class="o">+</span> <span class="mf">0.0167</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">g</span><span class="p">))</span> <span class="o">*</span> <span class="mi">1658000</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">positive</span><span class="p">:</span>
-            <span class="n">delta</span> <span class="o">=</span> <span class="o">-</span><span class="n">delta</span>
-        <span class="k">return</span> <span class="n">delta</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_leap_seconds_correction</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">converter</span><span class="p">:</span> <span class="n">_ErfaDayFracConverter</span><span class="p">,</span> <span class="n">correction</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="nb">int</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute leap seconds correction, returned in nanoseconds.</span>
-
-<span class="sd">        Correction in nanoseconds is used to bring self from wherever it is to TAI.</span>
-<span class="sd">        Converter is an ERFA method used to get the actual leap seconds. An alternative</span>
-<span class="sd">        would be to download and lookup the leap seconds tables ourselves, which is left</span>
-<span class="sd">        as an exercise for the future.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># ERFA methods take and return a pair of ndarrays for the full days and fractions of JD</span>
-        <span class="n">old_days</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span> <span class="o">+</span> <span class="mi">2400000</span>
-        <span class="n">old_frac</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span> <span class="o">+</span> <span class="n">correction</span><span class="p">)</span> <span class="o">/</span> <span class="n">_NANOS_IN_DAY</span> <span class="o">+</span> <span class="mf">0.5</span>
-        <span class="n">new_days</span><span class="p">,</span> <span class="n">new_frac</span> <span class="o">=</span> <span class="n">converter</span><span class="p">(</span><span class="n">old_days</span><span class="p">,</span> <span class="n">old_frac</span><span class="p">)</span>
-        <span class="n">delta</span> <span class="o">=</span> <span class="p">((</span><span class="n">new_days</span> <span class="o">-</span> <span class="n">old_days</span><span class="p">)</span> <span class="o">+</span> <span class="p">(</span><span class="n">new_frac</span> <span class="o">-</span> <span class="n">old_frac</span><span class="p">))</span> <span class="o">*</span> <span class="n">_NANOS_IN_DAY</span>
-        <span class="c1"># Want nice round seconds, but in nanoseconds. Without rounding we occasionally</span>
-        <span class="c1"># get a stray nanosecond, which messes up roundtrip conversions.</span>
-        <span class="n">delta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">delta</span> <span class="o">*</span> <span class="mf">1e-9</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span> <span class="o">*</span> <span class="mi">1_000_000_000</span>
-        <span class="k">return</span> <span class="n">delta</span>
 
 <div class="viewcode-block" id="Timestamp.rescale">
 <a class="viewcode-back" href="../../../reference/api/adam_core.time.time.html#adam_core.time.Timestamp.rescale">[docs]</a>
@@ -1223,53 +1297,21 @@
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">==</span> <span class="s2">&quot;ut1&quot;</span> <span class="ow">or</span> <span class="n">new_scale</span> <span class="o">==</span> <span class="s2">&quot;ut1&quot;</span><span class="p">:</span>
             <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">rescale_astropy</span><span class="p">(</span><span class="n">new_scale</span><span class="p">)</span>
 
-        <span class="c1"># Delta in nanoseconds</span>
-        <span class="n">correction</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">==</span> <span class="s2">&quot;tt&quot;</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">new_scale</span> <span class="o">==</span> <span class="s2">&quot;tai&quot;</span><span class="p">:</span>
-                <span class="n">correction</span> <span class="o">=</span> <span class="o">-</span><span class="n">_TAI_TT_NS_CORRECTION</span>
-            <span class="k">elif</span> <span class="n">new_scale</span> <span class="o">==</span> <span class="s2">&quot;utc&quot;</span><span class="p">:</span>
-                <span class="n">correction</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_leap_seconds_correction</span><span class="p">(</span><span class="n">erfa</span><span class="o">.</span><span class="n">taiutc</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-                    <span class="o">-</span> <span class="n">_TAI_TT_NS_CORRECTION</span>
-                <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">new_scale</span> <span class="o">==</span> <span class="s2">&quot;tdb&quot;</span><span class="p">:</span>
-                <span class="n">correction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tt_tdb_correction</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">==</span> <span class="s2">&quot;utc&quot;</span><span class="p">:</span>
-            <span class="n">correction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_leap_seconds_correction</span><span class="p">(</span><span class="n">erfa</span><span class="o">.</span><span class="n">utctai</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">new_scale</span> <span class="o">==</span> <span class="s2">&quot;tt&quot;</span><span class="p">:</span>
-                <span class="n">correction</span> <span class="o">+=</span> <span class="n">_TAI_TT_NS_CORRECTION</span>
-            <span class="k">elif</span> <span class="n">new_scale</span> <span class="o">==</span> <span class="s2">&quot;tdb&quot;</span><span class="p">:</span>
-                <span class="c1"># We are effectively going UTC-&gt;TAI-&gt;TT-&gt;TDB with corrections here</span>
-                <span class="n">correction</span> <span class="o">+=</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_tt_tdb_correction</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">correction</span> <span class="o">+</span> <span class="n">_TAI_TT_NS_CORRECTION</span><span class="p">)</span>
-                    <span class="o">+</span> <span class="n">_TAI_TT_NS_CORRECTION</span>
-                <span class="p">)</span>
-        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">==</span> <span class="s2">&quot;tai&quot;</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">new_scale</span> <span class="o">==</span> <span class="s2">&quot;tt&quot;</span><span class="p">:</span>
-                <span class="n">correction</span> <span class="o">=</span> <span class="n">_TAI_TT_NS_CORRECTION</span>
-            <span class="k">elif</span> <span class="n">new_scale</span> <span class="o">==</span> <span class="s2">&quot;tdb&quot;</span><span class="p">:</span>
-                <span class="n">correction</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="bp">self</span><span class="o">.</span><span class="n">_tt_tdb_correction</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">_TAI_TT_NS_CORRECTION</span><span class="p">)</span>
-                    <span class="o">+</span> <span class="n">_TAI_TT_NS_CORRECTION</span>
-                <span class="p">)</span>
-            <span class="k">elif</span> <span class="n">new_scale</span> <span class="o">==</span> <span class="s2">&quot;tai&quot;</span><span class="p">:</span>
-                <span class="n">correction</span> <span class="o">=</span> <span class="mi">0</span>
-            <span class="k">elif</span> <span class="n">new_scale</span> <span class="o">==</span> <span class="s2">&quot;utc&quot;</span><span class="p">:</span>
-                <span class="n">correction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_leap_seconds_correction</span><span class="p">(</span><span class="n">erfa</span><span class="o">.</span><span class="n">taiutc</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="o">==</span> <span class="s2">&quot;tdb&quot;</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">new_scale</span> <span class="o">==</span> <span class="s2">&quot;tt&quot;</span><span class="p">:</span>
-                <span class="n">correction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tt_tdb_correction</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">new_scale</span> <span class="o">==</span> <span class="s2">&quot;tai&quot;</span><span class="p">:</span>
-                <span class="n">correction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tt_tdb_correction</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="n">_TAI_TT_NS_CORRECTION</span>
-            <span class="k">elif</span> <span class="n">new_scale</span> <span class="o">==</span> <span class="s2">&quot;utc&quot;</span><span class="p">:</span>
-                <span class="n">correction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_tt_tdb_correction</span><span class="p">(</span><span class="kc">False</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">-</span> <span class="n">_TAI_TT_NS_CORRECTION</span>
-                <span class="n">correction</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_leap_seconds_correction</span><span class="p">(</span><span class="n">erfa</span><span class="o">.</span><span class="n">taiutc</span><span class="p">,</span> <span class="n">correction</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">correction</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">tmp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">add_nanos</span><span class="p">(</span><span class="n">correction</span><span class="p">,</span> <span class="n">check_range</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">days</span><span class="o">=</span><span class="n">tmp</span><span class="o">.</span><span class="n">days</span><span class="p">,</span> <span class="n">nanos</span><span class="o">=</span><span class="n">tmp</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">new_scale</span>
+        <span class="c1"># The tai/tt/utc/tdb conversions run in the Rust backend (bead</span>
+        <span class="c1"># personal-cmy.25), which ports the same ERFA leap-second and</span>
+        <span class="c1"># TT&lt;-&gt;TDB correction policies; both sides are gated bit-exactly by</span>
+        <span class="c1"># the frozen fixture in</span>
+        <span class="c1"># migration/artifacts/time_scale_rescale_fixture_2026-05-15.json.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scale</span> <span class="ow">in</span> <span class="n">_RUST_RESCALE_SCALES</span> <span class="ow">and</span> <span class="n">new_scale</span> <span class="ow">in</span> <span class="n">_RUST_RESCALE_SCALES</span><span class="p">:</span>
+            <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+            <span class="n">days</span><span class="p">,</span> <span class="n">nanos</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">timestamp_rescale</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+                <span class="n">new_scale</span><span class="p">,</span>
             <span class="p">)</span>
+            <span class="k">return</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="n">days</span><span class="p">,</span> <span class="n">nanos</span><span class="o">=</span><span class="n">nanos</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">new_scale</span><span class="p">)</span>
 
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">&quot;Rescale from </span><span class="si">{}</span><span class="s2"> to </span><span class="si">{}</span><span class="s2"> is not supported&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span> <span class="n">new_scale</span><span class="p">)</span>
@@ -1311,6 +1353,18 @@
 
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_precision_max_deviation</span><span class="p">(</span><span class="n">precision</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">int</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;ns&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">0</span>
+    <span class="k">if</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;us&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">999</span>
+    <span class="k">if</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;ms&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">999_999</span>
+    <span class="k">if</span> <span class="n">precision</span> <span class="o">==</span> <span class="s2">&quot;s&quot;</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">999_999_999</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported precision: </span><span class="si">{</span><span class="n">precision</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_duration_arrays_within_tolerance</span><span class="p">(</span>
     <span class="n">delta_days</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Int64Array</span><span class="p">,</span> <span class="n">delta_nanos</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Int64Array</span><span class="p">,</span> <span class="n">max_nanos_deviation</span><span class="p">:</span> <span class="nb">int</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">BooleanArray</span><span class="p">:</span>
@@ -1350,7 +1404,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

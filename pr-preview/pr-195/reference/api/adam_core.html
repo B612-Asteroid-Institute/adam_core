@@ -204,6 +204,7 @@
 <ul class="current">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -218,6 +219,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -273,6 +275,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -315,6 +318,7 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -333,24 +337,32 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -358,13 +370,13 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -372,8 +384,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -591,7 +601,6 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.dynamics.propagation.html">adam_core.dynamics.propagation module</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.dynamics.propagation.html#adam_core.dynamics.propagation.ChiDiagnostics"><code class="docutils literal notranslate"><span class="pre">ChiDiagnostics</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.dynamics.propagation.html#adam_core.dynamics.propagation.propagate_2body"><code class="docutils literal notranslate"><span class="pre">propagate_2body()</span></code></a></li>
 </ul>
 </li>
@@ -717,6 +726,12 @@
 <li class="toctree-l4"><a class="reference internal" href="adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations"><code class="docutils literal notranslate"><span class="pre">ADESObservations</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.observations.ades.html#adam_core.observations.ades.ADES_to_string"><code class="docutils literal notranslate"><span class="pre">ADES_to_string()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.observations.ades.html#adam_core.observations.ades.ADES_string_to_tables"><code class="docutils literal notranslate"><span class="pre">ADES_string_to_tables()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.observations.arrow_bridge.html#adam_core.observations.arrow_bridge.observations_to_ipc"><code class="docutils literal notranslate"><span class="pre">observations_to_ipc()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.observations.arrow_bridge.html#adam_core.observations.arrow_bridge.observations_from_ipc"><code class="docutils literal notranslate"><span class="pre">observations_from_ipc()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.observations.arrow_bridge.html#adam_core.observations.arrow_bridge.round_trip_observations"><code class="docutils literal notranslate"><span class="pre">round_trip_observations()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.associations.html">adam_core.observations.associations module</a><ul>
@@ -871,6 +886,24 @@
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantOrbits.weights_cov"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.weights_cov</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.aberrated_coordinates"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.aberrated_coordinates</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.alpha"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.alpha</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.collapse"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.collapse()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.collapse_by_object_id"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.collapse_by_object_id()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.collapse_sigma_points_orbit_major"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.collapse_sigma_points_orbit_major()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.coordinates"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.coordinates</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.light_time"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.light_time</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.link_to_ephemeris"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.link_to_ephemeris()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.object_id"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.object_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.orbit_id"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.orbit_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.predicted_magnitude_v"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.predicted_magnitude_v</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.schema"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.schema</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.variant_id"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.variant_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.weights"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.weights</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantEphemeris.weights_cov"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.weights_cov</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.html#subpackages">Subpackages</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.openspace.html">adam_core.orbits.openspace package</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.openspace.html#submodules">Submodules</a></li>
@@ -883,6 +916,24 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.html#submodules">Submodules</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.orbits_to_ipc"><code class="docutils literal notranslate"><span class="pre">orbits_to_ipc()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.variants_to_ipc"><code class="docutils literal notranslate"><span class="pre">variants_to_ipc()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.orbits_from_ipc"><code class="docutils literal notranslate"><span class="pre">orbits_from_ipc()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.variants_from_ipc"><code class="docutils literal notranslate"><span class="pre">variants_from_ipc()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.observers_to_ipc"><code class="docutils literal notranslate"><span class="pre">observers_to_ipc()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.observers_from_ipc"><code class="docutils literal notranslate"><span class="pre">observers_from_ipc()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.coordinates_to_ipc"><code class="docutils literal notranslate"><span class="pre">coordinates_to_ipc()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.orbits_to_record_batch"><code class="docutils literal notranslate"><span class="pre">orbits_to_record_batch()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.orbits_from_record_batch"><code class="docutils literal notranslate"><span class="pre">orbits_from_record_batch()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.variants_to_record_batch"><code class="docutils literal notranslate"><span class="pre">variants_to_record_batch()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.variants_from_record_batch"><code class="docutils literal notranslate"><span class="pre">variants_from_record_batch()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.observers_to_record_batch"><code class="docutils literal notranslate"><span class="pre">observers_to_record_batch()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.round_trip_orbits"><code class="docutils literal notranslate"><span class="pre">round_trip_orbits()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.round_trip_observers"><code class="docutils literal notranslate"><span class="pre">round_trip_observers()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html#adam_core.orbits.arrow_bridge.round_trip_orbits_zero_copy"><code class="docutils literal notranslate"><span class="pre">round_trip_orbits_zero_copy()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.classification.html">adam_core.orbits.classification module</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.classification.html#adam_core.orbits.classification.calc_orbit_class"><code class="docutils literal notranslate"><span class="pre">calc_orbit_class()</span></code></a></li>
 </ul>
@@ -933,6 +984,8 @@
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.calculate_phase_angle"><code class="docutils literal notranslate"><span class="pre">calculate_phase_angle()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.convert_magnitude"><code class="docutils literal notranslate"><span class="pre">convert_magnitude()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.predict_magnitudes"><code class="docutils literal notranslate"><span class="pre">predict_magnitudes()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.hg_phase_correction"><code class="docutils literal notranslate"><span class="pre">hg_phase_correction()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.reduced_magnitude"><code class="docutils literal notranslate"><span class="pre">reduced_magnitude()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.estimate_absolute_magnitude_v_from_detections"><code class="docutils literal notranslate"><span class="pre">estimate_absolute_magnitude_v_from_detections()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.estimate_absolute_magnitude_v_from_detections_grouped"><code class="docutils literal notranslate"><span class="pre">estimate_absolute_magnitude_v_from_detections_grouped()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.GroupedPhysicalParameters"><code class="docutils literal notranslate"><span class="pre">GroupedPhysicalParameters</span></code></a><ul>
@@ -940,6 +993,69 @@
 <li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.GroupedPhysicalParameters.object_id"><code class="docutils literal notranslate"><span class="pre">GroupedPhysicalParameters.object_id</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.GroupedPhysicalParameters.physical_parameters"><code class="docutils literal notranslate"><span class="pre">GroupedPhysicalParameters.physical_parameters</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.GroupedPhysicalParameters.schema"><code class="docutils literal notranslate"><span class="pre">GroupedPhysicalParameters.schema</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.build_rotation_period_observations_from_detections"><code class="docutils literal notranslate"><span class="pre">build_rotation_period_observations_from_detections()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.estimate_rotation_period"><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.estimate_rotation_period_best_apparition"><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period_best_apparition()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.estimate_rotation_period_from_detections"><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period_from_detections()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.estimate_rotation_period_from_detections_grouped"><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period_from_detections_grouped()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations"><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.delta_au"><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.delta_au</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.filter"><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.filter</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.from_point_source_observations"><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.from_point_source_observations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.mag"><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.mag</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.mag_sigma"><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.mag_sigma</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.phase_angle_deg"><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.phase_angle_deg</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.r_au"><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.r_au</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.schema"><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.schema</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.session_id"><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.session_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodObservations.time"><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.time</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.alternate_period_days"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.alternate_period_days</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.amplitude_snr"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.amplitude_snr</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.confidence_flags"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.confidence_flags</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_alternate_period_days"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.fourier_alternate_period_days</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_is_reliable"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.fourier_is_reliable</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_is_valid"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.fourier_is_valid</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_order"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.fourier_order</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_period_days"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.fourier_period_days</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_phase_c1"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.fourier_phase_c1</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_phase_c2"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.fourier_phase_c2</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.fourier_sigma_threshold"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.fourier_sigma_threshold</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.frequency_cycles_per_day"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.frequency_cycles_per_day</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.insufficiency_reasons"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.insufficiency_reasons</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.is_period_doubled"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.is_period_doubled</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.is_reliable"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.is_reliable</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.is_valid"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.is_valid</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_clipped"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.n_clipped</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_filters"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.n_filters</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_fit_observations"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.n_fit_observations</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_observations"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.n_observations</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_rotations_spanned"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.n_rotations_spanned</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_sessions"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.n_sessions</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.n_significant_aliases"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.n_significant_aliases</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.period_days"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.period_days</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.period_hours"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.period_hours</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.period_lower_days"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.period_lower_days</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.period_upper_days"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.period_upper_days</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.period_verdict"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.period_verdict</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.phase_coverage_fraction"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.phase_coverage_fraction</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.profile"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.profile</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.relative_period_uncertainty"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.relative_period_uncertainty</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.reliability_code"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.reliability_code</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.residual_sigma_mag"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.residual_sigma_mag</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.schema"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.schema</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.single_insufficient"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.single_insufficient()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.RotationPeriodResult.used_session_offsets"><code class="docutils literal notranslate"><span class="pre">RotationPeriodResult.used_session_offsets</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.GroupedRotationPeriodResults"><code class="docutils literal notranslate"><span class="pre">GroupedRotationPeriodResults</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.GroupedRotationPeriodResults.object_id"><code class="docutils literal notranslate"><span class="pre">GroupedRotationPeriodResults.object_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.GroupedRotationPeriodResults.result"><code class="docutils literal notranslate"><span class="pre">GroupedRotationPeriodResults.result</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.html#adam_core.photometry.GroupedRotationPeriodResults.schema"><code class="docutils literal notranslate"><span class="pre">GroupedRotationPeriodResults.schema</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#subpackages">Subpackages</a><ul>
@@ -962,6 +1078,10 @@
 <li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.bandpasses.html#submodules">Submodules</a></li>
 </ul>
 </li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.rotation.html#submodules">Submodules</a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.photometry.html#submodules">Submodules</a><ul>
@@ -969,6 +1089,10 @@
 <li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.absolute_magnitude.html#adam_core.photometry.absolute_magnitude.GroupedPhysicalParameters"><code class="docutils literal notranslate"><span class="pre">GroupedPhysicalParameters</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.absolute_magnitude.html#adam_core.photometry.absolute_magnitude.estimate_absolute_magnitude_v_from_detections"><code class="docutils literal notranslate"><span class="pre">estimate_absolute_magnitude_v_from_detections()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.absolute_magnitude.html#adam_core.photometry.absolute_magnitude.estimate_absolute_magnitude_v_from_detections_grouped"><code class="docutils literal notranslate"><span class="pre">estimate_absolute_magnitude_v_from_detections_grouped()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.lightcurve.html#adam_core.photometry.lightcurve.reduced_magnitude"><code class="docutils literal notranslate"><span class="pre">reduced_magnitude()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a><ul>
@@ -980,6 +1104,7 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.magnitude_common.html#adam_core.photometry.magnitude_common.hg_phase_correction"><code class="docutils literal notranslate"><span class="pre">hg_phase_correction()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.magnitude_common.html#adam_core.photometry.magnitude_common.bandpass_filter_id_table"><code class="docutils literal notranslate"><span class="pre">bandpass_filter_id_table()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.magnitude_common.html#adam_core.photometry.magnitude_common.bandpass_integrals_for_composition"><code class="docutils literal notranslate"><span class="pre">bandpass_integrals_for_composition()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.photometry.magnitude_common.html#adam_core.photometry.magnitude_common.bandpass_composition_key"><code class="docutils literal notranslate"><span class="pre">bandpass_composition_key()</span></code></a></li>
@@ -1002,10 +1127,10 @@
 </li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.propagator.html#submodules">Submodules</a><ul>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.propagation_worker"><code class="docutils literal notranslate"><span class="pre">propagation_worker()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.attach_magnitude_or_phase"><code class="docutils literal notranslate"><span class="pre">attach_magnitude_or_phase()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.EphemerisMixin"><code class="docutils literal notranslate"><span class="pre">EphemerisMixin</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.Propagator"><code class="docutils literal notranslate"><span class="pre">Propagator</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.ObserverType"><code class="docutils literal notranslate"><span class="pre">ObserverType</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.TimestampType"><code class="docutils literal notranslate"><span class="pre">TimestampType</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
@@ -1090,16 +1215,8 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.utils.html#submodules">Submodules</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.bounded_lru.html#adam_core.utils.bounded_lru.bounded_lru_get"><code class="docutils literal notranslate"><span class="pre">bounded_lru_get()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.bounded_lru.html#adam_core.utils.bounded_lru.bounded_lru_put"><code class="docutils literal notranslate"><span class="pre">bounded_lru_put()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.utils.chunking.html">adam_core.utils.chunking module</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.chunking.html#adam_core.utils.chunking.pad_to_fixed_size"><code class="docutils literal notranslate"><span class="pre">pad_to_fixed_size()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.chunking.html#adam_core.utils.chunking.process_in_chunks"><code class="docutils literal notranslate"><span class="pre">process_in_chunks()</span></code></a></li>
-</ul>
-</li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.utils.mpc.html">adam_core.utils.mpc module</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.convert_mpc_packed_dates"><code class="docutils literal notranslate"><span class="pre">convert_mpc_packed_dates()</span></code></a></li>
@@ -1116,6 +1233,7 @@
 <li class="toctree-l3"><a class="reference internal" href="adam_core.utils.spice.html">adam_core.utils.spice module</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.utils.spice.html#adam_core.utils.spice.clear_spkez_cache"><code class="docutils literal notranslate"><span class="pre">clear_spkez_cache()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.utils.spice.html#adam_core.utils.spice.setup_SPICE"><code class="docutils literal notranslate"><span class="pre">setup_SPICE()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.spice.html#adam_core.utils.spice.setup_mpc_obscodes"><code class="docutils literal notranslate"><span class="pre">setup_mpc_obscodes()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.utils.spice.html#adam_core.utils.spice.get_perturber_state"><code class="docutils literal notranslate"><span class="pre">get_perturber_state()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.utils.spice.html#adam_core.utils.spice.list_registered_kernels"><code class="docutils literal notranslate"><span class="pre">list_registered_kernels()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.utils.spice.html#adam_core.utils.spice.register_spice_kernel"><code class="docutils literal notranslate"><span class="pre">register_spice_kernel()</span></code></a></li>
@@ -1141,42 +1259,6 @@
 <div class="toctree-wrapper compound">
 <ul>
 <li class="toctree-l1"><a class="reference internal" href="adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l1"><a class="reference internal" href="adam_core.parallel.html">adam_core.parallel module</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.ParallelBackend"><code class="docutils literal notranslate"><span class="pre">ParallelBackend</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.ParallelBackend.name"><code class="docutils literal notranslate"><span class="pre">ParallelBackend.name</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.ParallelBackend.put"><code class="docutils literal notranslate"><span class="pre">ParallelBackend.put()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.ParallelBackend.get"><code class="docutils literal notranslate"><span class="pre">ParallelBackend.get()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.ParallelBackend.is_ref"><code class="docutils literal notranslate"><span class="pre">ParallelBackend.is_ref()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.ParallelBackend.free"><code class="docutils literal notranslate"><span class="pre">ParallelBackend.free()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.ParallelBackend.map_unordered"><code class="docutils literal notranslate"><span class="pre">ParallelBackend.map_unordered()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.SequentialBackend"><code class="docutils literal notranslate"><span class="pre">SequentialBackend</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.SequentialBackend.name"><code class="docutils literal notranslate"><span class="pre">SequentialBackend.name</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.SequentialBackend.put"><code class="docutils literal notranslate"><span class="pre">SequentialBackend.put()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.SequentialBackend.get"><code class="docutils literal notranslate"><span class="pre">SequentialBackend.get()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.SequentialBackend.is_ref"><code class="docutils literal notranslate"><span class="pre">SequentialBackend.is_ref()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.SequentialBackend.free"><code class="docutils literal notranslate"><span class="pre">SequentialBackend.free()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.SequentialBackend.map_unordered"><code class="docutils literal notranslate"><span class="pre">SequentialBackend.map_unordered()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.RayBackend"><code class="docutils literal notranslate"><span class="pre">RayBackend</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.RayBackend.name"><code class="docutils literal notranslate"><span class="pre">RayBackend.name</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.RayBackend.put"><code class="docutils literal notranslate"><span class="pre">RayBackend.put()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.RayBackend.get"><code class="docutils literal notranslate"><span class="pre">RayBackend.get()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.RayBackend.is_ref"><code class="docutils literal notranslate"><span class="pre">RayBackend.is_ref()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.RayBackend.free"><code class="docutils literal notranslate"><span class="pre">RayBackend.free()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.RayBackend.map_unordered"><code class="docutils literal notranslate"><span class="pre">RayBackend.map_unordered()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.get_backend"><code class="docutils literal notranslate"><span class="pre">get_backend()</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="adam_core.parallel.html#adam_core.parallel.resolve_max_processes"><code class="docutils literal notranslate"><span class="pre">resolve_max_processes()</span></code></a></li>
-</ul>
-</li>
-<li class="toctree-l1"><a class="reference internal" href="adam_core.ray_cluster.html">adam_core.ray_cluster module</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="adam_core.ray_cluster.html#adam_core.ray_cluster.initialize_use_ray"><code class="docutils literal notranslate"><span class="pre">initialize_use_ray()</span></code></a></li>
-</ul>
-</li>
 </ul>
 </div>
 </section>
@@ -1217,7 +1299,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

@@ -3,11 +3,11 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="adam_core.utils.iter module" href="adam_core.utils.iter.html"><link rel="prev" title="adam_core.utils.bounded_lru module" href="adam_core.utils.bounded_lru.html">
-        <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/reference/api/adam_core.utils.chunking.html">
+<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="adam_core.orbits.classification module" href="adam_core.orbits.classification.html"><link rel="prev" title="adam_core.orbits.query.scout module" href="adam_core.orbits.query.scout.html">
+        <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/reference/api/adam_core.orbits.arrow_bridge.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
-        <title>adam_core.utils.chunking module - adam_core</title>
+        <title>adam_core.orbits.arrow_bridge module - adam_core</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
@@ -204,6 +204,7 @@
 <ul class="current">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -218,6 +219,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -273,6 +275,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -300,7 +303,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.orbits.html">adam_core.orbits package</a><input aria-label="Toggle navigation of adam_core.orbits package" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 current has-children"><a class="reference internal" href="adam_core.orbits.html">adam_core.orbits package</a><input aria-label="Toggle navigation of adam_core.orbits package" checked="" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
 <li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.orbits.openspace.html">adam_core.orbits.openspace package</a><input aria-label="Toggle navigation of adam_core.orbits.openspace package" class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" role="switch" type="checkbox"/><label for="toctree-checkbox-13"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.openspace.assets.html">adam_core.orbits.openspace.assets module</a></li>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.openspace.lua.html">adam_core.orbits.openspace.lua module</a></li>
@@ -315,6 +318,7 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 current current-page"><a class="current reference internal" href="#">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -333,24 +337,32 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 current has-children"><a class="reference internal" href="adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" checked="" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
-<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -358,13 +370,13 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5 current current-page"><a class="current reference internal" href="#">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -372,8 +384,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -403,12 +413,12 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/blob/main/docs/source/reference/api/adam_core.utils.chunking.rst?plain=true" title="View this page">
+  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/blob/main/docs/source/reference/api/adam_core.orbits.arrow_bridge.rst?plain=true" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
 </div><div class="edit-this-page">
-  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/edit/main/docs/source/reference/api/adam_core.utils.chunking.rst" rel="edit" title="Edit this page">
+  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/edit/main/docs/source/reference/api/adam_core.orbits.arrow_bridge.rst" rel="edit" title="Edit this page">
     <svg><use href="#svg-pencil"></use></svg>
     <span class="visually-hidden">Edit this page</span>
   </a>
@@ -425,44 +435,112 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="module-adam_core.utils.chunking">
-<span id="adam-core-utils-chunking-module"></span><h1>adam_core.utils.chunking module<a class="headerlink" href="#module-adam_core.utils.chunking" title="Link to this heading">¶</a></h1>
-<dl class="py function">
-<dt class="sig sig-object py" id="adam_core.utils.chunking.pad_to_fixed_size">
-<span class="sig-prename descclassname"><span class="pre">adam_core.utils.chunking.</span></span><span class="sig-name descname"><span class="pre">pad_to_fixed_size</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">target_shape</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pad_value</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/utils/chunking.html#pad_to_fixed_size"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.chunking.pad_to_fixed_size" title="Link to this definition">¶</a></dt>
-<dd><p>Pad an array to a fixed shape with a specified pad value.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>array</strong> (<em>array-like</em>) – Array to pad</p></li>
-<li><p><strong>target_shape</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><em>tuple</em></a>) – Desired output shape</p></li>
-<li><p><strong>pad_value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em> or </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>optional</em>) – Value to use for padding, by default 0</p></li>
+          <section id="module-adam_core.orbits.arrow_bridge">
+<span id="adam-core-orbits-arrow-bridge-module"></span><h1>adam_core.orbits.arrow_bridge module<a class="headerlink" href="#module-adam_core.orbits.arrow_bridge" title="Link to this heading">¶</a></h1>
+<p>Arrow bridge: quivr <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> &lt;-&gt; Rust-canonical <code class="docutils literal notranslate"><span class="pre">OrbitBatch</span></code>.</p>
+<p>W1 data-model keystone (Beads personal-cmy.13). Carries the <em>complete</em> nested
+<code class="docutils literal notranslate"><span class="pre">Orbits</span></code> schema (coordinates incl. covariance, time, origin, physical
+parameters) to/from the Rust data model in a single Python&lt;-&gt;Rust crossing, and
+exposes Rust-native workflows that run entirely on the <code class="docutils literal notranslate"><span class="pre">OrbitBatch</span></code>.</p>
+<p>Two transports share the same Rust workflow code:</p>
+<ul class="simple">
+<li><p><strong>IPC bytes</strong> (<code class="docutils literal notranslate"><span class="pre">*_ipc</span></code> helpers): schema-faithful, one serialize/deserialize
+copy; works on any supported pyo3/pyarrow.</p></li>
+<li><p><strong>Arrow C Data Interface</strong> (<code class="docutils literal notranslate"><span class="pre">*_record_batch</span></code> helpers): zero-copy buffer
+sharing via pyarrow <code class="docutils literal notranslate"><span class="pre">RecordBatch</span></code> &lt;-&gt; arrow-rs.</p></li>
 </ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>padded_array</strong> – Padded array with desired shape</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p>array-like</p>
-</dd>
-</dl>
+<p>quivr stores <code class="docutils literal notranslate"><span class="pre">frame</span></code> and the timestamp <code class="docutils literal notranslate"><span class="pre">scale</span></code> as <code class="docutils literal notranslate"><span class="pre">StringAttribute</span></code> values
+in Arrow schema metadata (<code class="docutils literal notranslate"><span class="pre">coordinates.frame</span></code> / <code class="docutils literal notranslate"><span class="pre">coordinates.time.scale</span></code>);
+the Rust codec reads canonical <code class="docutils literal notranslate"><span class="pre">adam_core_*</span></code> keys. The metadata translation
+lives here so callers exchange ordinary <code class="docutils literal notranslate"><span class="pre">Orbits</span></code>/<code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code> objects.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.orbits_to_ipc">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">orbits_to_ipc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">orbits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.14)"><span class="pre">bytes</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#orbits_to_ipc"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.orbits_to_ipc" title="Link to this definition">¶</a></dt>
+<dd><p>Serialize <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> to Arrow IPC bytes with the metadata Rust needs.</p>
 </dd></dl>
 
 <dl class="py function">
-<dt class="sig sig-object py" id="adam_core.utils.chunking.process_in_chunks">
-<span class="sig-prename descclassname"><span class="pre">adam_core.utils.chunking.</span></span><span class="sig-name descname"><span class="pre">process_in_chunks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chunk_size</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/utils/chunking.html#process_in_chunks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.chunking.process_in_chunks" title="Link to this definition">¶</a></dt>
-<dd><p>Yield chunks of the array with a fixed size, padding the last chunk if necessary.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>array</strong> (<em>array-like</em>) – Array to process in chunks</p></li>
-<li><p><strong>chunk_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a>) – Size of each chunk</p></li>
-</ul>
-</dd>
-<dt class="field-even">Yields<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>chunk</strong> (<em>array-like</em>) – Array chunk of fixed size (padded if necessary)</p>
-</dd>
-</dl>
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.variants_to_ipc">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">variants_to_ipc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">variants</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits" title="adam_core.orbits.variants.VariantOrbits"><span class="pre">VariantOrbits</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.14)"><span class="pre">bytes</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#variants_to_ipc"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.variants_to_ipc" title="Link to this definition">¶</a></dt>
+<dd><p>Serialize <code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code> to Arrow IPC bytes with the metadata Rust needs.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.orbits_from_ipc">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">orbits_from_ipc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.14)"><span class="pre">bytes</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#orbits_from_ipc"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.orbits_from_ipc" title="Link to this definition">¶</a></dt>
+<dd><p>Reconstruct <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> from Rust-produced Arrow IPC bytes.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.variants_from_ipc">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">variants_from_ipc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.14)"><span class="pre">bytes</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits" title="adam_core.orbits.variants.VariantOrbits"><span class="pre">VariantOrbits</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#variants_from_ipc"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.variants_from_ipc" title="Link to this definition">¶</a></dt>
+<dd><p>Reconstruct <code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code> from Rust-produced Arrow IPC bytes.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.observers_to_ipc">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">observers_to_ipc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observers.observers.html#adam_core.observers.observers.Observers" title="adam_core.observers.observers.Observers"><span class="pre">Observers</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.14)"><span class="pre">bytes</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#observers_to_ipc"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.observers_to_ipc" title="Link to this definition">¶</a></dt>
+<dd><p>Serialize <code class="docutils literal notranslate"><span class="pre">Observers</span></code> to Arrow IPC bytes with the metadata Rust needs.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.observers_from_ipc">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">observers_from_ipc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">raw</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.14)"><span class="pre">bytes</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.observers.observers.html#adam_core.observers.observers.Observers" title="adam_core.observers.observers.Observers"><span class="pre">Observers</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#observers_from_ipc"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.observers_from_ipc" title="Link to this definition">¶</a></dt>
+<dd><p>Reconstruct <code class="docutils literal notranslate"><span class="pre">Observers</span></code> from Rust-produced Arrow IPC bytes.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.coordinates_to_ipc">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">coordinates_to_ipc</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coordinates</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">representation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#bytes" title="(in Python v3.14)"><span class="pre">bytes</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#coordinates_to_ipc"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.coordinates_to_ipc" title="Link to this definition">¶</a></dt>
+<dd><p>Serialize a coordinate table (<code class="docutils literal notranslate"><span class="pre">cartesian</span></code> or <code class="docutils literal notranslate"><span class="pre">spherical</span></code>) to Arrow IPC.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.orbits_to_record_batch">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">orbits_to_record_batch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">orbits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.RecordBatch.html#pyarrow.RecordBatch" title="(in Apache Arrow v24.0.0)"><span class="pre">RecordBatch</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#orbits_to_record_batch"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.orbits_to_record_batch" title="Link to this definition">¶</a></dt>
+<dd><p>Materialize <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> as a single pyarrow <code class="docutils literal notranslate"><span class="pre">RecordBatch</span></code> for zero-copy hand-off.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.orbits_from_record_batch">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">orbits_from_record_batch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">record_batch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.RecordBatch.html#pyarrow.RecordBatch" title="(in Apache Arrow v24.0.0)"><span class="pre">RecordBatch</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#orbits_from_record_batch"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.orbits_from_record_batch" title="Link to this definition">¶</a></dt>
+<dd><p>Reconstruct <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> from a Rust-produced pyarrow <code class="docutils literal notranslate"><span class="pre">RecordBatch</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.variants_to_record_batch">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">variants_to_record_batch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">variants</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits" title="adam_core.orbits.variants.VariantOrbits"><span class="pre">VariantOrbits</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.RecordBatch.html#pyarrow.RecordBatch" title="(in Apache Arrow v24.0.0)"><span class="pre">RecordBatch</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#variants_to_record_batch"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.variants_to_record_batch" title="Link to this definition">¶</a></dt>
+<dd><p>Materialize <code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code> as one metadata-stamped RecordBatch.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.variants_from_record_batch">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">variants_from_record_batch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">record_batch</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.RecordBatch.html#pyarrow.RecordBatch" title="(in Apache Arrow v24.0.0)"><span class="pre">RecordBatch</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits" title="adam_core.orbits.variants.VariantOrbits"><span class="pre">VariantOrbits</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#variants_from_record_batch"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.variants_from_record_batch" title="Link to this definition">¶</a></dt>
+<dd><p>Wrap a Rust-produced VariantOrbits RecordBatch directly.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.observers_to_record_batch">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">observers_to_record_batch</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observers.observers.html#adam_core.observers.observers.Observers" title="adam_core.observers.observers.Observers"><span class="pre">Observers</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.RecordBatch.html#pyarrow.RecordBatch" title="(in Apache Arrow v24.0.0)"><span class="pre">RecordBatch</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#observers_to_record_batch"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.observers_to_record_batch" title="Link to this definition">¶</a></dt>
+<dd><p>Materialize <code class="docutils literal notranslate"><span class="pre">Observers</span></code> as one metadata-stamped RecordBatch.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.round_trip_orbits">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">round_trip_orbits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">orbits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#round_trip_orbits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.round_trip_orbits" title="Link to this definition">¶</a></dt>
+<dd><p>Decode to the Rust <code class="docutils literal notranslate"><span class="pre">OrbitBatch</span></code> and back via IPC (identity bridge check).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.round_trip_observers">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">round_trip_observers</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observers</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observers.observers.html#adam_core.observers.observers.Observers" title="adam_core.observers.observers.Observers"><span class="pre">Observers</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.observers.observers.html#adam_core.observers.observers.Observers" title="adam_core.observers.observers.Observers"><span class="pre">Observers</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#round_trip_observers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.round_trip_observers" title="Link to this definition">¶</a></dt>
+<dd><p>Decode to the Rust <code class="docutils literal notranslate"><span class="pre">ObserverBatch</span></code> and back via IPC (transport check).</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.orbits.arrow_bridge.round_trip_orbits_zero_copy">
+<span class="sig-prename descclassname"><span class="pre">adam_core.orbits.arrow_bridge.</span></span><span class="sig-name descname"><span class="pre">round_trip_orbits_zero_copy</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">orbits</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/arrow_bridge.html#round_trip_orbits_zero_copy"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.arrow_bridge.round_trip_orbits_zero_copy" title="Link to this definition">¶</a></dt>
+<dd><p>Identity round-trip via the zero-copy Arrow C Data Interface transport.</p>
 </dd></dl>
 
 </section>
@@ -472,23 +550,23 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="adam_core.utils.iter.html">
+          <a class="next-page" href="adam_core.orbits.classification.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">adam_core.utils.iter module</div>
+                <div class="title">adam_core.orbits.classification module</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="adam_core.utils.bounded_lru.html">
+          <a class="prev-page" href="adam_core.orbits.query.scout.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">adam_core.utils.bounded_lru module</div>
+                <div class="title">adam_core.orbits.query.scout module</div>
                 
               </div>
             </a>
@@ -502,7 +580,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             
@@ -523,9 +601,22 @@
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">adam_core.utils.chunking module</a><ul>
-<li><a class="reference internal" href="#adam_core.utils.chunking.pad_to_fixed_size"><code class="docutils literal notranslate"><span class="pre">pad_to_fixed_size()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.utils.chunking.process_in_chunks"><code class="docutils literal notranslate"><span class="pre">process_in_chunks()</span></code></a></li>
+<li><a class="reference internal" href="#">adam_core.orbits.arrow_bridge module</a><ul>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.orbits_to_ipc"><code class="docutils literal notranslate"><span class="pre">orbits_to_ipc()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.variants_to_ipc"><code class="docutils literal notranslate"><span class="pre">variants_to_ipc()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.orbits_from_ipc"><code class="docutils literal notranslate"><span class="pre">orbits_from_ipc()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.variants_from_ipc"><code class="docutils literal notranslate"><span class="pre">variants_from_ipc()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.observers_to_ipc"><code class="docutils literal notranslate"><span class="pre">observers_to_ipc()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.observers_from_ipc"><code class="docutils literal notranslate"><span class="pre">observers_from_ipc()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.coordinates_to_ipc"><code class="docutils literal notranslate"><span class="pre">coordinates_to_ipc()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.orbits_to_record_batch"><code class="docutils literal notranslate"><span class="pre">orbits_to_record_batch()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.orbits_from_record_batch"><code class="docutils literal notranslate"><span class="pre">orbits_from_record_batch()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.variants_to_record_batch"><code class="docutils literal notranslate"><span class="pre">variants_to_record_batch()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.variants_from_record_batch"><code class="docutils literal notranslate"><span class="pre">variants_from_record_batch()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.observers_to_record_batch"><code class="docutils literal notranslate"><span class="pre">observers_to_record_batch()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.round_trip_orbits"><code class="docutils literal notranslate"><span class="pre">round_trip_orbits()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.round_trip_observers"><code class="docutils literal notranslate"><span class="pre">round_trip_observers()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.arrow_bridge.round_trip_orbits_zero_copy"><code class="docutils literal notranslate"><span class="pre">round_trip_orbits_zero_copy()</span></code></a></li>
 </ul>
 </li>
 </ul>

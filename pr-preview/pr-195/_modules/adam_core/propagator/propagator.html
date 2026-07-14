@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -415,544 +425,70 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for adam_core.propagator.propagator</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span></span><span class="sd">&quot;&quot;&quot;Abstract propagator framework.</span>
+
+<span class="sd">adam_core ships no concrete propagator and no Python composition: only</span>
+<span class="sd">Rust-backed propagators (e.g. ``adam_assist.ASSISTPropagator``) are</span>
+<span class="sd">supported. Each public surface -- :meth:`Propagator.propagate_orbits`,</span>
+<span class="sd">:meth:`EphemerisMixin.generate_ephemeris`, and</span>
+<span class="sd">:meth:`~adam_core.dynamics.impacts.ImpactMixin.detect_collisions` -- is the</span>
+<span class="sd">abstract single-crossing contract that a backend implements as one</span>
+<span class="sd">Python-&gt;Rust crossing. Covariance sampling/collapse, light-time/aberration,</span>
+<span class="sd">photometry, and local parallelism (rayon) all live inside the backend; Ray, if</span>
+<span class="sd">used at all, is only an optional outer distribution wrapper around a whole</span>
+<span class="sd">backend call.</span>
+
+<span class="sd">The former Python composition (per-chunk Ray fan-out, covariance</span>
+<span class="sd">sample/propagate/collapse, the generic light-time ephemeris pipeline, and the</span>
+<span class="sd">``_propagate_orbits``/``_generate_ephemeris`` hooks) has been deleted; its</span>
+<span class="sd">behavior is replicated inside the Rust backends and validated by the</span>
+<span class="sd">the downstream ``adam-assist`` Rust/parity test suites.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">ray</span><span class="w"> </span><span class="kn">import</span> <span class="n">ObjectRef</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.api</span><span class="w"> </span><span class="kn">import</span> <span class="n">add_light_time_numpy</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">Constants</span> <span class="k">as</span> <span class="n">c</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span><span class="p">,</span> <span class="n">OriginCodes</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.spherical</span><span class="w"> </span><span class="kn">import</span> <span class="n">SphericalCoordinates</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.transform</span><span class="w"> </span><span class="kn">import</span> <span class="n">transform_coordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.ephemeris</span><span class="w"> </span><span class="kn">import</span> <span class="n">Ephemeris</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.variants</span><span class="w"> </span><span class="kn">import</span> <span class="n">VariantEphemeris</span><span class="p">,</span> <span class="n">VariantOrbits</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..parallel</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_backend</span><span class="p">,</span> <span class="n">resolve_max_processes</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..photometry.magnitude</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">calculate_apparent_magnitude_v</span><span class="p">,</span>
-    <span class="n">calculate_apparent_magnitude_v_and_phase_angle</span><span class="p">,</span>
-    <span class="n">calculate_phase_angle</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.iter</span><span class="w"> </span><span class="kn">import</span> <span class="n">_iterate_chunks</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.variants</span><span class="w"> </span><span class="kn">import</span> <span class="n">VariantOrbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.types</span><span class="w"> </span><span class="kn">import</span> <span class="n">EphemerisType</span><span class="p">,</span> <span class="n">ObserverType</span><span class="p">,</span> <span class="n">OrbitType</span><span class="p">,</span> <span class="n">TimestampType</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">ensure_input_origin_and_frame</span><span class="p">,</span> <span class="n">ensure_input_time_scale</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
-<span class="n">C</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">C</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">&quot;EphemerisMixin&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;Propagator&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;EphemerisType&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;ObserverType&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;OrbitType&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;TimestampType&quot;</span><span class="p">,</span>
+<span class="p">]</span>
 
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_alignment_indices_string_keys</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">obs_code</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">object_</span><span class="p">],</span>
-    <span class="n">obs_days</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span>
-    <span class="n">obs_nanos</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span>
-    <span class="n">eph_code</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">object_</span><span class="p">],</span>
-    <span class="n">eph_days</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span>
-    <span class="n">eph_nanos</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">]:</span>
-    <span class="n">keys_obs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
-        <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">c</span><span class="si">}</span><span class="s2">|</span><span class="si">{</span><span class="n">d</span><span class="si">}</span><span class="s2">|</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">c</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">obs_code</span><span class="p">,</span> <span class="n">obs_days</span><span class="p">,</span> <span class="n">obs_nanos</span><span class="p">)],</span>
-        <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">keys_eph</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
-        <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">c</span><span class="si">}</span><span class="s2">|</span><span class="si">{</span><span class="n">d</span><span class="si">}</span><span class="s2">|</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">c</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">eph_code</span><span class="p">,</span> <span class="n">eph_days</span><span class="p">,</span> <span class="n">eph_nanos</span><span class="p">)],</span>
-        <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">keys_obs</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys_obs</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="s2">&quot;Observer keys are not unique; cannot map ephemeris rows unambiguously.&quot;</span>
-        <span class="p">)</span>
-
-    <span class="n">sorter</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">keys_obs</span><span class="p">)</span>
-    <span class="n">pos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">keys_obs</span><span class="p">[</span><span class="n">sorter</span><span class="p">],</span> <span class="n">keys_eph</span><span class="p">)</span>
-    <span class="n">idx</span> <span class="o">=</span> <span class="n">sorter</span><span class="p">[</span><span class="n">pos</span><span class="p">]</span>
-    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">keys_obs</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">!=</span> <span class="n">keys_eph</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Failed to align ephemeris rows to observers (key mismatch).&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_alignment_indices_struct_index_in</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">obs_code</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span>
-    <span class="n">obs_days</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span>
-    <span class="n">obs_nanos</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span>
-    <span class="n">eph_code</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span>
-    <span class="n">eph_days</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span>
-    <span class="n">eph_nanos</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">]:</span>
-    <span class="c1"># NOTE: Arrow compute `index_in` does not support struct kernels in our supported</span>
-    <span class="c1"># versions, so we build keys via vectorized Arrow string concatenation (no Python loops).</span>
-    <span class="n">sep</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">scalar</span><span class="p">(</span><span class="s2">&quot;|&quot;</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
-    <span class="n">obs_code_s</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">obs_code</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
-    <span class="n">obs_days_s</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">obs_days</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
-    <span class="n">obs_nanos_s</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">obs_nanos</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
-    <span class="n">eph_code_s</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">eph_code</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
-    <span class="n">eph_days_s</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">eph_days</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
-    <span class="n">eph_nanos_s</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">eph_nanos</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
-
-    <span class="n">obs_key</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">binary_join_element_wise</span><span class="p">(</span>
-        <span class="n">pc</span><span class="o">.</span><span class="n">binary_join_element_wise</span><span class="p">(</span><span class="n">obs_code_s</span><span class="p">,</span> <span class="n">obs_days_s</span><span class="p">,</span> <span class="n">sep</span><span class="p">),</span> <span class="n">obs_nanos_s</span><span class="p">,</span> <span class="n">sep</span>
-    <span class="p">)</span>
-    <span class="n">eph_key</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">binary_join_element_wise</span><span class="p">(</span>
-        <span class="n">pc</span><span class="o">.</span><span class="n">binary_join_element_wise</span><span class="p">(</span><span class="n">eph_code_s</span><span class="p">,</span> <span class="n">eph_days_s</span><span class="p">,</span> <span class="n">sep</span><span class="p">),</span> <span class="n">eph_nanos_s</span><span class="p">,</span> <span class="n">sep</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Uniqueness check: keys must uniquely identify an observer row.</span>
-    <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">count_distinct</span><span class="p">(</span><span class="n">obs_key</span><span class="p">)</span><span class="o">.</span><span class="n">as_py</span><span class="p">())</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">obs_key</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="s2">&quot;Observer keys are not unique; cannot map ephemeris rows unambiguously.&quot;</span>
-        <span class="p">)</span>
-
-    <span class="n">idx</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">fill_null</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">index_in</span><span class="p">(</span><span class="n">eph_key</span><span class="p">,</span> <span class="n">value_set</span><span class="o">=</span><span class="n">obs_key</span><span class="p">),</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
-    <span class="n">idx_np</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">idx</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">idx_np</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Failed to align ephemeris rows to observers (key mismatch).&quot;</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">idx_np</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_hg_params_for_ephemeris_rows_arrow</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">orbit_id</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">,</span>
-    <span class="n">H_v</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">,</span>
-    <span class="n">G</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">,</span>
-    <span class="n">ephemeris_orbit_id</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Vectorized mapping from orbit_id -&gt; (H_v, G) aligned to ephemeris rows.</span>
-
-<span class="sd">    This raises immediately if the input orbit table contains conflicting (H_v, G)</span>
-<span class="sd">    values for the same orbit_id.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">oid</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">orbit_id</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
-    <span class="n">H</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">H_v</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">())</span>
-    <span class="n">g</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">G</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">())</span>
-
-    <span class="n">valid</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">and_</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">is_finite</span><span class="p">(</span><span class="n">H</span><span class="p">),</span> <span class="n">pc</span><span class="o">.</span><span class="n">is_finite</span><span class="p">(</span><span class="n">g</span><span class="p">))</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">pc</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">valid</span><span class="p">)</span><span class="o">.</span><span class="n">as_py</span><span class="p">():</span>
-        <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ephemeris_orbit_id</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
-            <span class="n">n</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
-        <span class="p">)</span>
-
-    <span class="n">t</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">table</span><span class="p">({</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">:</span> <span class="n">oid</span><span class="p">,</span> <span class="s2">&quot;H_v&quot;</span><span class="p">:</span> <span class="n">H</span><span class="p">,</span> <span class="s2">&quot;G&quot;</span><span class="p">:</span> <span class="n">g</span><span class="p">})</span>
-    <span class="n">t</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">valid</span><span class="p">)</span>
-
-    <span class="n">gb</span> <span class="o">=</span> <span class="n">t</span><span class="o">.</span><span class="n">group_by</span><span class="p">(</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">aggregate</span><span class="p">(</span>
-        <span class="p">[(</span><span class="s2">&quot;H_v&quot;</span><span class="p">,</span> <span class="s2">&quot;min&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;H_v&quot;</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;G&quot;</span><span class="p">,</span> <span class="s2">&quot;min&quot;</span><span class="p">),</span> <span class="p">(</span><span class="s2">&quot;G&quot;</span><span class="p">,</span> <span class="s2">&quot;max&quot;</span><span class="p">)]</span>
-    <span class="p">)</span>
-    <span class="c1"># Any mismatch indicates conflicting params for an orbit_id.</span>
-    <span class="n">conflict</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">or_</span><span class="p">(</span>
-        <span class="n">pc</span><span class="o">.</span><span class="n">not_equal</span><span class="p">(</span><span class="n">gb</span><span class="p">[</span><span class="s2">&quot;H_v_min&quot;</span><span class="p">],</span> <span class="n">gb</span><span class="p">[</span><span class="s2">&quot;H_v_max&quot;</span><span class="p">]),</span>
-        <span class="n">pc</span><span class="o">.</span><span class="n">not_equal</span><span class="p">(</span><span class="n">gb</span><span class="p">[</span><span class="s2">&quot;G_min&quot;</span><span class="p">],</span> <span class="n">gb</span><span class="p">[</span><span class="s2">&quot;G_max&quot;</span><span class="p">]),</span>
-    <span class="p">)</span>
-    <span class="k">if</span> <span class="n">pc</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">conflict</span><span class="p">)</span><span class="o">.</span><span class="n">as_py</span><span class="p">():</span>
-        <span class="n">bad</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">filter</span><span class="p">(</span><span class="n">gb</span><span class="p">[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">],</span> <span class="n">conflict</span><span class="p">)</span>
-        <span class="n">bad_id</span> <span class="o">=</span> <span class="n">bad</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">bad</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="s2">&quot;&lt;unknown&gt;&quot;</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Conflicting physical parameters for orbit_id=</span><span class="si">{</span><span class="n">bad_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-    <span class="c1"># Map ephemeris orbit_id -&gt; grouped index</span>
-    <span class="n">eph_oid</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">ephemeris_orbit_id</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
-    <span class="n">idx</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">index_in</span><span class="p">(</span><span class="n">eph_oid</span><span class="p">,</span> <span class="n">value_set</span><span class="o">=</span><span class="n">gb</span><span class="p">[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">])</span>
-    <span class="c1"># pc.take propagates nulls for missing indices; those convert to NaN below.</span>
-    <span class="n">H_out</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">gb</span><span class="p">[</span><span class="s2">&quot;H_v_min&quot;</span><span class="p">],</span> <span class="n">idx</span><span class="p">)</span>
-    <span class="n">G_out</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">gb</span><span class="p">[</span><span class="s2">&quot;G_min&quot;</span><span class="p">],</span> <span class="n">idx</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">(</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">H_out</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">G_out</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-    <span class="p">)</span>
-
-
-<div class="viewcode-block" id="propagation_worker">
-<a class="viewcode-back" href="../../../reference/api/adam_core.propagator.propagator.html#adam_core.propagator.propagation_worker">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">propagation_worker</span><span class="p">(</span>
-    <span class="n">orbits</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">Orbits</span><span class="p">,</span> <span class="n">VariantOrbits</span><span class="p">],</span>
-    <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">,</span>
-    <span class="n">propagator</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="s2">&quot;Propagator&quot;</span><span class="p">],</span>
-    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">Orbits</span><span class="p">,</span> <span class="n">VariantOrbits</span><span class="p">]:</span>
-    <span class="n">prop</span> <span class="o">=</span> <span class="n">propagator</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-    <span class="n">propagated</span> <span class="o">=</span> <span class="n">prop</span><span class="o">.</span><span class="n">_propagate_orbits</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">propagated</span></div>
-
-
-
-<div class="viewcode-block" id="attach_magnitude_or_phase">
-<a class="viewcode-back" href="../../../reference/api/adam_core.propagator.propagator.html#adam_core.propagator.attach_magnitude_or_phase">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">attach_magnitude_or_phase</span><span class="p">(</span>
-    <span class="n">ephemeris</span><span class="p">:</span> <span class="n">EphemerisType</span><span class="p">,</span>
-    <span class="n">orbits</span><span class="p">:</span> <span class="n">OrbitType</span><span class="p">,</span>
-    <span class="n">observers</span><span class="p">:</span> <span class="n">ObserverType</span><span class="p">,</span>
-    <span class="n">predict_magnitudes</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-    <span class="n">predict_phase_angle</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EphemerisType</span><span class="p">:</span>
-    <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="n">predict_magnitudes</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">predict_phase_angle</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">ephemeris</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">ephemeris</span>
-
-    <span class="k">if</span> <span class="n">pc</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">is_null</span><span class="p">(</span><span class="n">ephemeris</span><span class="o">.</span><span class="n">aberrated_coordinates</span><span class="o">.</span><span class="n">x</span><span class="p">))</span><span class="o">.</span><span class="n">as_py</span><span class="p">():</span>
-        <span class="k">return</span> <span class="n">ephemeris</span>
-
-    <span class="n">orbits_value</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">ObjectRef</span><span class="p">)</span> <span class="k">else</span> <span class="n">orbits</span>
-    <span class="n">observers_value</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">observers</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observers</span><span class="p">,</span> <span class="n">ObjectRef</span><span class="p">)</span> <span class="k">else</span> <span class="n">observers</span>
-    <span class="p">)</span>
-
-    <span class="n">want_mags</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">predict_magnitudes</span><span class="p">)</span>
-    <span class="n">want_alpha</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">predict_phase_angle</span><span class="p">)</span>
-
-    <span class="n">H_v</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">G</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">has_params</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="n">want_mags</span><span class="p">:</span>
-        <span class="n">H_v</span><span class="p">,</span> <span class="n">G</span> <span class="o">=</span> <span class="n">_hg_params_for_ephemeris_rows_arrow</span><span class="p">(</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbits_value</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
-            <span class="n">H_v</span><span class="o">=</span><span class="n">orbits_value</span><span class="o">.</span><span class="n">physical_parameters</span><span class="o">.</span><span class="n">H_v</span><span class="p">,</span>
-            <span class="n">G</span><span class="o">=</span><span class="n">orbits_value</span><span class="o">.</span><span class="n">physical_parameters</span><span class="o">.</span><span class="n">G</span><span class="p">,</span>
-            <span class="n">ephemeris_orbit_id</span><span class="o">=</span><span class="n">ephemeris</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">has_params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">H_v</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">has_params</span><span class="p">):</span>
-            <span class="n">want_mags</span> <span class="o">=</span> <span class="kc">False</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">want_alpha</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">want_mags</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">ephemeris</span>
-
-    <span class="k">if</span> <span class="n">ephemeris</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span> <span class="o">!=</span> <span class="n">observers_value</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span><span class="p">:</span>
-        <span class="n">observers_value</span> <span class="o">=</span> <span class="n">observers_value</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-            <span class="s2">&quot;coordinates.time&quot;</span><span class="p">,</span>
-            <span class="n">observers_value</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="n">ephemeris</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span><span class="p">),</span>
-        <span class="p">)</span>
-
-    <span class="n">idx_np</span> <span class="o">=</span> <span class="n">_alignment_indices_struct_index_in</span><span class="p">(</span>
-        <span class="n">obs_code</span><span class="o">=</span><span class="n">observers_value</span><span class="o">.</span><span class="n">code</span><span class="p">,</span>
-        <span class="n">obs_days</span><span class="o">=</span><span class="n">observers_value</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="p">,</span>
-        <span class="n">obs_nanos</span><span class="o">=</span><span class="n">observers_value</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span>
-        <span class="n">eph_code</span><span class="o">=</span><span class="n">ephemeris</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="p">,</span>
-        <span class="n">eph_days</span><span class="o">=</span><span class="n">ephemeris</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="p">,</span>
-        <span class="n">eph_nanos</span><span class="o">=</span><span class="n">ephemeris</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">observers_aligned</span> <span class="o">=</span> <span class="n">observers_value</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">idx_np</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">()))</span>
-    <span class="n">obj_helio</span> <span class="o">=</span> <span class="n">transform_coordinates</span><span class="p">(</span>
-        <span class="n">ephemeris</span><span class="o">.</span><span class="n">aberrated_coordinates</span><span class="p">,</span>
-        <span class="n">CartesianCoordinates</span><span class="p">,</span>
-        <span class="n">frame_out</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-        <span class="n">origin_out</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">obs_helio</span> <span class="o">=</span> <span class="n">observers_aligned</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-        <span class="s2">&quot;coordinates&quot;</span><span class="p">,</span>
-        <span class="n">transform_coordinates</span><span class="p">(</span>
-            <span class="n">observers_aligned</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-            <span class="n">CartesianCoordinates</span><span class="p">,</span>
-            <span class="n">frame_out</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-            <span class="n">origin_out</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="p">,</span>
-        <span class="p">),</span>
-    <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">want_mags</span> <span class="ow">and</span> <span class="p">(</span><span class="n">H_v</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">G</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">has_params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-            <span class="s2">&quot;Internal error: H/G photometry parameters are required for &quot;</span>
-            <span class="s2">&quot;magnitude prediction&quot;</span>
-        <span class="p">)</span>
-
-    <span class="n">alpha_deg</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">mags</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="n">want_mags</span> <span class="ow">and</span> <span class="n">want_alpha</span><span class="p">:</span>
-        <span class="n">mags</span><span class="p">,</span> <span class="n">alpha_deg</span> <span class="o">=</span> <span class="n">calculate_apparent_magnitude_v_and_phase_angle</span><span class="p">(</span>
-            <span class="n">H_v</span><span class="o">=</span><span class="n">H_v</span><span class="p">,</span>
-            <span class="n">object_coords</span><span class="o">=</span><span class="n">obj_helio</span><span class="p">,</span>
-            <span class="n">observer</span><span class="o">=</span><span class="n">obs_helio</span><span class="p">,</span>
-            <span class="n">G</span><span class="o">=</span><span class="n">G</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">elif</span> <span class="n">want_alpha</span><span class="p">:</span>
-        <span class="n">alpha_deg</span> <span class="o">=</span> <span class="n">calculate_phase_angle</span><span class="p">(</span><span class="n">obj_helio</span><span class="p">,</span> <span class="n">obs_helio</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="n">want_mags</span><span class="p">:</span>
-        <span class="n">mags</span> <span class="o">=</span> <span class="n">calculate_apparent_magnitude_v</span><span class="p">(</span>
-            <span class="n">H_v</span><span class="o">=</span><span class="n">H_v</span><span class="p">,</span>
-            <span class="n">object_coords</span><span class="o">=</span><span class="n">obj_helio</span><span class="p">,</span>
-            <span class="n">observer</span><span class="o">=</span><span class="n">obs_helio</span><span class="p">,</span>
-            <span class="n">G</span><span class="o">=</span><span class="n">G</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">alpha_deg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">alpha_deg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">alpha_deg</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">ephemeris</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-            <span class="s2">&quot;alpha&quot;</span><span class="p">,</span>
-            <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">alpha_deg</span><span class="p">,</span> <span class="n">mask</span><span class="o">=~</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">alpha_deg</span><span class="p">),</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">()),</span>
-        <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">mags</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">has_params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="s2">&quot;Internal error: photometry mask is required for magnitude output&quot;</span>
-            <span class="p">)</span>
-        <span class="n">mags</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mags</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">valid</span> <span class="o">=</span> <span class="n">has_params</span> <span class="o">&amp;</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">mags</span><span class="p">)</span>
-        <span class="n">predicted</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">mags</span><span class="p">,</span> <span class="n">mask</span><span class="o">=~</span><span class="n">valid</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">())</span>
-        <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">ephemeris</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">&quot;predicted_magnitude_v&quot;</span><span class="p">,</span> <span class="n">predicted</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">ephemeris</span></div>
-
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_uses_default_ephemeris_mixin</span><span class="p">(</span><span class="n">propagator</span><span class="p">:</span> <span class="s2">&quot;Propagator&quot;</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    True iff `propagator._generate_ephemeris` is the EphemerisMixin implementation.</span>
-
-<span class="sd">    Why: subclasses may override `_generate_ephemeris` without accepting extra keyword</span>
-<span class="sd">    arguments. We only pass photometry flags into the default mixin implementation.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">func</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="o">.</span><span class="n">_generate_ephemeris</span><span class="p">,</span> <span class="s2">&quot;__func__&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">func</span> <span class="ow">is</span> <span class="n">EphemerisMixin</span><span class="o">.</span><span class="n">_generate_ephemeris</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_propagation_chunk_worker</span><span class="p">(</span>
-    <span class="n">idx</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span>
-    <span class="n">orbits</span><span class="p">:</span> <span class="n">OrbitType</span><span class="p">,</span>
-    <span class="n">times</span><span class="p">:</span> <span class="n">OrbitType</span><span class="p">,</span>
-    <span class="n">propagator</span><span class="p">:</span> <span class="s2">&quot;Propagator&quot;</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrbitType</span><span class="p">:</span>
-    <span class="n">orbits_chunk</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
-    <span class="n">propagated</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">_propagate_orbits</span><span class="p">(</span><span class="n">orbits_chunk</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">propagated</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_ephemeris_chunk_worker</span><span class="p">(</span>
-    <span class="n">idx</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">],</span>
-    <span class="n">orbits</span><span class="p">:</span> <span class="n">OrbitType</span><span class="p">,</span>
-    <span class="n">observers</span><span class="p">:</span> <span class="n">ObserverType</span><span class="p">,</span>
-    <span class="n">propagator</span><span class="p">:</span> <span class="s2">&quot;Propagator&quot;</span><span class="p">,</span>
-    <span class="n">predict_magnitudes</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-    <span class="n">predict_phase_angle</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EphemerisType</span><span class="p">:</span>
-    <span class="n">orbits_chunk</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">_uses_default_ephemeris_mixin</span><span class="p">(</span><span class="n">propagator</span><span class="p">):</span>
-        <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">_generate_ephemeris</span><span class="p">(</span>
-            <span class="n">orbits_chunk</span><span class="p">,</span>
-            <span class="n">observers</span><span class="p">,</span>
-            <span class="n">predict_magnitudes</span><span class="o">=</span><span class="n">predict_magnitudes</span><span class="p">,</span>
-            <span class="n">predict_phase_angle</span><span class="o">=</span><span class="n">predict_phase_angle</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">_generate_ephemeris</span><span class="p">(</span><span class="n">orbits_chunk</span><span class="p">,</span> <span class="n">observers</span><span class="p">)</span>
-        <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">attach_magnitude_or_phase</span><span class="p">(</span>
-            <span class="n">ephemeris</span><span class="p">,</span>
-            <span class="n">orbits</span><span class="o">=</span><span class="n">orbits_chunk</span><span class="p">,</span>
-            <span class="n">observers</span><span class="o">=</span><span class="n">observers</span><span class="p">,</span>
-            <span class="n">predict_magnitudes</span><span class="o">=</span><span class="n">predict_magnitudes</span><span class="p">,</span>
-            <span class="n">predict_phase_angle</span><span class="o">=</span><span class="n">predict_phase_angle</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">ephemeris</span>
+<span class="n">_CovarianceMethod</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;sigma-point&quot;</span><span class="p">,</span> <span class="s2">&quot;monte-carlo&quot;</span><span class="p">]</span>
 
 
 <div class="viewcode-block" id="EphemerisMixin">
 <a class="viewcode-back" href="../../../reference/api/adam_core.propagator.propagator.html#adam_core.propagator.EphemerisMixin">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">EphemerisMixin</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Mixin with signature for generating ephemerides.</span>
-<span class="sd">    Subclasses should implement the _generate_ephemeris method.</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">EphemerisMixin</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Ephemeris-generation contract for propagators.</span>
+
+<span class="sd">    Concrete (Rust-backed) propagators implement :meth:`generate_ephemeris` as a</span>
+<span class="sd">    single Python-&gt;Rust crossing: covariance sampling, per-variant ephemeris,</span>
+<span class="sd">    collapse to per-row covariance, light-time/aberration, and photometry all</span>
+<span class="sd">    run inside the backend. adam_core provides no Python composition -- only the</span>
+<span class="sd">    abstract contract below.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_generate_ephemeris</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span>
-        <span class="n">orbits</span><span class="p">:</span> <span class="n">OrbitType</span><span class="p">,</span>
-        <span class="n">observers</span><span class="p">:</span> <span class="n">ObserverType</span><span class="p">,</span>
-        <span class="o">*</span><span class="p">,</span>
-        <span class="n">predict_magnitudes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-        <span class="n">predict_phase_angle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">EphemerisType</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        A generic ephemeris implementation, which can be used or overridden by subclasses.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># Sort observers by time and code to ensure consistent ordering</span>
-        <span class="c1"># As further propagation will order by time as well</span>
-        <span class="n">observers</span> <span class="o">=</span> <span class="n">observers</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-            <span class="p">[</span><span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span> <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">,</span> <span class="s2">&quot;code&quot;</span><span class="p">]</span>
-        <span class="p">)</span>
-
-        <span class="n">observers_barycentric</span> <span class="o">=</span> <span class="n">observers</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-            <span class="s2">&quot;coordinates&quot;</span><span class="p">,</span>
-            <span class="n">transform_coordinates</span><span class="p">(</span>
-                <span class="n">observers</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-                <span class="n">CartesianCoordinates</span><span class="p">,</span>
-                <span class="n">frame_out</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-                <span class="n">origin_out</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SOLAR_SYSTEM_BARYCENTER</span><span class="p">,</span>
-            <span class="p">),</span>
-        <span class="p">)</span>
-        <span class="n">observers_barycentric_tiled</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
-            <span class="p">[</span><span class="n">observers_barycentric</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
-        <span class="p">)</span>
-
-        <span class="c1"># Propagate orbits to sorted observer times</span>
-        <span class="c1"># Returns orbits sorted by orbit_id and time</span>
-        <span class="n">propagated_orbits</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">propagate_orbits</span><span class="p">(</span>
-            <span class="n">orbits</span><span class="p">,</span> <span class="n">observers</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="n">max_processes</span><span class="o">=</span><span class="mi">1</span>
-        <span class="p">)</span>
-
-        <span class="c1"># Transform both the orbits and observers to the barycenter if they are not already.</span>
-        <span class="n">propagated_orbits_barycentric</span> <span class="o">=</span> <span class="n">propagated_orbits</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-            <span class="s2">&quot;coordinates&quot;</span><span class="p">,</span>
-            <span class="n">transform_coordinates</span><span class="p">(</span>
-                <span class="n">propagated_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-                <span class="n">CartesianCoordinates</span><span class="p">,</span>
-                <span class="n">frame_out</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-                <span class="n">origin_out</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SOLAR_SYSTEM_BARYCENTER</span><span class="p">,</span>
-            <span class="p">),</span>
-        <span class="p">)</span>
-
-        <span class="c1"># Process in padded chunks</span>
-        <span class="n">propagated_orbits_aberrated</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-        <span class="n">light_time</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
-
-        <span class="n">propagated_orbits_barycentric_values</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span>
-        <span class="p">)</span>
-        <span class="n">observers_barycentric_tiled_values</span> <span class="o">=</span> <span class="n">observers_barycentric_tiled</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">r</span>
-
-        <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">propagated_orbits_barycentric_values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-        <span class="n">rust_out</span> <span class="o">=</span> <span class="n">add_light_time_numpy</span><span class="p">(</span>
-            <span class="n">propagated_orbits_barycentric_values</span><span class="p">,</span>
-            <span class="n">observers_barycentric_tiled_values</span><span class="p">,</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">c</span><span class="o">.</span><span class="n">MU</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-            <span class="n">lt_tol</span><span class="o">=</span><span class="mf">1e-12</span><span class="p">,</span>
-            <span class="n">max_iter</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-            <span class="n">tol</span><span class="o">=</span><span class="mf">1e-15</span><span class="p">,</span>
-            <span class="n">max_lt_iter</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">propagated_orbits_aberrated</span><span class="p">,</span> <span class="n">light_time</span> <span class="o">=</span> <span class="n">rust_out</span>
-
-        <span class="c1"># Guard against pathological light-time values before constructing timestamps.</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">light_time</span><span class="p">)):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">&quot;Light travel time is NaN or too large and propagation will break.&quot;</span>
-            <span class="p">)</span>
-
-        <span class="c1"># Compute emission times by subtracting light-time (in days) from the</span>
-        <span class="c1"># propagated (observer) times.</span>
-        <span class="n">emission_times</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">add_fractional_days</span><span class="p">(</span>
-                <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="o">-</span><span class="n">light_time</span><span class="p">)</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
-
-        <span class="n">propagated_orbits_aberrated</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
-            <span class="n">object_id</span><span class="o">=</span><span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">object_id</span><span class="p">,</span>
-            <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">x</span><span class="o">=</span><span class="n">propagated_orbits_aberrated</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-                <span class="n">y</span><span class="o">=</span><span class="n">propagated_orbits_aberrated</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-                <span class="n">z</span><span class="o">=</span><span class="n">propagated_orbits_aberrated</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-                <span class="n">vx</span><span class="o">=</span><span class="n">propagated_orbits_aberrated</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
-                <span class="n">vy</span><span class="o">=</span><span class="n">propagated_orbits_aberrated</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
-                <span class="n">vz</span><span class="o">=</span><span class="n">propagated_orbits_aberrated</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
-                <span class="n">covariance</span><span class="o">=</span><span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="p">,</span>
-                <span class="n">time</span><span class="o">=</span><span class="n">emission_times</span><span class="p">,</span>
-                <span class="n">origin</span><span class="o">=</span><span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
-                <span class="n">frame</span><span class="o">=</span><span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
-            <span class="p">),</span>
-        <span class="p">)</span>
-
-        <span class="n">topocentric_state</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">propagated_orbits_aberrated</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span>
-            <span class="o">-</span> <span class="n">observers_barycentric_tiled</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span>
-        <span class="p">)</span>
-        <span class="n">topocentric_coordinates</span> <span class="o">=</span> <span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">x</span><span class="o">=</span><span class="n">topocentric_state</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-            <span class="n">y</span><span class="o">=</span><span class="n">topocentric_state</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-            <span class="n">z</span><span class="o">=</span><span class="n">topocentric_state</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-            <span class="n">vx</span><span class="o">=</span><span class="n">topocentric_state</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
-            <span class="n">vy</span><span class="o">=</span><span class="n">topocentric_state</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
-            <span class="n">vz</span><span class="o">=</span><span class="n">topocentric_state</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
-            <span class="n">covariance</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
-            <span class="c1"># The ephemeris times are at the point of the observer,</span>
-            <span class="c1"># not the aberrated orbit</span>
-            <span class="n">time</span><span class="o">=</span><span class="n">observers_barycentric_tiled</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
-            <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">code</span><span class="o">=</span><span class="n">observers_barycentric_tiled</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-            <span class="p">),</span>
-            <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-        <span class="p">)</span>
-
-        <span class="n">spherical_coordinates</span> <span class="o">=</span> <span class="n">SphericalCoordinates</span><span class="o">.</span><span class="n">from_cartesian</span><span class="p">(</span>
-            <span class="n">topocentric_coordinates</span>
-        <span class="p">)</span>
-
-        <span class="n">spherical_coordinates</span> <span class="o">=</span> <span class="n">transform_coordinates</span><span class="p">(</span>
-            <span class="n">spherical_coordinates</span><span class="p">,</span> <span class="n">SphericalCoordinates</span><span class="p">,</span> <span class="n">frame_out</span><span class="o">=</span><span class="s2">&quot;equatorial&quot;</span>
-        <span class="p">)</span>
-
-        <span class="c1"># Ephemeris are generally compared in UTC, so rescale the time</span>
-        <span class="n">spherical_coordinates</span> <span class="o">=</span> <span class="n">spherical_coordinates</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-            <span class="s2">&quot;time&quot;</span><span class="p">,</span>
-            <span class="n">spherical_coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;utc&quot;</span><span class="p">),</span>
-        <span class="p">)</span>
-
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">Orbits</span><span class="p">):</span>
-            <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">Ephemeris</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">orbit_id</span><span class="o">=</span><span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
-                <span class="n">object_id</span><span class="o">=</span><span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">object_id</span><span class="p">,</span>
-                <span class="n">coordinates</span><span class="o">=</span><span class="n">spherical_coordinates</span><span class="p">,</span>
-                <span class="n">light_time</span><span class="o">=</span><span class="n">light_time</span><span class="p">,</span>
-                <span class="n">aberrated_coordinates</span><span class="o">=</span><span class="n">propagated_orbits_aberrated</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">VariantOrbits</span><span class="p">):</span>
-
-            <span class="c1"># Propagated order is (orbit_id, variant_id, time) to match observer tiling</span>
-            <span class="c1"># [observers]*len(orbits). Sort input the same way and repeat each variant&#39;s</span>
-            <span class="c1"># weight for each time so row i gets the weight for the variant at that row.</span>
-            <span class="n">orbits_sorted</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-                <span class="p">[</span>
-                    <span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span>
-                    <span class="s2">&quot;variant_id&quot;</span><span class="p">,</span>
-                    <span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span>
-                    <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">,</span>
-                <span class="p">]</span>
-            <span class="p">)</span>
-
-            <span class="n">n_obs</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observers</span><span class="p">)</span>
-            <span class="n">weights_np</span> <span class="o">=</span> <span class="n">orbits_sorted</span><span class="o">.</span><span class="n">weights</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-            <span class="n">weights_cov_np</span> <span class="o">=</span> <span class="n">orbits_sorted</span><span class="o">.</span><span class="n">weights_cov</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-            <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">VariantEphemeris</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">orbit_id</span><span class="o">=</span><span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
-                <span class="n">object_id</span><span class="o">=</span><span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">object_id</span><span class="p">,</span>
-                <span class="n">variant_id</span><span class="o">=</span><span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">variant_id</span><span class="p">,</span>
-                <span class="n">coordinates</span><span class="o">=</span><span class="n">spherical_coordinates</span><span class="p">,</span>
-                <span class="n">light_time</span><span class="o">=</span><span class="n">light_time</span><span class="p">,</span>
-                <span class="n">weights</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">weights_np</span><span class="p">,</span> <span class="n">n_obs</span><span class="p">),</span>
-                <span class="n">weights_cov</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">weights_cov_np</span><span class="p">,</span> <span class="n">n_obs</span><span class="p">),</span>
-                <span class="n">aberrated_coordinates</span><span class="o">=</span><span class="n">propagated_orbits_aberrated</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-            <span class="p">)</span>
-
-        <span class="c1"># Return in same order as propagate_orbits: (orbit_id, variant_id, time) or</span>
-        <span class="c1"># (orbit_id, time). No sort here; callers use .sort_by() or .select()/.apply_mask().</span>
-        <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">attach_magnitude_or_phase</span><span class="p">(</span>
-            <span class="n">ephemeris</span><span class="p">,</span>
-            <span class="n">orbits</span><span class="o">=</span><span class="n">orbits</span><span class="p">,</span>
-            <span class="n">observers</span><span class="o">=</span><span class="n">observers</span><span class="p">,</span>
-            <span class="n">predict_magnitudes</span><span class="o">=</span><span class="n">predict_magnitudes</span><span class="p">,</span>
-            <span class="n">predict_phase_angle</span><span class="o">=</span><span class="n">predict_phase_angle</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">ephemeris</span>
 
 <div class="viewcode-block" id="EphemerisMixin.generate_ephemeris">
 <a class="viewcode-back" href="../../../reference/api/adam_core.propagator.propagator.html#adam_core.propagator.EphemerisMixin.generate_ephemeris">[docs]</a>
+    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">generate_ephemeris</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">orbits</span><span class="p">:</span> <span class="n">OrbitType</span><span class="p">,</span>
         <span class="n">observers</span><span class="p">:</span> <span class="n">ObserverType</span><span class="p">,</span>
         <span class="n">covariance</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="n">covariance_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span>
-            <span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;sigma-point&quot;</span><span class="p">,</span> <span class="s2">&quot;monte-carlo&quot;</span>
-        <span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;monte-carlo&quot;</span><span class="p">,</span>
+        <span class="n">covariance_method</span><span class="p">:</span> <span class="n">_CovarianceMethod</span> <span class="o">=</span> <span class="s2">&quot;monte-carlo&quot;</span><span class="p">,</span>
         <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
         <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
         <span class="n">max_processes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
@@ -960,519 +496,96 @@
         <span class="n">predict_magnitudes</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
         <span class="n">predict_phase_angle</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Ephemeris</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Generate ephemerides for each orbit in orbits as observed by each observer</span>
-<span class="sd">        in observers.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate ephemerides for each orbit as observed by each observer.</span>
+
+<span class="sd">        Backends must return predicted ephemerides in a stable row order</span>
+<span class="sd">        (orbit_id, time) -- or (orbit_id, variant_id, time) for variant</span>
+<span class="sd">        ephemeris -- and, when ``covariance`` is set, propagate the orbit</span>
+<span class="sd">        covariance by sampling/collapse inside the single Rust crossing.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        orbits : `~adam_core.orbits.orbits.Orbits` (N)</span>
+<span class="sd">        orbits : Orbits (N)</span>
 <span class="sd">            Orbits for which to generate ephemerides.</span>
-<span class="sd">        observers : `~adam_core.observers.observers.Observers` (M)</span>
-<span class="sd">            Observers for which to generate the ephemerides of each</span>
-<span class="sd">            orbit.</span>
-<span class="sd">        covariance: bool, optional</span>
-<span class="sd">            Propagate the covariance matrices of the orbits. This is done by sampling the</span>
-<span class="sd">            orbits from their covariance matrices and propagating each sample and for each</span>
-<span class="sd">            sample also generating ephemerides. The covariance</span>
-<span class="sd">            of the ephemerides is then the covariance of the samples.</span>
-<span class="sd">        covariance_method : {&#39;sigma-point&#39;, &#39;monte-carlo&#39;, &#39;auto&#39;}, optional</span>
-<span class="sd">            The method to use for sampling the covariance matrix. If &#39;auto&#39; is selected then the method</span>
-<span class="sd">            will be automatically selected based on the covariance matrix. The default is &#39;monte-carlo&#39;.</span>
+<span class="sd">        observers : Observers (M)</span>
+<span class="sd">            Observers for which to generate each orbit&#39;s ephemeris.</span>
+<span class="sd">        covariance : bool, optional</span>
+<span class="sd">            Propagate the orbit covariance matrices to the ephemeris.</span>
+<span class="sd">        covariance_method : {&#39;auto&#39;, &#39;sigma-point&#39;, &#39;monte-carlo&#39;}, optional</span>
+<span class="sd">            Sampling method used when ``covariance`` is set.</span>
 <span class="sd">        num_samples : int, optional</span>
-<span class="sd">            The number of samples to draw when sampling with monte-carlo.</span>
-<span class="sd">        chunk_size : int, optional</span>
-<span class="sd">            Number of orbits to send to each job.</span>
-<span class="sd">        max_processes : int or None, optional</span>
-<span class="sd">            Number of processes to launch. If None then the number of</span>
-<span class="sd">            processes will be equal to the number of cores on the machine. If 1</span>
-<span class="sd">            then no multiprocessing will be used. If &quot;ray&quot; is the parallel_backend and a ray instance</span>
-<span class="sd">            is initialized already then this argument is ignored.</span>
+<span class="sd">            Number of monte-carlo samples to draw.</span>
+<span class="sd">        chunk_size, max_processes, seed : optional</span>
+<span class="sd">            Backend parallelism / determinism controls. Local parallelism is a</span>
+<span class="sd">            backend (rayon) concern; ``max_processes`` is retained only for an</span>
+<span class="sd">            optional outer distribution wrapper.</span>
+<span class="sd">        predict_magnitudes, predict_phase_angle : bool, optional</span>
+<span class="sd">            Whether to attach predicted V magnitude / phase angle columns.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        ephemeris : `~adam_core.orbits.ephemeris.Ephemeris` or `~adam_core.orbits.variants.VariantEphemeris`</span>
-<span class="sd">            Predicted ephemerides. Row order matches :meth:`propagate_orbits`: (orbit_id, time)</span>
-<span class="sd">            or (orbit_id, variant_id, time) for variant ephemeris. Use .sort_by() or</span>
-<span class="sd">            .select()/.apply_mask() for other orderings or grouping.</span>
+<span class="sd">        ephemeris : Ephemeris or VariantEphemeris</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c1"># If sending in VariantOrbits, we make sure not to run covariance</span>
-        <span class="k">assert</span> <span class="p">(</span><span class="n">covariance</span> <span class="ow">is</span> <span class="kc">False</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
-            <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">Orbits</span><span class="p">)</span>
-        <span class="p">),</span> <span class="s2">&quot;Covariance is not supported for VariantOrbits&quot;</span>
-
-        <span class="c1"># Check if we need to propagate orbit variants so we can propagate covariance</span>
-        <span class="c1"># matrices</span>
-        <span class="n">ephemeris</span><span class="p">:</span> <span class="n">Ephemeris</span> <span class="o">=</span> <span class="n">Ephemeris</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-        <span class="n">variant_ephemeris</span><span class="p">:</span> <span class="n">VariantEphemeris</span> <span class="o">=</span> <span class="n">VariantEphemeris</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-
-        <span class="n">variants</span> <span class="o">=</span> <span class="n">VariantOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">is_all_nan</span><span class="p">():</span>
-            <span class="n">variants</span> <span class="o">=</span> <span class="n">VariantOrbits</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-                <span class="n">orbits</span><span class="p">,</span>
-                <span class="n">method</span><span class="o">=</span><span class="n">covariance_method</span><span class="p">,</span>
-                <span class="n">num_samples</span><span class="o">=</span><span class="n">num_samples</span><span class="p">,</span>
-                <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
-            <span class="p">)</span>
-
-        <span class="n">max_processes</span> <span class="o">=</span> <span class="n">resolve_max_processes</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span>
-
-        <span class="n">uses_default_ephemeris</span> <span class="o">=</span> <span class="n">_uses_default_ephemeris_mixin</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
-        <span class="n">needs_attach</span> <span class="o">=</span> <span class="n">max_processes</span> <span class="o">&lt;=</span> <span class="mi">1</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">uses_default_ephemeris</span>
-
-        <span class="k">if</span> <span class="n">max_processes</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="n">backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span>
-
-            <span class="c1"># Place orbits and observers in shared store, dereferencing if the</span>
-            <span class="c1"># caller already passed a Ray ObjectRef so chunking can size to len.</span>
-            <span class="k">if</span> <span class="n">backend</span><span class="o">.</span><span class="n">is_ref</span><span class="p">(</span><span class="n">observers</span><span class="p">):</span>
-                <span class="n">observers_ref</span> <span class="o">=</span> <span class="n">observers</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">observers_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">observers</span><span class="p">)</span>
-
-            <span class="k">if</span> <span class="n">backend</span><span class="o">.</span><span class="n">is_ref</span><span class="p">(</span><span class="n">orbits</span><span class="p">):</span>
-                <span class="n">orbits_ref</span> <span class="o">=</span> <span class="n">orbits</span>
-                <span class="n">orbits</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">orbits_ref</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">orbits_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
-
-            <span class="n">futures_inputs</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">))</span>
-            <span class="c1"># Use at least max_processes chunks so all workers get work.</span>
-            <span class="n">effective_chunk_size</span> <span class="o">=</span> <span class="n">chunk_size</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">effective_chunk_size</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span>
-                    <span class="n">chunk_size</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span> <span class="o">//</span> <span class="n">max_processes</span><span class="p">)</span>
-                <span class="p">)</span>
-            <span class="k">for</span> <span class="n">idx_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">effective_chunk_size</span><span class="p">):</span>
-                <span class="n">futures_inputs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="p">(</span>
-                        <span class="n">idx_chunk</span><span class="p">,</span>
-                        <span class="n">orbits_ref</span><span class="p">,</span>
-                        <span class="n">observers_ref</span><span class="p">,</span>
-                        <span class="bp">self</span><span class="p">,</span>
-                        <span class="n">predict_magnitudes</span><span class="p">,</span>
-                        <span class="n">predict_phase_angle</span><span class="p">,</span>
-                    <span class="p">)</span>
-                <span class="p">)</span>
-
-            <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">variants</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">variants_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">variants</span><span class="p">)</span>
-
-                <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">variants</span><span class="p">))</span>
-                <span class="n">var_chunk_size</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">chunk_size</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">variants</span><span class="p">)</span> <span class="o">//</span> <span class="n">max_processes</span><span class="p">))</span>
-                <span class="k">for</span> <span class="n">variant_chunk_idx</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">var_chunk_size</span><span class="p">):</span>
-                    <span class="n">futures_inputs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                        <span class="p">(</span>
-                            <span class="n">variant_chunk_idx</span><span class="p">,</span>
-                            <span class="n">variants_ref</span><span class="p">,</span>
-                            <span class="n">observers_ref</span><span class="p">,</span>
-                            <span class="bp">self</span><span class="p">,</span>
-                            <span class="n">predict_magnitudes</span><span class="p">,</span>
-                            <span class="n">predict_phase_angle</span><span class="p">,</span>
-                        <span class="p">)</span>
-                    <span class="p">)</span>
-
-            <span class="n">ephemeris_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Ephemeris</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="n">variant_ephemeris_parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">VariantEphemeris</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">backend</span><span class="o">.</span><span class="n">map_unordered</span><span class="p">(</span>
-                <span class="n">_ephemeris_chunk_worker</span><span class="p">,</span> <span class="n">futures_inputs</span>
-            <span class="p">):</span>
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">Ephemeris</span><span class="p">):</span>
-                    <span class="n">ephemeris_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">VariantEphemeris</span><span class="p">):</span>
-                    <span class="n">variant_ephemeris_parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Unexpected result type from ephemeris worker: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">result</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-                    <span class="p">)</span>
-
-            <span class="k">if</span> <span class="n">ephemeris_parts</span><span class="p">:</span>
-                <span class="n">ephemeris</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="n">ephemeris_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ephemeris_parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
-                    <span class="k">else</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">ephemeris_parts</span><span class="p">)</span>
-                <span class="p">)</span>
-            <span class="k">if</span> <span class="n">variant_ephemeris_parts</span><span class="p">:</span>
-                <span class="n">variant_ephemeris</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="n">variant_ephemeris_parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">variant_ephemeris_parts</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
-                    <span class="k">else</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">variant_ephemeris_parts</span><span class="p">)</span>
-                <span class="p">)</span>
-
-            <span class="c1"># Concatenation was in completion order; sort to canonical order.</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ephemeris</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">ephemeris</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-                    <span class="p">[</span>
-                        <span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;coordinates.origin.code&quot;</span><span class="p">,</span>
-                    <span class="p">]</span>
-                <span class="p">)</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">variant_ephemeris</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">variant_ephemeris</span> <span class="o">=</span> <span class="n">variant_ephemeris</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-                    <span class="p">[</span>
-                        <span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;variant_id&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;coordinates.origin.code&quot;</span><span class="p">,</span>
-                    <span class="p">]</span>
-                <span class="p">)</span>
-
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">uses_default_ephemeris</span><span class="p">:</span>
-                <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_ephemeris</span><span class="p">(</span>
-                    <span class="n">orbits</span><span class="p">,</span>
-                    <span class="n">observers</span><span class="p">,</span>
-                    <span class="n">predict_magnitudes</span><span class="o">=</span><span class="n">predict_magnitudes</span><span class="p">,</span>
-                    <span class="n">predict_phase_angle</span><span class="o">=</span><span class="n">predict_phase_angle</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">results</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_ephemeris</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">observers</span><span class="p">)</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">Ephemeris</span><span class="p">):</span>
-                <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">results</span>
-            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">results</span><span class="p">,</span> <span class="n">VariantEphemeris</span><span class="p">):</span>
-                <span class="n">variant_ephemeris</span> <span class="o">=</span> <span class="n">results</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Unexpected result type from generate_ephemeris: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">results</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-                <span class="p">)</span>
-            <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">variants</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">uses_default_ephemeris</span><span class="p">:</span>
-                    <span class="n">variant_ephemeris</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_ephemeris</span><span class="p">(</span>
-                        <span class="n">variants</span><span class="p">,</span>
-                        <span class="n">observers</span><span class="p">,</span>
-                        <span class="n">predict_magnitudes</span><span class="o">=</span><span class="n">predict_magnitudes</span><span class="p">,</span>
-                        <span class="n">predict_phase_angle</span><span class="o">=</span><span class="n">predict_phase_angle</span><span class="p">,</span>
-                    <span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">variant_ephemeris</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_generate_ephemeris</span><span class="p">(</span><span class="n">variants</span><span class="p">,</span> <span class="n">observers</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="kc">False</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">variant_ephemeris</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="c1"># If we decide that we do not need to guarantee that the time scale is in UTC</span>
-
-            <span class="c1"># then we may want to call:</span>
-            <span class="c1"># if isinstance(observers, ray.ObjectRef):</span>
-            <span class="c1">#     variant_ephemeris = ensure_input_time_scale(</span>
-            <span class="c1">#         variant_ephemeris, ray.get(observers).coordinates.time</span>
-            <span class="c1">#     )</span>
-            <span class="c1"># else:</span>
-            <span class="c1">#     variant_ephemeris = ensure_input_time_scale(</span>
-            <span class="c1">#         variant_ephemeris, observers.coordinates.time</span>
-            <span class="c1">#     )</span>
-            <span class="n">variant_ephemeris</span> <span class="o">=</span> <span class="n">variant_ephemeris</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-                <span class="s2">&quot;coordinates.time&quot;</span><span class="p">,</span>
-                <span class="n">variant_ephemeris</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;utc&quot;</span><span class="p">),</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">needs_attach</span><span class="p">:</span>
-                <span class="n">variant_ephemeris</span> <span class="o">=</span> <span class="n">attach_magnitude_or_phase</span><span class="p">(</span>
-                    <span class="n">variant_ephemeris</span><span class="p">,</span>
-                    <span class="n">orbits</span><span class="o">=</span><span class="n">orbits</span><span class="p">,</span>
-                    <span class="n">observers</span><span class="o">=</span><span class="n">observers</span><span class="p">,</span>
-                    <span class="n">predict_magnitudes</span><span class="o">=</span><span class="n">predict_magnitudes</span><span class="p">,</span>
-                    <span class="n">predict_phase_angle</span><span class="o">=</span><span class="n">predict_phase_angle</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="k">return</span> <span class="n">variant_ephemeris</span>
-
-        <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">variant_ephemeris</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">variant_ephemeris</span><span class="o">.</span><span class="n">collapse</span><span class="p">(</span><span class="n">ephemeris</span><span class="p">)</span>
-
-        <span class="c1"># Same note as above.</span>
-        <span class="c1"># if isinstance(observers, ray.ObjectRef):</span>
-        <span class="c1">#     ephemeris = ensure_input_time_scale(</span>
-        <span class="c1">#         ephemeris, ray.get(observers).coordinates.time</span>
-        <span class="c1">#     )</span>
-        <span class="c1"># else:</span>
-        <span class="c1">#     ephemeris = ensure_input_time_scale(</span>
-        <span class="c1">#         ephemeris, observers.coordinates.time</span>
-        <span class="c1">#     )</span>
-        <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">ephemeris</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-            <span class="s2">&quot;coordinates.time&quot;</span><span class="p">,</span>
-            <span class="n">ephemeris</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;utc&quot;</span><span class="p">),</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="n">needs_attach</span><span class="p">:</span>
-            <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">attach_magnitude_or_phase</span><span class="p">(</span>
-                <span class="n">ephemeris</span><span class="p">,</span>
-                <span class="n">orbits</span><span class="o">=</span><span class="n">orbits</span><span class="p">,</span>
-                <span class="n">observers</span><span class="o">=</span><span class="n">observers</span><span class="p">,</span>
-                <span class="n">predict_magnitudes</span><span class="o">=</span><span class="n">predict_magnitudes</span><span class="p">,</span>
-                <span class="n">predict_phase_angle</span><span class="o">=</span><span class="n">predict_phase_angle</span><span class="p">,</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">ephemeris</span></div>
+        <span class="o">...</span></div>
 </div>
 
 
 
 <div class="viewcode-block" id="Propagator">
 <a class="viewcode-back" href="../../../reference/api/adam_core.propagator.propagator.html#adam_core.propagator.Propagator">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">Propagator</span><span class="p">(</span><span class="n">ABC</span><span class="p">,</span> <span class="n">EphemerisMixin</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Abstract class for propagating orbits and related functions.</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">Propagator</span><span class="p">(</span><span class="n">EphemerisMixin</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract base for orbit propagators.</span>
 
-<span class="sd">    Subclasses should implement the _propagate_orbits.</span>
-<span class="sd">    For additional functions, subclasses can add abstract mixins.</span>
-
-<span class="sd">    Important: subclasses should be pickleable! As this class uses multiprocessing</span>
-<span class="sd">    to parallelize propagation and ephemeris generation. This means that</span>
-<span class="sd">    subclasses should not have any unpickleable attributes.</span>
+<span class="sd">    Concrete (Rust-backed) propagators implement :meth:`propagate_orbits` as a</span>
+<span class="sd">    single Python-&gt;Rust crossing. When ``covariance`` is set, the backend</span>
+<span class="sd">    samples orbit variants, propagates them, and collapses the samples back to</span>
+<span class="sd">    a covariance -- all inside Rust. adam_core ships no concrete propagator and</span>
+<span class="sd">    no Python composition; only Rust backends are supported.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_propagate_orbits</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">orbits</span><span class="p">:</span> <span class="n">OrbitType</span><span class="p">,</span> <span class="n">times</span><span class="p">:</span> <span class="n">TimestampType</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrbitType</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Propagate orbits to times.</span>
-
-<span class="sd">        THIS FUNCTION SHOULD BE DEFINED BY THE USER.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">pass</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Get the state of the propagator.</span>
-
-<span class="sd">        Subclasses need to define what is picklable for multiprocessing.</span>
-
-<span class="sd">        e.g.</span>
-
-<span class="sd">        def __getstate__(self):</span>
-<span class="sd">            state = self.__dict__.copy()</span>
-<span class="sd">            state.pop(&quot;_stateful_attribute_that_is_not_pickleable&quot;)</span>
-<span class="sd">            return state</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-            <span class="s2">&quot;Propagator must implement __getstate__ for multiprocessing serialization.</span><span class="se">\n</span><span class="s2">&quot;</span>
-            <span class="s2">&quot;Example implementation: </span><span class="se">\n</span><span class="s2">&quot;</span>
-            <span class="s2">&quot;def __getstate__(self):</span><span class="se">\n</span><span class="s2">&quot;</span>
-            <span class="s2">&quot;    state = self.__dict__.copy()</span><span class="se">\n</span><span class="s2">&quot;</span>
-            <span class="s2">&quot;    state.pop(&#39;_stateful_attribute_that_is_not_pickleable&#39;)</span><span class="se">\n</span><span class="s2">&quot;</span>
-            <span class="s2">&quot;    return state&quot;</span>
-        <span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Set the state of the propagator.</span>
-
-<span class="sd">        Subclasses need to define what is unpicklable for multiprocessing.</span>
-
-<span class="sd">        e.g.</span>
-
-<span class="sd">        def __setstate__(self, state):</span>
-<span class="sd">            self.__dict__.update(state)</span>
-<span class="sd">            self._stateful_attribute_that_is_not_pickleable = None</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
-            <span class="s2">&quot;Propagator must implement __setstate__ for multiprocessing serialization.</span><span class="se">\n</span><span class="s2">&quot;</span>
-            <span class="s2">&quot;Example implementation: </span><span class="se">\n</span><span class="s2">&quot;</span>
-            <span class="s2">&quot;def __setstate__(self, state):</span><span class="se">\n</span><span class="s2">&quot;</span>
-            <span class="s2">&quot;    self.__dict__.update(state)</span><span class="se">\n</span><span class="s2">&quot;</span>
-            <span class="s2">&quot;    self._stateful_attribute_that_is_not_pickleable = None&quot;</span>
-        <span class="p">)</span>
 
 <div class="viewcode-block" id="Propagator.propagate_orbits">
 <a class="viewcode-back" href="../../../reference/api/adam_core.propagator.propagator.html#adam_core.propagator.Propagator.propagate_orbits">[docs]</a>
+    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">propagate_orbits</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">orbits</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">OrbitType</span><span class="p">,</span> <span class="n">ObjectRef</span><span class="p">],</span>
-        <span class="n">times</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">TimestampType</span><span class="p">,</span> <span class="n">ObjectRef</span><span class="p">],</span>
+        <span class="n">orbits</span><span class="p">:</span> <span class="n">OrbitType</span><span class="p">,</span>
+        <span class="n">times</span><span class="p">:</span> <span class="n">TimestampType</span><span class="p">,</span>
         <span class="n">covariance</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-        <span class="n">covariance_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span>
-            <span class="s2">&quot;auto&quot;</span><span class="p">,</span> <span class="s2">&quot;sigma-point&quot;</span><span class="p">,</span> <span class="s2">&quot;monte-carlo&quot;</span>
-        <span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;monte-carlo&quot;</span><span class="p">,</span>
+        <span class="n">covariance_method</span><span class="p">:</span> <span class="n">_CovarianceMethod</span> <span class="o">=</span> <span class="s2">&quot;monte-carlo&quot;</span><span class="p">,</span>
         <span class="n">num_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1000</span><span class="p">,</span>
         <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
         <span class="n">max_processes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
         <span class="n">seed</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Union</span><span class="p">[</span><span class="n">Orbits</span><span class="p">,</span> <span class="n">VariantOrbits</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Propagate each orbit in orbits to each time in times.</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Propagate each orbit in ``orbits`` to each time in ``times``.</span>
 
-<span class="sd">        This method handles parallelization of the propagation of the orbits.</span>
-<span class="sd">        Subclasses may override this method to modify parallelization behavior.</span>
+<span class="sd">        Backends must return propagated orbits in a stable row order</span>
+<span class="sd">        (orbit_id, time) -- or (orbit_id, variant_id, time) for VariantOrbits --</span>
+<span class="sd">        and, when ``covariance`` is set, propagate the orbit covariance by</span>
+<span class="sd">        sampling/collapse inside the single Rust crossing.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
-<span class="sd">        orbits : `~adam_core.orbits.orbits.Orbits` (N)</span>
+<span class="sd">        orbits : Orbits (N)</span>
 <span class="sd">            Orbits to propagate.</span>
 <span class="sd">        times : Timestamp (M)</span>
-<span class="sd">            Times to which to propagate orbits. Sorted chronologically before</span>
-<span class="sd">            calling the backend so integrators (e.g. ASSIST, REBOUND) receive</span>
-<span class="sd">            time-ordered epochs for efficient stepping.</span>
+<span class="sd">            Times to which to propagate.</span>
 <span class="sd">        covariance : bool, optional</span>
-<span class="sd">            Propagate the covariance matrices of the orbits. This is done by sampling the</span>
-<span class="sd">            orbits from their covariance matrices and propagating each sample. The covariance</span>
-<span class="sd">            of the propagated orbits is then the covariance of the samples.</span>
-<span class="sd">        covariance_method : {&#39;sigma-point&#39;, &#39;monte-carlo&#39;, &#39;auto&#39;}, optional</span>
-<span class="sd">            The method to use for sampling the covariance matrix. If &#39;auto&#39; is selected then the method</span>
-<span class="sd">            will be automatically selected based on the covariance matrix. The default is &#39;monte-carlo&#39;.</span>
+<span class="sd">            Propagate the orbit covariance matrices.</span>
+<span class="sd">        covariance_method : {&#39;auto&#39;, &#39;sigma-point&#39;, &#39;monte-carlo&#39;}, optional</span>
+<span class="sd">            Sampling method used when ``covariance`` is set.</span>
 <span class="sd">        num_samples : int, optional</span>
-<span class="sd">            The number of samples to draw when sampling with monte-carlo.</span>
-<span class="sd">        chunk_size : int, optional</span>
-<span class="sd">            Number of orbits to send to each job.</span>
-<span class="sd">        max_processes : int or None, optional</span>
-<span class="sd">            Maximum number of processes to launch. If None then the number of</span>
-<span class="sd">            processes will be equal to the number of cores on the machine. If 1</span>
-<span class="sd">            then no multiprocessing will be used. If &quot;ray&quot; is the parallel_backend and a ray instance</span>
-<span class="sd">            is initialized already then this argument is ignored.</span>
+<span class="sd">            Number of monte-carlo samples to draw.</span>
+<span class="sd">        chunk_size, max_processes, seed : optional</span>
+<span class="sd">            Backend parallelism / determinism controls. Local parallelism is a</span>
+<span class="sd">            backend (rayon) concern; ``max_processes`` is retained only for an</span>
+<span class="sd">            optional outer distribution wrapper.</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
-<span class="sd">        propagated : `~adam_core.orbits.orbits.Orbits` or `~adam_core.orbits.variants.VariantOrbits`</span>
-<span class="sd">            Propagated orbits. Rows are ordered (orbit_id, time) for Orbits and</span>
-<span class="sd">            (orbit_id, variant_id, time) for VariantOrbits. Use .sort_by() or</span>
-<span class="sd">            .select()/.apply_mask() for other orderings or grouping.</span>
+<span class="sd">        propagated : Orbits or VariantOrbits</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">VariantOrbits</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span><span class="s2">&quot;Covariance is not supported for VariantOrbits&quot;</span><span class="p">)</span>
-
-        <span class="n">max_processes</span> <span class="o">=</span> <span class="n">resolve_max_processes</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span>
-
-        <span class="c1"># Resolve times and sort chronologically so backends (ASSIST, REBOUND, etc.)</span>
-        <span class="c1"># receive time-ordered epochs for efficient integration.</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="n">ObjectRef</span><span class="p">):</span>
-            <span class="n">times</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">times</span><span class="p">)</span>
-        <span class="n">times</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">sort_by</span><span class="p">([</span><span class="s2">&quot;days&quot;</span><span class="p">,</span> <span class="s2">&quot;nanos&quot;</span><span class="p">])</span>
-
-        <span class="k">if</span> <span class="n">max_processes</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="n">propagated_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Orbits</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="n">covariance_variants_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">VariantOrbits</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="c1"># When the input is VariantOrbits, do not treat them as covariance.</span>
-            <span class="n">propagated_variants_input_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">VariantOrbits</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="n">input_is_variants</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-
-            <span class="n">backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span>
-
-            <span class="n">times_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">times</span><span class="p">)</span>
-
-            <span class="k">if</span> <span class="n">backend</span><span class="o">.</span><span class="n">is_ref</span><span class="p">(</span><span class="n">orbits</span><span class="p">):</span>
-                <span class="n">orbits_ref</span> <span class="o">=</span> <span class="n">orbits</span>
-                <span class="n">orbits</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">orbits_ref</span><span class="p">)</span>
-                <span class="n">input_is_variants</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">VariantOrbits</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">input_is_variants</span> <span class="o">=</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">VariantOrbits</span><span class="p">)</span>
-                <span class="n">orbits_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
-
-            <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">and</span> <span class="n">input_is_variants</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span><span class="s2">&quot;Covariance is not supported for VariantOrbits&quot;</span><span class="p">)</span>
-
-            <span class="n">futures_inputs</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">))</span>
-            <span class="k">for</span> <span class="n">idx_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">):</span>
-                <span class="n">futures_inputs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                    <span class="p">(</span>
-                        <span class="n">idx_chunk</span><span class="p">,</span>
-                        <span class="n">orbits_ref</span><span class="p">,</span>
-                        <span class="n">times_ref</span><span class="p">,</span>
-                        <span class="bp">self</span><span class="p">,</span>
-                    <span class="p">)</span>
-                <span class="p">)</span>
-
-            <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">is_all_nan</span><span class="p">():</span>
-                <span class="n">variants</span> <span class="o">=</span> <span class="n">VariantOrbits</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-                    <span class="n">orbits</span><span class="p">,</span>
-                    <span class="n">method</span><span class="o">=</span><span class="n">covariance_method</span><span class="p">,</span>
-                    <span class="n">num_samples</span><span class="o">=</span><span class="n">num_samples</span><span class="p">,</span>
-                    <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
-                <span class="p">)</span>
-
-                <span class="n">variants_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">variants</span><span class="p">)</span>
-
-                <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">variants</span><span class="p">))</span>
-                <span class="k">for</span> <span class="n">variant_chunk_idx</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">):</span>
-                    <span class="n">futures_inputs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                        <span class="p">(</span>
-                            <span class="n">variant_chunk_idx</span><span class="p">,</span>
-                            <span class="n">variants_ref</span><span class="p">,</span>
-                            <span class="n">times_ref</span><span class="p">,</span>
-                            <span class="bp">self</span><span class="p">,</span>
-                        <span class="p">)</span>
-                    <span class="p">)</span>
-
-            <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">backend</span><span class="o">.</span><span class="n">map_unordered</span><span class="p">(</span>
-                <span class="n">_propagation_chunk_worker</span><span class="p">,</span> <span class="n">futures_inputs</span>
-            <span class="p">):</span>
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">Orbits</span><span class="p">):</span>
-                    <span class="n">propagated_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">VariantOrbits</span><span class="p">):</span>
-                    <span class="k">if</span> <span class="n">input_is_variants</span><span class="p">:</span>
-                        <span class="n">propagated_variants_input_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-                    <span class="k">else</span><span class="p">:</span>
-                        <span class="n">covariance_variants_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Unexpected result type from propagation worker: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">result</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
-                    <span class="p">)</span>
-
-            <span class="c1"># Concatenate propagated orbits</span>
-            <span class="k">if</span> <span class="n">input_is_variants</span><span class="p">:</span>
-                <span class="n">propagated</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">propagated_variants_input_list</span><span class="p">)</span>
-                <span class="n">propagated_variants</span> <span class="o">=</span> <span class="kc">None</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">propagated</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">propagated_list</span><span class="p">)</span>
-                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">covariance_variants_list</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                    <span class="n">propagated_variants</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">covariance_variants_list</span><span class="p">)</span>
-                    <span class="n">propagated_variants</span> <span class="o">=</span> <span class="n">propagated_variants</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-                        <span class="p">[</span>
-                            <span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span>
-                            <span class="s2">&quot;variant_id&quot;</span><span class="p">,</span>
-                            <span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span>
-                            <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">,</span>
-                        <span class="p">]</span>
-                    <span class="p">)</span>
-                <span class="k">else</span><span class="p">:</span>
-                    <span class="n">propagated_variants</span> <span class="o">=</span> <span class="kc">None</span>
-
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">propagated</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_propagate_orbits</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
-
-            <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="kc">True</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">is_all_nan</span><span class="p">():</span>
-                <span class="n">variants</span> <span class="o">=</span> <span class="n">VariantOrbits</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
-                    <span class="n">orbits</span><span class="p">,</span>
-                    <span class="n">method</span><span class="o">=</span><span class="n">covariance_method</span><span class="p">,</span>
-                    <span class="n">num_samples</span><span class="o">=</span><span class="n">num_samples</span><span class="p">,</span>
-                    <span class="n">seed</span><span class="o">=</span><span class="n">seed</span><span class="p">,</span>
-                <span class="p">)</span>
-
-                <span class="n">propagated_variants</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_propagate_orbits</span><span class="p">(</span><span class="n">variants</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
-                <span class="n">propagated_variants</span> <span class="o">=</span> <span class="n">propagated_variants</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-                    <span class="p">[</span>
-                        <span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;variant_id&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">,</span>
-                    <span class="p">]</span>
-                <span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">propagated_variants</span> <span class="o">=</span> <span class="kc">None</span>
-
-        <span class="k">if</span> <span class="n">propagated_variants</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">propagated</span> <span class="o">=</span> <span class="n">propagated_variants</span><span class="o">.</span><span class="n">collapse</span><span class="p">(</span><span class="n">propagated</span><span class="p">)</span>
-
-        <span class="c1"># Preserve the time scale of the requested times</span>
-        <span class="n">propagated</span> <span class="o">=</span> <span class="n">ensure_input_time_scale</span><span class="p">(</span><span class="n">propagated</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
-
-        <span class="c1"># Return the results with the original origin and frame</span>
-        <span class="c1"># Preserve the original output origin for the input orbits</span>
-        <span class="c1"># by orbit id</span>
-        <span class="n">propagated</span> <span class="o">=</span> <span class="n">ensure_input_origin_and_frame</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">propagated</span><span class="p">)</span>
-
-        <span class="c1"># Internal order is (orbit_id, variant_id, time) so that observer tiling</span>
-        <span class="c1"># [observers]*len(orbits) in _generate_ephemeris matches row-for-row.</span>
-        <span class="c1"># Callers that need time-first or grouping should sort or use .select()/.apply_mask().</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">propagated</span><span class="p">,</span> <span class="n">VariantOrbits</span><span class="p">):</span>
-            <span class="k">return</span> <span class="n">propagated</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-                <span class="p">[</span>
-                    <span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span>
-                    <span class="s2">&quot;variant_id&quot;</span><span class="p">,</span>
-                    <span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span>
-                    <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">,</span>
-                <span class="p">]</span>
-            <span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">propagated</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-            <span class="p">[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span> <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">]</span>
-        <span class="p">)</span></div>
+        <span class="o">...</span></div>
 </div>
 
 </pre></div>
@@ -1493,7 +606,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

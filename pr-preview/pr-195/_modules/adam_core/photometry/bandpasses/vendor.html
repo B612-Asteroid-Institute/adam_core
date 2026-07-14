@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -427,19 +437,13 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">io</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.parquet</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pq</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.io</span><span class="w"> </span><span class="kn">import</span> <span class="n">fits</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.io.votable</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_single_table</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">...utils.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">_raise_compatible_http_error</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.tables</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">AsteroidTemplates</span><span class="p">,</span>
     <span class="n">BandpassCurves</span><span class="p">,</span>
@@ -517,61 +521,6 @@
     <span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_download_svo_votable</span><span class="p">(</span><span class="n">svo_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">timeout_s</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">60</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bytes</span><span class="p">:</span>
-    <span class="n">url</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;https://svo2.cab.inta-csic.es/theory/fps/fps.php?ID=</span><span class="si">{</span><span class="n">svo_id</span><span class="si">}</span><span class="s2">&quot;</span>
-    <span class="n">resp</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout_s</span><span class="p">)</span>
-    <span class="n">resp</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">resp</span><span class="o">.</span><span class="n">content</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_parse_svo_curve</span><span class="p">(</span>
-    <span class="n">votable_bytes</span><span class="p">:</span> <span class="nb">bytes</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]:</span>
-    <span class="n">table</span> <span class="o">=</span> <span class="n">parse_single_table</span><span class="p">(</span><span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">votable_bytes</span><span class="p">))</span><span class="o">.</span><span class="n">to_table</span><span class="p">()</span>
-    <span class="k">if</span> <span class="s2">&quot;Wavelength&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">colnames</span> <span class="ow">or</span> <span class="s2">&quot;Transmission&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unexpected SVO schema; columns=</span><span class="si">{</span><span class="n">table</span><span class="o">.</span><span class="n">colnames</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-
-    <span class="n">wl</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;Wavelength&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">trans</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">table</span><span class="p">[</span><span class="s2">&quot;Transmission&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">wl</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span> <span class="ow">or</span> <span class="n">trans</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unexpected SVO curve dimensions&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">wl</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">trans</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;SVO Wavelength and Transmission lengths do not match&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">wl</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;SVO curve has too few points&quot;</span><span class="p">)</span>
-
-    <span class="c1"># SVO FPS provides wavelength in Angstrom for these filters.</span>
-    <span class="n">wl_nm</span> <span class="o">=</span> <span class="n">wl</span> <span class="o">/</span> <span class="mf">10.0</span>
-    <span class="k">return</span> <span class="n">wl_nm</span><span class="p">,</span> <span class="n">trans</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_normalize_curve</span><span class="p">(</span>
-    <span class="n">wavelength_nm</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">throughput</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]:</span>
-    <span class="n">wl</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">wavelength_nm</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">thr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">throughput</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">wl</span><span class="p">))</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">thr</span><span class="p">)):</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Non-finite values in curve&quot;</span><span class="p">)</span>
-
-    <span class="n">order</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">wl</span><span class="p">)</span>
-    <span class="n">wl</span> <span class="o">=</span> <span class="n">wl</span><span class="p">[</span><span class="n">order</span><span class="p">]</span>
-    <span class="n">thr</span> <span class="o">=</span> <span class="n">thr</span><span class="p">[</span><span class="n">order</span><span class="p">]</span>
-
-    <span class="c1"># Drop duplicate wavelengths by keeping the first occurrence.</span>
-    <span class="n">unique_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(([</span><span class="kc">True</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">wl</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">))</span>
-    <span class="n">wl</span> <span class="o">=</span> <span class="n">wl</span><span class="p">[</span><span class="n">unique_mask</span><span class="p">]</span>
-    <span class="n">thr</span> <span class="o">=</span> <span class="n">thr</span><span class="p">[</span><span class="n">unique_mask</span><span class="p">]</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">wl</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Curve is degenerate after de-duplication&quot;</span><span class="p">)</span>
-
-    <span class="n">thr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="n">thr</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
-    <span class="n">m</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">thr</span><span class="p">))</span>
-    <span class="k">if</span> <span class="n">m</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Curve has zero throughput everywhere&quot;</span><span class="p">)</span>
-    <span class="n">thr</span> <span class="o">=</span> <span class="n">thr</span> <span class="o">/</span> <span class="n">m</span>
-    <span class="k">return</span> <span class="n">wl</span><span class="p">,</span> <span class="n">thr</span>
-
-
 <div class="viewcode-block" id="build_bandpass_curves">
 <a class="viewcode-back" href="../../../../reference/api/adam_core.photometry.bandpasses.vendor.html#adam_core.photometry.bandpasses.vendor.build_bandpass_curves">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">build_bandpass_curves</span><span class="p">(</span>
@@ -590,306 +539,71 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="n">records</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;No bandpass specs provided&quot;</span><span class="p">)</span>
 
-    <span class="n">filter_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">instruments</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">bands</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">sources</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">wavelengths</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">throughputs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
 
-    <span class="n">seen</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-    <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">records</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">spec</span><span class="o">.</span><span class="n">filter_id</span> <span class="ow">in</span> <span class="n">seen</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Duplicate filter_id in specs: </span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">filter_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="n">seen</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">filter_id</span><span class="p">)</span>
-
-        <span class="n">raw</span> <span class="o">=</span> <span class="n">_download_svo_votable</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">svo_id</span><span class="p">,</span> <span class="n">timeout_s</span><span class="o">=</span><span class="n">timeout_s</span><span class="p">)</span>
-        <span class="n">wl_nm</span><span class="p">,</span> <span class="n">thr</span> <span class="o">=</span> <span class="n">_parse_svo_curve</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span>
-        <span class="n">wl_nm</span><span class="p">,</span> <span class="n">thr</span> <span class="o">=</span> <span class="n">_normalize_curve</span><span class="p">(</span><span class="n">wl_nm</span><span class="p">,</span> <span class="n">thr</span><span class="p">)</span>
-
-        <span class="n">filter_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">filter_id</span><span class="p">)</span>
-        <span class="n">instruments</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">instrument</span><span class="p">)</span>
-        <span class="n">bands</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">band</span><span class="p">)</span>
-        <span class="n">sources</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;https://svo2.cab.inta-csic.es/theory/fps/fps.php?ID=</span><span class="si">{</span><span class="n">spec</span><span class="o">.</span><span class="n">svo_id</span><span class="si">}</span><span class="s2">&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">build_bandpass_curves_arrow</span><span class="p">(</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">out_dir</span><span class="p">),</span>
+            <span class="p">[</span>
+                <span class="p">(</span><span class="n">spec</span><span class="o">.</span><span class="n">filter_id</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">instrument</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">band</span><span class="p">,</span> <span class="n">spec</span><span class="o">.</span><span class="n">svo_id</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">spec</span> <span class="ow">in</span> <span class="n">records</span>
+            <span class="p">],</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">timeout_s</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="n">wavelengths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">wl_nm</span><span class="p">)</span>
-        <span class="n">throughputs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">thr</span><span class="p">)</span>
-
-    <span class="n">wl_arr</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">wavelengths</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_list</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">()))</span>
-    <span class="n">thr_arr</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">throughputs</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_list</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">()))</span>
-
-    <span class="n">table</span> <span class="o">=</span> <span class="n">BandpassCurves</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">filter_id</span><span class="o">=</span><span class="n">filter_ids</span><span class="p">,</span>
-        <span class="n">instrument</span><span class="o">=</span><span class="n">instruments</span><span class="p">,</span>
-        <span class="n">band</span><span class="o">=</span><span class="n">bands</span><span class="p">,</span>
-        <span class="n">wavelength_nm</span><span class="o">=</span><span class="n">wl_arr</span><span class="p">,</span>
-        <span class="n">throughput</span><span class="o">=</span><span class="n">thr_arr</span><span class="p">,</span>
-        <span class="n">source</span><span class="o">=</span><span class="n">sources</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="n">out_path</span> <span class="o">=</span> <span class="n">out_dir</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s2">&quot;bandpass_curves.parquet&quot;</span><span class="p">)</span>
-    <span class="n">table</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">out_path</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">table</span></div>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="n">_raise_compatible_http_error</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">BandpassCurves</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span></div>
 
 
 
 <div class="viewcode-block" id="build_observatory_band_map">
 <a class="viewcode-back" href="../../../../reference/api/adam_core.photometry.bandpasses.vendor.html#adam_core.photometry.bandpasses.vendor.build_observatory_band_map">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">build_observatory_band_map</span><span class="p">(</span><span class="n">out_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObservatoryBandMap</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Write `ObservatoryBandMap` to `out_dir/observatory_band_map.parquet`.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">mappings</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build and atomically publish the map in one Rust crossing.&quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
 
-    <span class="c1"># DECam (W84)</span>
-    <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;u&quot;</span><span class="p">,</span> <span class="s2">&quot;g&quot;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">]:</span>
-        <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">&quot;W84&quot;</span><span class="p">,</span> <span class="n">band</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;DECam_</span><span class="si">{</span><span class="n">band</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">))</span>
-    <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">&quot;W84&quot;</span><span class="p">,</span> <span class="s2">&quot;Y&quot;</span><span class="p">,</span> <span class="s2">&quot;DECam_Y&quot;</span><span class="p">))</span>
-    <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">&quot;W84&quot;</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">,</span> <span class="s2">&quot;DECam_Y&quot;</span><span class="p">))</span>  <span class="c1"># pragmatic alias</span>
-    <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">&quot;W84&quot;</span><span class="p">,</span> <span class="s2">&quot;VR&quot;</span><span class="p">,</span> <span class="s2">&quot;DECam_VR&quot;</span><span class="p">))</span>
-    <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">&quot;W84&quot;</span><span class="p">,</span> <span class="s2">&quot;vr&quot;</span><span class="p">,</span> <span class="s2">&quot;DECam_VR&quot;</span><span class="p">))</span>  <span class="c1"># pragmatic alias</span>
-
-    <span class="c1"># Mosaic3 (695): z-band only in SVO for Mosaic3/MzLS.</span>
-    <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">&quot;695&quot;</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">,</span> <span class="s2">&quot;Mosaic3_z&quot;</span><span class="p">))</span>
-
-    <span class="c1"># ZTF (I41)</span>
-    <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;g&quot;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="s2">&quot;i&quot;</span><span class="p">]:</span>
-        <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">&quot;I41&quot;</span><span class="p">,</span> <span class="n">band</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;ZTF_</span><span class="si">{</span><span class="n">band</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">))</span>
-
-    <span class="c1"># SkyMapper (Q55)</span>
-    <span class="n">mappings</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span>
-        <span class="p">[</span>
-            <span class="p">(</span><span class="s2">&quot;Q55&quot;</span><span class="p">,</span> <span class="s2">&quot;u&quot;</span><span class="p">,</span> <span class="s2">&quot;SkyMapper_u&quot;</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;Q55&quot;</span><span class="p">,</span> <span class="s2">&quot;v&quot;</span><span class="p">,</span> <span class="s2">&quot;SkyMapper_v&quot;</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;Q55&quot;</span><span class="p">,</span> <span class="s2">&quot;g&quot;</span><span class="p">,</span> <span class="s2">&quot;SkyMapper_g&quot;</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;Q55&quot;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="s2">&quot;SkyMapper_r&quot;</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;Q55&quot;</span><span class="p">,</span> <span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="s2">&quot;SkyMapper_i&quot;</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;Q55&quot;</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">,</span> <span class="s2">&quot;SkyMapper_z&quot;</span><span class="p">),</span>
-        <span class="p">]</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Rubin/LSST (X05)</span>
-    <span class="k">for</span> <span class="n">band</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;u&quot;</span><span class="p">,</span> <span class="s2">&quot;g&quot;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">]:</span>
-        <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">&quot;X05&quot;</span><span class="p">,</span> <span class="n">band</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;LSST_</span><span class="si">{</span><span class="n">band</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">))</span>
-    <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">&quot;X05&quot;</span><span class="p">,</span> <span class="s2">&quot;Y&quot;</span><span class="p">,</span> <span class="s2">&quot;LSST_y&quot;</span><span class="p">))</span>  <span class="c1"># pragmatic alias</span>
-
-    <span class="c1"># ATLAS (multiple MPC codes share the same c/o passbands)</span>
-    <span class="k">for</span> <span class="n">code</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;T08&quot;</span><span class="p">,</span> <span class="s2">&quot;T05&quot;</span><span class="p">,</span> <span class="s2">&quot;M22&quot;</span><span class="p">,</span> <span class="s2">&quot;W68&quot;</span><span class="p">]:</span>
-        <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">code</span><span class="p">,</span> <span class="s2">&quot;c&quot;</span><span class="p">,</span> <span class="s2">&quot;ATLAS_c&quot;</span><span class="p">))</span>
-        <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">code</span><span class="p">,</span> <span class="s2">&quot;o&quot;</span><span class="p">,</span> <span class="s2">&quot;ATLAS_o&quot;</span><span class="p">))</span>
-
-    <span class="c1"># Kitt Peak-Bok (V00): BASS / Bok-90Prime g/r.</span>
-    <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">&quot;V00&quot;</span><span class="p">,</span> <span class="s2">&quot;g&quot;</span><span class="p">,</span> <span class="s2">&quot;BASS_g&quot;</span><span class="p">))</span>
-    <span class="n">mappings</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">&quot;V00&quot;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="s2">&quot;BASS_r&quot;</span><span class="p">))</span>
-
-    <span class="n">obs_codes</span><span class="p">,</span> <span class="n">bands</span><span class="p">,</span> <span class="n">filter_ids</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">mappings</span><span class="p">)</span>
-    <span class="n">keys</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">c</span><span class="si">}</span><span class="s2">|</span><span class="si">{</span><span class="n">b</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">c</span><span class="p">,</span> <span class="n">b</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">obs_codes</span><span class="p">,</span> <span class="n">bands</span><span class="p">)]</span>
-    <span class="n">table</span> <span class="o">=</span> <span class="n">ObservatoryBandMap</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">observatory_code</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">obs_codes</span><span class="p">),</span>
-        <span class="n">reported_band</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">bands</span><span class="p">),</span>
-        <span class="n">filter_id</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">filter_ids</span><span class="p">),</span>
-        <span class="n">key</span><span class="o">=</span><span class="nb">list</span><span class="p">(</span><span class="n">keys</span><span class="p">),</span>
-    <span class="p">)</span>
-    <span class="n">out_path</span> <span class="o">=</span> <span class="n">out_dir</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s2">&quot;observatory_band_map.parquet&quot;</span><span class="p">)</span>
-    <span class="n">table</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">out_path</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">table</span></div>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">build_observatory_band_map_arrow</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">out_dir</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">ObservatoryBandMap</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span></div>
 
 
 
 <div class="viewcode-block" id="build_asteroid_templates">
 <a class="viewcode-back" href="../../../../reference/api/adam_core.photometry.bandpasses.vendor.html#adam_core.photometry.bandpasses.vendor.build_asteroid_templates">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">build_asteroid_templates</span><span class="p">(</span><span class="n">out_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">AsteroidTemplates</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Build and vendor asteroid reflectance templates (C, S) plus fixed mixes (NEO, MBA).</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Build and atomically publish all template products in one Rust crossing.&quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
 
-<span class="sd">    Notes</span>
-<span class="sd">    -----</span>
-<span class="sd">    - These are intentionally simple, hand-built reflectance templates designed for</span>
-<span class="sd">      early synthetic photometry and are *not* a replacement for higher-fidelity</span>
-<span class="sd">      published average spectra.</span>
-<span class="sd">    - Reflectance is normalized to 1.0 at 550 nm.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># Shared wavelength grid (nm) spanning typical optical filters.</span>
-    <span class="n">wl</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="mf">300.0</span><span class="p">,</span> <span class="mf">1100.0</span><span class="p">,</span> <span class="mi">4000</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_normalize_at_550</span><span class="p">(</span>
-        <span class="n">reflectance</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
-        <span class="n">r550</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="mf">550.0</span><span class="p">,</span> <span class="n">wl</span><span class="p">,</span> <span class="n">reflectance</span><span class="p">))</span>
-        <span class="k">if</span> <span class="n">r550</span> <span class="o">&lt;=</span> <span class="mf">0.0</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">r550</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Template reflectance is invalid at 550 nm&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="p">(</span><span class="n">reflectance</span> <span class="o">/</span> <span class="n">r550</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-
-    <span class="c1"># C-type: relatively flat/slightly red with a weak 0.7 µm feature and UV drop-off.</span>
-    <span class="n">c</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">wl</span><span class="p">)</span>
-    <span class="n">c</span> <span class="o">*=</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="mf">0.15</span> <span class="o">*</span> <span class="p">(</span><span class="n">wl</span> <span class="o">-</span> <span class="mf">550.0</span><span class="p">)</span> <span class="o">/</span> <span class="mf">550.0</span>
-    <span class="n">c</span> <span class="o">*=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="mf">0.03</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="p">((</span><span class="n">wl</span> <span class="o">-</span> <span class="mf">700.0</span><span class="p">)</span> <span class="o">/</span> <span class="mf">50.0</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
-    <span class="n">uv</span> <span class="o">=</span> <span class="n">wl</span> <span class="o">&lt;</span> <span class="mf">450.0</span>
-    <span class="n">c</span><span class="p">[</span><span class="n">uv</span><span class="p">]</span> <span class="o">*=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="p">(((</span><span class="mf">450.0</span> <span class="o">-</span> <span class="n">wl</span><span class="p">[</span><span class="n">uv</span><span class="p">])</span> <span class="o">/</span> <span class="mf">100.0</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">))</span>
-    <span class="n">c</span> <span class="o">=</span> <span class="n">_normalize_at_550</span><span class="p">(</span><span class="n">c</span><span class="p">)</span>
-
-    <span class="c1"># S-type: redder slope with onset of the ~1 µm silicate absorption and UV drop-off.</span>
-    <span class="n">s</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones_like</span><span class="p">(</span><span class="n">wl</span><span class="p">)</span>
-    <span class="n">s</span> <span class="o">*=</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="mf">0.50</span> <span class="o">*</span> <span class="p">(</span><span class="n">wl</span> <span class="o">-</span> <span class="mf">550.0</span><span class="p">)</span> <span class="o">/</span> <span class="mf">550.0</span>
-    <span class="n">s</span> <span class="o">*=</span> <span class="mf">1.0</span> <span class="o">-</span> <span class="mf">0.10</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="p">((</span><span class="n">wl</span> <span class="o">-</span> <span class="mf">950.0</span><span class="p">)</span> <span class="o">/</span> <span class="mf">100.0</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">)</span>
-    <span class="n">uv</span> <span class="o">=</span> <span class="n">wl</span> <span class="o">&lt;</span> <span class="mf">500.0</span>
-    <span class="n">s</span><span class="p">[</span><span class="n">uv</span><span class="p">]</span> <span class="o">*=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="p">(((</span><span class="mf">500.0</span> <span class="o">-</span> <span class="n">wl</span><span class="p">[</span><span class="n">uv</span><span class="p">])</span> <span class="o">/</span> <span class="mf">120.0</span><span class="p">)</span> <span class="o">**</span> <span class="mi">2</span><span class="p">))</span>
-    <span class="n">s</span> <span class="o">=</span> <span class="n">_normalize_at_550</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
-
-    <span class="c1"># Mixes are linear combinations in reflectance space.</span>
-    <span class="n">neo</span> <span class="o">=</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">c</span> <span class="o">+</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="n">s</span>
-    <span class="n">mba</span> <span class="o">=</span> <span class="mf">0.7</span> <span class="o">*</span> <span class="n">c</span> <span class="o">+</span> <span class="mf">0.3</span> <span class="o">*</span> <span class="n">s</span>
-
-    <span class="n">templates</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="p">(</span><span class="s2">&quot;C&quot;</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">c</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;S&quot;</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">s</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;NEO&quot;</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="n">neo</span><span class="p">),</span>
-        <span class="p">(</span><span class="s2">&quot;MBA&quot;</span><span class="p">,</span> <span class="mf">0.7</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="n">mba</span><span class="p">),</span>
-    <span class="p">]</span>
-
-    <span class="n">citations</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="s2">&quot;C&quot;</span><span class="p">:</span> <span class="s2">&quot;Hand-built C-type reflectance template (optical/NIR). Informed by mean asteroid colors (e.g., Bowell &amp; Lumme 1979; Erasmus et al. 2019). Normalized at 550 nm.&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;S&quot;</span><span class="p">:</span> <span class="s2">&quot;Hand-built S-type reflectance template (optical/NIR). Informed by mean asteroid colors (e.g., Bowell &amp; Lumme 1979; Erasmus et al. 2019). Normalized at 550 nm.&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;NEO&quot;</span><span class="p">:</span> <span class="s2">&quot;Assumed NEO population mix: 50% C / 50% S (linear reflectance mix).&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;MBA&quot;</span><span class="p">:</span> <span class="s2">&quot;Assumed main-belt population mix: 70% C / 30% S (linear reflectance mix).&quot;</span><span class="p">,</span>
-    <span class="p">}</span>
-
-    <span class="n">wl_arr</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">wl</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">templates</span><span class="p">),</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_list</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">()))</span>
-    <span class="n">refl_arr</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">t</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">templates</span><span class="p">],</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_list</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">()))</span>
-    <span class="n">table</span> <span class="o">=</span> <span class="n">AsteroidTemplates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">template_id</span><span class="o">=</span><span class="p">[</span><span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">templates</span><span class="p">],</span>
-        <span class="n">wavelength_nm</span><span class="o">=</span><span class="n">wl_arr</span><span class="p">,</span>
-        <span class="n">reflectance</span><span class="o">=</span><span class="n">refl_arr</span><span class="p">,</span>
-        <span class="n">weight_C</span><span class="o">=</span><span class="p">[</span><span class="n">t</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">templates</span><span class="p">],</span>
-        <span class="n">weight_S</span><span class="o">=</span><span class="p">[</span><span class="n">t</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">templates</span><span class="p">],</span>
-        <span class="n">citation</span><span class="o">=</span><span class="p">[</span><span class="n">citations</span><span class="p">[</span><span class="n">t</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">templates</span><span class="p">],</span>
-    <span class="p">)</span>
-
-    <span class="n">out_path</span> <span class="o">=</span> <span class="n">out_dir</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s2">&quot;asteroid_templates.parquet&quot;</span><span class="p">)</span>
-    <span class="n">table</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">out_path</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">table</span></div>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">build_asteroid_templates_arrow</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">out_dir</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">AsteroidTemplates</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span></div>
 
 
 
 <div class="viewcode-block" id="build_solar_spectrum">
 <a class="viewcode-back" href="../../../../reference/api/adam_core.photometry.bandpasses.vendor.html#adam_core.photometry.bandpasses.vendor.build_solar_spectrum">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">build_solar_spectrum</span><span class="p">(</span><span class="n">out_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">Table</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Download and vendor a fixed solar spectrum used for synthetic photometry integrals.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fetch, parse, normalize, and atomically publish the FITS product in Rust.&quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
 
-<span class="sd">    Source</span>
-<span class="sd">    ------</span>
-<span class="sd">    STScI reference atlas solar spectrum FITS used widely in calibration contexts.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">url</span> <span class="o">=</span> <span class="s2">&quot;https://archive.stsci.edu/hlsps/reference-atlases/cdbs/grid/solsys/solar_spec.fits&quot;</span>
-    <span class="n">resp</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">url</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">120</span><span class="p">)</span>
-    <span class="n">resp</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
-
-    <span class="k">with</span> <span class="n">fits</span><span class="o">.</span><span class="n">open</span><span class="p">(</span><span class="n">io</span><span class="o">.</span><span class="n">BytesIO</span><span class="p">(</span><span class="n">resp</span><span class="o">.</span><span class="n">content</span><span class="p">))</span> <span class="k">as</span> <span class="n">hdul</span><span class="p">:</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">hdul</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">data</span>
-        <span class="n">wavelength_angstrom</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;WAVELENGTH&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">flux</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;FLUX&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-
-    <span class="n">wavelength_nm</span> <span class="o">=</span> <span class="n">wavelength_angstrom</span> <span class="o">/</span> <span class="mf">10.0</span>
-
-    <span class="c1"># Restrict to a useful range for optical/NIR passbands, then normalize.</span>
-    <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">wavelength_nm</span> <span class="o">&gt;=</span> <span class="mf">300.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">wavelength_nm</span> <span class="o">&lt;=</span> <span class="mf">1200.0</span><span class="p">)</span>
-    <span class="n">wavelength_nm</span> <span class="o">=</span> <span class="n">wavelength_nm</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
-    <span class="n">flux</span> <span class="o">=</span> <span class="n">flux</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
-    <span class="n">flux</span> <span class="o">=</span> <span class="n">flux</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">flux</span><span class="p">))</span>
-
-    <span class="n">table</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">table</span><span class="p">(</span>
-        <span class="p">{</span>
-            <span class="s2">&quot;wavelength_nm&quot;</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">wavelength_nm</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">()),</span>
-            <span class="s2">&quot;flux&quot;</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">flux</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">()),</span>
-        <span class="p">}</span>
-    <span class="p">)</span>
-    <span class="n">out_path</span> <span class="o">=</span> <span class="n">out_dir</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s2">&quot;solar_spectrum.parquet&quot;</span><span class="p">)</span>
-    <span class="n">pq</span><span class="o">.</span><span class="n">write_table</span><span class="p">(</span><span class="n">table</span><span class="p">,</span> <span class="n">out_path</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">table</span></div>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">build_solar_spectrum_arrow</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">out_dir</span><span class="p">),</span> <span class="mi">120</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="n">_raise_compatible_http_error</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">Table</span><span class="o">.</span><span class="n">from_batches</span><span class="p">([</span><span class="n">batch</span><span class="p">])</span></div>
 
 
 
 <div class="viewcode-block" id="build_template_bandpass_integrals">
 <a class="viewcode-back" href="../../../../reference/api/adam_core.photometry.bandpasses.vendor.html#adam_core.photometry.bandpasses.vendor.build_template_bandpass_integrals">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">build_template_bandpass_integrals</span><span class="p">(</span><span class="n">out_dir</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">TemplateBandpassIntegrals</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Compute and vendor template×filter integrals for photon-counting synthetic photometry.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">curves</span> <span class="o">=</span> <span class="n">BandpassCurves</span><span class="o">.</span><span class="n">from_parquet</span><span class="p">(</span><span class="n">out_dir</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s2">&quot;bandpass_curves.parquet&quot;</span><span class="p">))</span>
-    <span class="n">templates</span> <span class="o">=</span> <span class="n">AsteroidTemplates</span><span class="o">.</span><span class="n">from_parquet</span><span class="p">(</span>
-        <span class="n">out_dir</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s2">&quot;asteroid_templates.parquet&quot;</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="n">solar_tbl</span> <span class="o">=</span> <span class="n">pq</span><span class="o">.</span><span class="n">read_table</span><span class="p">(</span><span class="n">out_dir</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s2">&quot;solar_spectrum.parquet&quot;</span><span class="p">))</span>
-    <span class="n">solar_wl</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
-        <span class="n">solar_tbl</span><span class="p">[</span><span class="s2">&quot;wavelength_nm&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
-    <span class="p">)</span>
-    <span class="n">solar_flux</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
-        <span class="n">solar_tbl</span><span class="p">[</span><span class="s2">&quot;flux&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
-    <span class="p">)</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Compute, assemble, and atomically publish integrals in one Rust crossing.&quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
 
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">solar_wl</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">solar_wl</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">):</span>
-        <span class="n">order</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">solar_wl</span><span class="p">)</span>
-        <span class="n">solar_wl</span> <span class="o">=</span> <span class="n">solar_wl</span><span class="p">[</span><span class="n">order</span><span class="p">]</span>
-        <span class="n">solar_flux</span> <span class="o">=</span> <span class="n">solar_flux</span><span class="p">[</span><span class="n">order</span><span class="p">]</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">_interp</span><span class="p">(</span>
-        <span class="n">x</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-        <span class="n">y</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-        <span class="n">x_new</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">interp</span><span class="p">(</span><span class="n">x_new</span><span class="p">,</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">left</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span> <span class="n">copy</span><span class="o">=</span><span class="kc">False</span>
-        <span class="p">)</span>
-
-    <span class="n">template_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">filter_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">integrals</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-
-    <span class="k">for</span> <span class="n">tmpl_id</span><span class="p">,</span> <span class="n">wl_list</span><span class="p">,</span> <span class="n">refl_list</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
-        <span class="n">templates</span><span class="o">.</span><span class="n">template_id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
-        <span class="n">templates</span><span class="o">.</span><span class="n">wavelength_nm</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
-        <span class="n">templates</span><span class="o">.</span><span class="n">reflectance</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
-    <span class="p">):</span>
-        <span class="n">tmpl_wl</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">wl_list</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">tmpl_refl</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">refl_list</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">filt_id</span><span class="p">,</span> <span class="n">filt_wl_list</span><span class="p">,</span> <span class="n">thr_list</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span>
-            <span class="n">curves</span><span class="o">.</span><span class="n">filter_id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
-            <span class="n">curves</span><span class="o">.</span><span class="n">wavelength_nm</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
-            <span class="n">curves</span><span class="o">.</span><span class="n">throughput</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
-        <span class="p">):</span>
-            <span class="n">filt_wl</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">filt_wl_list</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-            <span class="n">filt_thr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">thr_list</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-
-            <span class="n">wl_min</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span>
-                <span class="nb">float</span><span class="p">(</span><span class="n">solar_wl</span><span class="o">.</span><span class="n">min</span><span class="p">()),</span> <span class="nb">float</span><span class="p">(</span><span class="n">tmpl_wl</span><span class="o">.</span><span class="n">min</span><span class="p">()),</span> <span class="nb">float</span><span class="p">(</span><span class="n">filt_wl</span><span class="o">.</span><span class="n">min</span><span class="p">())</span>
-            <span class="p">)</span>
-            <span class="n">wl_max</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span>
-                <span class="nb">float</span><span class="p">(</span><span class="n">solar_wl</span><span class="o">.</span><span class="n">max</span><span class="p">()),</span> <span class="nb">float</span><span class="p">(</span><span class="n">tmpl_wl</span><span class="o">.</span><span class="n">max</span><span class="p">()),</span> <span class="nb">float</span><span class="p">(</span><span class="n">filt_wl</span><span class="o">.</span><span class="n">max</span><span class="p">())</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">wl_max</span> <span class="o">&lt;=</span> <span class="n">wl_min</span><span class="p">:</span>
-                <span class="n">val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;nan&quot;</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">mask</span> <span class="o">=</span> <span class="p">(</span><span class="n">solar_wl</span> <span class="o">&gt;=</span> <span class="n">wl_min</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">solar_wl</span> <span class="o">&lt;=</span> <span class="n">wl_max</span><span class="p">)</span>
-                <span class="n">wl</span> <span class="o">=</span> <span class="n">solar_wl</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
-                <span class="n">sun</span> <span class="o">=</span> <span class="n">solar_flux</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
-                <span class="n">t</span> <span class="o">=</span> <span class="n">_interp</span><span class="p">(</span><span class="n">filt_wl</span><span class="p">,</span> <span class="n">filt_thr</span><span class="p">,</span> <span class="n">wl</span><span class="p">)</span>
-                <span class="n">r</span> <span class="o">=</span> <span class="n">_interp</span><span class="p">(</span><span class="n">tmpl_wl</span><span class="p">,</span> <span class="n">tmpl_refl</span><span class="p">,</span> <span class="n">wl</span><span class="p">)</span>
-                <span class="n">val</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">trapezoid</span><span class="p">(</span><span class="n">sun</span> <span class="o">*</span> <span class="n">r</span> <span class="o">*</span> <span class="n">t</span> <span class="o">*</span> <span class="n">wl</span><span class="p">,</span> <span class="n">wl</span><span class="p">))</span>
-
-            <span class="n">template_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">tmpl_id</span><span class="p">))</span>
-            <span class="n">filter_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">filt_id</span><span class="p">))</span>
-            <span class="n">integrals</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
-
-    <span class="n">table</span> <span class="o">=</span> <span class="n">TemplateBandpassIntegrals</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">template_id</span><span class="o">=</span><span class="n">template_ids</span><span class="p">,</span>
-        <span class="n">filter_id</span><span class="o">=</span><span class="n">filter_ids</span><span class="p">,</span>
-        <span class="n">integral_photon</span><span class="o">=</span><span class="n">integrals</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">out_path</span> <span class="o">=</span> <span class="n">out_dir</span><span class="o">.</span><span class="n">joinpath</span><span class="p">(</span><span class="s2">&quot;template_bandpass_integrals.parquet&quot;</span><span class="p">)</span>
-    <span class="n">table</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="n">out_path</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">table</span></div>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">build_template_bandpass_integrals_arrow</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">out_dir</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">TemplateBandpassIntegrals</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span></div>
 
 </pre></div>
         </article>
@@ -909,7 +623,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

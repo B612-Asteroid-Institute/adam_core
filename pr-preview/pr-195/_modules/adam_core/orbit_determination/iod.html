@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -417,19 +427,20 @@
           <h1>Source code for adam_core.orbit_determination.iod</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">itertools</span><span class="w"> </span><span class="kn">import</span> <span class="n">combinations</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Type</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.residuals</span><span class="w"> </span><span class="kn">import</span> <span class="n">Residuals</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..parallel</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_backend</span><span class="p">,</span> <span class="n">resolve_max_processes</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.iter</span><span class="w"> </span><span class="kn">import</span> <span class="n">_iterate_chunk_indices</span><span class="p">,</span> <span class="n">_iterate_chunks</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.iter</span><span class="w"> </span><span class="kn">import</span> <span class="n">_iterate_chunks</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">FittedOrbitMembers</span><span class="p">,</span>
     <span class="n">FittedOrbits</span><span class="p">,</span>
@@ -473,38 +484,22 @@
 <span class="sd">    members : qv.AnyTable</span>
 <span class="sd">        Sorted linkage members.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># Grab the linkage ID column from the linkages table and add an index column</span>
-    <span class="n">linkage_table</span> <span class="o">=</span> <span class="n">linkages</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">select</span><span class="p">([</span><span class="n">linkage_column</span><span class="p">])</span>
-    <span class="n">linkage_table</span> <span class="o">=</span> <span class="n">linkage_table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span>
-        <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;index&quot;</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">linkage_table</span><span class="p">)))</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+    <span class="c1"># One Rust crossing owns the observation-time join and the stable</span>
+    <span class="c1"># (linkage id, observation time) ordering.</span>
+    <span class="n">time_table</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">combine_chunks</span><span class="p">()</span>
+    <span class="n">linkage_order</span><span class="p">,</span> <span class="n">member_order</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">sort_linkages_by_id_and_time_numpy</span><span class="p">(</span>
+        <span class="n">linkages</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="n">linkage_column</span><span class="p">)</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+        <span class="n">members</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="n">linkage_column</span><span class="p">)</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+        <span class="n">members</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;obs_id&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+        <span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+        <span class="n">time_table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;days&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+        <span class="n">time_table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;nanos&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
     <span class="p">)</span>
 
-    <span class="c1"># Grab the linkage ID and observation ID columns from the linkage members table and add an index column</span>
-    <span class="n">members_table</span> <span class="o">=</span> <span class="n">members</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">select</span><span class="p">([</span><span class="n">linkage_column</span><span class="p">,</span> <span class="s2">&quot;obs_id&quot;</span><span class="p">])</span>
-    <span class="n">members_table</span> <span class="o">=</span> <span class="n">members_table</span><span class="o">.</span><span class="n">add_column</span><span class="p">(</span>
-        <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;index&quot;</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">members_table</span><span class="p">)))</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Grab the observation ID, observation time columns and join with the linkage members table on the observation ID</span>
-    <span class="n">observation_times</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">flattened_table</span><span class="p">()</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
-        <span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span> <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">]</span>
-    <span class="p">)</span>
-    <span class="n">member_times</span> <span class="o">=</span> <span class="n">members_table</span><span class="o">.</span><span class="n">join</span><span class="p">(</span>
-        <span class="n">observation_times</span><span class="p">,</span> <span class="n">keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;obs_id&quot;</span><span class="p">],</span> <span class="n">right_keys</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;id&quot;</span><span class="p">]</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Sort the reduced linkages table by linkage ID and the linkage member times table by linkage ID and observation time</span>
-    <span class="n">linkage_table</span> <span class="o">=</span> <span class="n">linkage_table</span><span class="o">.</span><span class="n">sort_by</span><span class="p">([(</span><span class="n">linkage_column</span><span class="p">,</span> <span class="s2">&quot;ascending&quot;</span><span class="p">)])</span>
-    <span class="n">member_times</span> <span class="o">=</span> <span class="n">member_times</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-        <span class="p">[</span>
-            <span class="p">(</span><span class="n">linkage_column</span><span class="p">,</span> <span class="s2">&quot;ascending&quot;</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span> <span class="s2">&quot;ascending&quot;</span><span class="p">),</span>
-            <span class="p">(</span><span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">,</span> <span class="s2">&quot;ascending&quot;</span><span class="p">),</span>
-        <span class="p">]</span>
-    <span class="p">)</span>
-
-    <span class="n">linkages</span> <span class="o">=</span> <span class="n">linkages</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">linkage_table</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">])</span>
-    <span class="n">members</span> <span class="o">=</span> <span class="n">members</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">member_times</span><span class="p">[</span><span class="s2">&quot;index&quot;</span><span class="p">])</span>
+    <span class="n">linkages</span> <span class="o">=</span> <span class="n">linkages</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">linkage_order</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">()))</span>
+    <span class="n">members</span> <span class="o">=</span> <span class="n">members</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">member_order</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">()))</span>
 
     <span class="k">if</span> <span class="n">linkages</span><span class="o">.</span><span class="n">fragmented</span><span class="p">():</span>
         <span class="n">linkages</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">defragment</span><span class="p">(</span><span class="n">linkages</span><span class="p">)</span>
@@ -545,64 +540,106 @@
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">obs_ids</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
 
-    <span class="n">indexes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">obs_ids</span><span class="p">))</span>
     <span class="n">times</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;first+middle+last&quot;</span><span class="p">:</span>
-        <span class="n">selected_times</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">100</span><span class="p">],</span> <span class="n">interpolation</span><span class="o">=</span><span class="s2">&quot;nearest&quot;</span><span class="p">)</span>
-        <span class="n">selected_index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">intersect1d</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="n">selected_times</span><span class="p">,</span> <span class="n">return_indices</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
-        <span class="n">selected_index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">selected_index</span><span class="p">])</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
 
-    <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;thirds&quot;</span><span class="p">:</span>
-        <span class="n">selected_times</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">percentile</span><span class="p">(</span>
-            <span class="n">times</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span> <span class="o">/</span> <span class="mi">6</span> <span class="o">*</span> <span class="mi">100</span><span class="p">,</span> <span class="mi">50</span><span class="p">,</span> <span class="mi">5</span> <span class="o">/</span> <span class="mi">6</span> <span class="o">*</span> <span class="mi">100</span><span class="p">],</span> <span class="n">interpolation</span><span class="o">=</span><span class="s2">&quot;nearest&quot;</span>
-        <span class="p">)</span>
-        <span class="n">selected_index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">intersect1d</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="n">selected_times</span><span class="p">,</span> <span class="n">return_indices</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">1</span><span class="p">]</span>
-        <span class="n">selected_index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">selected_index</span><span class="p">])</span>
-
-    <span class="k">elif</span> <span class="n">method</span> <span class="o">==</span> <span class="s2">&quot;combinations&quot;</span><span class="p">:</span>
-        <span class="c1"># Make all possible combinations of 3 observations</span>
-        <span class="n">selected_index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
-            <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">index</span><span class="p">)</span> <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">combinations</span><span class="p">(</span><span class="n">indexes</span><span class="p">,</span> <span class="mi">3</span><span class="p">)]</span>
-        <span class="p">)</span>
-
-        <span class="c1"># Calculate arc length</span>
-        <span class="n">arc_length</span> <span class="o">=</span> <span class="n">times</span><span class="p">[</span><span class="n">selected_index</span><span class="p">][:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">times</span><span class="p">[</span><span class="n">selected_index</span><span class="p">][:,</span> <span class="mi">0</span><span class="p">]</span>
-
-        <span class="c1"># Calculate distance of second observation from middle point (last + first) / 2</span>
-        <span class="n">time_from_mid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span>
-            <span class="p">(</span><span class="n">times</span><span class="p">[</span><span class="n">selected_index</span><span class="p">][:,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="n">times</span><span class="p">[</span><span class="n">selected_index</span><span class="p">][:,</span> <span class="mi">0</span><span class="p">])</span> <span class="o">/</span> <span class="mi">2</span>
-            <span class="o">-</span> <span class="n">times</span><span class="p">[</span><span class="n">selected_index</span><span class="p">][:,</span> <span class="mi">1</span><span class="p">]</span>
-        <span class="p">)</span>
-
-        <span class="c1"># Sort by descending arc length and ascending time from midpoint</span>
-        <span class="n">sort</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">lexsort</span><span class="p">((</span><span class="n">time_from_mid</span><span class="p">,</span> <span class="o">-</span><span class="n">arc_length</span><span class="p">))</span>
-        <span class="n">selected_index</span> <span class="o">=</span> <span class="n">selected_index</span><span class="p">[</span><span class="n">sort</span><span class="p">]</span>
-
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;method should be one of {&#39;first+middle+last&#39;, &#39;thirds&#39;}&quot;</span><span class="p">)</span>
-
-    <span class="c1"># Make sure each returned combination of observation ids have at least 3 unique</span>
-    <span class="c1"># times</span>
-    <span class="n">keep</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">comb</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">times</span><span class="p">[</span><span class="n">selected_index</span><span class="p">]):</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">comb</span><span class="p">))</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
-            <span class="n">keep</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">)</span>
-    <span class="n">keep</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">keep</span><span class="p">)</span>
+    <span class="c1"># One Rust crossing owns percentile/combination selection, arc-length and</span>
+    <span class="c1"># midpoint ordering, and the unique-time filter; the legacy ValueError</span>
+    <span class="c1"># message for unknown methods is preserved by the kernel.</span>
+    <span class="n">selected_index</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+        <span class="n">_rust_native</span><span class="o">.</span><span class="n">select_observation_triplets_numpy</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span> <span class="n">method</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+    <span class="p">)</span>
 
     <span class="c1"># Return an empty array if no observations satisfy the criteria</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">keep</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">selected_index</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">selected_index</span> <span class="o">=</span> <span class="n">selected_index</span><span class="p">[</span><span class="n">keep</span><span class="p">,</span> <span class="p">:]</span>
 
     <span class="k">return</span> <span class="n">obs_ids</span><span class="p">[</span><span class="n">selected_index</span><span class="p">]</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_tables_from_native_iod</span><span class="p">(</span><span class="n">output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Wrap one fused Rust IOD batch product without further computation.&quot;&quot;&quot;</span>
+    <span class="n">orbit_ids</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;orbit_ids&quot;</span><span class="p">])</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">orbit_ids</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">(),</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+    <span class="n">states</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;states&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">epochs</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;epoch_mjd&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;utc&quot;</span>
+    <span class="p">)</span>
+    <span class="n">orbits</span> <span class="o">=</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbit_ids</span><span class="p">,</span>
+        <span class="n">object_id</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbit_ids</span><span class="p">),</span>
+        <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+            <span class="n">y</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+            <span class="n">z</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
+            <span class="n">vx</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
+            <span class="n">vy</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
+            <span class="n">vz</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
+            <span class="n">time</span><span class="o">=</span><span class="n">epochs</span><span class="p">,</span>
+            <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SUN&quot;</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbit_ids</span><span class="p">)),</span>
+            <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">arc_length</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;arc_length&quot;</span><span class="p">],</span>
+        <span class="n">num_obs</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;num_obs&quot;</span><span class="p">],</span>
+        <span class="n">chi2</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;chi2&quot;</span><span class="p">],</span>
+        <span class="n">reduced_chi2</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;reduced_chi2&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="n">residuals</span> <span class="o">=</span> <span class="n">Residuals</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">values</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;residual_values&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+        <span class="n">chi2</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;residual_chi2&quot;</span><span class="p">],</span>
+        <span class="n">dof</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;residual_dof&quot;</span><span class="p">],</span>
+        <span class="n">probability</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;residual_probability&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="n">members</span> <span class="o">=</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">orbit_id</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;member_orbit_ids&quot;</span><span class="p">],</span>
+        <span class="n">obs_id</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;member_obs_ids&quot;</span><span class="p">],</span>
+        <span class="n">residuals</span><span class="o">=</span><span class="n">residuals</span><span class="p">,</span>
+        <span class="n">solution</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;solution&quot;</span><span class="p">],</span>
+        <span class="n">outlier</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;outlier&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">orbits</span><span class="p">,</span> <span class="n">members</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_native_initial_orbit_determination</span><span class="p">(</span>
+    <span class="n">prop</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">linkage_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">member_linkage_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="n">member_obs_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">contamination_percentage</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">observation_selection_method</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">light_time</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]:</span>
+    <span class="n">output</span> <span class="o">=</span> <span class="n">prop</span><span class="o">.</span><span class="n">initial_orbit_determination</span><span class="p">(</span>
+        <span class="n">observations</span><span class="p">,</span>
+        <span class="n">linkage_ids</span><span class="p">,</span>
+        <span class="n">member_linkage_ids</span><span class="p">,</span>
+        <span class="n">member_obs_ids</span><span class="p">,</span>
+        <span class="n">min_obs</span><span class="o">=</span><span class="n">min_obs</span><span class="p">,</span>
+        <span class="n">min_arc_length</span><span class="o">=</span><span class="n">min_arc_length</span><span class="p">,</span>
+        <span class="n">contamination_percentage</span><span class="o">=</span><span class="n">contamination_percentage</span><span class="p">,</span>
+        <span class="n">rchi2_threshold</span><span class="o">=</span><span class="n">rchi2_threshold</span><span class="p">,</span>
+        <span class="n">observation_selection_method</span><span class="o">=</span><span class="n">observation_selection_method</span><span class="p">,</span>
+        <span class="n">light_time</span><span class="o">=</span><span class="n">light_time</span><span class="p">,</span>
+        <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">_tables_from_native_iod</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">iod_worker</span><span class="p">(</span>
     <span class="n">linkage_ids</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">str_</span><span class="p">],</span>
-    <span class="n">observations</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">OrbitDeterminationObservations</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">],</span>
-    <span class="n">linkage_members</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">],</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">linkage_members</span><span class="p">:</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span>
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Propagator</span><span class="p">],</span>
     <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
     <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
@@ -689,45 +726,6 @@
     <span class="k">return</span> <span class="n">iod_orbits</span><span class="p">,</span> <span class="n">iod_orbit_members</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_iod_chunk_worker</span><span class="p">(</span>
-    <span class="n">linkage_ids</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">str_</span><span class="p">],</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">],</span>
-    <span class="n">linkage_members_indices</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
-    <span class="n">observations</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">OrbitDeterminationObservations</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">],</span>
-    <span class="n">linkage_members</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">],</span>
-    <span class="n">propagator</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Propagator</span><span class="p">],</span>
-    <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
-    <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
-    <span class="n">contamination_percentage</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-    <span class="n">rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span>
-    <span class="n">observation_selection_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span>
-        <span class="s2">&quot;combinations&quot;</span><span class="p">,</span> <span class="s2">&quot;first+middle+last&quot;</span><span class="p">,</span> <span class="s2">&quot;thirds&quot;</span>
-    <span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;combinations&quot;</span><span class="p">,</span>
-    <span class="n">linkage_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;cluster_id&quot;</span><span class="p">,</span>
-    <span class="n">iterate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
-    <span class="n">light_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
-    <span class="n">propagator_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{},</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]:</span>
-    <span class="c1"># Select linkage ids from linkage_members_indices</span>
-    <span class="n">linkage_id_chunk</span> <span class="o">=</span> <span class="n">linkage_ids</span><span class="p">[</span>
-        <span class="n">linkage_members_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="p">:</span> <span class="n">linkage_members_indices</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
-    <span class="p">]</span>
-    <span class="k">return</span> <span class="n">iod_worker</span><span class="p">(</span>
-        <span class="n">linkage_id_chunk</span><span class="p">,</span>
-        <span class="n">observations</span><span class="p">,</span>
-        <span class="n">linkage_members</span><span class="p">,</span>
-        <span class="n">min_obs</span><span class="o">=</span><span class="n">min_obs</span><span class="p">,</span>
-        <span class="n">min_arc_length</span><span class="o">=</span><span class="n">min_arc_length</span><span class="p">,</span>
-        <span class="n">contamination_percentage</span><span class="o">=</span><span class="n">contamination_percentage</span><span class="p">,</span>
-        <span class="n">rchi2_threshold</span><span class="o">=</span><span class="n">rchi2_threshold</span><span class="p">,</span>
-        <span class="n">observation_selection_method</span><span class="o">=</span><span class="n">observation_selection_method</span><span class="p">,</span>
-        <span class="n">linkage_id_col</span><span class="o">=</span><span class="n">linkage_id_col</span><span class="p">,</span>
-        <span class="n">iterate</span><span class="o">=</span><span class="n">iterate</span><span class="p">,</span>
-        <span class="n">light_time</span><span class="o">=</span><span class="n">light_time</span><span class="p">,</span>
-        <span class="n">propagator</span><span class="o">=</span><span class="n">propagator</span><span class="p">,</span>
-        <span class="n">propagator_kwargs</span><span class="o">=</span><span class="n">propagator_kwargs</span><span class="p">,</span>
-    <span class="p">)</span>
-
-
 <span class="k">def</span><span class="w"> </span><span class="nf">iod</span><span class="p">(</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Propagator</span><span class="p">],</span>
@@ -808,6 +806,26 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c1"># Initialize the propagator</span>
     <span class="n">prop</span> <span class="o">=</span> <span class="n">propagator</span><span class="p">(</span><span class="o">**</span><span class="n">propagator_kwargs</span><span class="p">)</span>
+
+    <span class="c1"># One native crossing owns the complete preliminary-IOD decision loop on</span>
+    <span class="c1"># providers exposing the fused work unit. UUID creation remains Python-</span>
+    <span class="c1"># owned; the native batch uses it as the synthetic linkage/final orbit id.</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">prop</span><span class="p">,</span> <span class="s2">&quot;initial_orbit_determination&quot;</span><span class="p">):</span>
+        <span class="n">orbit_id</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span>
+        <span class="k">return</span> <span class="n">_native_initial_orbit_determination</span><span class="p">(</span>
+            <span class="n">prop</span><span class="p">,</span>
+            <span class="n">observations</span><span class="p">,</span>
+            <span class="p">[</span><span class="n">orbit_id</span><span class="p">],</span>
+            <span class="p">[</span><span class="n">orbit_id</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span>
+            <span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+            <span class="n">min_obs</span><span class="o">=</span><span class="n">min_obs</span><span class="p">,</span>
+            <span class="n">min_arc_length</span><span class="o">=</span><span class="n">min_arc_length</span><span class="p">,</span>
+            <span class="n">contamination_percentage</span><span class="o">=</span><span class="n">contamination_percentage</span><span class="p">,</span>
+            <span class="n">rchi2_threshold</span><span class="o">=</span><span class="n">rchi2_threshold</span><span class="p">,</span>
+            <span class="n">observation_selection_method</span><span class="o">=</span><span class="n">observation_selection_method</span><span class="p">,</span>
+            <span class="n">light_time</span><span class="o">=</span><span class="n">light_time</span><span class="p">,</span>
+            <span class="n">chunk_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="n">processable</span> <span class="o">=</span> <span class="kc">True</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
@@ -1002,8 +1020,8 @@
 <div class="viewcode-block" id="initial_orbit_determination">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.initial_orbit_determination">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">initial_orbit_determination</span><span class="p">(</span>
-    <span class="n">observations</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">OrbitDeterminationObservations</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">],</span>
-    <span class="n">linkage_members</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">],</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">linkage_members</span><span class="p">:</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span>
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Propagator</span><span class="p">],</span>
     <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
     <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
@@ -1025,19 +1043,28 @@
     <span class="n">time_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Running initial orbit determination...&quot;</span><span class="p">)</span>
 
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">linkage_members</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">):</span>
-        <span class="n">linkage_members_ref</span> <span class="o">=</span> <span class="n">linkage_members</span>
-        <span class="n">linkage_members</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">linkage_members</span><span class="p">)</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Retrieved linkage members from the object store.&quot;</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">linkage_members_ref</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">):</span>
-        <span class="n">observations_ref</span> <span class="o">=</span> <span class="n">observations</span>
-        <span class="n">observations</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Retrieved observations from the object store.&quot;</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">observations_ref</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># The supported native provider owns the entire multi-linkage workflow in</span>
+    <span class="c1"># one crossing; chunk_size is consumed by Rust and max_processes is kept</span>
+    <span class="c1"># only for signature compatibility (native execution replaces Ray).</span>
+    <span class="n">native_prop</span> <span class="o">=</span> <span class="n">propagator</span><span class="p">(</span><span class="o">**</span><span class="n">propagator_kwargs</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">native_prop</span><span class="p">,</span> <span class="s2">&quot;initial_orbit_determination&quot;</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">linkage_members</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">(),</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+        <span class="n">linkage_ids</span> <span class="o">=</span> <span class="n">linkage_members</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="n">linkage_id_col</span><span class="p">)</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">_native_initial_orbit_determination</span><span class="p">(</span>
+            <span class="n">native_prop</span><span class="p">,</span>
+            <span class="n">observations</span><span class="p">,</span>
+            <span class="n">linkage_ids</span><span class="p">,</span>
+            <span class="n">linkage_members</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="n">linkage_id_col</span><span class="p">)</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+            <span class="n">linkage_members</span><span class="o">.</span><span class="n">obs_id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+            <span class="n">min_obs</span><span class="o">=</span><span class="n">min_obs</span><span class="p">,</span>
+            <span class="n">min_arc_length</span><span class="o">=</span><span class="n">min_arc_length</span><span class="p">,</span>
+            <span class="n">contamination_percentage</span><span class="o">=</span><span class="n">contamination_percentage</span><span class="p">,</span>
+            <span class="n">rchi2_threshold</span><span class="o">=</span><span class="n">rchi2_threshold</span><span class="p">,</span>
+            <span class="n">observation_selection_method</span><span class="o">=</span><span class="n">observation_selection_method</span><span class="p">,</span>
+            <span class="n">light_time</span><span class="o">=</span><span class="n">light_time</span><span class="p">,</span>
+            <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="n">iod_orbits_chunks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">iod_orbit_members_chunks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">FittedOrbitMembers</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
@@ -1045,80 +1072,28 @@
         <span class="c1"># Extract linkage IDs</span>
         <span class="n">linkage_ids</span> <span class="o">=</span> <span class="n">linkage_members</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="n">linkage_id_col</span><span class="p">)</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
 
-        <span class="n">max_processes</span> <span class="o">=</span> <span class="n">resolve_max_processes</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">max_processes</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="n">backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span>
-            <span class="n">refs_to_free</span> <span class="o">=</span> <span class="p">[]</span>
-
-            <span class="n">linkage_ids_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">linkage_ids</span><span class="p">)</span>
-            <span class="n">refs_to_free</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">linkage_ids_ref</span><span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Placed linkage IDs in the object store.&quot;</span><span class="p">)</span>
-
-            <span class="k">if</span> <span class="n">linkage_members_ref</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">linkage_members_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">linkage_members</span><span class="p">)</span>
-                <span class="n">refs_to_free</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">linkage_members_ref</span><span class="p">)</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Placed linkage members in the object store.&quot;</span><span class="p">)</span>
-
-            <span class="k">if</span> <span class="n">observations_ref</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">observations_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
-                <span class="n">refs_to_free</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">observations_ref</span><span class="p">)</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Placed observations in the object store.&quot;</span><span class="p">)</span>
-
-            <span class="n">args_iter</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="p">(</span>
-                    <span class="n">linkage_ids_ref</span><span class="p">,</span>
-                    <span class="n">linkage_id_chunk_indices</span><span class="p">,</span>
-                    <span class="n">observations_ref</span><span class="p">,</span>
-                    <span class="n">linkage_members_ref</span><span class="p">,</span>
-                    <span class="n">propagator</span><span class="p">,</span>
-                    <span class="n">min_obs</span><span class="p">,</span>
-                    <span class="n">min_arc_length</span><span class="p">,</span>
-                    <span class="n">contamination_percentage</span><span class="p">,</span>
-                    <span class="n">rchi2_threshold</span><span class="p">,</span>
-                    <span class="n">observation_selection_method</span><span class="p">,</span>
-                    <span class="n">linkage_id_col</span><span class="p">,</span>
-                    <span class="n">iterate</span><span class="p">,</span>
-                    <span class="n">light_time</span><span class="p">,</span>
-                    <span class="n">propagator_kwargs</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="k">for</span> <span class="n">linkage_id_chunk_indices</span> <span class="ow">in</span> <span class="n">_iterate_chunk_indices</span><span class="p">(</span>
-                    <span class="n">linkage_ids</span><span class="p">,</span> <span class="n">chunk_size</span>
-                <span class="p">)</span>
+        <span class="c1"># `max_processes` remains accepted for signature compatibility.</span>
+        <span class="c1"># Native providers returned above; non-native providers use the</span>
+        <span class="c1"># deterministic serial fallback instead of Python/Ray distribution.</span>
+        <span class="k">del</span> <span class="n">max_processes</span>
+        <span class="k">for</span> <span class="n">linkage_id_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">linkage_ids</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">):</span>
+            <span class="n">iod_orbits_chunk</span><span class="p">,</span> <span class="n">iod_orbit_members_chunk</span> <span class="o">=</span> <span class="n">iod_worker</span><span class="p">(</span>
+                <span class="n">linkage_id_chunk</span><span class="p">,</span>
+                <span class="n">observations</span><span class="p">,</span>
+                <span class="n">linkage_members</span><span class="p">,</span>
+                <span class="n">min_obs</span><span class="o">=</span><span class="n">min_obs</span><span class="p">,</span>
+                <span class="n">min_arc_length</span><span class="o">=</span><span class="n">min_arc_length</span><span class="p">,</span>
+                <span class="n">contamination_percentage</span><span class="o">=</span><span class="n">contamination_percentage</span><span class="p">,</span>
+                <span class="n">rchi2_threshold</span><span class="o">=</span><span class="n">rchi2_threshold</span><span class="p">,</span>
+                <span class="n">observation_selection_method</span><span class="o">=</span><span class="n">observation_selection_method</span><span class="p">,</span>
+                <span class="n">iterate</span><span class="o">=</span><span class="n">iterate</span><span class="p">,</span>
+                <span class="n">light_time</span><span class="o">=</span><span class="n">light_time</span><span class="p">,</span>
+                <span class="n">linkage_id_col</span><span class="o">=</span><span class="n">linkage_id_col</span><span class="p">,</span>
+                <span class="n">propagator</span><span class="o">=</span><span class="n">propagator</span><span class="p">,</span>
+                <span class="n">propagator_kwargs</span><span class="o">=</span><span class="n">propagator_kwargs</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="k">for</span> <span class="n">iod_orbits_chunk</span><span class="p">,</span> <span class="n">iod_orbit_members_chunk</span> <span class="ow">in</span> <span class="n">backend</span><span class="o">.</span><span class="n">map_unordered</span><span class="p">(</span>
-                <span class="n">_iod_chunk_worker</span><span class="p">,</span>
-                <span class="n">args_iter</span><span class="p">,</span>
-                <span class="n">worker_options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;num_returns&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;num_cpus&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
-            <span class="p">):</span>
-                <span class="n">iod_orbits_chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">iod_orbits_chunk</span><span class="p">)</span>
-                <span class="n">iod_orbit_members_chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">iod_orbit_members_chunk</span><span class="p">)</span>
-
-            <span class="n">backend</span><span class="o">.</span><span class="n">free</span><span class="p">(</span><span class="n">refs_to_free</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">refs_to_free</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Removed </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">refs_to_free</span><span class="p">)</span><span class="si">}</span><span class="s2"> references from the object store.&quot;</span>
-                <span class="p">)</span>
-
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">for</span> <span class="n">linkage_id_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">linkage_ids</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">):</span>
-                <span class="n">iod_orbits_chunk</span><span class="p">,</span> <span class="n">iod_orbit_members_chunk</span> <span class="o">=</span> <span class="n">iod_worker</span><span class="p">(</span>
-                    <span class="n">linkage_id_chunk</span><span class="p">,</span>
-                    <span class="n">observations</span><span class="p">,</span>
-                    <span class="n">linkage_members</span><span class="p">,</span>
-                    <span class="n">min_obs</span><span class="o">=</span><span class="n">min_obs</span><span class="p">,</span>
-                    <span class="n">min_arc_length</span><span class="o">=</span><span class="n">min_arc_length</span><span class="p">,</span>
-                    <span class="n">contamination_percentage</span><span class="o">=</span><span class="n">contamination_percentage</span><span class="p">,</span>
-                    <span class="n">rchi2_threshold</span><span class="o">=</span><span class="n">rchi2_threshold</span><span class="p">,</span>
-                    <span class="n">observation_selection_method</span><span class="o">=</span><span class="n">observation_selection_method</span><span class="p">,</span>
-                    <span class="n">iterate</span><span class="o">=</span><span class="n">iterate</span><span class="p">,</span>
-                    <span class="n">light_time</span><span class="o">=</span><span class="n">light_time</span><span class="p">,</span>
-                    <span class="n">linkage_id_col</span><span class="o">=</span><span class="n">linkage_id_col</span><span class="p">,</span>
-                    <span class="n">propagator</span><span class="o">=</span><span class="n">propagator</span><span class="p">,</span>
-                    <span class="n">propagator_kwargs</span><span class="o">=</span><span class="n">propagator_kwargs</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="n">iod_orbits_chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">iod_orbits_chunk</span><span class="p">)</span>
-                <span class="n">iod_orbit_members_chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">iod_orbit_members_chunk</span><span class="p">)</span>
+            <span class="n">iod_orbits_chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">iod_orbits_chunk</span><span class="p">)</span>
+            <span class="n">iod_orbit_members_chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">iod_orbit_members_chunk</span><span class="p">)</span>
 
         <span class="n">iod_orbits</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">iod_orbits_chunks</span><span class="p">)</span>
@@ -1191,7 +1166,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -417,6 +427,7 @@
           <h1>Source code for adam_core.orbits.query.sbdb</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">threading</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
@@ -428,7 +439,6 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">astroquery.jplsbdb</span><span class="w"> </span><span class="kn">import</span> <span class="n">SBDB</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">...coordinates.cometary</span><span class="w"> </span><span class="kn">import</span> <span class="n">CometaryCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">...coordinates.covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoordinateCovariances</span><span class="p">,</span> <span class="n">sigmas_to_covariances</span>
@@ -443,6 +453,29 @@
 <span class="n">_SBDB_API_FAIR_USE_MAX_CONCURRENT_REQUESTS</span> <span class="o">=</span> <span class="mi">1</span>
 
 <span class="n">_thread_local</span> <span class="o">=</span> <span class="n">threading</span><span class="o">.</span><span class="n">local</span><span class="p">()</span>
+
+
+<span class="k">class</span><span class="w"> </span><span class="nc">_SBDBCompatibilityShim</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Patch target for legacy tests/callers without importing Astroquery.</span>
+
+<span class="sd">    The ordinary public path is Rust HTTP. Historical users that patched</span>
+<span class="sd">    ``adam_core.orbits.query.sbdb.SBDB.query`` can still supply processed</span>
+<span class="sd">    payloads; the default sentinel is never called.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">clear_cache</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="nd">@staticmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">query</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="k">del</span> <span class="n">args</span><span class="p">,</span> <span class="n">kwargs</span>
+        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;legacy SBDB.query compatibility hook was not patched&quot;</span><span class="p">)</span>
+
+
+<span class="n">_sbdb_compatibility</span> <span class="o">=</span> <span class="n">_SBDBCompatibilityShim</span>
+<span class="nb">globals</span><span class="p">()[</span><span class="s2">&quot;SBDB&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">_sbdb_compatibility</span>
+<span class="n">_DEFAULT_SBDB_QUERY</span> <span class="o">=</span> <span class="n">_sbdb_compatibility</span><span class="o">.</span><span class="n">query</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_requests_session</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">requests</span><span class="o">.</span><span class="n">Session</span><span class="p">:</span>
@@ -540,9 +573,9 @@
 <span class="sd">        List of dictionaries containing orbital elements and other object properties.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">SBDB</span><span class="o">.</span><span class="n">clear_cache</span><span class="p">()</span>  <span class="c1"># Yikes!</span>
+    <span class="n">_sbdb_compatibility</span><span class="o">.</span><span class="n">clear_cache</span><span class="p">()</span>  <span class="c1"># Yikes!</span>
     <span class="k">for</span> <span class="n">obj_id</span> <span class="ow">in</span> <span class="n">obj_ids</span><span class="p">:</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">SBDB</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">_sbdb_compatibility</span><span class="o">.</span><span class="n">query</span><span class="p">(</span>
             <span class="n">obj_id</span><span class="p">,</span>
             <span class="n">covariance</span><span class="o">=</span><span class="s2">&quot;mat&quot;</span><span class="p">,</span>
             <span class="n">id_type</span><span class="o">=</span><span class="s2">&quot;search&quot;</span><span class="p">,</span>
@@ -692,8 +725,24 @@
 <span class="sd">    ------</span>
 <span class="sd">    NotFoundError: If any of the queries object IDs are not found.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">results</span> <span class="o">=</span> <span class="n">_get_sbdb_elements</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">_orbits_from_sbdb_results</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="n">results</span><span class="p">)</span></div>
+    <span class="k">if</span> <span class="n">_sbdb_compatibility</span><span class="o">.</span><span class="n">query</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">_DEFAULT_SBDB_QUERY</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_orbits_from_sbdb_results</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="n">_get_sbdb_elements</span><span class="p">(</span><span class="n">ids</span><span class="p">))</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">..._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">...utils.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">_raise_compatible_http_error</span>
+
+    <span class="n">object_ids</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">]</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">query_sbdb_arrow</span><span class="p">(</span><span class="n">object_ids</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="mf">60.0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="kc">False</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="n">_raise_compatible_http_error</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;__NOT_FOUND__:&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">NotFoundError</span><span class="p">(</span><span class="s2">&quot;object </span><span class="si">{}</span><span class="s2"> was not found&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">raise</span>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">Orbits</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span></div>
 
 
 
@@ -757,6 +806,9 @@
         <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">sleep_s</span><span class="p">)</span>
 
     <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SBDB query failed after </span><span class="si">{</span><span class="n">max_attempts</span><span class="si">}</span><span class="s2"> attempts: </span><span class="si">{</span><span class="n">last_err</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+
+<span class="n">_DEFAULT_SBDB_API_GET_JSON</span> <span class="o">=</span> <span class="n">_sbdb_api_get_json</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_sbdb_float</span><span class="p">(</span><span class="n">value</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
@@ -909,105 +961,29 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Convert raw SBDB JSON payloads into an `Orbits` table.</span>
 
-<span class="sd">    This mirrors the behavior of the legacy `query_sbdb` implementation:</span>
-<span class="sd">    - Prefer covariance-provided elements/epoch when present.</span>
-<span class="sd">    - Use covariance matrix when available; otherwise build a diagonal covariance from sigmas.</span>
+<span class="sd">    The deterministic payload normalization (element selection, covariance</span>
+<span class="sd">    matrix/label handling, SBDB-&gt;ADAM covariance ordering, and physical</span>
+<span class="sd">    parameter extraction) is Rust-backed behind this canonical helper; Python</span>
+<span class="sd">    remains the thin table-construction facade.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">payloads</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;ids and payloads must have the same length.&quot;</span><span class="p">)</span>
-
-    <span class="n">expected_labels</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;e&quot;</span><span class="p">,</span> <span class="s2">&quot;q&quot;</span><span class="p">,</span> <span class="s2">&quot;tp&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;peri&quot;</span><span class="p">,</span> <span class="s2">&quot;i&quot;</span><span class="p">]</span>
-
-    <span class="n">orbit_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">object_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">phys_rows</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
-
-    <span class="n">coords_cometary</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">payloads</span><span class="p">),</span> <span class="mi">6</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">covariances_sbdb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">payloads</span><span class="p">),</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">times_jd</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">payloads</span><span class="p">)),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-
-    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">obj_id</span><span class="p">,</span> <span class="n">payload</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="n">payloads</span><span class="p">)):</span>
+    <span class="k">for</span> <span class="n">obj_id</span><span class="p">,</span> <span class="n">payload</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="n">payloads</span><span class="p">):</span>
         <span class="k">if</span> <span class="s2">&quot;object&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">payload</span><span class="p">:</span>
             <span class="k">raise</span> <span class="n">NotFoundError</span><span class="p">(</span><span class="s2">&quot;object </span><span class="si">{}</span><span class="s2"> was not found&quot;</span><span class="p">,</span> <span class="n">obj_id</span><span class="p">)</span>
-        <span class="k">if</span> <span class="s2">&quot;orbit&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">payload</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SBDB payload for </span><span class="si">{</span><span class="n">obj_id</span><span class="si">!r}</span><span class="s2"> missing &#39;orbit&#39;.&quot;</span><span class="p">)</span>
 
-        <span class="n">obj</span> <span class="o">=</span> <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;object&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="n">orbit_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s2">05d</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="n">object_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fullname&quot;</span><span class="p">)))</span>
-
-        <span class="n">orbit</span> <span class="o">=</span> <span class="n">payload</span><span class="p">[</span><span class="s2">&quot;orbit&quot;</span><span class="p">]</span> <span class="ow">or</span> <span class="p">{}</span>
-        <span class="n">elements_list</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;elements&quot;</span><span class="p">)</span>
-        <span class="n">epoch_jd</span> <span class="o">=</span> <span class="n">_sbdb_float</span><span class="p">(</span><span class="n">orbit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;epoch&quot;</span><span class="p">))</span>
-
-        <span class="n">cov</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;covariance&quot;</span><span class="p">)</span>
-        <span class="n">cov_matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cov</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="n">cov</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;data&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">labels</span> <span class="o">=</span> <span class="n">cov</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;labels&quot;</span><span class="p">)</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
-                <span class="n">labels6</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">[:</span><span class="mi">6</span><span class="p">]]</span>
-                <span class="k">if</span> <span class="n">labels6</span> <span class="o">!=</span> <span class="n">expected_labels</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Expected covariance matrix labels to be </span><span class="si">{</span><span class="n">expected_labels</span><span class="si">}</span><span class="s2"> &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;in the first 6 entries, got </span><span class="si">{</span><span class="n">labels6</span><span class="si">}</span><span class="s2">.&quot;</span>
-                    <span class="p">)</span>
-
-            <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">cov</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">6</span> <span class="ow">or</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">6</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expected SBDB covariance matrix to be at least 6x6.&quot;</span><span class="p">)</span>
-            <span class="n">cov_matrix</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:</span><span class="mi">6</span><span class="p">,</span> <span class="p">:</span><span class="mi">6</span><span class="p">]</span>
-
-            <span class="c1"># If covariance provides elements, prefer them (and the covariance epoch).</span>
-            <span class="k">if</span> <span class="s2">&quot;elements&quot;</span> <span class="ow">in</span> <span class="n">cov</span> <span class="ow">and</span> <span class="n">cov</span><span class="p">[</span><span class="s2">&quot;elements&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">elements_list</span> <span class="o">=</span> <span class="n">cov</span><span class="p">[</span><span class="s2">&quot;elements&quot;</span><span class="p">]</span>
-                <span class="k">if</span> <span class="n">cov</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;epoch&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">epoch_jd</span> <span class="o">=</span> <span class="n">_sbdb_float</span><span class="p">(</span><span class="n">cov</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;epoch&quot;</span><span class="p">))</span>
-
-        <span class="k">if</span> <span class="n">elements_list</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SBDB payload for </span><span class="si">{</span><span class="n">obj_id</span><span class="si">!r}</span><span class="s2"> missing orbit elements.&quot;</span><span class="p">)</span>
-
-        <span class="n">elements_by_name</span> <span class="o">=</span> <span class="n">_sbdb_elements_map</span><span class="p">(</span><span class="n">elements_list</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">cov_matrix</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="c1"># Fallback: build a diagonal covariance from per-element sigmas.</span>
-            <span class="n">sigmas</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
-                <span class="p">[</span>
-                    <span class="p">[</span>
-                        <span class="n">_sbdb_element_sigma</span><span class="p">(</span><span class="n">elements_by_name</span><span class="p">,</span> <span class="s2">&quot;e&quot;</span><span class="p">),</span>
-                        <span class="n">_sbdb_element_sigma</span><span class="p">(</span><span class="n">elements_by_name</span><span class="p">,</span> <span class="s2">&quot;q&quot;</span><span class="p">),</span>
-                        <span class="n">_sbdb_element_sigma</span><span class="p">(</span><span class="n">elements_by_name</span><span class="p">,</span> <span class="s2">&quot;tp&quot;</span><span class="p">),</span>
-                        <span class="n">_sbdb_element_sigma</span><span class="p">(</span><span class="n">elements_by_name</span><span class="p">,</span> <span class="s2">&quot;om&quot;</span><span class="p">),</span>
-                        <span class="n">_sbdb_element_sigma</span><span class="p">(</span><span class="n">elements_by_name</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">),</span>
-                        <span class="n">_sbdb_element_sigma</span><span class="p">(</span><span class="n">elements_by_name</span><span class="p">,</span> <span class="s2">&quot;i&quot;</span><span class="p">),</span>
-                    <span class="p">]</span>
-                <span class="p">],</span>
-                <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">cov_matrix</span> <span class="o">=</span> <span class="n">sigmas_to_covariances</span><span class="p">(</span><span class="n">sigmas</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-
-        <span class="n">covariances_sbdb</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">cov_matrix</span>
-
-        <span class="n">times_jd</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">epoch_jd</span>
-
-        <span class="n">q</span> <span class="o">=</span> <span class="n">_sbdb_element_value</span><span class="p">(</span><span class="n">elements_by_name</span><span class="p">,</span> <span class="s2">&quot;q&quot;</span><span class="p">)</span>
-        <span class="n">e</span> <span class="o">=</span> <span class="n">_sbdb_element_value</span><span class="p">(</span><span class="n">elements_by_name</span><span class="p">,</span> <span class="s2">&quot;e&quot;</span><span class="p">)</span>
-        <span class="n">inc</span> <span class="o">=</span> <span class="n">_sbdb_element_value</span><span class="p">(</span><span class="n">elements_by_name</span><span class="p">,</span> <span class="s2">&quot;i&quot;</span><span class="p">)</span>
-        <span class="n">om</span> <span class="o">=</span> <span class="n">_sbdb_element_value</span><span class="p">(</span><span class="n">elements_by_name</span><span class="p">,</span> <span class="s2">&quot;om&quot;</span><span class="p">)</span>
-        <span class="n">w</span> <span class="o">=</span> <span class="n">_sbdb_element_value</span><span class="p">(</span><span class="n">elements_by_name</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span>
-        <span class="n">tp_jd</span> <span class="o">=</span> <span class="n">_sbdb_element_value</span><span class="p">(</span><span class="n">elements_by_name</span><span class="p">,</span> <span class="s2">&quot;tp&quot;</span><span class="p">)</span>
-        <span class="n">tp_mjd</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_jd</span><span class="p">([</span><span class="n">tp_jd</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">mjd</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
-
-        <span class="n">coords_cometary</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">q</span>
-        <span class="n">coords_cometary</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">e</span>
-        <span class="n">coords_cometary</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">inc</span>
-        <span class="n">coords_cometary</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">om</span>
-        <span class="n">coords_cometary</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span> <span class="o">=</span> <span class="n">w</span>
-        <span class="n">coords_cometary</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span> <span class="o">=</span> <span class="n">tp_mjd</span>
-
-        <span class="n">phys_rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_sbdb_phys_par_from_payload</span><span class="p">(</span><span class="n">payload</span><span class="p">))</span>
-
-    <span class="n">covariances_cometary</span> <span class="o">=</span> <span class="n">_convert_SBDB_covariances</span><span class="p">(</span><span class="n">covariances_sbdb</span><span class="p">)</span>
-    <span class="n">times</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_jd</span><span class="p">(</span><span class="n">times_jd</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
+    <span class="n">normalized</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span>
+        <span class="n">_rn</span><span class="o">.</span><span class="n">query_sbdb_normalize_payloads</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">ids</span><span class="p">),</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">payloads</span><span class="p">))</span>
+    <span class="p">)</span>
+    <span class="n">coords_cometary</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">normalized</span><span class="p">[</span><span class="s2">&quot;coords_cometary&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">covariances_cometary</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+        <span class="n">normalized</span><span class="p">[</span><span class="s2">&quot;covariances_cometary&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">payloads</span><span class="p">),</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+    <span class="n">times</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_jd</span><span class="p">(</span>
+        <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">normalized</span><span class="p">[</span><span class="s2">&quot;times_jd&quot;</span><span class="p">],</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">()),</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span>
+    <span class="p">)</span>
     <span class="n">origin</span> <span class="o">=</span> <span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SUN&quot;</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">))])</span>
 
     <span class="n">coordinates</span> <span class="o">=</span> <span class="n">CometaryCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
@@ -1023,10 +999,16 @@
         <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
     <span class="p">)</span>
 
-    <span class="n">physical_parameters</span> <span class="o">=</span> <span class="n">_physical_parameters_from_sbdb</span><span class="p">(</span><span class="n">phys_rows</span><span class="p">)</span>
+    <span class="n">phys</span> <span class="o">=</span> <span class="n">normalized</span><span class="p">[</span><span class="s2">&quot;physical_parameters&quot;</span><span class="p">]</span>
+    <span class="n">physical_parameters</span> <span class="o">=</span> <span class="n">PhysicalParameters</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">H_v</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">phys</span><span class="p">[</span><span class="s2">&quot;H_v&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="n">H_v_sigma</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">phys</span><span class="p">[</span><span class="s2">&quot;H_v_sigma&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="n">G</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">phys</span><span class="p">[</span><span class="s2">&quot;G&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="n">G_sigma</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">phys</span><span class="p">[</span><span class="s2">&quot;G_sigma&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+    <span class="p">)</span>
     <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">orbit_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">orbit_ids</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;object&quot;</span><span class="p">),</span>
-        <span class="n">object_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">object_ids</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;object&quot;</span><span class="p">),</span>
+        <span class="n">orbit_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">normalized</span><span class="p">[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;object&quot;</span><span class="p">),</span>
+        <span class="n">object_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">normalized</span><span class="p">[</span><span class="s2">&quot;object_id&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;object&quot;</span><span class="p">),</span>
         <span class="n">coordinates</span><span class="o">=</span><span class="n">coordinates</span><span class="o">.</span><span class="n">to_cartesian</span><span class="p">(),</span>
         <span class="n">physical_parameters</span><span class="o">=</span><span class="n">physical_parameters</span><span class="p">,</span>
     <span class="p">)</span>
@@ -1116,43 +1098,68 @@
 <span class="sd">        If True, set the returned `Orbits.orbit_id` values to the input IDs (after any missing</span>
 <span class="sd">        filtering). This is useful when callers need to map rows back to the requested identifiers.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># Normalize ids into a list of strings while preserving the caller&#39;s order.</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">..._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">...utils.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">_raise_compatible_http_error</span>
+
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">bytes</span><span class="p">)):</span>
         <span class="n">obj_ids</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">ids</span><span class="p">)]</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">obj_ids</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">]</span>
-
-    <span class="n">payloads</span> <span class="o">=</span> <span class="n">_get_sbdb_payloads_new</span><span class="p">(</span>
-        <span class="n">obj_ids</span><span class="p">,</span>
-        <span class="n">max_concurrent_requests</span><span class="o">=</span><span class="n">max_concurrent_requests</span><span class="p">,</span>
-        <span class="n">timeout_s</span><span class="o">=</span><span class="n">timeout_s</span><span class="p">,</span>
-        <span class="n">max_attempts</span><span class="o">=</span><span class="n">max_attempts</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">if</span> <span class="n">allow_missing</span><span class="p">:</span>
-        <span class="n">kept_ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">kept_payloads</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">obj_id</span><span class="p">,</span> <span class="n">payload</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">obj_ids</span><span class="p">,</span> <span class="n">payloads</span><span class="p">):</span>
-            <span class="k">if</span> <span class="s2">&quot;object&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">payload</span><span class="p">:</span>
-                <span class="k">continue</span>
-            <span class="n">kept_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obj_id</span><span class="p">)</span>
-            <span class="n">kept_payloads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">kept_ids</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-
-        <span class="n">orbits</span> <span class="o">=</span> <span class="n">_orbits_from_sbdb_payloads</span><span class="p">(</span><span class="n">kept_ids</span><span class="p">,</span> <span class="n">kept_payloads</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">max_concurrent_requests</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;max_concurrent_requests must be &gt; 0&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">_sbdb_api_get_json</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">_DEFAULT_SBDB_API_GET_JSON</span><span class="p">:</span>
+        <span class="n">payloads</span> <span class="o">=</span> <span class="n">_get_sbdb_payloads_new</span><span class="p">(</span>
+            <span class="n">obj_ids</span><span class="p">,</span>
+            <span class="n">max_concurrent_requests</span><span class="o">=</span><span class="n">max_concurrent_requests</span><span class="p">,</span>
+            <span class="n">timeout_s</span><span class="o">=</span><span class="n">timeout_s</span><span class="p">,</span>
+            <span class="n">max_attempts</span><span class="o">=</span><span class="n">max_attempts</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">allow_missing</span><span class="p">:</span>
+            <span class="n">kept</span> <span class="o">=</span> <span class="p">[</span>
+                <span class="p">(</span><span class="n">obj_id</span><span class="p">,</span> <span class="n">payload</span><span class="p">)</span>
+                <span class="k">for</span> <span class="n">obj_id</span><span class="p">,</span> <span class="n">payload</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">obj_ids</span><span class="p">,</span> <span class="n">payloads</span><span class="p">)</span>
+                <span class="k">if</span> <span class="s2">&quot;object&quot;</span> <span class="ow">in</span> <span class="n">payload</span>
+            <span class="p">]</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">kept</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+            <span class="n">kept_ids</span><span class="p">,</span> <span class="n">kept_payloads</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">kept</span><span class="p">))</span>
+            <span class="n">orbits</span> <span class="o">=</span> <span class="n">_orbits_from_sbdb_payloads</span><span class="p">(</span><span class="n">kept_ids</span><span class="p">,</span> <span class="n">kept_payloads</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">orbit_id_from_input</span><span class="p">:</span>
+                <span class="n">orbits</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
+                    <span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">kept_ids</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
+                <span class="p">)</span>
+            <span class="k">return</span> <span class="n">orbits</span>
+        <span class="n">orbits</span> <span class="o">=</span> <span class="n">_orbits_from_sbdb_payloads</span><span class="p">(</span><span class="n">obj_ids</span><span class="p">,</span> <span class="n">payloads</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">orbit_id_from_input</span><span class="p">:</span>
             <span class="n">orbits</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-                <span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">kept_ids</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
+                <span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">obj_ids</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
             <span class="p">)</span>
         <span class="k">return</span> <span class="n">orbits</span>
-
-    <span class="n">orbits</span> <span class="o">=</span> <span class="n">_orbits_from_sbdb_payloads</span><span class="p">(</span><span class="n">obj_ids</span><span class="p">,</span> <span class="n">payloads</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">orbit_id_from_input</span><span class="p">:</span>
-        <span class="n">orbits</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-            <span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">obj_ids</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())</span>
+    <span class="k">if</span> <span class="n">max_concurrent_requests</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="s2">&quot;query_sbdb_new is configured with max_concurrent_requests=</span><span class="si">%s</span><span class="s2">. &quot;</span>
+            <span class="s2">&quot;JPL&#39;s SSD/CNEOS API fair use policy requests only one in-flight request at a time; &quot;</span>
+            <span class="s2">&quot;Rust will execute these requests sequentially.&quot;</span><span class="p">,</span>
+            <span class="n">max_concurrent_requests</span><span class="p">,</span>
         <span class="p">)</span>
-    <span class="k">return</span> <span class="n">orbits</span></div>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">query_sbdb_arrow</span><span class="p">(</span>
+            <span class="n">obj_ids</span><span class="p">,</span>
+            <span class="kc">True</span><span class="p">,</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">timeout_s</span><span class="p">),</span>
+            <span class="nb">int</span><span class="p">(</span><span class="n">max_attempts</span><span class="p">),</span>
+            <span class="nb">bool</span><span class="p">(</span><span class="n">allow_missing</span><span class="p">),</span>
+            <span class="nb">bool</span><span class="p">(</span><span class="n">orbit_id_from_input</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="n">_raise_compatible_http_error</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+    <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;__NOT_FOUND__:&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">NotFoundError</span><span class="p">(</span><span class="s2">&quot;object </span><span class="si">{}</span><span class="s2"> was not found&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;:&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">raise</span>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">Orbits</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span></div>
 
 
 
@@ -1184,7 +1191,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

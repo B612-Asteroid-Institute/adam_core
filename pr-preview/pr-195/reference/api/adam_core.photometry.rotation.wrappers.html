@@ -3,11 +3,11 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="Rust Benchmark Governance" href="../rust_benchmark_governance.html"><link rel="prev" title="adam_core.parallel module" href="adam_core.parallel.html">
-        <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/reference/api/adam_core.ray_cluster.html">
+<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="adam_core.photometry.absolute_magnitude module" href="adam_core.photometry.absolute_magnitude.html"><link rel="prev" title="adam_core.photometry.rotation.jax_backend module" href="adam_core.photometry.rotation.jax_backend.html">
+        <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/reference/api/adam_core.photometry.rotation.wrappers.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
-        <title>adam_core.ray_cluster module - adam_core</title>
+        <title>adam_core.photometry.rotation.wrappers module - adam_core</title>
       <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
     <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
     <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
@@ -204,6 +204,7 @@
 <ul class="current">
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -218,6 +219,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -273,6 +275,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -315,6 +318,7 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -325,7 +329,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.photometry.html">adam_core.photometry package</a><input aria-label="Toggle navigation of adam_core.photometry package" class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" role="switch" type="checkbox"/><label for="toctree-checkbox-15"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 current has-children"><a class="reference internal" href="adam_core.photometry.html">adam_core.photometry package</a><input aria-label="Toggle navigation of adam_core.photometry package" checked="" class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" role="switch" type="checkbox"/><label for="toctree-checkbox-15"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
 <li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.photometry.bandpasses.html">adam_core.photometry.bandpasses package</a><input aria-label="Toggle navigation of adam_core.photometry.bandpasses package" class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" role="switch" type="checkbox"/><label for="toctree-checkbox-16"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.bandpasses.api.html">adam_core.photometry.bandpasses.api module</a></li>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.bandpasses.constants.html">adam_core.photometry.bandpasses.constants module</a></li>
@@ -333,24 +337,32 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 current has-children"><a class="reference internal" href="adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" checked="" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6 current current-page"><a class="current reference internal" href="#">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -358,13 +370,13 @@
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -372,8 +384,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4 current current-page"><a class="current reference internal" href="#">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -403,12 +413,12 @@
         </a>
         <div class="content-icon-container">
           <div class="view-this-page">
-  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/blob/main/docs/source/reference/api/adam_core.ray_cluster.rst?plain=true" title="View this page">
+  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/blob/main/docs/source/reference/api/adam_core.photometry.rotation.wrappers.rst?plain=true" title="View this page">
     <svg><use href="#svg-eye"></use></svg>
     <span class="visually-hidden">View this page</span>
   </a>
 </div><div class="edit-this-page">
-  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/edit/main/docs/source/reference/api/adam_core.ray_cluster.rst" rel="edit" title="Edit this page">
+  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/edit/main/docs/source/reference/api/adam_core.photometry.rotation.wrappers.rst" rel="edit" title="Edit this page">
     <svg><use href="#svg-pencil"></use></svg>
     <span class="visually-hidden">Edit this page</span>
   </a>
@@ -425,13 +435,52 @@
           </label>
         </div>
         <article role="main" id="furo-main-content">
-          <section id="module-adam_core.ray_cluster">
-<span id="adam-core-ray-cluster-module"></span><h1>adam_core.ray_cluster module<a class="headerlink" href="#module-adam_core.ray_cluster" title="Link to this heading">¶</a></h1>
+          <section id="module-adam_core.photometry.rotation.wrappers">
+<span id="adam-core-photometry-rotation-wrappers-module"></span><h1>adam_core.photometry.rotation.wrappers module<a class="headerlink" href="#module-adam_core.photometry.rotation.wrappers" title="Link to this heading">¶</a></h1>
 <dl class="py function">
-<dt class="sig sig-object py" id="adam_core.ray_cluster.initialize_use_ray">
-<span class="sig-prename descclassname"><span class="pre">adam_core.ray_cluster.</span></span><span class="sig-name descname"><span class="pre">initialize_use_ray</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">num_cpus</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">object_store_bytes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/ray_cluster.html#initialize_use_ray"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.ray_cluster.initialize_use_ray" title="Link to this definition">¶</a></dt>
-<dd><p>Ensures we use existing local cluster, or starts new one with desired resources</p>
+<dt class="sig sig-object py" id="adam_core.photometry.rotation.wrappers.build_rotation_period_observations_from_detections">
+<span class="sig-prename descclassname"><span class="pre">adam_core.photometry.rotation.wrappers.</span></span><span class="sig-name descname"><span class="pre">build_rotation_period_observations_from_detections</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">detections</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observations.detections.html#adam_core.observations.detections.PointSourceDetections" title="adam_core.observations.detections.PointSourceDetections"><span class="pre">PointSourceDetections</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">exposures</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observations.exposures.html#adam_core.observations.exposures.Exposures" title="adam_core.observations.exposures.Exposures"><span class="pre">Exposures</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">object_coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates" title="adam_core.coordinates.cartesian.CartesianCoordinates"><span class="pre">CartesianCoordinates</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations" title="adam_core.photometry.rotation.core.RotationPeriodObservations"><span class="pre">RotationPeriodObservations</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/photometry/rotation/wrappers.html#build_rotation_period_observations_from_detections"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.photometry.rotation.wrappers.build_rotation_period_observations_from_detections" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.photometry.rotation.wrappers.estimate_rotation_period_best_apparition">
+<span class="sig-prename descclassname"><span class="pre">adam_core.photometry.rotation.wrappers.</span></span><span class="sig-name descname"><span class="pre">estimate_rotation_period_best_apparition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodObservations" title="adam_core.photometry.rotation.core.RotationPeriodObservations"><span class="pre">RotationPeriodObservations</span></a></span></em>, <em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">apparition_gap_days</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">120.0</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">solver_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult" title="adam_core.photometry.rotation.core.RotationPeriodResult"><span class="pre">RotationPeriodResult</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/photometry/rotation/wrappers.html#estimate_rotation_period_best_apparition"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.photometry.rotation.wrappers.estimate_rotation_period_best_apparition" title="Link to this definition">¶</a></dt>
+<dd><p>Solve each apparition separately and keep the highest-confidence result.</p>
+<p>Ground-based lightcurves of the same asteroid from different apparitions
+differ in viewing aspect (and therefore amplitude), photometric noise, and
+nightly cadence, so the diurnal-alias structure of each apparition differs
+too. An apparition that happens to sample the rotation cleanly can yield a
+confident, correct period where the densest apparition – or all
+apparitions pooled – locks onto a sampling alias or hedges. This helper
+partitions the observations into apparitions (separated by more than
+<code class="docutils literal notranslate"><span class="pre">apparition_gap_days</span></code>), runs <code class="xref py py-func docutils literal notranslate"><span class="pre">estimate_rotation_period()</span></code> on each
+independently, and returns the result of the most confident apparition.</p>
+<p>The selection rule uses no knowledge of any reference answer: rank the
+verdicts <code class="docutils literal notranslate"><span class="pre">single_period</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">period_family</span></code> &gt; <code class="docutils literal notranslate"><span class="pre">insufficient_data</span></code>,
+tie-break on higher <code class="docutils literal notranslate"><span class="pre">amplitude_snr</span></code>, then on more observations, then on
+the earlier apparition. Measured on the 118-object LCDB standard-candle
+calibration set, this policy raised confident (<code class="docutils literal notranslate"><span class="pre">single_period</span></code>) claims
+from 35 to 43 while the strict precision of those claims improved (0.800 -&gt;
+0.837) and the wrong-family count was unchanged – selection shopping did
+not introduce false confidence on that set, but the guarantee is
+empirical, not structural.</p>
+<p>The chosen row is returned with a <code class="docutils literal notranslate"><span class="pre">apparition_selected_&lt;k&gt;_of_&lt;n&gt;</span></code>
+confidence flag appended (1-based, chronological). An apparition whose
+solve fails with an expected <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> participates as an
+<code class="docutils literal notranslate"><span class="pre">insufficient_data</span></code> candidate flagged <code class="docutils literal notranslate"><span class="pre">solve_error</span></code>; an unexpected
+error is re-raised with the apparition attached. Apparitions solve
+serially; for large batches, parallelize per apparition yourself.</p>
 </dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.photometry.rotation.wrappers.estimate_rotation_period_from_detections">
+<span class="sig-prename descclassname"><span class="pre">adam_core.photometry.rotation.wrappers.</span></span><span class="sig-name descname"><span class="pre">estimate_rotation_period_from_detections</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">detections</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observations.detections.html#adam_core.observations.detections.PointSourceDetections" title="adam_core.observations.detections.PointSourceDetections"><span class="pre">PointSourceDetections</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">exposures</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observations.exposures.html#adam_core.observations.exposures.Exposures" title="adam_core.observations.exposures.Exposures"><span class="pre">Exposures</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">object_coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates" title="adam_core.coordinates.cartesian.CartesianCoordinates"><span class="pre">CartesianCoordinates</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">search_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult" title="adam_core.photometry.rotation.core.RotationPeriodResult"><span class="pre">RotationPeriodResult</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/photometry/rotation/wrappers.html#estimate_rotation_period_from_detections"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.photometry.rotation.wrappers.estimate_rotation_period_from_detections" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.photometry.rotation.wrappers.estimate_rotation_period_from_detections_grouped">
+<span class="sig-prename descclassname"><span class="pre">adam_core.photometry.rotation.wrappers.</span></span><span class="sig-name descname"><span class="pre">estimate_rotation_period_from_detections_grouped</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">detections</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observations.detections.html#adam_core.observations.detections.PointSourceDetections" title="adam_core.observations.detections.PointSourceDetections"><span class="pre">PointSourceDetections</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">exposures</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.observations.exposures.html#adam_core.observations.exposures.Exposures" title="adam_core.observations.exposures.Exposures"><span class="pre">Exposures</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">object_coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates" title="adam_core.coordinates.cartesian.CartesianCoordinates"><span class="pre">CartesianCoordinates</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">object_ids</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v24.0.0)"><span class="pre">Array</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.ChunkedArray.html#pyarrow.ChunkedArray" title="(in Apache Arrow v24.0.0)"><span class="pre">ChunkedArray</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">search_kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.GroupedRotationPeriodResults" title="adam_core.photometry.rotation.core.GroupedRotationPeriodResults"><span class="pre">GroupedRotationPeriodResults</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/photometry/rotation/wrappers.html#estimate_rotation_period_from_detections_grouped"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.photometry.rotation.wrappers.estimate_rotation_period_from_detections_grouped" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
 
 </section>
 
@@ -440,23 +489,23 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="../rust_benchmark_governance.html">
+          <a class="next-page" href="adam_core.photometry.absolute_magnitude.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">Rust Benchmark Governance</div>
+                <div class="title">adam_core.photometry.absolute_magnitude module</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="adam_core.parallel.html">
+          <a class="prev-page" href="adam_core.photometry.rotation.jax_backend.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">adam_core.parallel module</div>
+                <div class="title">adam_core.photometry.rotation.jax_backend module</div>
                 
               </div>
             </a>
@@ -470,7 +519,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             
@@ -491,8 +540,11 @@
         <div class="toc-tree-container">
           <div class="toc-tree">
             <ul>
-<li><a class="reference internal" href="#">adam_core.ray_cluster module</a><ul>
-<li><a class="reference internal" href="#adam_core.ray_cluster.initialize_use_ray"><code class="docutils literal notranslate"><span class="pre">initialize_use_ray()</span></code></a></li>
+<li><a class="reference internal" href="#">adam_core.photometry.rotation.wrappers module</a><ul>
+<li><a class="reference internal" href="#adam_core.photometry.rotation.wrappers.build_rotation_period_observations_from_detections"><code class="docutils literal notranslate"><span class="pre">build_rotation_period_observations_from_detections()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.photometry.rotation.wrappers.estimate_rotation_period_best_apparition"><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period_best_apparition()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.photometry.rotation.wrappers.estimate_rotation_period_from_detections"><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period_from_detections()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.photometry.rotation.wrappers.estimate_rotation_period_from_detections_grouped"><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period_from_detections_grouped()</span></code></a></li>
 </ul>
 </li>
 </ul>

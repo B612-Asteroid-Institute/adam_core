@@ -1,7 +1,0 @@
-adam\_core.parallel module
-==========================
-
-.. automodule:: adam_core.parallel
-   :members:
-   :show-inheritance:
-   :undoc-members:

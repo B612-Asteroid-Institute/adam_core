@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -421,6 +431,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Set</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">naif_de440</span><span class="w"> </span><span class="kn">import</span> <span class="n">de440</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">naif_earth_itrf93</span><span class="w"> </span><span class="kn">import</span> <span class="n">earth_itrf93</span>
@@ -433,7 +444,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span><span class="p">,</span> <span class="n">OriginCodes</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.bounded_lru</span><span class="w"> </span><span class="kn">import</span> <span class="n">bounded_lru_get</span><span class="p">,</span> <span class="n">bounded_lru_put</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.bounded_lru</span><span class="w"> </span><span class="kn">import</span> <span class="n">_bounded_lru_get</span><span class="p">,</span> <span class="n">_bounded_lru_put</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.spice_backend</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_backend</span>
 
 <span class="n">DEFAULT_KERNELS</span> <span class="o">=</span> <span class="p">[</span>
@@ -445,8 +456,6 @@
     <span class="n">earth_itrf93</span><span class="p">,</span>
 <span class="p">]</span>
 
-<span class="c1"># Global state for tracking custom kernels</span>
-<span class="n">_REGISTERED_KERNELS</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
 
 <span class="n">J2000_TDB_JD</span> <span class="o">=</span> <span class="mf">2451545.0</span>
 
@@ -497,11 +506,11 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_spkez_cache_get</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="n">_SpkezCacheKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">bounded_lru_get</span><span class="p">(</span><span class="n">_SPKEZ_CACHE</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="n">_SPKEZ_CACHE_MAXSIZE</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_bounded_lru_get</span><span class="p">(</span><span class="n">_SPKEZ_CACHE</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="n">_SPKEZ_CACHE_MAXSIZE</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_spkez_cache_put</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="n">_SpkezCacheKey</span><span class="p">,</span> <span class="n">state_au_aud</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="n">bounded_lru_put</span><span class="p">(</span><span class="n">_SPKEZ_CACHE</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">state_au_aud</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="n">_SPKEZ_CACHE_MAXSIZE</span><span class="p">)</span>
+    <span class="n">_bounded_lru_put</span><span class="p">(</span><span class="n">_SPKEZ_CACHE</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">state_au_aud</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="n">_SPKEZ_CACHE_MAXSIZE</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="clear_spkez_cache">
@@ -512,7 +521,11 @@
 
 <span class="sd">    This is primarily intended for testing and benchmarking.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">_SPKEZ_CACHE</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span></div>
+    <span class="c1"># Both the retained legacy Python cache and the Rust-side cache behind</span>
+    <span class="c1"># the fused get_perturber_state crossing are semantic result caches;</span>
+    <span class="c1"># clear them together.</span>
+    <span class="n">_SPKEZ_CACHE</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+    <span class="n">get_backend</span><span class="p">()</span><span class="o">.</span><span class="n">clear_spkez_state_cache</span><span class="p">()</span></div>
 
 
 
@@ -571,15 +584,40 @@
     <span class="k">if</span> <span class="n">kernels</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">kernels</span> <span class="o">=</span> <span class="n">DEFAULT_KERNELS</span>
 
-    <span class="n">process_id</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">getpid</span><span class="p">()</span>
-    <span class="n">env_var</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;ADAM_CORE_SPICE_INITIALIZED_</span><span class="si">{</span><span class="n">process_id</span><span class="si">}</span><span class="s2">&quot;</span>
-    <span class="k">if</span> <span class="n">env_var</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">environ</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">force</span><span class="p">:</span>
-        <span class="k">return</span>
-
+    <span class="c1"># The process-global Rust backend is the single source of truth for what</span>
+    <span class="c1"># is loaded, and ``furnsh`` is idempotent by path (Rust dedups), so simply</span>
+    <span class="c1"># furnsh-ing each kernel is a cheap no-op when already loaded and a real</span>
+    <span class="c1"># load into a freshly cleared/rebuilt backend otherwise. This self-heals</span>
+    <span class="c1"># after any backend reset (a test calling ``clear``) with no separate</span>
+    <span class="c1"># Python-side bookkeeping to desync (personal-cmy.23). ``force`` is</span>
+    <span class="c1"># retained for API compatibility; furnsh idempotency makes it a no-op.</span>
+    <span class="k">del</span> <span class="n">force</span>
+    <span class="n">backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">()</span>
     <span class="k">for</span> <span class="n">kernel</span> <span class="ow">in</span> <span class="n">kernels</span><span class="p">:</span>
-        <span class="n">register_spice_kernel</span><span class="p">(</span><span class="n">kernel</span><span class="p">)</span>
-    <span class="n">os</span><span class="o">.</span><span class="n">environ</span><span class="p">[</span><span class="n">env_var</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;True&quot;</span>
+        <span class="n">backend</span><span class="o">.</span><span class="n">furnsh</span><span class="p">(</span><span class="n">kernel</span><span class="p">)</span>
     <span class="k">return</span></div>
+
+
+
+<div class="viewcode-block" id="setup_mpc_obscodes">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.spice.html#adam_core.utils.setup_mpc_obscodes">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">setup_mpc_obscodes</span><span class="p">(</span><span class="n">force</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Ensure the MPC observatory parallax table is loaded into the</span>
+<span class="sd">    process-global Rust backend (the canonical obscodes loader).</span>
+
+<span class="sd">    Idempotent and keyed on the backend&#39;s actual loaded-site count (not a</span>
+<span class="sd">    Python-side flag), so it reloads correctly after a backend ``clear``. The</span>
+<span class="sd">    obscodes ship as JSON in the ``mpc_obscodes`` data package. Both</span>
+<span class="sd">    ``Observers.from_codes`` and the Rust-native origin translation (for</span>
+<span class="sd">    observatory-code origins) rely on this.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">()</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">force</span> <span class="ow">and</span> <span class="n">backend</span><span class="o">.</span><span class="n">mpc_obscodes_loaded</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">mpc_obscodes</span><span class="w"> </span><span class="kn">import</span> <span class="n">mpc_obscodes</span>
+
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">mpc_obscodes</span><span class="p">)</span> <span class="k">as</span> <span class="n">obscodes_file</span><span class="p">:</span>
+        <span class="n">backend</span><span class="o">.</span><span class="n">load_mpc_obscodes</span><span class="p">(</span><span class="n">obscodes_file</span><span class="o">.</span><span class="n">read</span><span class="p">())</span></div>
 
 
 
@@ -611,13 +649,7 @@
 <span class="sd">        The state vectors of the perturber in the desired frame</span>
 <span class="sd">        and measured from the desired origin.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">:</span>
-        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;ECLIPJ2000&quot;</span>
-    <span class="k">elif</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">:</span>
-        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;J2000&quot;</span>
-    <span class="k">elif</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">:</span>
-        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;ITRF93&quot;</span>
-    <span class="k">else</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">frame</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">,</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">):</span>
         <span class="n">err</span> <span class="o">=</span> <span class="s2">&quot;frame should be one of {&#39;equatorial&#39;, &#39;ecliptic&#39;, &#39;itrf93&#39;}&quot;</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
 
@@ -627,6 +659,66 @@
     <span class="n">N</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">))</span>
     <span class="k">if</span> <span class="n">N</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+
+    <span class="c1"># One fused Rust crossing owns the TDB rescale, epoch dedup, bounded</span>
+    <span class="c1"># forward/reverse state cache, batched SPK lookup, unit conversion, and</span>
+    <span class="c1"># nested table assembly (bead personal-cmy.37.4.9). Coverage failures</span>
+    <span class="c1"># fall back to the retained legacy composition, which reproduces the</span>
+    <span class="c1"># exact legacy NotCovered/ValueError behavior from the same readers.</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">_rust_backend_perturber_states</span><span class="p">(</span><span class="n">perturber</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_get_perturber_state_legacy</span><span class="p">(</span><span class="n">perturber</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_rust_backend_perturber_states</span><span class="p">(</span>
+    <span class="n">perturber</span><span class="p">:</span> <span class="n">OriginCodes</span><span class="p">,</span>
+    <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">,</span>
+    <span class="n">frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">origin</span><span class="p">:</span> <span class="n">OriginCodes</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Single fused crossing behind ``get_perturber_state`` (module-level so</span>
+<span class="sd">    tests can force the legacy fallback by monkeypatching it to raise).&quot;&quot;&quot;</span>
+    <span class="n">time_table</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">combine_chunks</span><span class="p">()</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">RecordBatch</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">time_table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;days&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">time_table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;nanos&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;days&quot;</span><span class="p">,</span> <span class="s2">&quot;nanos&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">get_backend</span><span class="p">()</span><span class="o">.</span><span class="n">perturber_states_arrow</span><span class="p">(</span>
+        <span class="n">batch</span><span class="p">,</span>
+        <span class="n">times</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+        <span class="nb">int</span><span class="p">(</span><span class="n">perturber</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+        <span class="nb">int</span><span class="p">(</span><span class="n">origin</span><span class="o">.</span><span class="n">value</span><span class="p">),</span>
+        <span class="n">origin</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="n">frame</span><span class="p">,</span>
+        <span class="n">_SPKEZ_CACHE_MAXSIZE</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_perturber_state_legacy</span><span class="p">(</span>
+    <span class="n">perturber</span><span class="p">:</span> <span class="n">OriginCodes</span><span class="p">,</span>
+    <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">,</span>
+    <span class="n">frame</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">,</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
+    <span class="n">origin</span><span class="p">:</span> <span class="n">OriginCodes</span> <span class="o">=</span> <span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CartesianCoordinates</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Retained legacy composition (Python epoch cache + batched backend</span>
+<span class="sd">    query); used when the fused Rust crossing reports a failure and by tests</span>
+<span class="sd">    that exercise the Python cache internals directly.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">:</span>
+        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;ECLIPJ2000&quot;</span>
+    <span class="k">elif</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">:</span>
+        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;J2000&quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;ITRF93&quot;</span>
+
+    <span class="n">N</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">))</span>
 
     <span class="c1"># Build stable time keys in TDB using integer (days,nanos).</span>
     <span class="n">times_tdb</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
@@ -732,8 +824,7 @@
         <span class="n">vz</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
         <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span>
         <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="n">origin</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">*</span> <span class="n">N</span><span class="p">),</span>
-    <span class="p">)</span></div>
-
+    <span class="p">)</span>
 
 
 <div class="viewcode-block" id="list_registered_kernels">
@@ -747,7 +838,7 @@
 <span class="sd">    kernels : set[str]</span>
 <span class="sd">        Set of kernel file paths that are currently registered</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">return</span> <span class="n">_REGISTERED_KERNELS</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span></div>
+    <span class="k">return</span> <span class="nb">set</span><span class="p">(</span><span class="n">get_backend</span><span class="p">()</span><span class="o">.</span><span class="n">registered_kernels</span><span class="p">())</span></div>
 
 
 
@@ -762,9 +853,9 @@
 <span class="sd">    kernel_path : str</span>
 <span class="sd">        Path to the SPICE kernel file</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">kernel_path</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_REGISTERED_KERNELS</span><span class="p">:</span>
-        <span class="n">get_backend</span><span class="p">()</span><span class="o">.</span><span class="n">furnsh</span><span class="p">(</span><span class="n">kernel_path</span><span class="p">)</span>
-        <span class="n">_REGISTERED_KERNELS</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">kernel_path</span><span class="p">)</span></div>
+    <span class="c1"># furnsh is idempotent by path in the Rust backend, so no Python-side</span>
+    <span class="c1"># dedup is needed; the global backend&#39;s kernel list is the registry.</span>
+    <span class="n">get_backend</span><span class="p">()</span><span class="o">.</span><span class="n">furnsh</span><span class="p">(</span><span class="n">kernel_path</span><span class="p">)</span></div>
 
 
 
@@ -779,9 +870,9 @@
 <span class="sd">    kernel_path : str</span>
 <span class="sd">        Path to the SPICE kernel file</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">kernel_path</span> <span class="ow">in</span> <span class="n">_REGISTERED_KERNELS</span><span class="p">:</span>
-        <span class="n">get_backend</span><span class="p">()</span><span class="o">.</span><span class="n">unload</span><span class="p">(</span><span class="n">kernel_path</span><span class="p">)</span>
-        <span class="n">_REGISTERED_KERNELS</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">kernel_path</span><span class="p">)</span></div>
+    <span class="c1"># unload is a no-op in the Rust backend when the path is not loaded, so</span>
+    <span class="c1"># no Python-side membership check is needed.</span>
+    <span class="n">get_backend</span><span class="p">()</span><span class="o">.</span><span class="n">unload</span><span class="p">(</span><span class="n">kernel_path</span><span class="p">)</span></div>
 
 
 
@@ -818,17 +909,62 @@
 <span class="sd">        If the body ID is not found in any loaded kernel or if state data</span>
 <span class="sd">        cannot be retrieved for the requested times</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">:</span>
-        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;ECLIPJ2000&quot;</span>
-    <span class="k">elif</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">:</span>
-        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;J2000&quot;</span>
-    <span class="k">elif</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">:</span>
-        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;ITRF93&quot;</span>
-    <span class="k">else</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">frame</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">,</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;frame should be one of {&#39;equatorial&#39;, &#39;ecliptic&#39;, &#39;itrf93&#39;}&quot;</span><span class="p">)</span>
 
     <span class="c1"># Make sure SPICE is ready</span>
     <span class="n">setup_SPICE</span><span class="p">()</span>
+
+    <span class="c1"># One fused Rust crossing owns ET conversion, the batched SPK lookup,</span>
+    <span class="c1"># the legacy unit-conversion order, and nested table assembly (bead</span>
+    <span class="c1"># personal-cmy.37.4.9). Failures fall back to the retained legacy</span>
+    <span class="c1"># composition, which reproduces the exact legacy wrapped ValueError from</span>
+    <span class="c1"># the same readers.</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">_rust_backend_spice_body_states</span><span class="p">(</span><span class="n">body_id</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">_get_spice_body_state_legacy</span><span class="p">(</span><span class="n">body_id</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_rust_backend_spice_body_states</span><span class="p">(</span>
+    <span class="n">body_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">,</span>
+    <span class="n">frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">origin</span><span class="p">:</span> <span class="n">OriginCodes</span><span class="p">,</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Single fused crossing behind ``get_spice_body_state`` (module-level so</span>
+<span class="sd">    tests can force the legacy fallback by monkeypatching it to raise).&quot;&quot;&quot;</span>
+    <span class="n">time_table</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">combine_chunks</span><span class="p">()</span>
+    <span class="n">batch</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">RecordBatch</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">time_table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;days&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">time_table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;nanos&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;days&quot;</span><span class="p">,</span> <span class="s2">&quot;nanos&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">get_backend</span><span class="p">()</span><span class="o">.</span><span class="n">spice_body_states_arrow</span><span class="p">(</span>
+        <span class="n">batch</span><span class="p">,</span> <span class="n">times</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">body_id</span><span class="p">),</span> <span class="n">origin</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="n">frame</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_get_spice_body_state_legacy</span><span class="p">(</span>
+    <span class="n">body_id</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">,</span>
+    <span class="n">frame</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">,</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
+    <span class="n">origin</span><span class="p">:</span> <span class="n">OriginCodes</span> <span class="o">=</span> <span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">CartesianCoordinates</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Retained legacy composition; used when the fused Rust crossing</span>
+<span class="sd">    reports a failure so the public error contract stays byte-identical.&quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">:</span>
+        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;ECLIPJ2000&quot;</span>
+    <span class="k">elif</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">:</span>
+        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;J2000&quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">frame_spice</span> <span class="o">=</span> <span class="s2">&quot;ITRF93&quot;</span>
 
     <span class="c1"># Convert epochs to ET in TDB</span>
     <span class="n">epochs_et</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">et</span><span class="p">()</span>
@@ -865,8 +1001,7 @@
         <span class="n">vz</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
         <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span>
         <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="n">origin</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">*</span> <span class="n">N</span><span class="p">),</span>
-    <span class="p">)</span></div>
-
+    <span class="p">)</span>
 </pre></div>
         </article>
       </div>
@@ -885,7 +1020,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

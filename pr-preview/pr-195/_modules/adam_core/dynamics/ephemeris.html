@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -415,119 +425,31 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for adam_core.dynamics.ephemeris</h1><div class="highlight"><pre>
-<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Dict</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+<span></span><span class="sd">&quot;&quot;&quot;Arrow-native two-body ephemeris generation.&quot;&quot;&quot;</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.api</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">generate_ephemeris_2body_numpy</span> <span class="k">as</span> <span class="n">rust_generate_ephemeris_2body_numpy</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.api</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">generate_ephemeris_2body_with_covariance_numpy</span> <span class="k">as</span> <span class="n">rust_generate_ephemeris_2body_with_covariance_numpy</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoordinateCovariances</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span><span class="p">,</span> <span class="n">OriginCodes</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.spherical</span><span class="w"> </span><span class="kn">import</span> <span class="n">SphericalCoordinates</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.transform</span><span class="w"> </span><span class="kn">import</span> <span class="n">transform_coordinates</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.api</span><span class="w"> </span><span class="kn">import</span> <span class="n">generate_ephemeris_arrow</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">ensure_spice_backend</span><span class="p">,</span> <span class="n">table_from_record_batch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..observers.observers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observers</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">observers_to_record_batch</span><span class="p">,</span> <span class="n">orbits_to_record_batch</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.ephemeris</span><span class="w"> </span><span class="kn">import</span> <span class="n">Ephemeris</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..parallel</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_backend</span><span class="p">,</span> <span class="n">resolve_max_processes</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..photometry.magnitude</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">calculate_apparent_magnitude_v</span><span class="p">,</span>
-    <span class="n">calculate_apparent_magnitude_v_and_phase_angle</span><span class="p">,</span>
-    <span class="n">calculate_phase_angle</span><span class="p">,</span>
-<span class="p">)</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.iter</span><span class="w"> </span><span class="kn">import</span> <span class="n">_iterate_chunks</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.exceptions</span><span class="w"> </span><span class="kn">import</span> <span class="n">DynamicsNumericalError</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_first_non_finite</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
-    <span class="n">bad</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">values</span><span class="p">))</span>
-    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">bad</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="n">bad</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">None</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_raise_ephemeris_numerical_error</span><span class="p">(</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">row_index</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">orbit_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">object_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">observation_time</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">light_time</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">],</span>
-    <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">tol</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">lt_tol</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="k">raise</span> <span class="n">DynamicsNumericalError</span><span class="p">(</span>
-        <span class="n">stage</span><span class="o">=</span><span class="s2">&quot;ephemeris&quot;</span><span class="p">,</span>
-        <span class="n">reason</span><span class="o">=</span><span class="n">reason</span><span class="p">,</span>
-        <span class="n">context</span><span class="o">=</span><span class="p">{</span>
-            <span class="s2">&quot;row_index&quot;</span><span class="p">:</span> <span class="n">row_index</span><span class="p">,</span>
-            <span class="s2">&quot;orbit_id&quot;</span><span class="p">:</span> <span class="n">orbit_id</span><span class="p">,</span>
-            <span class="s2">&quot;object_id&quot;</span><span class="p">:</span> <span class="n">object_id</span><span class="p">,</span>
-            <span class="s2">&quot;observation_time_mjd_tdb&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">observation_time</span><span class="p">),</span>
-            <span class="s2">&quot;light_time_days&quot;</span><span class="p">:</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">light_time</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="n">light_time</span><span class="p">),</span>
-            <span class="s2">&quot;max_iter&quot;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">max_iter</span><span class="p">),</span>
-            <span class="s2">&quot;tol&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">tol</span><span class="p">),</span>
-            <span class="s2">&quot;lt_tol&quot;</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">lt_tol</span><span class="p">),</span>
-        <span class="p">},</span>
-    <span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_generate_ephemeris_2body_serial</span><span class="p">(</span>
-    <span class="n">propagated_orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
-    <span class="n">observers</span><span class="p">:</span> <span class="n">Observers</span><span class="p">,</span>
-    <span class="o">*</span><span class="p">,</span>
-    <span class="n">lt_tol</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">tol</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">stellar_aberration</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-    <span class="n">predict_magnitudes</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-    <span class="n">predict_phase_angle</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Ephemeris</span><span class="p">:</span>
-    <span class="c1"># Delegate to the public function&#39;s existing implementation, but without Ray.</span>
-    <span class="k">return</span> <span class="n">generate_ephemeris_2body</span><span class="p">(</span>
-        <span class="n">propagated_orbits</span><span class="p">,</span>
-        <span class="n">observers</span><span class="p">,</span>
-        <span class="n">lt_tol</span><span class="o">=</span><span class="n">lt_tol</span><span class="p">,</span>
-        <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
-        <span class="n">tol</span><span class="o">=</span><span class="n">tol</span><span class="p">,</span>
-        <span class="n">stellar_aberration</span><span class="o">=</span><span class="n">stellar_aberration</span><span class="p">,</span>
-        <span class="n">predict_magnitudes</span><span class="o">=</span><span class="n">predict_magnitudes</span><span class="p">,</span>
-        <span class="n">predict_phase_angle</span><span class="o">=</span><span class="n">predict_phase_angle</span><span class="p">,</span>
-        <span class="n">max_processes</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-    <span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_ephemeris_2body_chunk_worker</span><span class="p">(</span>
-    <span class="n">start</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">idx_chunk</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">propagated_orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
-    <span class="n">observers</span><span class="p">:</span> <span class="n">Observers</span><span class="p">,</span>
-    <span class="n">lt_tol</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
-    <span class="n">tol</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
-    <span class="n">stellar_aberration</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-    <span class="n">predict_magnitudes</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-    <span class="n">predict_phase_angle</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Ephemeris</span><span class="p">]:</span>
-    <span class="n">prop_chunk</span> <span class="o">=</span> <span class="n">propagated_orbits</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">)</span>
-    <span class="n">obs_chunk</span> <span class="o">=</span> <span class="n">observers</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">)</span>
-    <span class="n">eph</span> <span class="o">=</span> <span class="n">_generate_ephemeris_2body_serial</span><span class="p">(</span>
-        <span class="n">prop_chunk</span><span class="p">,</span>
-        <span class="n">obs_chunk</span><span class="p">,</span>
-        <span class="n">lt_tol</span><span class="o">=</span><span class="n">lt_tol</span><span class="p">,</span>
-        <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
-        <span class="n">tol</span><span class="o">=</span><span class="n">tol</span><span class="p">,</span>
-        <span class="n">stellar_aberration</span><span class="o">=</span><span class="n">stellar_aberration</span><span class="p">,</span>
-        <span class="n">predict_magnitudes</span><span class="o">=</span><span class="n">predict_magnitudes</span><span class="p">,</span>
-        <span class="n">predict_phase_angle</span><span class="o">=</span><span class="n">predict_phase_angle</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">start</span><span class="p">,</span> <span class="n">eph</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_numerical_error</span><span class="p">(</span><span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">DynamicsNumericalError</span><span class="p">:</span>
+    <span class="n">reason</span> <span class="o">=</span> <span class="n">message</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;reason=&quot;</span><span class="p">)[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;;&quot;</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">or</span> <span class="s2">&quot;ephemeris_failure&quot;</span>
+    <span class="n">context</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">object</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">message</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;; &quot;</span><span class="p">)[</span><span class="mi">1</span><span class="p">:]:</span>
+        <span class="n">key</span><span class="p">,</span> <span class="n">separator</span><span class="p">,</span> <span class="n">value</span> <span class="o">=</span> <span class="n">item</span><span class="o">.</span><span class="n">partition</span><span class="p">(</span><span class="s2">&quot;=&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">separator</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">context</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="n">context</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+    <span class="k">return</span> <span class="n">DynamicsNumericalError</span><span class="p">(</span><span class="n">stage</span><span class="o">=</span><span class="s2">&quot;ephemeris&quot;</span><span class="p">,</span> <span class="n">reason</span><span class="o">=</span><span class="n">reason</span><span class="p">,</span> <span class="n">context</span><span class="o">=</span><span class="n">context</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="generate_ephemeris_2body">
@@ -545,378 +467,44 @@
     <span class="n">max_processes</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span><span class="p">,</span>
     <span class="n">chunk_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Ephemeris</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Generate on-sky ephemerides for each propagated orbit as viewed by the observers.</span>
-<span class="sd">    This function calculates the light time delay between the propagated orbit and the observer,</span>
-<span class="sd">    and then propagates the orbit backward by that amount to when the light from object was actually</span>
-<span class="sd">    emitted towards the observer (&quot;astrometric coordinates&quot;).</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Generate paired topocentric ephemerides entirely in Rust.</span>
 
-<span class="sd">    The motion of the observer in an inertial frame will cause an object</span>
-<span class="sd">    to appear in a different location than its true location, this is known as</span>
-<span class="sd">    stellar aberration (often referred to in combination with other aberrations as &quot;apparent</span>
-<span class="sd">    coordinates&quot;). Stellar aberration can optionally be applied after</span>
-<span class="sd">    light time correction has been added but it should not be necessary when comparing to ephemerides</span>
-<span class="sd">    of solar system small bodies extracted from astrometric catalogs. The stars to which the</span>
-<span class="sd">    catalog is calibrated undergo the same aberration as the moving objects as seen from the observer.</span>
+<span class="sd">    ``propagated_orbits`` and ``observers`` are handed to Rust as two nested</span>
+<span class="sd">    RecordBatches. Rust owns frame/origin normalization, pairwise propagation,</span>
+<span class="sd">    light-time and stellar-aberration correction, covariance transport,</span>
+<span class="sd">    photometry, diagnostics, and construction of the finished Ephemeris batch.</span>
+<span class="sd">    Python directly wraps that returned RecordBatch without rebuilding columns.</span>
 
-<span class="sd">    If stellar aberration is applied then the velocity of the input orbits are unmodified, only the position</span>
-<span class="sd">    vector is modified with stellar aberration.</span>
-
-<span class="sd">    For more details on aberrations see:</span>
-<span class="sd">        https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/FORTRAN/req/abcorr.html</span>
-<span class="sd">        https://ssd.jpl.nasa.gov/horizons/manual.html#defs</span>
-
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    propagated_orbits : `~adam_core.orbits.orbits.Orbits` (N)</span>
-<span class="sd">        Propagated orbits.</span>
-<span class="sd">    observers : `~adam_core.observers.observers.Observers` (N)</span>
-<span class="sd">        Observers for which to generate ephemerides. Orbits should already have been</span>
-<span class="sd">        propagated to the same times as the observers.</span>
-<span class="sd">    lt_tol : float, optional</span>
-<span class="sd">        Calculate aberration to within this value in time (units of days).</span>
-<span class="sd">    mu : float, optional</span>
-<span class="sd">        Gravitational parameter (GM) of the attracting body in units of</span>
-<span class="sd">        AU**3 / d**2.</span>
-<span class="sd">    max_iter : int, optional</span>
-<span class="sd">        Maximum number of iterations over which to converge for propagation.</span>
-<span class="sd">    tol : float, optional</span>
-<span class="sd">        Numerical tolerance to which to compute universal anomaly during propagation using the Newtown-Raphson</span>
-<span class="sd">        method.</span>
-<span class="sd">    stellar_aberration : bool, optional</span>
-<span class="sd">        Apply stellar aberration to the ephemerides.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    ephemeris : `~adam_core.orbits.ephemeris.Ephemeris` (N)</span>
-<span class="sd">        Topocentric ephemerides for each propagated orbit as observed by the given observers.</span>
+<span class="sd">    ``max_processes`` remains an accepted, ignored compatibility option; no</span>
+<span class="sd">    Python process fan-out occurs and local parallelism uses Rust&#39;s warmed</span>
+<span class="sd">    global Rayon pool.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">resolve_max_processes</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="n">backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span>
-
-        <span class="n">num_entries</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observers</span><span class="p">)</span>
-        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">propagated_orbits</span><span class="p">)</span> <span class="o">==</span> <span class="n">num_entries</span>
-
-        <span class="n">propagated_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">propagated_orbits</span><span class="p">)</span>
-        <span class="n">observers_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">observers</span><span class="p">)</span>
-
-        <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_entries</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-        <span class="n">args_iter</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="p">(</span>
-                <span class="nb">int</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">)</span> <span class="k">else</span> <span class="mi">0</span><span class="p">,</span>
-                <span class="n">idx_chunk</span><span class="p">,</span>
-                <span class="n">propagated_ref</span><span class="p">,</span>
-                <span class="n">observers_ref</span><span class="p">,</span>
-                <span class="n">lt_tol</span><span class="p">,</span>
-                <span class="n">max_iter</span><span class="p">,</span>
-                <span class="n">tol</span><span class="p">,</span>
-                <span class="n">stellar_aberration</span><span class="p">,</span>
-                <span class="n">predict_magnitudes</span><span class="p">,</span>
-                <span class="n">predict_phase_angle</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">for</span> <span class="n">idx_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">propagated_orbits</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observers</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">AssertionError</span><span class="p">(</span>
+            <span class="s2">&quot;Orbits and observers must be paired and orbits must be propagated &quot;</span>
+            <span class="s2">&quot;to observer times.&quot;</span>
         <span class="p">)</span>
-
-        <span class="n">results</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Ephemeris</span><span class="p">]</span> <span class="o">=</span> <span class="p">{}</span>
-        <span class="k">for</span> <span class="n">start_i</span><span class="p">,</span> <span class="n">eph_i</span> <span class="ow">in</span> <span class="n">backend</span><span class="o">.</span><span class="n">map_unordered</span><span class="p">(</span>
-            <span class="n">_ephemeris_2body_chunk_worker</span><span class="p">,</span> <span class="n">args_iter</span>
-        <span class="p">):</span>
-            <span class="n">results</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">start_i</span><span class="p">)]</span> <span class="o">=</span> <span class="n">eph_i</span>
-
-        <span class="n">chunks</span> <span class="o">=</span> <span class="p">[</span><span class="n">results</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">results</span><span class="o">.</span><span class="n">keys</span><span class="p">())]</span>
-        <span class="k">return</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">chunks</span><span class="p">)</span> <span class="k">if</span> <span class="n">chunks</span> <span class="k">else</span> <span class="n">Ephemeris</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-
-    <span class="n">num_entries</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observers</span><span class="p">)</span>
-    <span class="k">assert</span> <span class="p">(</span>
-        <span class="nb">len</span><span class="p">(</span><span class="n">propagated_orbits</span><span class="p">)</span> <span class="o">==</span> <span class="n">num_entries</span>
-    <span class="p">),</span> <span class="s2">&quot;Orbits and observers must be paired and orbits must be propagated to observer times.&quot;</span>
-
-    <span class="c1"># Transform both the orbits and observers to the barycenter if they are not already.</span>
-    <span class="c1">#</span>
-    <span class="c1"># Fast path: common workload uses SUN/ecliptic for both, on an aligned time grid.</span>
-    <span class="c1"># In that case we can compute the SUN-&gt;SSB translation vectors once and apply them</span>
-    <span class="c1"># to both orbits and observers (strictly equivalent, but avoids duplicate work).</span>
-    <span class="n">propagated_orbits_barycentric</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">observers_barycentric</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">del</span> <span class="n">max_processes</span>
+    <span class="n">ensure_spice_backend</span><span class="p">()</span>
     <span class="k">try</span><span class="p">:</span>
-        <span class="n">po</span> <span class="o">=</span> <span class="n">propagated_orbits</span><span class="o">.</span><span class="n">coordinates</span>
-        <span class="n">obc</span> <span class="o">=</span> <span class="n">observers</span><span class="o">.</span><span class="n">coordinates</span>
-        <span class="n">po_origin</span> <span class="o">=</span> <span class="n">po</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="n">ob_origin</span> <span class="o">=</span> <span class="n">obc</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="k">if</span> <span class="p">(</span>
-            <span class="nb">str</span><span class="p">(</span><span class="n">po</span><span class="o">.</span><span class="n">frame</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;ecliptic&quot;</span>
-            <span class="ow">and</span> <span class="nb">str</span><span class="p">(</span><span class="n">obc</span><span class="o">.</span><span class="n">frame</span><span class="p">)</span> <span class="o">==</span> <span class="s2">&quot;ecliptic&quot;</span>
-            <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">po_origin</span> <span class="o">==</span> <span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-            <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">ob_origin</span> <span class="o">==</span> <span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-        <span class="p">):</span>
-            <span class="n">t_po</span> <span class="o">=</span> <span class="n">po</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
-            <span class="n">t_ob</span> <span class="o">=</span> <span class="n">obc</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
-            <span class="n">same_time</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span>
-                <span class="n">t_po</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-                <span class="n">t_ob</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-            <span class="p">)</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span>
-                <span class="n">t_po</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-                <span class="n">t_ob</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-            <span class="p">)</span>
-            <span class="k">if</span> <span class="n">same_time</span><span class="p">:</span>
-                <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.spice</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_perturber_state</span>
-
-                <span class="n">sun_wrt_ssb</span> <span class="o">=</span> <span class="n">get_perturber_state</span><span class="p">(</span>
-                    <span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="p">,</span>
-                    <span class="n">t_po</span><span class="p">,</span>
-                    <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-                    <span class="n">origin</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SOLAR_SYSTEM_BARYCENTER</span><span class="p">,</span>
-                <span class="p">)</span><span class="o">.</span><span class="n">values</span>
-                <span class="n">coords_po</span> <span class="o">=</span> <span class="n">po</span><span class="o">.</span><span class="n">translate</span><span class="p">(</span>
-                    <span class="n">sun_wrt_ssb</span><span class="p">,</span> <span class="n">OriginCodes</span><span class="o">.</span><span class="n">SOLAR_SYSTEM_BARYCENTER</span><span class="o">.</span><span class="n">name</span>
-                <span class="p">)</span>
-                <span class="n">coords_ob</span> <span class="o">=</span> <span class="n">obc</span><span class="o">.</span><span class="n">translate</span><span class="p">(</span>
-                    <span class="n">sun_wrt_ssb</span><span class="p">,</span> <span class="n">OriginCodes</span><span class="o">.</span><span class="n">SOLAR_SYSTEM_BARYCENTER</span><span class="o">.</span><span class="n">name</span>
-                <span class="p">)</span>
-                <span class="n">propagated_orbits_barycentric</span> <span class="o">=</span> <span class="n">propagated_orbits</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-                    <span class="s2">&quot;coordinates&quot;</span><span class="p">,</span> <span class="n">coords_po</span>
-                <span class="p">)</span>
-                <span class="n">observers_barycentric</span> <span class="o">=</span> <span class="n">observers</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">&quot;coordinates&quot;</span><span class="p">,</span> <span class="n">coords_ob</span><span class="p">)</span>
-    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
-        <span class="n">propagated_orbits_barycentric</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="n">observers_barycentric</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="k">if</span> <span class="n">propagated_orbits_barycentric</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">observers_barycentric</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">propagated_orbits_barycentric</span> <span class="o">=</span> <span class="n">propagated_orbits</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-            <span class="s2">&quot;coordinates&quot;</span><span class="p">,</span>
-            <span class="n">transform_coordinates</span><span class="p">(</span>
-                <span class="n">propagated_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-                <span class="n">CartesianCoordinates</span><span class="p">,</span>
-                <span class="n">frame_out</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-                <span class="n">origin_out</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SOLAR_SYSTEM_BARYCENTER</span><span class="p">,</span>
-            <span class="p">),</span>
-        <span class="p">)</span>
-        <span class="n">observers_barycentric</span> <span class="o">=</span> <span class="n">observers</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-            <span class="s2">&quot;coordinates&quot;</span><span class="p">,</span>
-            <span class="n">transform_coordinates</span><span class="p">(</span>
-                <span class="n">observers</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-                <span class="n">CartesianCoordinates</span><span class="p">,</span>
-                <span class="n">frame_out</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-                <span class="n">origin_out</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SOLAR_SYSTEM_BARYCENTER</span><span class="p">,</span>
-            <span class="p">),</span>
-        <span class="p">)</span>
-
-    <span class="n">observer_coordinates</span> <span class="o">=</span> <span class="n">observers_barycentric</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span>
-    <span class="n">observer_codes</span> <span class="o">=</span> <span class="n">observers_barycentric</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">mu</span> <span class="o">=</span> <span class="n">observers_barycentric</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">mu</span><span class="p">()</span>
-    <span class="n">times</span> <span class="o">=</span> <span class="n">propagated_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-
-    <span class="n">orbits_array</span> <span class="o">=</span> <span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span>
-    <span class="n">need_covariance</span> <span class="o">=</span> <span class="ow">not</span> <span class="n">propagated_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">is_all_nan</span><span class="p">()</span>
-    <span class="k">if</span> <span class="n">need_covariance</span><span class="p">:</span>
-        <span class="n">cartesian_covariances</span> <span class="o">=</span> <span class="n">propagated_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">cartesian_covariances</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="n">covariances_spherical_flat</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="c1"># Rust single-crossing path: one call fuses LT Newton + aberration +</span>
-    <span class="c1"># ec-&gt;eq + cart-&gt;sph (+ Dual&lt;6&gt; Jacobian when covariance is needed).</span>
-    <span class="k">if</span> <span class="n">need_covariance</span><span class="p">:</span>
-        <span class="n">cov_flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">cartesian_covariances</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">num_entries</span><span class="p">,</span> <span class="mi">36</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="n">rust_result</span> <span class="o">=</span> <span class="n">rust_generate_ephemeris_2body_with_covariance_numpy</span><span class="p">(</span>
-            <span class="n">orbits_array</span><span class="p">,</span>
-            <span class="n">cov_flat</span><span class="p">,</span>
-            <span class="n">observer_coordinates</span><span class="p">,</span>
-            <span class="n">mu</span><span class="p">,</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">generate_ephemeris_arrow</span><span class="p">(</span>
+            <span class="n">orbits_to_record_batch</span><span class="p">(</span><span class="n">propagated_orbits</span><span class="p">),</span>
+            <span class="n">observers_to_record_batch</span><span class="p">(</span><span class="n">observers</span><span class="p">),</span>
             <span class="n">lt_tol</span><span class="o">=</span><span class="n">lt_tol</span><span class="p">,</span>
             <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
             <span class="n">tol</span><span class="o">=</span><span class="n">tol</span><span class="p">,</span>
             <span class="n">stellar_aberration</span><span class="o">=</span><span class="n">stellar_aberration</span><span class="p">,</span>
+            <span class="n">predict_magnitudes</span><span class="o">=</span><span class="n">predict_magnitudes</span><span class="p">,</span>
+            <span class="n">predict_phase_angle</span><span class="o">=</span><span class="n">predict_phase_angle</span><span class="p">,</span>
+            <span class="n">chunk_size</span><span class="o">=</span><span class="n">chunk_size</span><span class="p">,</span>
+            <span class="n">thread_limit</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">sph_r</span><span class="p">,</span> <span class="n">lt_r</span><span class="p">,</span> <span class="n">aberrated_r</span><span class="p">,</span> <span class="n">cov_r</span> <span class="o">=</span> <span class="n">rust_result</span>
-        <span class="n">ephemeris_spherical</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">sph_r</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">light_time</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">lt_r</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">aberrated_orbits</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">aberrated_r</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">covariances_spherical_flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">cov_r</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">rust_result</span> <span class="o">=</span> <span class="n">rust_generate_ephemeris_2body_numpy</span><span class="p">(</span>
-            <span class="n">orbits_array</span><span class="p">,</span>
-            <span class="n">observer_coordinates</span><span class="p">,</span>
-            <span class="n">mu</span><span class="p">,</span>
-            <span class="n">lt_tol</span><span class="o">=</span><span class="n">lt_tol</span><span class="p">,</span>
-            <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
-            <span class="n">tol</span><span class="o">=</span><span class="n">tol</span><span class="p">,</span>
-            <span class="n">stellar_aberration</span><span class="o">=</span><span class="n">stellar_aberration</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">sph_r</span><span class="p">,</span> <span class="n">lt_r</span><span class="p">,</span> <span class="n">aberrated_r</span> <span class="o">=</span> <span class="n">rust_result</span>
-        <span class="n">ephemeris_spherical</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">sph_r</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">light_time</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">lt_r</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">aberrated_orbits</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">aberrated_r</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-
-    <span class="c1"># Row-level error context for any NaN emitted by either backend. The Rust</span>
-    <span class="c1"># kernel mirrors the JAX NaN policy (iter &gt;= max_lt_iter → NaN light-time).</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_error_context_for</span><span class="p">(</span><span class="n">row</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">_raise_ephemeris_numerical_error</span><span class="p">(</span>
-            <span class="n">reason</span><span class="o">=</span><span class="n">reason</span><span class="p">,</span>
-            <span class="n">row_index</span><span class="o">=</span><span class="n">row</span><span class="p">,</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span>
-                <span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)[</span>
-                    <span class="n">row</span>
-                <span class="p">]</span>
-            <span class="p">),</span>
-            <span class="n">object_id</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span>
-                <span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">object_id</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)[</span>
-                    <span class="n">row</span>
-                <span class="p">]</span>
-            <span class="p">),</span>
-            <span class="n">observation_time</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">times</span><span class="p">[</span><span class="n">row</span><span class="p">]),</span>
-            <span class="n">light_time</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">light_time</span><span class="p">[</span><span class="n">row</span><span class="p">]),</span>
-            <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
-            <span class="n">tol</span><span class="o">=</span><span class="n">tol</span><span class="p">,</span>
-            <span class="n">lt_tol</span><span class="o">=</span><span class="n">lt_tol</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="n">bad_lt</span> <span class="o">=</span> <span class="n">_first_non_finite</span><span class="p">(</span><span class="n">light_time</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">bad_lt</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">_error_context_for</span><span class="p">(</span><span class="n">bad_lt</span><span class="p">,</span> <span class="s2">&quot;non_finite_light_time&quot;</span><span class="p">)</span>
-    <span class="n">bad_eph</span> <span class="o">=</span> <span class="n">_first_non_finite</span><span class="p">(</span><span class="n">ephemeris_spherical</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">bad_eph</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">_error_context_for</span><span class="p">(</span><span class="n">bad_eph</span><span class="p">,</span> <span class="s2">&quot;non_finite_ephemeris_state&quot;</span><span class="p">)</span>
-    <span class="n">bad_aberrated</span> <span class="o">=</span> <span class="n">_first_non_finite</span><span class="p">(</span><span class="n">aberrated_orbits</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">bad_aberrated</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">_error_context_for</span><span class="p">(</span><span class="n">bad_aberrated</span><span class="p">,</span> <span class="s2">&quot;non_finite_aberrated_state&quot;</span><span class="p">)</span>
-
-    <span class="c1"># Compute emission times by subtracting light-time (in days) from the observation times.</span>
-    <span class="n">emission_times</span> <span class="o">=</span> <span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">add_fractional_days</span><span class="p">(</span>
-        <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="o">-</span><span class="n">light_time</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="n">aberrated_coordinates</span> <span class="o">=</span> <span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">x</span><span class="o">=</span><span class="n">aberrated_orbits</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-        <span class="n">y</span><span class="o">=</span><span class="n">aberrated_orbits</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-        <span class="n">z</span><span class="o">=</span><span class="n">aberrated_orbits</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-        <span class="n">vx</span><span class="o">=</span><span class="n">aberrated_orbits</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
-        <span class="n">vy</span><span class="o">=</span><span class="n">aberrated_orbits</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
-        <span class="n">vz</span><span class="o">=</span><span class="n">aberrated_orbits</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
-        <span class="n">time</span><span class="o">=</span><span class="n">emission_times</span><span class="p">,</span>
-        <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">code</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">num_entries</span><span class="p">,</span> <span class="n">OriginCodes</span><span class="o">.</span><span class="n">SOLAR_SYSTEM_BARYCENTER</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
-        <span class="p">),</span>
-        <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">need_covariance</span><span class="p">:</span>
-        <span class="n">covariances_spherical</span> <span class="o">=</span> <span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
-            <span class="n">covariances_spherical_flat</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">num_entries</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
-        <span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">covariances_spherical</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="n">spherical_coordinates</span> <span class="o">=</span> <span class="n">SphericalCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">time</span><span class="o">=</span><span class="n">propagated_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
-        <span class="n">rho</span><span class="o">=</span><span class="n">ephemeris_spherical</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-        <span class="n">lon</span><span class="o">=</span><span class="n">ephemeris_spherical</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-        <span class="n">lat</span><span class="o">=</span><span class="n">ephemeris_spherical</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-        <span class="n">vrho</span><span class="o">=</span><span class="n">ephemeris_spherical</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
-        <span class="n">vlon</span><span class="o">=</span><span class="n">ephemeris_spherical</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
-        <span class="n">vlat</span><span class="o">=</span><span class="n">ephemeris_spherical</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
-        <span class="n">covariance</span><span class="o">=</span><span class="n">covariances_spherical</span><span class="p">,</span>
-        <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="n">observer_codes</span><span class="p">),</span>
-        <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;equatorial&quot;</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">Ephemeris</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">orbit_id</span><span class="o">=</span><span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
-        <span class="n">object_id</span><span class="o">=</span><span class="n">propagated_orbits_barycentric</span><span class="o">.</span><span class="n">object_id</span><span class="p">,</span>
-        <span class="n">coordinates</span><span class="o">=</span><span class="n">spherical_coordinates</span><span class="p">,</span>
-        <span class="n">light_time</span><span class="o">=</span><span class="n">light_time</span><span class="p">,</span>
-        <span class="n">aberrated_coordinates</span><span class="o">=</span><span class="n">aberrated_coordinates</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="n">want_alpha</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">predict_phase_angle</span><span class="p">)</span>
-    <span class="n">want_mags</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">predict_magnitudes</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">want_alpha</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">want_mags</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">ephemeris</span>
-
-    <span class="c1"># Determine whether we can compute magnitudes (needs H and G).</span>
-    <span class="n">has_params</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">H_v</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">G</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="n">want_mags</span><span class="p">:</span>
-        <span class="n">H_v</span> <span class="o">=</span> <span class="n">propagated_orbits</span><span class="o">.</span><span class="n">physical_parameters</span><span class="o">.</span><span class="n">H_v</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="n">G</span> <span class="o">=</span> <span class="n">propagated_orbits</span><span class="o">.</span><span class="n">physical_parameters</span><span class="o">.</span><span class="n">G</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="n">has_params</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">H_v</span><span class="p">)</span> <span class="o">&amp;</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">G</span><span class="p">)</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">has_params</span><span class="p">):</span>
-            <span class="n">want_mags</span> <span class="o">=</span> <span class="kc">False</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">want_alpha</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">want_mags</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">ephemeris</span>
-
-    <span class="c1"># Transform object and observer coordinates to heliocentric for photometry.</span>
-    <span class="k">if</span> <span class="n">aberrated_coordinates</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-            <span class="s2">&quot;Internal error: aberrated coordinates are required for photometry but were not computed.&quot;</span>
-        <span class="p">)</span>
-    <span class="n">aberrated_heliocentric</span> <span class="o">=</span> <span class="n">transform_coordinates</span><span class="p">(</span>
-        <span class="n">aberrated_coordinates</span><span class="p">,</span>
-        <span class="n">CartesianCoordinates</span><span class="p">,</span>
-        <span class="n">frame_out</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-        <span class="n">origin_out</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">observers_heliocentric</span> <span class="o">=</span> <span class="n">observers</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-        <span class="s2">&quot;coordinates&quot;</span><span class="p">,</span>
-        <span class="n">transform_coordinates</span><span class="p">(</span>
-            <span class="n">observers</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-            <span class="n">CartesianCoordinates</span><span class="p">,</span>
-            <span class="n">frame_out</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-            <span class="n">origin_out</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="p">,</span>
-        <span class="p">),</span>
-    <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">want_mags</span> <span class="ow">and</span> <span class="p">(</span><span class="n">H_v</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">G</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">has_params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-            <span class="s2">&quot;Internal error: H/G photometry parameters are required for &quot;</span>
-            <span class="s2">&quot;magnitude prediction&quot;</span>
-        <span class="p">)</span>
-
-    <span class="n">alpha_deg</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">mags</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="n">want_mags</span> <span class="ow">and</span> <span class="n">want_alpha</span><span class="p">:</span>
-        <span class="n">mags</span><span class="p">,</span> <span class="n">alpha_deg</span> <span class="o">=</span> <span class="n">calculate_apparent_magnitude_v_and_phase_angle</span><span class="p">(</span>
-            <span class="n">H_v</span><span class="o">=</span><span class="n">H_v</span><span class="p">,</span>
-            <span class="n">object_coords</span><span class="o">=</span><span class="n">aberrated_heliocentric</span><span class="p">,</span>
-            <span class="n">observer</span><span class="o">=</span><span class="n">observers_heliocentric</span><span class="p">,</span>
-            <span class="n">G</span><span class="o">=</span><span class="n">G</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">elif</span> <span class="n">want_alpha</span><span class="p">:</span>
-        <span class="n">alpha_deg</span> <span class="o">=</span> <span class="n">calculate_phase_angle</span><span class="p">(</span>
-            <span class="n">aberrated_heliocentric</span><span class="p">,</span> <span class="n">observers_heliocentric</span>
-        <span class="p">)</span>
-    <span class="k">elif</span> <span class="n">want_mags</span><span class="p">:</span>
-        <span class="n">mags</span> <span class="o">=</span> <span class="n">calculate_apparent_magnitude_v</span><span class="p">(</span>
-            <span class="n">H_v</span><span class="o">=</span><span class="n">H_v</span><span class="p">,</span>
-            <span class="n">object_coords</span><span class="o">=</span><span class="n">aberrated_heliocentric</span><span class="p">,</span>
-            <span class="n">observer</span><span class="o">=</span><span class="n">observers_heliocentric</span><span class="p">,</span>
-            <span class="n">G</span><span class="o">=</span><span class="n">G</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">alpha_deg</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">alpha_deg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">alpha_deg</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">ephemeris</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-            <span class="s2">&quot;alpha&quot;</span><span class="p">,</span>
-            <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">alpha_deg</span><span class="p">,</span> <span class="n">mask</span><span class="o">=~</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">alpha_deg</span><span class="p">),</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">()),</span>
-        <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">mags</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">has_params</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
-                <span class="s2">&quot;Internal error: photometry mask is required for magnitude output&quot;</span>
-            <span class="p">)</span>
-        <span class="n">mags</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mags</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">valid</span> <span class="o">=</span> <span class="n">has_params</span> <span class="o">&amp;</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">mags</span><span class="p">)</span>
-        <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">ephemeris</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-            <span class="s2">&quot;predicted_magnitude_v&quot;</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">mags</span><span class="p">,</span> <span class="n">mask</span><span class="o">=~</span><span class="n">valid</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">())</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">ephemeris</span></div>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="n">message</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">message</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;ephemeris row failure:&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">_numerical_error</span><span class="p">(</span><span class="n">message</span><span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+        <span class="k">raise</span>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">Ephemeris</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span></div>
 
 </pre></div>
         </article>
@@ -936,7 +524,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

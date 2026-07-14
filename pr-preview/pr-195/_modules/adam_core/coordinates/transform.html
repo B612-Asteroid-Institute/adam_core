@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -424,6 +434,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._rust</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -433,20 +444,21 @@
     <span class="n">cartesian_to_spherical_numpy</span><span class="p">,</span>
     <span class="n">cometary_to_cartesian_numpy</span><span class="p">,</span>
     <span class="n">keplerian_to_cartesian_numpy</span><span class="p">,</span>
-    <span class="n">rotate_cartesian_time_varying_numpy</span><span class="p">,</span>
     <span class="n">spherical_to_cartesian_numpy</span><span class="p">,</span>
-    <span class="n">transform_coordinates_numpy</span><span class="p">,</span>
-    <span class="n">transform_coordinates_with_covariance_numpy</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ensure_spice_backend</span><span class="p">,</span>
+    <span class="n">stamp_adam_core_metadata</span><span class="p">,</span>
+    <span class="n">table_from_record_batch</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">Constants</span> <span class="k">as</span> <span class="n">c</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.bounded_lru</span><span class="w"> </span><span class="kn">import</span> <span class="n">bounded_lru_get</span><span class="p">,</span> <span class="n">bounded_lru_put</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.bounded_lru</span><span class="w"> </span><span class="kn">import</span> <span class="n">_bounded_lru_get</span><span class="p">,</span> <span class="n">_bounded_lru_put</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.</span><span class="w"> </span><span class="kn">import</span> <span class="n">types</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">COVARIANCE_ROTATION_TOLERANCE</span><span class="p">,</span> <span class="n">CartesianCoordinates</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.cometary</span><span class="w"> </span><span class="kn">import</span> <span class="n">CometaryCoordinates</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoordinateCovariances</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.geodetics</span><span class="w"> </span><span class="kn">import</span> <span class="n">WGS84</span><span class="p">,</span> <span class="n">GeodeticCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.keplerian</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeplerianCoordinates</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span><span class="p">,</span> <span class="n">OriginCodes</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">OriginCodes</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.spherical</span><span class="w"> </span><span class="kn">import</span> <span class="n">SphericalCoordinates</span>
 
 <span class="n">TRANSFORM_EQ2EC</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
@@ -486,11 +498,11 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_translation_cache_get</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="n">_TranslationCacheKey</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="k">return</span> <span class="n">bounded_lru_get</span><span class="p">(</span><span class="n">_TRANSLATION_CACHE</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="n">_TRANSLATION_CACHE_MAXSIZE</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_bounded_lru_get</span><span class="p">(</span><span class="n">_TRANSLATION_CACHE</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="n">_TRANSLATION_CACHE_MAXSIZE</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_translation_cache_put</span><span class="p">(</span><span class="n">key</span><span class="p">:</span> <span class="n">_TranslationCacheKey</span><span class="p">,</span> <span class="n">vectors</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="n">bounded_lru_put</span><span class="p">(</span>
+    <span class="n">_bounded_lru_put</span><span class="p">(</span>
         <span class="n">_TRANSLATION_CACHE</span><span class="p">,</span> <span class="n">key</span><span class="p">,</span> <span class="n">vectors</span><span class="p">,</span> <span class="n">maxsize</span><span class="o">=</span><span class="n">_TRANSLATION_CACHE_MAXSIZE</span>
     <span class="p">)</span>
 
@@ -527,342 +539,90 @@
 <span class="p">}</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_coordinates_from_rust_values</span><span class="p">(</span>
-    <span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-    <span class="n">coords_in</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span><span class="p">,</span>
-    <span class="n">representation_out</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span><span class="p">],</span>
-    <span class="n">frame_out</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">,</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">],</span>
-    <span class="n">covariance</span><span class="p">:</span> <span class="n">CoordinateCovariances</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span><span class="p">:</span>
-    <span class="n">cov</span> <span class="o">=</span> <span class="n">coords_in</span><span class="o">.</span><span class="n">covariance</span> <span class="k">if</span> <span class="n">covariance</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">covariance</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">CartesianCoordinates</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">x</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-            <span class="n">y</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-            <span class="n">z</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-            <span class="n">vx</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
-            <span class="n">vy</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
-            <span class="n">vz</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
-            <span class="n">time</span><span class="o">=</span><span class="n">coords_in</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
-            <span class="n">covariance</span><span class="o">=</span><span class="n">cov</span><span class="p">,</span>
-            <span class="n">origin</span><span class="o">=</span><span class="n">coords_in</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
-            <span class="n">frame</span><span class="o">=</span><span class="n">frame_out</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">SphericalCoordinates</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">SphericalCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">rho</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-            <span class="n">lon</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-            <span class="n">lat</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-            <span class="n">vrho</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
-            <span class="n">vlon</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
-            <span class="n">vlat</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
-            <span class="n">time</span><span class="o">=</span><span class="n">coords_in</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
-            <span class="n">covariance</span><span class="o">=</span><span class="n">cov</span><span class="p">,</span>
-            <span class="n">origin</span><span class="o">=</span><span class="n">coords_in</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
-            <span class="n">frame</span><span class="o">=</span><span class="n">frame_out</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">GeodeticCoordinates</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">GeodeticCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">alt</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-            <span class="n">lon</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-            <span class="n">lat</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-            <span class="n">vup</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
-            <span class="n">veast</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
-            <span class="n">vnorth</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
-            <span class="n">time</span><span class="o">=</span><span class="n">coords_in</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
-            <span class="n">covariance</span><span class="o">=</span><span class="n">cov</span><span class="p">,</span>
-            <span class="n">origin</span><span class="o">=</span><span class="n">coords_in</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
-            <span class="n">frame</span><span class="o">=</span><span class="n">frame_out</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">KeplerianCoordinates</span><span class="p">:</span>
-        <span class="c1"># The non-covariance path (cartesian_to_keplerian_flat6) returns 13 columns</span>
-        <span class="c1"># (a, Q, q, e, i, raan, ap, M, nu, E, P, T, tp) for legacy compat; the</span>
-        <span class="c1"># covariance path evaluates the 6-column generic kernel to keep the Jacobian</span>
-        <span class="c1"># square. Dispatch on column count.</span>
-        <span class="k">if</span> <span class="n">values</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">13</span><span class="p">:</span>
-            <span class="n">kep_cols</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">kep_cols</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">)</span>
-        <span class="n">a_col</span><span class="p">,</span> <span class="n">e_col</span><span class="p">,</span> <span class="n">i_col</span><span class="p">,</span> <span class="n">raan_col</span><span class="p">,</span> <span class="n">ap_col</span><span class="p">,</span> <span class="n">m_col</span> <span class="o">=</span> <span class="n">kep_cols</span>
-        <span class="k">return</span> <span class="n">KeplerianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">a</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="n">a_col</span><span class="p">],</span>
-            <span class="n">e</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="n">e_col</span><span class="p">],</span>
-            <span class="n">i</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="n">i_col</span><span class="p">],</span>
-            <span class="n">raan</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="n">raan_col</span><span class="p">],</span>
-            <span class="n">ap</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="n">ap_col</span><span class="p">],</span>
-            <span class="n">M</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="n">m_col</span><span class="p">],</span>
-            <span class="n">time</span><span class="o">=</span><span class="n">coords_in</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
-            <span class="n">covariance</span><span class="o">=</span><span class="n">cov</span><span class="p">,</span>
-            <span class="n">origin</span><span class="o">=</span><span class="n">coords_in</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
-            <span class="n">frame</span><span class="o">=</span><span class="n">frame_out</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">CometaryCoordinates</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">CometaryCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">q</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-            <span class="n">e</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-            <span class="n">i</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-            <span class="n">raan</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
-            <span class="n">ap</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
-            <span class="n">tp</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
-            <span class="n">time</span><span class="o">=</span><span class="n">coords_in</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
-            <span class="n">covariance</span><span class="o">=</span><span class="n">cov</span><span class="p">,</span>
-            <span class="n">origin</span><span class="o">=</span><span class="n">coords_in</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
-            <span class="n">frame</span><span class="o">=</span><span class="n">frame_out</span><span class="p">,</span>
-        <span class="p">)</span>
-    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unsupported representation_out: </span><span class="si">{</span><span class="n">representation_out</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_coordinate_record_batch</span><span class="p">(</span>
+    <span class="n">coords</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span><span class="p">,</span> <span class="n">representation</span><span class="p">:</span> <span class="nb">str</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">RecordBatch</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Expose a coordinate table as one metadata-stamped RecordBatch.&quot;&quot;&quot;</span>
+    <span class="n">table</span> <span class="o">=</span> <span class="n">stamp_adam_core_metadata</span><span class="p">(</span>
+        <span class="n">coords</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">combine_chunks</span><span class="p">(),</span>
+        <span class="n">representation</span><span class="o">=</span><span class="n">representation</span><span class="p">,</span>
+        <span class="n">frame</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
+        <span class="n">scale</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+        <span class="n">schema_name</span><span class="o">=</span><span class="s2">&quot;CoordinateBatch.cartesian.nested.quivr.v1&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">batches</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">to_batches</span><span class="p">(</span><span class="n">max_chunksize</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">batches</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">batches</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">RecordBatch</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([],</span> <span class="nb">type</span><span class="o">=</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="p">],</span>
+        <span class="n">schema</span><span class="o">=</span><span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="p">,</span>
+    <span class="p">)</span>
 
 
-<span class="n">_RUST_TRANSFORM_INPUT_TYPES</span> <span class="o">=</span> <span class="p">(</span>
-    <span class="n">CartesianCoordinates</span><span class="p">,</span>
-    <span class="n">SphericalCoordinates</span><span class="p">,</span>
-    <span class="n">KeplerianCoordinates</span><span class="p">,</span>
-    <span class="n">CometaryCoordinates</span><span class="p">,</span>
-<span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_rust_transform_supports</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_transform_coordinates_native</span><span class="p">(</span>
     <span class="n">coords</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span><span class="p">,</span>
     <span class="n">representation_out</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span><span class="p">],</span>
     <span class="n">frame_out</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">,</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">],</span>
-    <span class="n">origin_out</span><span class="p">:</span> <span class="n">OriginCodes</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Return True if the Rust single-crossing path covers this exact input combination.</span>
+    <span class="n">origin_out</span><span class="p">:</span> <span class="n">OriginCodes</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Transform one coordinate RecordBatch entirely in Rust.</span>
 
-<span class="sd">    The supported set is explicit: input representation in</span>
-<span class="sd">    (Cartesian, Spherical, Keplerian, Cometary), output representation in</span>
-<span class="sd">    (Cartesian, Spherical, Keplerian, Cometary, Geodetic), same origin in/out</span>
-<span class="sd">    (EARTH only for Geodetic output), covariance allowed (propagated via</span>
-<span class="sd">    forward-mode autodiff in Rust; NaN covariance passes through), and frame</span>
-<span class="sd">    transitions limited to identity or equatorial&lt;-&gt;ecliptic (plus itrf93 for</span>
-<span class="sd">    Geodetic output). Anything outside this set must fall back to legacy.</span>
+<span class="sd">    Python stamps schema metadata and directly wraps the returned RecordBatch;</span>
+<span class="sd">    representation/frame/origin composition, SPICE calls, covariance AD, and</span>
+<span class="sd">    Arrow table assembly remain behind this one crossing.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_RUST_TRANSFORM_INPUT_TYPES</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">False</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_RUST_TRANSFORM_REPRESENTATIONS</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">False</span>
-    <span class="k">if</span> <span class="n">frame_out</span> <span class="o">!=</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">:</span>
-        <span class="k">if</span> <span class="p">{</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span> <span class="n">frame_out</span><span class="p">}</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">}:</span>
-            <span class="k">pass</span>  <span class="c1"># single-crossing Rust kernel rotates inline</span>
-        <span class="k">elif</span> <span class="s2">&quot;itrf93&quot;</span> <span class="ow">in</span> <span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span> <span class="n">frame_out</span><span class="p">):</span>
-            <span class="c1"># Time-varying ITRF93 rotation needs Cartesian states (no</span>
-            <span class="c1"># physically meaningful ITRF93 Keplerian/Cometary/Spherical</span>
-            <span class="c1"># representation to rotate from). Dispatcher routes through</span>
-            <span class="c1"># rotate_cartesian_time_varying + identity-frame conversion.</span>
-            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">CartesianCoordinates</span><span class="p">:</span>
-                <span class="k">return</span> <span class="kc">False</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">False</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">GeodeticCoordinates</span> <span class="ow">and</span> <span class="n">frame_out</span> <span class="o">!=</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">False</span>
-    <span class="n">origin_differs</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span> <span class="o">!=</span> <span class="n">origin_out</span><span class="p">))</span>
-    <span class="k">if</span> <span class="n">origin_differs</span><span class="p">:</span>
-        <span class="c1"># The dispatcher handles origin changes by routing through a</span>
-        <span class="c1"># SPICE-backed Cartesian translation (covariance-invariant).</span>
-        <span class="c1"># This needs a single target origin (`OriginCodes`); mixed-origin</span>
-        <span class="c1"># arrays aren&#39;t a supported target.</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">origin_out</span><span class="p">,</span> <span class="n">OriginCodes</span><span class="p">):</span>
-            <span class="k">return</span> <span class="kc">False</span>
-        <span class="c1"># Geodetic output must be EARTH-centered ITRF93; if we&#39;re asking</span>
-        <span class="c1"># for a different origin-out, we can&#39;t satisfy it.</span>
-        <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">GeodeticCoordinates</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">origin_out</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">OriginCodes</span><span class="o">.</span><span class="n">EARTH</span><span class="p">:</span>
-                <span class="k">return</span> <span class="kc">False</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">GeodeticCoordinates</span><span class="p">:</span>
-        <span class="n">origin_codes</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">origin_codes</span> <span class="o">!=</span> <span class="s2">&quot;EARTH&quot;</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">origin_differs</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">False</span>
-    <span class="c1"># Pure Cartesian frame-only change is faster on the legacy path (a single</span>
-    <span class="c1"># 6x6 rotation) than through the Rust dispatcher&#39;s Python marshaling; keep</span>
-    <span class="c1"># it on legacy so the promotion gate holds for all covered workloads.</span>
-    <span class="k">if</span> <span class="p">(</span>
-        <span class="nb">type</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="ow">is</span> <span class="n">CartesianCoordinates</span>
-        <span class="ow">and</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">CartesianCoordinates</span>
-    <span class="p">):</span>
-        <span class="k">return</span> <span class="kc">False</span>
-    <span class="c1"># Cartesian output with origin change: the dispatcher would just do</span>
-    <span class="c1"># to_cartesian+translate+rotate, which is exactly what the legacy</span>
-    <span class="c1"># fallthrough does (all three hops are already Rust after lever 1).</span>
-    <span class="c1"># Going through the dispatcher adds Python marshaling overhead with no</span>
-    <span class="c1"># fusion win, so keep this on legacy.</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">CartesianCoordinates</span> <span class="ow">and</span> <span class="n">origin_differs</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">False</span>
-    <span class="k">return</span> <span class="kc">True</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.._rust</span><span class="w"> </span><span class="kn">import</span> <span class="n">transform_coordinates_arrow</span>
+
+    <span class="n">representation_in_name</span> <span class="o">=</span> <span class="n">_RUST_TRANSFORM_REPRESENTATIONS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="nb">type</span><span class="p">(</span><span class="n">coords</span><span class="p">))</span>
+    <span class="n">representation_out_name</span> <span class="o">=</span> <span class="n">_RUST_TRANSFORM_REPRESENTATIONS</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">representation_out</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">representation_in_name</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">representation_out_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="n">target_origin</span> <span class="o">=</span> <span class="n">origin_out</span><span class="o">.</span><span class="n">name</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">origin_out</span><span class="p">,</span> <span class="n">OriginCodes</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+    <span class="n">itrf93_frame_change</span> <span class="o">=</span> <span class="n">frame_out</span> <span class="o">!=</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span> <span class="ow">and</span> <span class="s2">&quot;itrf93&quot;</span> <span class="ow">in</span> <span class="p">(</span>
+        <span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
+        <span class="n">frame_out</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">target_origin</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">itrf93_frame_change</span><span class="p">:</span>
+        <span class="n">ensure_spice_backend</span><span class="p">()</span>
+
+    <span class="n">result</span> <span class="o">=</span> <span class="n">transform_coordinates_arrow</span><span class="p">(</span>
+        <span class="n">_coordinate_record_batch</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">representation_in_name</span><span class="p">),</span>
+        <span class="n">representation_out_name</span><span class="p">,</span>
+        <span class="n">frame_out</span><span class="p">,</span>
+        <span class="n">target_origin</span><span class="p">,</span>
+        <span class="n">a</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">WGS84</span><span class="o">.</span><span class="n">a</span><span class="p">)</span> <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">GeodeticCoordinates</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">f</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">WGS84</span><span class="o">.</span><span class="n">f</span><span class="p">)</span> <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">GeodeticCoordinates</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">representation_out</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_try_transform_coordinates_rust</span><span class="p">(</span>
     <span class="n">coords</span><span class="p">:</span> <span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span><span class="p">,</span>
     <span class="n">representation_out</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span><span class="p">],</span>
     <span class="n">frame_out</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">,</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">],</span>
-    <span class="n">origin_out</span><span class="p">:</span> <span class="n">OriginCodes</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">origin_out</span><span class="p">:</span> <span class="n">OriginCodes</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">types</span><span class="o">.</span><span class="n">CoordinateType</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Attempt the Rust single-crossing transform path.</span>
+<span class="sd">    Run ``transform_coordinates`` on the fully-Rust single-crossing path.</span>
 
-<span class="sd">    Returns the transformed coordinates when the input combination is in the</span>
-<span class="sd">    supported set (see `_rust_transform_supports`), otherwise returns None so</span>
-<span class="sd">    the caller falls back to the legacy JAX path. Callers must treat a None</span>
-<span class="sd">    return as an explicit &quot;not supported by Rust yet&quot; signal, not an error.</span>
+<span class="sd">    Returns the transformed coordinates when the native path covers the case,</span>
+<span class="sd">    otherwise ``None`` so the caller uses the thin Python fallthrough</span>
+<span class="sd">    composition (``to_cartesian`` -&gt; ``cartesian_to_origin`` -&gt;</span>
+<span class="sd">    ``cartesian_to_frame`` -&gt; ``from_cartesian``) for the residual cases the</span>
+<span class="sd">    native path does not yet cover (non-Cartesian input into an ITRF93 frame</span>
+<span class="sd">    change, geodetic input). A ``None`` return is an explicit &quot;not covered</span>
+<span class="sd">    natively&quot; signal, not an error.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">_rust_transform_supports</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">representation_out</span><span class="p">,</span> <span class="n">frame_out</span><span class="p">,</span> <span class="n">origin_out</span><span class="p">):</span>
-        <span class="k">return</span> <span class="kc">None</span>
-
-    <span class="c1"># Origin change: resolve the per-row SPICE translation vector in the</span>
-    <span class="c1"># input frame, then pass it to the Rust dispatcher so the add fuses</span>
-    <span class="c1"># with rep-in -&gt; cart -&gt; frame rotate -&gt; rep-out -&gt; covariance AD in a</span>
-    <span class="c1"># single Python/Rust crossing. Translation is a constant offset</span>
-    <span class="c1"># (identity Jacobian wrt state), so covariance propagation is</span>
-    <span class="c1"># unaffected mathematically; the kernel just skips adding anything to</span>
-    <span class="c1"># the Jacobian accumulation.</span>
-    <span class="n">origin_differs</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span> <span class="o">!=</span> <span class="n">origin_out</span><span class="p">))</span>
-    <span class="n">translation_vectors</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="n">origin_differs</span><span class="p">:</span>
-        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">origin_out</span><span class="p">,</span> <span class="n">OriginCodes</span><span class="p">)</span>
-        <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="ow">is</span> <span class="n">CartesianCoordinates</span><span class="p">:</span>
-            <span class="n">translation_vectors</span> <span class="o">=</span> <span class="n">_resolve_origin_translation_vectors</span><span class="p">(</span>
-                <span class="n">coords</span><span class="p">,</span> <span class="n">origin_out</span>
-            <span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="c1"># SPICE resolves translation vectors in Cartesian space, so we</span>
-            <span class="c1"># need the rep-in-as-Cartesian (same frame, same origin) to</span>
-            <span class="c1"># resolve them. That&#39;s a pure origin-query operation against</span>
-            <span class="c1"># the *input* origin metadata — it doesn&#39;t depend on the</span>
-            <span class="c1"># actual Cartesian values — so we build a synthetic Cartesian</span>
-            <span class="c1"># view carrying just the time/origin/frame.</span>
-            <span class="n">synthetic</span> <span class="o">=</span> <span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">x</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)),</span>
-                <span class="n">y</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)),</span>
-                <span class="n">z</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)),</span>
-                <span class="n">vx</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)),</span>
-                <span class="n">vy</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)),</span>
-                <span class="n">vz</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)),</span>
-                <span class="n">time</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
-                <span class="n">origin</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
-                <span class="n">frame</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">translation_vectors</span> <span class="o">=</span> <span class="n">_resolve_origin_translation_vectors</span><span class="p">(</span>
-                <span class="n">synthetic</span><span class="p">,</span> <span class="n">origin_out</span>
-            <span class="p">)</span>
-
-    <span class="c1"># ITRF93 frame changes: do the time-varying rotation in Rust first, then</span>
-    <span class="c1"># re-dispatch as an identity-frame representation conversion so the</span>
-    <span class="c1"># covariance transform runs through Rust forward-mode autodiff instead</span>
-    <span class="c1"># of the JAX `from_cartesian` Jacobian path.</span>
-    <span class="k">if</span> <span class="n">frame_out</span> <span class="o">!=</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span> <span class="ow">and</span> <span class="s2">&quot;itrf93&quot;</span> <span class="ow">in</span> <span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span> <span class="n">frame_out</span><span class="p">):</span>
-        <span class="c1"># ITRF93 path cannot combine with origin_differs (gated out in</span>
-        <span class="c1"># _rust_transform_supports for non-EARTH targets, and ITRF93 with</span>
-        <span class="c1"># EARTH target would still require the time-varying rotate path</span>
-        <span class="c1"># first, then translate — handle via fallthrough here).</span>
-        <span class="k">if</span> <span class="n">origin_differs</span><span class="p">:</span>
-            <span class="n">translated</span> <span class="o">=</span> <span class="n">cartesian_to_origin</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">origin_out</span><span class="p">)</span>
-            <span class="n">rotated</span> <span class="o">=</span> <span class="n">apply_time_varying_rotation</span><span class="p">(</span><span class="n">translated</span><span class="p">,</span> <span class="n">frame_out</span><span class="p">)</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">rotated</span> <span class="o">=</span> <span class="n">apply_time_varying_rotation</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">frame_out</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">CartesianCoordinates</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">rotated</span>
-        <span class="k">return</span> <span class="n">_try_transform_coordinates_rust</span><span class="p">(</span>
-            <span class="n">rotated</span><span class="p">,</span> <span class="n">representation_out</span><span class="p">,</span> <span class="n">frame_out</span><span class="p">,</span> <span class="n">origin_out</span>
-        <span class="p">)</span>
-
-    <span class="n">representation_in_name</span> <span class="o">=</span> <span class="n">_RUST_TRANSFORM_REPRESENTATIONS</span><span class="p">[</span><span class="nb">type</span><span class="p">(</span><span class="n">coords</span><span class="p">)]</span>
-    <span class="n">representation_out_name</span> <span class="o">=</span> <span class="n">_RUST_TRANSFORM_REPRESENTATIONS</span><span class="p">[</span><span class="n">representation_out</span><span class="p">]</span>
-
-    <span class="n">t0</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">mu</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">a</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">f</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="ow">is</span> <span class="n">KeplerianCoordinates</span><span class="p">:</span>
-        <span class="n">mu</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">mu</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="ow">is</span> <span class="n">CometaryCoordinates</span><span class="p">:</span>
-        <span class="n">t0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">mu</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">mu</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">GeodeticCoordinates</span><span class="p">:</span>
-        <span class="n">a</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">WGS84</span><span class="o">.</span><span class="n">a</span><span class="p">)</span>
-        <span class="n">f</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">WGS84</span><span class="o">.</span><span class="n">f</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">KeplerianCoordinates</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">t0</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">t0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">mu</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">mu</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">mu</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">representation_out</span> <span class="ow">is</span> <span class="n">CometaryCoordinates</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">t0</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">t0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">mu</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">mu</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">mu</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-
-    <span class="n">translation_kwarg</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">translation_vectors</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">translation_vectors</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
-        <span class="k">else</span> <span class="kc">None</span>
+    <span class="c1"># The entire composition -- origin translation (perturber via spkez,</span>
+    <span class="c1"># observatory via ground-observer), representation change, constant AND</span>
+    <span class="c1"># time-varying ITRF93 frame rotation, and covariance forward-mode AD --</span>
+    <span class="c1"># runs in Rust in a single Python-&gt;Rust crossing.</span>
+    <span class="k">return</span> <span class="n">_transform_coordinates_native</span><span class="p">(</span>
+        <span class="n">coords</span><span class="p">,</span> <span class="n">representation_out</span><span class="p">,</span> <span class="n">frame_out</span><span class="p">,</span> <span class="n">origin_out</span>
     <span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">coords</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">is_all_nan</span><span class="p">():</span>
-        <span class="n">rust_coords</span> <span class="o">=</span> <span class="n">transform_coordinates_numpy</span><span class="p">(</span>
-            <span class="n">coords</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-            <span class="n">representation_in_name</span><span class="p">,</span>
-            <span class="n">representation_out_name</span><span class="p">,</span>
-            <span class="n">t0</span><span class="o">=</span><span class="n">t0</span><span class="p">,</span>
-            <span class="n">mu</span><span class="o">=</span><span class="n">mu</span><span class="p">,</span>
-            <span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span>
-            <span class="n">f</span><span class="o">=</span><span class="n">f</span><span class="p">,</span>
-            <span class="n">max_iter</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-            <span class="n">tol</span><span class="o">=</span><span class="mf">1e-15</span><span class="p">,</span>
-            <span class="n">frame_in</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
-            <span class="n">frame_out</span><span class="o">=</span><span class="n">frame_out</span><span class="p">,</span>
-            <span class="n">translation_vectors</span><span class="o">=</span><span class="n">translation_kwarg</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="n">rust_coords</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">return</span> <span class="kc">None</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">_coordinates_from_rust_values</span><span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rust_coords</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-            <span class="n">coords</span><span class="p">,</span>
-            <span class="n">representation_out</span><span class="p">,</span>
-            <span class="n">frame_out</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="n">origin_differs</span><span class="p">:</span>
-            <span class="n">result</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-                <span class="s2">&quot;origin&quot;</span><span class="p">,</span> <span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="n">origin_out</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">result</span><span class="p">))</span>
-            <span class="p">)</span>
-        <span class="k">return</span> <span class="n">result</span>
-
-    <span class="n">covariance_matrices</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
-    <span class="n">n</span> <span class="o">=</span> <span class="n">covariance_matrices</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">covariance_flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
-        <span class="n">covariance_matrices</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">36</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
-    <span class="p">)</span>
-    <span class="n">result</span> <span class="o">=</span> <span class="n">transform_coordinates_with_covariance_numpy</span><span class="p">(</span>
-        <span class="n">coords</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-        <span class="n">covariance_flat</span><span class="p">,</span>
-        <span class="n">representation_in_name</span><span class="p">,</span>
-        <span class="n">representation_out_name</span><span class="p">,</span>
-        <span class="n">t0</span><span class="o">=</span><span class="n">t0</span><span class="p">,</span>
-        <span class="n">mu</span><span class="o">=</span><span class="n">mu</span><span class="p">,</span>
-        <span class="n">a</span><span class="o">=</span><span class="n">a</span><span class="p">,</span>
-        <span class="n">f</span><span class="o">=</span><span class="n">f</span><span class="p">,</span>
-        <span class="n">max_iter</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-        <span class="n">tol</span><span class="o">=</span><span class="mf">1e-15</span><span class="p">,</span>
-        <span class="n">frame_in</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
-        <span class="n">frame_out</span><span class="o">=</span><span class="n">frame_out</span><span class="p">,</span>
-        <span class="n">translation_vectors</span><span class="o">=</span><span class="n">translation_kwarg</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">if</span> <span class="n">result</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="kc">None</span>
-    <span class="n">rust_coords</span><span class="p">,</span> <span class="n">rust_cov_flat</span> <span class="o">=</span> <span class="n">result</span>
-    <span class="n">cov_out</span> <span class="o">=</span> <span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rust_cov_flat</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="n">out</span> <span class="o">=</span> <span class="n">_coordinates_from_rust_values</span><span class="p">(</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">rust_coords</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-        <span class="n">coords</span><span class="p">,</span>
-        <span class="n">representation_out</span><span class="p">,</span>
-        <span class="n">frame_out</span><span class="p">,</span>
-        <span class="n">covariance</span><span class="o">=</span><span class="n">cov_out</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">if</span> <span class="n">origin_differs</span><span class="p">:</span>
-        <span class="n">out</span> <span class="o">=</span> <span class="n">out</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-            <span class="s2">&quot;origin&quot;</span><span class="p">,</span> <span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="n">origin_out</span><span class="o">.</span><span class="n">name</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">out</span><span class="p">))</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">out</span>
 
 
 <div class="viewcode-block" id="cartesian_to_geodetic">
@@ -1371,6 +1131,20 @@
 <span class="sd">        If origin is not a `~adam_core.coordinates.origin.OriginCodes` object or</span>
 <span class="sd">        a str of an observatory code.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># One Rust crossing owns origin resolution (perturber spkez / ground</span>
+    <span class="c1"># observer states) and the translation for every backend-supported</span>
+    <span class="c1"># origin. The legacy Python composition remains only as an explicit</span>
+    <span class="c1"># fallback for origin codes the Rust backend cannot resolve (space/custom</span>
+    <span class="c1"># observatories; see personal-cmy.37.2.16 for the dispatch boundary).</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">native</span> <span class="o">=</span> <span class="n">_transform_coordinates_native</span><span class="p">(</span>
+            <span class="n">coords</span><span class="p">,</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span> <span class="n">origin</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span><span class="p">:</span>
+        <span class="n">native</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">native</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">native</span>
+
     <span class="n">vectors</span> <span class="o">=</span> <span class="n">_resolve_origin_translation_vectors</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">origin</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">coords</span><span class="o">.</span><span class="n">translate</span><span class="p">(</span><span class="n">vectors</span><span class="p">,</span> <span class="n">origin</span><span class="o">.</span><span class="n">name</span><span class="p">)</span></div>
 
@@ -1412,100 +1186,23 @@
 
     <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="p">))</span> <span class="o">==</span> <span class="mi">1</span>
 
-    <span class="c1"># Transform to geocentric coordinates in the input frame</span>
-    <span class="k">if</span> <span class="n">frame_out</span> <span class="o">==</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">:</span>
-        <span class="n">frame_spice_out</span> <span class="o">=</span> <span class="s2">&quot;ITRF93&quot;</span>
-    <span class="k">elif</span> <span class="n">frame_out</span> <span class="o">==</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">:</span>
-        <span class="n">frame_spice_out</span> <span class="o">=</span> <span class="s2">&quot;ECLIPJ2000&quot;</span>
-    <span class="k">elif</span> <span class="n">frame_out</span> <span class="o">==</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">:</span>
-        <span class="n">frame_spice_out</span> <span class="o">=</span> <span class="s2">&quot;J2000&quot;</span>
-    <span class="k">else</span><span class="p">:</span>
+    <span class="c1"># Preserve the legacy frame validation errors before crossing.</span>
+    <span class="k">if</span> <span class="n">frame_out</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;itrf93&quot;</span><span class="p">,</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unsupported frame: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">frame_out</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;itrf93&quot;</span><span class="p">,</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unsupported frame: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">))</span>
 
-    <span class="n">frame_in</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span>
-    <span class="k">if</span> <span class="n">frame_in</span> <span class="o">==</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">:</span>
-        <span class="n">frame_spice_in</span> <span class="o">=</span> <span class="s2">&quot;ITRF93&quot;</span>
-    <span class="k">elif</span> <span class="n">frame_in</span> <span class="o">==</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">:</span>
-        <span class="n">frame_spice_in</span> <span class="o">=</span> <span class="s2">&quot;ECLIPJ2000&quot;</span>
-    <span class="k">elif</span> <span class="n">frame_in</span> <span class="o">==</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">:</span>
-        <span class="n">frame_spice_in</span> <span class="o">=</span> <span class="s2">&quot;J2000&quot;</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Unsupported frame: </span><span class="si">{}</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">frame_in</span><span class="p">))</span>
-
-    <span class="kn">from</span><span class="w"> </span><span class="nn">..constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">KM_P_AU</span><span class="p">,</span> <span class="n">S_P_DAY</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.spice</span><span class="w"> </span><span class="kn">import</span> <span class="n">_query_sxform_itrf93_batch</span>
-
-    <span class="c1"># Dedup epochs then query sxforms in one batched call. Fewer unique</span>
-    <span class="c1"># epochs than rows is the common case (e.g. many objects at a few</span>
-    <span class="c1"># shared times), so paying O(U) sxform computations over an O(N)</span>
-    <span class="c1"># per-row apply is the right trade.</span>
-    <span class="n">unique_times</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
-    <span class="n">unique_ets</span> <span class="o">=</span> <span class="n">unique_times</span><span class="o">.</span><span class="n">et</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">batched_kms</span> <span class="o">=</span> <span class="n">_query_sxform_itrf93_batch</span><span class="p">(</span>
-        <span class="n">frame_spice_in</span><span class="p">,</span> <span class="n">frame_spice_out</span><span class="p">,</span> <span class="n">unique_ets</span>
+    <span class="c1"># One Rust crossing owns SPICE sxform lookup, epoch deduplication, unit</span>
+    <span class="c1"># conversion, the per-row rotation, covariance transport with the NaN</span>
+    <span class="c1"># policy, near-zero cleanup, and output table assembly.</span>
+    <span class="n">rotated</span> <span class="o">=</span> <span class="n">_transform_coordinates_native</span><span class="p">(</span>
+        <span class="n">coords</span><span class="p">,</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">frame_out</span><span class="p">,</span> <span class="kc">None</span>
     <span class="p">)</span>
-
-    <span class="c1"># Unit conversion: sxform is km / km-s, our states are AU / AU-d.</span>
-    <span class="c1"># Fold the scaling into the matrix table once so the Rust apply</span>
-    <span class="c1"># kernel stays a pure (matrix @ state, matrix @ cov @ matrix^T).</span>
-    <span class="n">rotation_unit_conversion</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">))</span>
-    <span class="n">rotation_unit_conversion</span><span class="p">[:</span><span class="mi">3</span><span class="p">,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">identity</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">KM_P_AU</span>
-    <span class="n">rotation_unit_conversion</span><span class="p">[</span><span class="mi">3</span><span class="p">:,</span> <span class="mi">3</span><span class="p">:]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">identity</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="n">KM_P_AU</span> <span class="o">/</span> <span class="n">S_P_DAY</span>
-    <span class="n">inv_unit_conversion</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">rotation_unit_conversion</span><span class="p">)</span>
-    <span class="n">matrices_aud</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span>
-        <span class="s2">&quot;ij,ujk,kl-&gt;uil&quot;</span><span class="p">,</span> <span class="n">inv_unit_conversion</span><span class="p">,</span> <span class="n">batched_kms</span><span class="p">,</span> <span class="n">rotation_unit_conversion</span>
-    <span class="p">)</span>
-
-    <span class="c1"># Build per-row time index into unique_times by matching on the</span>
-    <span class="c1"># (days, nanos) pair packed into a single int64 key.</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_time_keys</span><span class="p">(</span><span class="n">time_like</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-        <span class="n">days</span> <span class="o">=</span> <span class="n">time_like</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-        <span class="n">nanos</span> <span class="o">=</span> <span class="n">time_like</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">days</span> <span class="o">*</span> <span class="mi">86_400_000_000_000</span> <span class="o">+</span> <span class="n">nanos</span>
-
-    <span class="n">keys_all</span> <span class="o">=</span> <span class="n">_time_keys</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="p">)</span>
-    <span class="n">keys_u</span> <span class="o">=</span> <span class="n">_time_keys</span><span class="p">(</span><span class="n">unique_times</span><span class="p">)</span>
-    <span class="n">order</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">keys_u</span><span class="p">)</span>
-    <span class="n">positions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">searchsorted</span><span class="p">(</span><span class="n">keys_u</span><span class="p">[</span><span class="n">order</span><span class="p">],</span> <span class="n">keys_all</span><span class="p">)</span>
-    <span class="n">time_index</span> <span class="o">=</span> <span class="n">order</span><span class="p">[</span><span class="n">positions</span><span class="p">]</span>
-
-    <span class="c1"># Single Rust crossing does per-row M @ state and M @ Σ @ M^T</span>
-    <span class="c1"># across all N rows in parallel. Covariance NaN handling matches</span>
-    <span class="c1"># CartesianCoordinates.rotate exactly (NaN cells pass through).</span>
-    <span class="n">states</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">values</span>
-    <span class="n">cov_matrix</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
-    <span class="n">cov_flat</span> <span class="o">=</span> <span class="n">cov_matrix</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">cov_matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">36</span><span class="p">)</span>
-    <span class="n">rotated_states</span><span class="p">,</span> <span class="n">rotated_cov_flat</span> <span class="o">=</span> <span class="n">rotate_cartesian_time_varying_numpy</span><span class="p">(</span>
-        <span class="n">states</span><span class="p">,</span>
-        <span class="n">time_index</span><span class="p">,</span>
-        <span class="n">matrices_aud</span><span class="p">,</span>
-        <span class="n">cov_flat</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">rotated_cov</span> <span class="o">=</span> <span class="n">rotated_cov_flat</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">cov_matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
-
-    <span class="c1"># Preserve the existing near-zero cleanup so downstream covariance</span>
-    <span class="c1"># consumers see the same small-element behaviour as the legacy path.</span>
-    <span class="n">near_zero_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">rotated_cov</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">COVARIANCE_ROTATION_TOLERANCE</span>
-    <span class="k">if</span> <span class="n">near_zero_mask</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">near_zero_mask</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span><span class="si">}</span><span class="s2"> covariance elements are within &quot;</span>
-            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">COVARIANCE_ROTATION_TOLERANCE</span><span class="si">:</span><span class="s2">.0e</span><span class="si">}</span><span class="s2"> of zero after rotation, &quot;</span>
-            <span class="s2">&quot;setting these elements to 0.&quot;</span>
+    <span class="k">if</span> <span class="n">rotated</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">&quot;Unsupported time-varying rotation: &quot;</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="si">}</span><span class="s2"> -&gt; </span><span class="si">{</span><span class="n">frame_out</span><span class="si">}</span><span class="s2">&quot;</span>
         <span class="p">)</span>
-        <span class="n">rotated_cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">near_zero_mask</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="n">rotated_cov</span><span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">x</span><span class="o">=</span><span class="n">rotated_states</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-        <span class="n">y</span><span class="o">=</span><span class="n">rotated_states</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-        <span class="n">z</span><span class="o">=</span><span class="n">rotated_states</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-        <span class="n">vx</span><span class="o">=</span><span class="n">rotated_states</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
-        <span class="n">vy</span><span class="o">=</span><span class="n">rotated_states</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
-        <span class="n">vz</span><span class="o">=</span><span class="n">rotated_states</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
-        <span class="n">time</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
-        <span class="n">covariance</span><span class="o">=</span><span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span><span class="n">rotated_cov</span><span class="p">),</span>
-        <span class="n">origin</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
-        <span class="n">frame</span><span class="o">=</span><span class="n">frame_out</span><span class="p">,</span>
-    <span class="p">)</span></div>
+    <span class="k">return</span> <span class="n">rotated</span></div>
 
 
 
@@ -1529,19 +1226,22 @@
 <span class="sd">    CartesianCoordinates : `~adam_core.coordinates.cartesian.CartesianCoordinates`</span>
 <span class="sd">        Rotated Cartesian coordinates and their covariances.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="k">if</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;ecliptic&quot;</span> <span class="ow">and</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">coords</span><span class="o">.</span><span class="n">rotate</span><span class="p">(</span><span class="n">TRANSFORM_EQ2EC</span><span class="p">,</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;equatorial&quot;</span> <span class="ow">and</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">coords</span><span class="o">.</span><span class="n">rotate</span><span class="p">(</span><span class="n">TRANSFORM_EC2EQ</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;itrf93&quot;</span> <span class="ow">and</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span> <span class="o">!=</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">apply_time_varying_rotation</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">frame</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="n">frame</span> <span class="o">!=</span> <span class="s2">&quot;itrf93&quot;</span> <span class="ow">and</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span> <span class="o">==</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">apply_time_varying_rotation</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">frame</span><span class="p">)</span>
-    <span class="k">elif</span> <span class="n">frame</span> <span class="o">==</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">frame</span> <span class="o">==</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">coords</span>
-    <span class="k">else</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">frame</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="s2">&quot;equatorial&quot;</span><span class="p">,</span> <span class="s2">&quot;itrf93&quot;</span><span class="p">):</span>
         <span class="n">err</span> <span class="o">=</span> <span class="s2">&quot;frame should be one of {&#39;ecliptic&#39;, &#39;equatorial&#39;, &#39;itrf93&#39;}&quot;</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">err</span><span class="p">)</span></div>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+
+    <span class="c1"># Time-varying rotations preserve the legacy SPICE setup and warning</span>
+    <span class="c1"># semantics; all rotations execute as one Rust crossing.</span>
+    <span class="k">if</span> <span class="s2">&quot;itrf93&quot;</span> <span class="ow">in</span> <span class="p">(</span><span class="n">frame</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">apply_time_varying_rotation</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">frame</span><span class="p">)</span>
+
+    <span class="n">rotated</span> <span class="o">=</span> <span class="n">_transform_coordinates_native</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">rotated</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">err</span> <span class="o">=</span> <span class="s2">&quot;frame should be one of {&#39;ecliptic&#39;, &#39;equatorial&#39;, &#39;itrf93&#39;}&quot;</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">rotated</span></div>
 
 
 
@@ -1611,25 +1311,15 @@
         <span class="p">)</span>
 
     <span class="n">coord_frame</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span>
-    <span class="c1"># Extract the origins from the input coordinates. These typically correspond</span>
-    <span class="c1"># to the name of OriginCode enums but stored as an array of strings.</span>
-    <span class="n">coord_origin</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-
     <span class="k">if</span> <span class="n">frame_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">frame_out</span> <span class="o">=</span> <span class="n">coord_frame</span>
 
-    <span class="c1"># If origin out is not None, then origin_out will be an OriginCode</span>
-    <span class="c1"># passed directly to this function. Otherwise, it will be an array of strings</span>
-    <span class="c1"># extracted from the input coordinates.</span>
-    <span class="k">if</span> <span class="n">origin_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">origin_out</span> <span class="o">=</span> <span class="n">coord_origin</span>
-
-    <span class="c1"># `~adam_core.coordinates.origin.Origin` support equality checks with</span>
-    <span class="c1"># `~adam_core.coordinates.origin.OriginCodes` so we can compare them directly.</span>
-    <span class="c1"># If its not an OriginCodes enum then origin_out will be an array of strings which</span>
-    <span class="c1"># also can be checked for equality.</span>
+    <span class="c1"># A missing target means preserve the per-row origins already present in</span>
+    <span class="c1"># the input RecordBatch. Avoid splitting the origin column just to express</span>
+    <span class="c1"># that no origin translation is requested.</span>
+    <span class="n">origin_unchanged</span> <span class="o">=</span> <span class="n">origin_out</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span> <span class="o">==</span> <span class="n">origin_out</span><span class="p">)</span>
     <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="ow">is</span> <span class="n">representation_out_</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">coord_frame</span> <span class="o">==</span> <span class="n">frame_out</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">coord_origin</span> <span class="o">==</span> <span class="n">origin_out</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">coord_frame</span> <span class="o">==</span> <span class="n">frame_out</span> <span class="ow">and</span> <span class="n">origin_unchanged</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">coords</span>
 
     <span class="n">rust_coords</span> <span class="o">=</span> <span class="n">_try_transform_coordinates_rust</span><span class="p">(</span>
@@ -1638,14 +1328,23 @@
     <span class="k">if</span> <span class="n">rust_coords</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">rust_coords</span>
 
+    <span class="c1"># Only the deliberately-uncovered legacy fallthrough needs a Python array</span>
+    <span class="c1"># of per-row origins. The canonical Arrow-native path above never extracts</span>
+    <span class="c1"># coordinate columns.</span>
+    <span class="n">fallback_origin_out</span><span class="p">:</span> <span class="n">OriginCodes</span> <span class="o">|</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="k">if</span> <span class="n">origin_out</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">fallback_origin_out</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">fallback_origin_out</span> <span class="o">=</span> <span class="n">origin_out</span>
+
     <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">CartesianCoordinates</span><span class="p">):</span>
         <span class="n">cartesian</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">to_cartesian</span><span class="p">()</span>
     <span class="k">else</span><span class="p">:</span>
         <span class="n">cartesian</span> <span class="o">=</span> <span class="n">coords</span>
 
     <span class="c1"># Translate coordinates to new origin (if any are different from current)</span>
-    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">cartesian</span><span class="o">.</span><span class="n">origin</span> <span class="o">!=</span> <span class="n">origin_out</span><span class="p">):</span>
-        <span class="n">cartesian</span> <span class="o">=</span> <span class="n">cartesian_to_origin</span><span class="p">(</span><span class="n">cartesian</span><span class="p">,</span> <span class="n">origin_out</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">cartesian</span><span class="o">.</span><span class="n">origin</span> <span class="o">!=</span> <span class="n">fallback_origin_out</span><span class="p">):</span>
+        <span class="n">cartesian</span> <span class="o">=</span> <span class="n">cartesian_to_origin</span><span class="p">(</span><span class="n">cartesian</span><span class="p">,</span> <span class="n">fallback_origin_out</span><span class="p">)</span>
 
     <span class="c1"># Rotate coordinates to new frame (if different from current)</span>
     <span class="k">if</span> <span class="n">cartesian</span><span class="o">.</span><span class="n">frame</span> <span class="o">!=</span> <span class="n">frame_out</span><span class="p">:</span>
@@ -1676,7 +1375,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

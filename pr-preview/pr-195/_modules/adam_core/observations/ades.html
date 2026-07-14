@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -415,14 +425,12 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for adam_core.observations.ades</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">asdict</span><span class="p">,</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
 
-<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Time</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 
@@ -550,32 +558,11 @@
 <div class="viewcode-block" id="ObsContext.to_string">
 <a class="viewcode-back" href="../../../reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ObsContext.to_string">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">to_string</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-        <span class="n">lines</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">asdict</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
-                <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;# </span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">k2</span><span class="p">,</span> <span class="n">v2</span> <span class="ow">in</span> <span class="n">v</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-                    <span class="k">if</span> <span class="n">v2</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;! </span><span class="si">{</span><span class="n">k2</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">v2</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">if</span> <span class="n">v</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">[</span>
-                        <span class="s2">&quot;observers&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;measurers&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;coinvestigators&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;collaborators&quot;</span><span class="p">,</span>
-                    <span class="p">]:</span>
-                        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;# </span><span class="si">{</span><span class="n">k</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">v</span><span class="p">:</span>
-                            <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;! name </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                    <span class="k">elif</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;fundingSource&quot;</span><span class="p">:</span>
-                        <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;# fundingSource </span><span class="si">{</span><span class="n">v</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-                    <span class="k">elif</span> <span class="n">k</span> <span class="o">==</span> <span class="s2">&quot;comments&quot;</span><span class="p">:</span>
-                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                            <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;# comment&quot;</span><span class="p">)</span>
-                            <span class="k">for</span> <span class="n">comment</span> <span class="ow">in</span> <span class="n">v</span><span class="p">:</span>
-                                <span class="n">lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;! line </span><span class="si">{</span><span class="n">comment</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="k">return</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span></div>
+        <span class="c1"># Rendered in the Rust backend (bead personal-cmy.26) from the</span>
+        <span class="c1"># dataclass dict payload; field order is preserved.</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+        <span class="k">return</span> <span class="n">_rn</span><span class="o">.</span><span class="n">ades_obs_context_to_string</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">asdict</span><span class="p">(</span><span class="bp">self</span><span class="p">)))</span></div>
 </div>
 
 
@@ -639,6 +626,12 @@
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Write ADES observations to a string.</span>
 
+<span class="sd">    The observation blocks are rendered in the Rust backend (bead</span>
+<span class="sd">    personal-cmy.20), byte-identically to the legacy Python/pandas writer</span>
+<span class="sd">    (gated by the frozen legacy fixture in</span>
+<span class="sd">    ``migration/artifacts/ades_parity_fixture_2026-07-05.json``); the</span>
+<span class="sd">    ObsContext headers stay Python-rendered.</span>
+
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    observations : ADESObservations</span>
@@ -666,156 +659,20 @@
 <span class="sd">    ades_string : str</span>
 <span class="sd">        The ADES observations as a string.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">ades_string</span> <span class="o">=</span> <span class="s2">&quot;# version=2022</span><span class="se">\n</span><span class="s2">&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
-    <span class="n">unique_observatories</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">stn</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">unique_observatories</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">observations_to_ipc</span>
 
-    <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="n">unique_observatories</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">obs</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">obs_contexts</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Observatory </span><span class="si">{</span><span class="n">obs</span><span class="si">}</span><span class="s2"> not found in obs_contexts&quot;</span><span class="p">)</span>
+    <span class="n">contexts_json</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="n">code</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">asdict</span><span class="p">(</span><span class="n">context</span><span class="p">))</span> <span class="k">for</span> <span class="n">code</span><span class="p">,</span> <span class="n">context</span> <span class="ow">in</span> <span class="n">obs_contexts</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">}</span>
+    <span class="k">return</span> <span class="n">_rn</span><span class="o">.</span><span class="n">ades_to_string_fused_ipc</span><span class="p">(</span>
+        <span class="n">observations_to_ipc</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span>
+        <span class="n">contexts_json</span><span class="p">,</span>
+        <span class="n">seconds_precision</span><span class="p">,</span>
+        <span class="p">{</span><span class="n">column</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">column</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">columns_precision</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
+    <span class="p">)</span></div>
 
-        <span class="n">observations_obscode</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">&quot;stn&quot;</span><span class="p">,</span> <span class="n">obs</span><span class="p">)</span>
-        <span class="n">observations_obscode</span> <span class="o">=</span> <span class="n">observations_obscode</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-            <span class="p">[</span>
-                <span class="p">(</span><span class="s2">&quot;provID&quot;</span><span class="p">,</span> <span class="s2">&quot;ascending&quot;</span><span class="p">),</span>
-                <span class="p">(</span><span class="s2">&quot;permID&quot;</span><span class="p">,</span> <span class="s2">&quot;ascending&quot;</span><span class="p">),</span>
-                <span class="p">(</span><span class="s2">&quot;trkSub&quot;</span><span class="p">,</span> <span class="s2">&quot;ascending&quot;</span><span class="p">),</span>
-                <span class="p">(</span><span class="s2">&quot;obsTime.days&quot;</span><span class="p">,</span> <span class="s2">&quot;ascending&quot;</span><span class="p">),</span>
-                <span class="p">(</span><span class="s2">&quot;obsTime.nanos&quot;</span><span class="p">,</span> <span class="s2">&quot;ascending&quot;</span><span class="p">),</span>
-            <span class="p">]</span>
-        <span class="p">)</span>
-
-        <span class="n">id_present</span> <span class="o">=</span> <span class="kc">False</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">pc</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">is_null</span><span class="p">(</span><span class="n">observations_obscode</span><span class="o">.</span><span class="n">permID</span><span class="p">))</span><span class="o">.</span><span class="n">as_py</span><span class="p">():</span>
-            <span class="n">id_present</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">pc</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">is_null</span><span class="p">(</span><span class="n">observations_obscode</span><span class="o">.</span><span class="n">provID</span><span class="p">))</span><span class="o">.</span><span class="n">as_py</span><span class="p">():</span>
-            <span class="n">id_present</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">pc</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">is_null</span><span class="p">(</span><span class="n">observations_obscode</span><span class="o">.</span><span class="n">trkSub</span><span class="p">))</span><span class="o">.</span><span class="n">as_py</span><span class="p">():</span>
-            <span class="n">id_present</span> <span class="o">=</span> <span class="kc">True</span>
-
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">id_present</span><span class="p">:</span>
-            <span class="n">err</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="s2">&quot;At least one of permID, provID, or trkSub should</span><span class="se">\n</span><span class="s2">&quot;</span>
-                <span class="s2">&quot;be present in observations.&quot;</span>
-            <span class="p">)</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
-
-        <span class="c1"># Write the observatory context block</span>
-        <span class="n">obs_context</span> <span class="o">=</span> <span class="n">obs_contexts</span><span class="p">[</span><span class="n">obs</span><span class="p">]</span>
-        <span class="n">ades_string</span> <span class="o">+=</span> <span class="n">obs_context</span><span class="o">.</span><span class="n">to_string</span><span class="p">()</span>
-
-        <span class="c1"># Write the observations block (we first convert</span>
-        <span class="c1"># to a pandas dataframe)</span>
-        <span class="n">ades</span> <span class="o">=</span> <span class="n">observations_obscode</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
-
-        <span class="c1"># Convert the timestamp to ISOT with the desired precision</span>
-        <span class="n">observation_times</span> <span class="o">=</span> <span class="n">Time</span><span class="p">(</span>
-            <span class="n">observations_obscode</span><span class="o">.</span><span class="n">obsTime</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;utc&quot;</span><span class="p">)</span>
-            <span class="o">.</span><span class="n">mjd</span><span class="p">()</span>
-            <span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-            <span class="nb">format</span><span class="o">=</span><span class="s2">&quot;mjd&quot;</span><span class="p">,</span>
-            <span class="n">precision</span><span class="o">=</span><span class="n">seconds_precision</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">ades</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span>
-            <span class="mi">4</span><span class="p">,</span>
-            <span class="s2">&quot;obsTime&quot;</span><span class="p">,</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">i</span> <span class="o">+</span> <span class="s2">&quot;Z&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">observation_times</span><span class="o">.</span><span class="n">utc</span><span class="o">.</span><span class="n">isot</span><span class="p">]),</span>
-        <span class="p">)</span>
-        <span class="n">ades</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;obsTime.days&quot;</span><span class="p">,</span> <span class="s2">&quot;obsTime.nanos&quot;</span><span class="p">],</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-        <span class="n">ades</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">how</span><span class="o">=</span><span class="s2">&quot;all&quot;</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-        <span class="c1"># Change the precision of some of the columns to conform</span>
-        <span class="c1"># to MPC standards</span>
-        <span class="k">for</span> <span class="n">col</span><span class="p">,</span> <span class="n">prec_col</span> <span class="ow">in</span> <span class="n">columns_precision</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-            <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">ades</span><span class="o">.</span><span class="n">columns</span><span class="p">:</span>
-                <span class="n">ades</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s2">.</span><span class="si">{</span><span class="n">prec_col</span><span class="si">}</span><span class="s2">f</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">i</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span>
-                    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">ades</span><span class="p">[</span><span class="n">col</span><span class="p">]</span>
-                <span class="p">]</span>
-
-        <span class="c1"># Rename the columns to match the ADES format</span>
-        <span class="n">ades</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;rmsRACosDec&quot;</span><span class="p">:</span> <span class="s2">&quot;rmsRA&quot;</span><span class="p">},</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-
-        <span class="n">ades_string</span> <span class="o">+=</span> <span class="n">ades</span><span class="o">.</span><span class="n">to_csv</span><span class="p">(</span>
-            <span class="n">sep</span><span class="o">=</span><span class="s2">&quot;|&quot;</span><span class="p">,</span> <span class="n">header</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">index</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">float_format</span><span class="o">=</span><span class="s2">&quot;</span><span class="si">%.16f</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">ades_string</span></div>
-
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_data_dict_to_table</span><span class="p">(</span><span class="n">data_dict</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">ADESObservations</span><span class="p">:</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">data_dict</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">ADESObservations</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-
-    <span class="c1"># Get the set of known columns from ADESObservations</span>
-    <span class="n">known_columns</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">ADESObservations</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">column_names</span><span class="p">)</span>
-    <span class="c1"># Check for unknown columns</span>
-    <span class="n">unknown_columns</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">data_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span> <span class="o">-</span> <span class="n">known_columns</span>
-    <span class="k">if</span> <span class="n">unknown_columns</span><span class="p">:</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Found unknown ADES columns that will be ignored: </span><span class="si">{</span><span class="n">unknown_columns</span><span class="si">}</span><span class="s2">&quot;</span>
-        <span class="p">)</span>
-
-    <span class="c1"># Convert every value that is empty string or whitespace to None</span>
-    <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">data_dict</span><span class="p">:</span>
-        <span class="n">data_dict</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span> <span class="k">if</span> <span class="n">x</span> <span class="o">==</span> <span class="s2">&quot;&quot;</span> <span class="ow">or</span> <span class="n">x</span><span class="o">.</span><span class="n">isspace</span><span class="p">()</span> <span class="k">else</span> <span class="n">x</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">data_dict</span><span class="p">[</span><span class="n">col</span><span class="p">]]</span>
-
-    <span class="n">numeric_cols</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="s2">&quot;ra&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;dec&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;rmsRA&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;rmsDec&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;mag&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;rmsMag&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;rmsCorr&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;rmsTime&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;logSNR&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;seeing&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;exp&quot;</span><span class="p">,</span>
-    <span class="p">]</span>
-    <span class="c1"># Do all the data conversions and then initialize the new table and concatenate</span>
-    <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">numeric_cols</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">data_dict</span><span class="p">:</span>
-            <span class="n">data_dict</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">if</span> <span class="n">x</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">data_dict</span><span class="p">[</span><span class="n">col</span><span class="p">]</span>
-            <span class="p">]</span>
-
-    <span class="c1"># Some users are accustomed to having fixed-width columns, so we strip whitespace</span>
-    <span class="c1"># from all the string columns with the exception of the &#39;remarks&#39; column</span>
-    <span class="n">string_cols</span> <span class="o">=</span> <span class="p">[</span>
-        <span class="s2">&quot;provID&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;permID&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;trkSub&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;obsSubID&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;stn&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;mode&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;astCat&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;photCat&quot;</span><span class="p">,</span>
-        <span class="s2">&quot;band&quot;</span><span class="p">,</span>
-    <span class="p">]</span>
-    <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">string_cols</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">data_dict</span><span class="p">:</span>
-            <span class="n">data_dict</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span>
-                <span class="n">x</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">if</span> <span class="n">x</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">data_dict</span><span class="p">[</span><span class="n">col</span><span class="p">]</span>
-            <span class="p">]</span>
-
-    <span class="k">if</span> <span class="s2">&quot;obsTime&quot;</span> <span class="ow">in</span> <span class="n">data_dict</span><span class="p">:</span>
-        <span class="c1"># Remove &#39;Z&#39; from timestamps and convert to MJD</span>
-        <span class="n">times</span> <span class="o">=</span> <span class="p">[</span><span class="n">t</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="k">if</span> <span class="n">t</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">data_dict</span><span class="p">[</span><span class="s2">&quot;obsTime&quot;</span><span class="p">]]</span>
-        <span class="n">data_dict</span><span class="p">[</span><span class="s2">&quot;obsTime&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;utc&quot;</span><span class="p">)</span>
-
-    <span class="c1"># Update the rmsRACosDec column name to be simply rmsRA</span>
-    <span class="k">if</span> <span class="s2">&quot;rmsRA&quot;</span> <span class="ow">in</span> <span class="n">data_dict</span><span class="p">:</span>
-        <span class="n">data_dict</span><span class="p">[</span><span class="s2">&quot;rmsRACosDec&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="n">data_dict</span><span class="p">[</span><span class="s2">&quot;rmsRA&quot;</span><span class="p">]</span>
-        <span class="n">data_dict</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">&quot;rmsRA&quot;</span><span class="p">)</span>
-
-    <span class="c1"># Only keep keys that are in ADESObservations</span>
-    <span class="n">data_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">data_dict</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">known_columns</span><span class="p">}</span>
-
-    <span class="k">return</span> <span class="n">ADESObservations</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="o">**</span><span class="n">data_dict</span><span class="p">)</span>
 
 
 <div class="viewcode-block" id="ADES_string_to_tables">
@@ -825,6 +682,10 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ObsContext</span><span class="p">],</span> <span class="n">ADESObservations</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Parse an ADES format string into ObsContext and ADESObservations objects.</span>
+
+<span class="sd">    The observation blocks are parsed in the Rust backend (bead</span>
+<span class="sd">    personal-cmy.20); the ObsContext metadata sections are parsed by the same</span>
+<span class="sd">    Python code the legacy parser used.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -838,77 +699,23 @@
 <span class="sd">        - A dictionary mapping observatory codes to their ObsContext objects</span>
 <span class="sd">        - An ADESObservations table containing the observations</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># Split the string into lines and remove empty lines</span>
-    <span class="n">lines</span> <span class="o">=</span> <span class="p">[</span><span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">ades_string</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()]</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
-    <span class="c1"># Start by parsing the data lines</span>
-    <span class="n">current_data</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">observations</span> <span class="o">=</span> <span class="n">ADESObservations</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">:</span>
-        <span class="c1"># Skip over metadata lines</span>
-        <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;#&quot;</span><span class="p">)</span> <span class="ow">or</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;!&quot;</span><span class="p">):</span>
-            <span class="k">continue</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">observations_from_ipc</span>
 
-        <span class="c1"># Detect if it&#39;s a header line by looking for permID, provID, or trkSub</span>
-        <span class="k">if</span> <span class="s2">&quot;permID&quot;</span> <span class="ow">in</span> <span class="n">line</span> <span class="ow">or</span> <span class="s2">&quot;provID&quot;</span> <span class="ow">in</span> <span class="n">line</span> <span class="ow">or</span> <span class="s2">&quot;trkSub&quot;</span> <span class="ow">in</span> <span class="n">line</span><span class="p">:</span>
-            <span class="n">observations</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
-                <span class="p">[</span><span class="n">observations</span><span class="p">,</span> <span class="n">_data_dict_to_table</span><span class="p">(</span><span class="n">current_data</span><span class="p">)]</span>
-            <span class="p">)</span>
-            <span class="n">new_headers</span> <span class="o">=</span> <span class="p">[</span><span class="n">header</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;|&quot;</span><span class="p">)]</span>
-            <span class="n">current_data</span> <span class="o">=</span> <span class="p">{</span><span class="n">header</span><span class="p">:</span> <span class="p">[]</span> <span class="k">for</span> <span class="n">header</span> <span class="ow">in</span> <span class="n">new_headers</span><span class="p">}</span>
-            <span class="k">continue</span>
+    <span class="n">raw</span><span class="p">,</span> <span class="n">unknown_columns</span><span class="p">,</span> <span class="n">contexts_json</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">ades_string_to_tables_fused_ipc</span><span class="p">(</span>
+        <span class="n">ades_string</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">unknown_columns</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Found unknown ADES columns that will be ignored: </span><span class="si">{</span><span class="nb">set</span><span class="p">(</span><span class="n">unknown_columns</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="p">)</span>
+    <span class="n">observations</span> <span class="o">=</span> <span class="n">observations_from_ipc</span><span class="p">(</span><span class="n">raw</span><span class="p">,</span> <span class="n">ADESObservations</span><span class="p">)</span>
 
-        <span class="c1"># Add the data line to the current data dictionary</span>
-        <span class="n">data_line</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;|&quot;</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">header</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">current_data</span><span class="o">.</span><span class="n">keys</span><span class="p">(),</span> <span class="n">data_line</span><span class="p">):</span>
-            <span class="n">current_data</span><span class="p">[</span><span class="n">header</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-
-    <span class="c1"># Add the last data dictionary to the observations table</span>
-    <span class="n">observations</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">observations</span><span class="p">,</span> <span class="n">_data_dict_to_table</span><span class="p">(</span><span class="n">current_data</span><span class="p">)])</span>
-
-    <span class="c1"># Now we parse the metadata sections</span>
-    <span class="c1"># Initialize variables</span>
-    <span class="n">obs_contexts</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">current_obs_context</span> <span class="o">=</span> <span class="p">{}</span>
-    <span class="n">current_section_key</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">current_context_code</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;#&quot;</span><span class="p">):</span>
-            <span class="n">line</span> <span class="o">=</span> <span class="n">line</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-            <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">):</span>
-                <span class="k">continue</span>
-            <span class="n">current_section_key</span><span class="p">,</span> <span class="o">*</span><span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">)]</span>
-            <span class="k">if</span> <span class="n">current_section_key</span> <span class="o">==</span> <span class="s2">&quot;observatory&quot;</span><span class="p">:</span>
-                <span class="c1"># Only build obs context if current_obs_context is not empty</span>
-                <span class="k">if</span> <span class="n">current_obs_context</span><span class="p">:</span>
-                    <span class="n">obs_contexts</span><span class="p">[</span><span class="n">current_context_code</span><span class="p">]</span> <span class="o">=</span> <span class="n">_build_obs_context</span><span class="p">(</span>
-                        <span class="n">current_obs_context</span>
-                    <span class="p">)</span>
-                <span class="n">current_obs_context</span> <span class="o">=</span> <span class="p">{}</span>
-                <span class="n">current_context_code</span> <span class="o">=</span> <span class="kc">None</span>
-
-            <span class="c1"># Some sections specify the value in the same line as the section key</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">current_obs_context</span><span class="p">[</span><span class="n">current_section_key</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-            <span class="k">continue</span>
-
-        <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;!&quot;</span><span class="p">):</span>
-            <span class="n">line</span> <span class="o">=</span> <span class="n">line</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-            <span class="n">key</span><span class="p">,</span> <span class="o">*</span><span class="n">value</span> <span class="o">=</span> <span class="p">[</span><span class="n">x</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot; &quot;</span><span class="p">)]</span>
-            <span class="n">value</span> <span class="o">=</span> <span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s2">&quot;mpcCode&quot;</span><span class="p">:</span>
-                <span class="n">current_context_code</span> <span class="o">=</span> <span class="n">value</span>
-            <span class="n">current_section</span> <span class="o">=</span> <span class="n">current_obs_context</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">current_section_key</span><span class="p">,</span> <span class="p">{})</span>
-            <span class="k">if</span> <span class="n">current_section_key</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;observers&quot;</span><span class="p">,</span> <span class="s2">&quot;measurers&quot;</span><span class="p">,</span> <span class="s2">&quot;comment&quot;</span><span class="p">]:</span>
-                <span class="n">current_key_values</span> <span class="o">=</span> <span class="n">current_section</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="p">[])</span>
-                <span class="n">current_key_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">current_section</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
-
-    <span class="k">if</span> <span class="n">current_obs_context</span><span class="p">:</span>
-        <span class="n">obs_contexts</span><span class="p">[</span><span class="n">current_context_code</span><span class="p">]</span> <span class="o">=</span> <span class="n">_build_obs_context</span><span class="p">(</span><span class="n">current_obs_context</span><span class="p">)</span>
-
+    <span class="c1"># The metadata sections are parsed in the Rust backend (bead</span>
+    <span class="c1"># personal-cmy.26); the ObsContext dataclasses are built here.</span>
+    <span class="n">pairs</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">contexts_json</span><span class="p">)</span>
+    <span class="n">obs_contexts</span> <span class="o">=</span> <span class="p">{</span><span class="n">code</span><span class="p">:</span> <span class="n">_build_obs_context</span><span class="p">(</span><span class="n">context</span><span class="p">)</span> <span class="k">for</span> <span class="n">code</span><span class="p">,</span> <span class="n">context</span> <span class="ow">in</span> <span class="n">pairs</span><span class="p">}</span>
     <span class="k">return</span> <span class="n">obs_contexts</span><span class="p">,</span> <span class="n">observations</span></div>
 
 
@@ -984,7 +791,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

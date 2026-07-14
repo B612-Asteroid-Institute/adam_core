@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -416,18 +426,16 @@
         <article role="main" id="furo-main-content">
           <h1>Source code for adam_core.dynamics.impacts</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">abstractmethod</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">KM_P_AU</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">Constants</span> <span class="k">as</span> <span class="n">c</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">Origin</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.parallel</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_backend</span><span class="p">,</span> <span class="n">resolve_max_processes</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.residuals</span><span class="w"> </span><span class="kn">import</span> <span class="n">Residuals</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.spherical</span><span class="w"> </span><span class="kn">import</span> <span class="n">SphericalCoordinates</span>
@@ -435,9 +443,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.variants</span><span class="w"> </span><span class="kn">import</span> <span class="n">VariantOrbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitType</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">ensure_input_origin_and_frame</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.iter</span><span class="w"> </span><span class="kn">import</span> <span class="n">_iterate_chunks</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -446,13 +452,6 @@
 <span class="c1"># Use the Earth&#39;s equatorial radius as used in DE4XX ephemerides</span>
 <span class="c1"># adam_core defines it in au but we need it in km</span>
 <span class="n">EARTH_RADIUS_KM</span> <span class="o">=</span> <span class="n">c</span><span class="o">.</span><span class="n">R_EARTH_EQUATORIAL</span> <span class="o">*</span> <span class="n">KM_P_AU</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_impact_chunk_worker</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">,</span> <span class="n">orbits</span><span class="p">,</span> <span class="n">propagator_class</span><span class="p">,</span> <span class="n">num_days</span><span class="p">,</span> <span class="n">conditions</span><span class="p">):</span>
-    <span class="n">prop</span> <span class="o">=</span> <span class="n">propagator_class</span><span class="p">()</span>
-    <span class="n">orbits_chunk</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">idx_chunk</span><span class="p">)</span>
-    <span class="n">variants</span><span class="p">,</span> <span class="n">impacts</span> <span class="o">=</span> <span class="n">prop</span><span class="o">.</span><span class="n">_detect_collisions</span><span class="p">(</span><span class="n">orbits_chunk</span><span class="p">,</span> <span class="n">num_days</span><span class="p">,</span> <span class="n">conditions</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">variants</span><span class="p">,</span> <span class="n">impacts</span>
 
 
 <div class="viewcode-block" id="ImpactProbabilities">
@@ -486,11 +485,16 @@
 <a class="viewcode-back" href="../../../reference/api/adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.CollisionConditions.default">[docs]</a>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">default</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">&quot;CollisionConditions&quot;</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+        <span class="n">condition_id</span><span class="p">,</span> <span class="n">object_code</span><span class="p">,</span> <span class="n">distance</span><span class="p">,</span> <span class="n">stopping</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">_rust_native</span><span class="o">.</span><span class="n">default_collision_condition_values</span><span class="p">()</span>
+        <span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">condition_id</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Default&quot;</span><span class="p">],</span>
-            <span class="n">collision_object</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;EARTH&quot;</span><span class="p">]),</span>
-            <span class="n">collision_distance</span><span class="o">=</span><span class="p">[</span><span class="n">EARTH_RADIUS_KM</span><span class="p">],</span>
-            <span class="n">stopping_condition</span><span class="o">=</span><span class="p">[</span><span class="kc">True</span><span class="p">],</span>
+            <span class="n">condition_id</span><span class="o">=</span><span class="p">[</span><span class="n">condition_id</span><span class="p">],</span>
+            <span class="n">collision_object</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="n">object_code</span><span class="p">]),</span>
+            <span class="n">collision_distance</span><span class="o">=</span><span class="p">[</span><span class="n">distance</span><span class="p">],</span>
+            <span class="n">stopping_condition</span><span class="o">=</span><span class="p">[</span><span class="n">stopping</span><span class="p">],</span>
         <span class="p">)</span></div>
 </div>
 
@@ -531,25 +535,18 @@
 
 <div class="viewcode-block" id="ImpactMixin">
 <a class="viewcode-back" href="../../../reference/api/adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.ImpactMixin">[docs]</a>
-<span class="k">class</span><span class="w"> </span><span class="nc">ImpactMixin</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    `~adam_core.propagator.Propagator` mixin with signature for detecting Earth impacts.</span>
-<span class="sd">    Subclasses should implement the _detect_collisions method.</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ImpactMixin</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Collision-detection contract for propagators.</span>
+
+<span class="sd">    Concrete (Rust-backed) propagators implement :meth:`detect_collisions` as a</span>
+<span class="sd">    single Python-&gt;Rust crossing (rayon parallelism lives in the backend).</span>
+<span class="sd">    adam_core provides only the abstract contract -- no Python/Ray composition.</span>
+<span class="sd">    Callers sample variants (via :func:`calculate_impacts`) before calling this.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-
-    <span class="nd">@abstractmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">_detect_collisions</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span> <span class="n">num_days</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">conditions</span><span class="p">:</span> <span class="n">CollisionConditions</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">OrbitType</span><span class="p">,</span> <span class="n">CollisionEvent</span><span class="p">]:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Detect collisions for the given orbits.</span>
-
-<span class="sd">        THIS FUNCTION SHOULD NOT BE OVERRIDDEN BY THE USER.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">pass</span>
 
 <div class="viewcode-block" id="ImpactMixin.detect_collisions">
 <a class="viewcode-back" href="../../../reference/api/adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.ImpactMixin.detect_collisions">[docs]</a>
+    <span class="nd">@abstractmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">detect_collisions</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">orbits</span><span class="p">:</span> <span class="n">OrbitType</span><span class="p">,</span>
@@ -593,48 +590,7 @@
 <span class="sd">            - collision_distance: Distance from the object at which collisions were detected.</span>
 <span class="sd">            - stopping_condition: Whether the propagation was stopped after a collision.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="n">conditions</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">conditions</span> <span class="o">=</span> <span class="n">CollisionConditions</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">condition_id</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Earth&quot;</span><span class="p">],</span>
-                <span class="n">collision_object</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;EARTH&quot;</span><span class="p">]),</span>
-                <span class="n">collision_distance</span><span class="o">=</span><span class="p">[</span><span class="n">EARTH_RADIUS_KM</span><span class="p">],</span>
-                <span class="n">stopping_condition</span><span class="o">=</span><span class="p">[</span><span class="kc">True</span><span class="p">],</span>
-            <span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">resolve_max_processes</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="n">impact_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">CollisionConditions</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-            <span class="n">propagated_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">OrbitType</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-
-            <span class="n">backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span>
-
-            <span class="c1"># Place orbits in shared store, dereferencing if the caller already</span>
-            <span class="c1"># passed a Ray ObjectRef so we can size chunks correctly.</span>
-            <span class="k">if</span> <span class="n">backend</span><span class="o">.</span><span class="n">is_ref</span><span class="p">(</span><span class="n">orbits</span><span class="p">):</span>
-                <span class="n">orbits_ref</span> <span class="o">=</span> <span class="n">orbits</span>
-                <span class="n">orbits</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">orbits_ref</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">orbits_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
-
-            <span class="n">idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">))</span>
-            <span class="n">args_iter</span> <span class="o">=</span> <span class="p">(</span>
-                <span class="p">(</span><span class="n">idx_chunk</span><span class="p">,</span> <span class="n">orbits_ref</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">,</span> <span class="n">num_days</span><span class="p">,</span> <span class="n">conditions</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">idx_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
-            <span class="p">)</span>
-            <span class="k">for</span> <span class="n">propagated</span><span class="p">,</span> <span class="n">impacts</span> <span class="ow">in</span> <span class="n">backend</span><span class="o">.</span><span class="n">map_unordered</span><span class="p">(</span>
-                <span class="n">_impact_chunk_worker</span><span class="p">,</span> <span class="n">args_iter</span>
-            <span class="p">):</span>
-                <span class="n">propagated_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">propagated</span><span class="p">)</span>
-                <span class="n">impact_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">impacts</span><span class="p">)</span>
-
-            <span class="n">propagated</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">propagated_list</span><span class="p">)</span>
-            <span class="n">impacts</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">impact_list</span><span class="p">)</span>
-
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">propagated</span><span class="p">,</span> <span class="n">impacts</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_detect_collisions</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">num_days</span><span class="p">,</span> <span class="n">conditions</span><span class="p">)</span>
-
-        <span class="n">propagated</span> <span class="o">=</span> <span class="n">ensure_input_origin_and_frame</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">propagated</span><span class="p">)</span>
-
-        <span class="k">return</span> <span class="n">propagated</span><span class="p">,</span> <span class="n">impacts</span></div>
+        <span class="o">...</span></div>
 </div>
 
 
@@ -680,12 +636,7 @@
         <span class="n">orbits</span><span class="p">,</span> <span class="n">method</span><span class="o">=</span><span class="s2">&quot;monte-carlo&quot;</span><span class="p">,</span> <span class="n">num_samples</span><span class="o">=</span><span class="n">num_samples</span><span class="p">,</span> <span class="n">seed</span><span class="o">=</span><span class="n">seed</span>
     <span class="p">)</span>
     <span class="k">if</span> <span class="n">conditions</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">conditions</span> <span class="o">=</span> <span class="n">CollisionConditions</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">condition_id</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Default&quot;</span><span class="p">],</span>
-            <span class="n">collision_object</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;EARTH&quot;</span><span class="p">]),</span>
-            <span class="n">collision_distance</span><span class="o">=</span><span class="p">[</span><span class="n">EARTH_RADIUS_KM</span><span class="p">],</span>
-            <span class="n">stopping_condition</span><span class="o">=</span><span class="p">[</span><span class="kc">True</span><span class="p">],</span>
-        <span class="p">)</span>
+        <span class="n">conditions</span> <span class="o">=</span> <span class="n">CollisionConditions</span><span class="o">.</span><span class="n">default</span><span class="p">()</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Detecting impacts...&quot;</span><span class="p">)</span>
     <span class="n">results</span><span class="p">,</span> <span class="n">collisions</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">detect_collisions</span><span class="p">(</span>
         <span class="n">variants</span><span class="p">,</span>
@@ -720,68 +671,61 @@
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">if</span> <span class="n">conditions</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">conditions</span> <span class="o">=</span> <span class="n">CollisionConditions</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">condition_id</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;Default&quot;</span><span class="p">],</span>
-            <span class="n">collision_object</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;EARTH&quot;</span><span class="p">]),</span>
-            <span class="n">collision_distance</span><span class="o">=</span><span class="p">[</span><span class="n">EARTH_RADIUS_KM</span><span class="p">],</span>
-            <span class="n">stopping_condition</span><span class="o">=</span><span class="p">[</span><span class="kc">True</span><span class="p">],</span>
-        <span class="p">)</span>
-
-    <span class="c1"># Loop through the unique set of orbit_ids within variants using quivr</span>
-    <span class="n">unique_orbits</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">variants</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">)</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
-
-    <span class="n">impact_probabilities_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ImpactProbabilities</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-
-    <span class="k">for</span> <span class="n">orbit_id</span> <span class="ow">in</span> <span class="n">unique_orbits</span><span class="p">:</span>
-        <span class="n">variant_masked</span> <span class="o">=</span> <span class="n">variants</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="n">orbit_id</span><span class="p">)</span>
-        <span class="n">variant_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">variant_masked</span><span class="p">)</span>
-        <span class="n">impacts_masked</span> <span class="o">=</span> <span class="n">collision_events</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="n">orbit_id</span><span class="p">)</span>
-
-        <span class="k">for</span> <span class="n">unique_condition</span> <span class="ow">in</span> <span class="n">conditions</span><span class="p">:</span>
-            <span class="n">condition_id</span> <span class="o">=</span> <span class="n">unique_condition</span><span class="o">.</span><span class="n">condition_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-            <span class="n">impacts_per_condition</span> <span class="o">=</span> <span class="n">impacts_masked</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">&quot;condition_id&quot;</span><span class="p">,</span> <span class="n">condition_id</span><span class="p">)</span>
-            <span class="n">impact_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">impacts_per_condition</span><span class="p">)</span>
-
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">impacts_per_condition</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">impact_mjds</span> <span class="o">=</span> <span class="n">impacts_per_condition</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span>
-                    <span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span>
-                <span class="p">)</span>
-                <span class="n">mean_mjd</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span>
-                    <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">impact_mjds</span><span class="p">)],</span>
-                    <span class="n">scale</span><span class="o">=</span><span class="n">impacts_per_condition</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
-                <span class="p">)</span>
-                <span class="n">stddev</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">impact_mjds</span><span class="p">)</span>
-                <span class="n">min_mjd</span> <span class="o">=</span> <span class="n">impacts_per_condition</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
-                <span class="n">max_mjd</span> <span class="o">=</span> <span class="n">impacts_per_condition</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">max</span><span class="p">()</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">mean_mjd</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">nulls</span><span class="p">(</span>
-                    <span class="mi">1</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">variant_masked</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span>
-                <span class="p">)</span>
-                <span class="n">stddev</span> <span class="o">=</span> <span class="kc">None</span>
-                <span class="n">min_mjd</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">nulls</span><span class="p">(</span>
-                    <span class="mi">1</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">variant_masked</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span>
-                <span class="p">)</span>
-                <span class="n">max_mjd</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">nulls</span><span class="p">(</span>
-                    <span class="mi">1</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">variant_masked</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span>
-                <span class="p">)</span>
-
-            <span class="n">impact_probabilities_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-                <span class="n">ImpactProbabilities</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                    <span class="n">condition_id</span><span class="o">=</span><span class="p">[</span><span class="n">condition_id</span><span class="p">],</span>
-                    <span class="n">orbit_id</span><span class="o">=</span><span class="p">[</span><span class="n">orbit_id</span><span class="p">],</span>
-                    <span class="n">impacts</span><span class="o">=</span><span class="p">[</span><span class="n">impact_count</span><span class="p">],</span>
-                    <span class="n">variants</span><span class="o">=</span><span class="p">[</span><span class="n">variant_count</span><span class="p">],</span>
-                    <span class="n">cumulative_probability</span><span class="o">=</span><span class="p">[</span><span class="n">impact_count</span> <span class="o">/</span> <span class="n">variant_count</span><span class="p">],</span>
-                    <span class="n">mean_impact_time</span><span class="o">=</span><span class="n">mean_mjd</span><span class="p">,</span>
-                    <span class="n">stddev_impact_time</span><span class="o">=</span><span class="p">[</span><span class="n">stddev</span><span class="p">],</span>
-                    <span class="n">minimum_impact_time</span><span class="o">=</span><span class="n">min_mjd</span><span class="p">,</span>
-                    <span class="n">maximum_impact_time</span><span class="o">=</span><span class="n">max_mjd</span><span class="p">,</span>
-                <span class="p">)</span>
-            <span class="p">)</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">impact_probabilities_list</span><span class="p">:</span>
+        <span class="n">conditions</span> <span class="o">=</span> <span class="n">CollisionConditions</span><span class="o">.</span><span class="n">default</span><span class="p">()</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">variants</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">ImpactProbabilities</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">impact_probabilities_list</span><span class="p">)</span></div>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+    <span class="n">collision_time</span> <span class="o">=</span> <span class="n">collision_events</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span>
+    <span class="n">scale</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">collision_time</span><span class="o">.</span><span class="n">scale</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">collision_events</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="k">else</span> <span class="n">variants</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span>
+    <span class="p">)</span>
+    <span class="n">stats</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">impact_probability_stats_numpy</span><span class="p">(</span>
+        <span class="n">variants</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+        <span class="n">collision_events</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+        <span class="n">collision_events</span><span class="o">.</span><span class="n">condition_id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+            <span class="n">collision_time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span>
+        <span class="p">),</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+            <span class="n">collision_time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span>
+        <span class="p">),</span>
+        <span class="n">scale</span><span class="p">,</span>
+        <span class="n">conditions</span><span class="o">.</span><span class="n">condition_id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+    <span class="p">)</span>
+
+    <span class="n">mean_time</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">days</span><span class="o">=</span><span class="n">stats</span><span class="p">[</span><span class="s2">&quot;mean_days&quot;</span><span class="p">],</span>
+        <span class="n">nanos</span><span class="o">=</span><span class="n">stats</span><span class="p">[</span><span class="s2">&quot;mean_nanos&quot;</span><span class="p">],</span>
+        <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span>
+        <span class="n">permit_nulls</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">minimum_time</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">days</span><span class="o">=</span><span class="n">stats</span><span class="p">[</span><span class="s2">&quot;minimum_days&quot;</span><span class="p">],</span>
+        <span class="n">nanos</span><span class="o">=</span><span class="n">stats</span><span class="p">[</span><span class="s2">&quot;minimum_nanos&quot;</span><span class="p">],</span>
+        <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span>
+        <span class="n">permit_nulls</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">maximum_time</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">days</span><span class="o">=</span><span class="n">stats</span><span class="p">[</span><span class="s2">&quot;maximum_days&quot;</span><span class="p">],</span>
+        <span class="n">nanos</span><span class="o">=</span><span class="n">stats</span><span class="p">[</span><span class="s2">&quot;maximum_nanos&quot;</span><span class="p">],</span>
+        <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">,</span>
+        <span class="n">permit_nulls</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">ImpactProbabilities</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">condition_id</span><span class="o">=</span><span class="n">stats</span><span class="p">[</span><span class="s2">&quot;condition_id&quot;</span><span class="p">],</span>
+        <span class="n">orbit_id</span><span class="o">=</span><span class="n">stats</span><span class="p">[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">],</span>
+        <span class="n">impacts</span><span class="o">=</span><span class="n">stats</span><span class="p">[</span><span class="s2">&quot;impacts&quot;</span><span class="p">],</span>
+        <span class="n">variants</span><span class="o">=</span><span class="n">stats</span><span class="p">[</span><span class="s2">&quot;variants&quot;</span><span class="p">],</span>
+        <span class="n">cumulative_probability</span><span class="o">=</span><span class="n">stats</span><span class="p">[</span><span class="s2">&quot;cumulative_probability&quot;</span><span class="p">],</span>
+        <span class="n">mean_impact_time</span><span class="o">=</span><span class="n">mean_time</span><span class="p">,</span>
+        <span class="n">stddev_impact_time</span><span class="o">=</span><span class="n">stats</span><span class="p">[</span><span class="s2">&quot;stddev_impact_time&quot;</span><span class="p">],</span>
+        <span class="n">minimum_impact_time</span><span class="o">=</span><span class="n">minimum_time</span><span class="p">,</span>
+        <span class="n">maximum_impact_time</span><span class="o">=</span><span class="n">maximum_time</span><span class="p">,</span>
+    <span class="p">)</span></div>
 
 
 
@@ -839,8 +783,16 @@
     <span class="n">residuals</span> <span class="o">=</span> <span class="n">Residuals</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span>
         <span class="n">observed_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span> <span class="n">predicted_orbit</span><span class="o">.</span><span class="n">coordinates</span>
     <span class="p">)</span>
-    <span class="n">mahalanobis_distance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">residuals</span><span class="o">.</span><span class="n">chi2</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
-    <span class="k">return</span> <span class="n">mahalanobis_distance</span></div>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+        <span class="n">_rust_native</span><span class="o">.</span><span class="n">sqrt_values_numpy</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+                <span class="n">residuals</span><span class="o">.</span><span class="n">chi2</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
+            <span class="p">)</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+    <span class="p">)</span></div>
 
 </pre></div>
         </article>
@@ -860,7 +812,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

@@ -31,5 +31,3 @@ Submodules
    :maxdepth: 4
 
    adam_core.constants
-   adam_core.parallel
-   adam_core.ray_cluster

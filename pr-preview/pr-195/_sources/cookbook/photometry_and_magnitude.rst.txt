@@ -268,6 +268,7 @@ When to Use
 Related Documentation
 ---------------------
 
+* :doc:`rotation_periods`
 * :doc:`../use_cases/observability_and_light_curves`
 * :doc:`../reference/api/adam_core.photometry`
 * :doc:`../reference/api/adam_core.propagator`

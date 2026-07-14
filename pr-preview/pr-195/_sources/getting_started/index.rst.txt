@@ -7,3 +7,4 @@ This section covers installation and environment setup.
    :maxdepth: 2
 
    installation
+   releasing

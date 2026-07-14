@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -421,12 +431,11 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">plotly.graph_objects</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">go</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">astropy.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Time</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core._rust</span><span class="w"> </span><span class="kn">import</span> <span class="n">porkchop_grid_numpy</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">transform_coordinates</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core._rust</span><span class="w"> </span><span class="kn">import</span> <span class="n">generate_porkchop_data_arrow</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span><span class="p">,</span> <span class="n">OriginCodes</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates.spherical</span><span class="w"> </span><span class="kn">import</span> <span class="n">SphericalCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates.units</span><span class="w"> </span><span class="kn">import</span> <span class="n">au_per_day_to_km_per_s</span>
@@ -434,7 +443,6 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_perturber_state</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.utils.plots.logos</span><span class="w"> </span><span class="kn">import</span> <span class="n">AsteroidInstituteLogoLight</span><span class="p">,</span> <span class="n">get_logo_base64</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -679,97 +687,55 @@
 <div class="viewcode-block" id="LambertSolutions.departure_body_orbit">
 <a class="viewcode-back" href="../../../reference/api/adam_core.missions.porkchop.html#adam_core.missions.porkchop.LambertSolutions.departure_body_orbit">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">departure_body_orbit</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Return the departure body orbit.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">departure_body_id</span><span class="p">,</span>
-            <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">time</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">departure_time</span><span class="p">,</span>
-                <span class="n">x</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">departure_body_x</span><span class="p">,</span>
-                <span class="n">y</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">departure_body_y</span><span class="p">,</span>
-                <span class="n">z</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">departure_body_z</span><span class="p">,</span>
-                <span class="n">vx</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">departure_body_vx</span><span class="p">,</span>
-                <span class="n">vy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">departure_body_vy</span><span class="p">,</span>
-                <span class="n">vz</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">departure_body_vz</span><span class="p">,</span>
-                <span class="n">origin</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
-                <span class="n">frame</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
-            <span class="p">),</span>
-        <span class="p">)</span></div>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the departure body orbit.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_orbit_accessor</span><span class="p">(</span><span class="s2">&quot;departure_body&quot;</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="LambertSolutions.arrival_body_orbit">
 <a class="viewcode-back" href="../../../reference/api/adam_core.missions.porkchop.html#adam_core.missions.porkchop.LambertSolutions.arrival_body_orbit">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">arrival_body_orbit</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Return the arrival body orbit.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">arrival_body_id</span><span class="p">,</span>
-            <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">time</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">arrival_time</span><span class="p">,</span>
-                <span class="n">x</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">arrival_body_x</span><span class="p">,</span>
-                <span class="n">y</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">arrival_body_y</span><span class="p">,</span>
-                <span class="n">z</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">arrival_body_z</span><span class="p">,</span>
-                <span class="n">vx</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">arrival_body_vx</span><span class="p">,</span>
-                <span class="n">vy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">arrival_body_vy</span><span class="p">,</span>
-                <span class="n">vz</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">arrival_body_vz</span><span class="p">,</span>
-                <span class="n">origin</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
-                <span class="n">frame</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
-            <span class="p">),</span>
-        <span class="p">)</span></div>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the arrival body orbit.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_orbit_accessor</span><span class="p">(</span><span class="s2">&quot;arrival_body&quot;</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="LambertSolutions.solution_departure_orbit">
 <a class="viewcode-back" href="../../../reference/api/adam_core.missions.porkchop.html#adam_core.missions.porkchop.LambertSolutions.solution_departure_orbit">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">solution_departure_orbit</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Return the solution departure orbit.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">solution_departure_orbit_id</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="sa">f</span><span class="s2">&quot;solution_departure_orbit_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span>
-            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">solution_departure_vx</span><span class="p">))</span>
-        <span class="p">]</span>
-        <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="n">solution_departure_orbit_id</span><span class="p">,</span>
-            <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">time</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">departure_time</span><span class="p">,</span>
-                <span class="n">x</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">departure_body_x</span><span class="p">,</span>
-                <span class="n">y</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">departure_body_y</span><span class="p">,</span>
-                <span class="n">z</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">departure_body_z</span><span class="p">,</span>
-                <span class="n">vx</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">solution_departure_vx</span><span class="p">,</span>
-                <span class="n">vy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">solution_departure_vy</span><span class="p">,</span>
-                <span class="n">vz</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">solution_departure_vz</span><span class="p">,</span>
-                <span class="n">origin</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
-                <span class="n">frame</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
-            <span class="p">),</span>
-        <span class="p">)</span></div>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the solution departure orbit.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_orbit_accessor</span><span class="p">(</span><span class="s2">&quot;solution_departure&quot;</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="LambertSolutions.solution_arrival_orbit">
 <a class="viewcode-back" href="../../../reference/api/adam_core.missions.porkchop.html#adam_core.missions.porkchop.LambertSolutions.solution_arrival_orbit">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">solution_arrival_orbit</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Return the solution arrival orbit.</span>
-<span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">solution_arrival_orbit_id</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="sa">f</span><span class="s2">&quot;solution_arrival_orbit_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">solution_arrival_vx</span><span class="p">))</span>
-        <span class="p">]</span>
-        <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="n">solution_arrival_orbit_id</span><span class="p">,</span>
-            <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">time</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">arrival_time</span><span class="p">,</span>
-                <span class="n">x</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">arrival_body_x</span><span class="p">,</span>
-                <span class="n">y</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">arrival_body_y</span><span class="p">,</span>
-                <span class="n">z</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">arrival_body_z</span><span class="p">,</span>
-                <span class="n">vx</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">solution_arrival_vx</span><span class="p">,</span>
-                <span class="n">vy</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">solution_arrival_vy</span><span class="p">,</span>
-                <span class="n">vz</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">solution_arrival_vz</span><span class="p">,</span>
-                <span class="n">origin</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
-                <span class="n">frame</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
-            <span class="p">),</span>
-        <span class="p">)</span></div>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Return the solution arrival orbit.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_orbit_accessor</span><span class="p">(</span><span class="s2">&quot;solution_arrival&quot;</span><span class="p">)</span></div>
 
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_record_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">RecordBatch</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Prepare the canonical Arrow input; conversion stays outside timing.&quot;&quot;&quot;</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">metadata</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="n">metadata</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+            <span class="p">{</span>
+                <span class="sa">b</span><span class="s2">&quot;adam_core_frame&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">frame</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span>
+                <span class="sa">b</span><span class="s2">&quot;adam_core_departure_time_scale&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">departure_time</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span>
+                <span class="sa">b</span><span class="s2">&quot;adam_core_arrival_time_scale&quot;</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">arrival_time</span><span class="o">.</span><span class="n">scale</span><span class="o">.</span><span class="n">encode</span><span class="p">(),</span>
+            <span class="p">}</span>
+        <span class="p">)</span>
+        <span class="n">table</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">combine_chunks</span><span class="p">()</span><span class="o">.</span><span class="n">replace_schema_metadata</span><span class="p">(</span><span class="n">metadata</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">RecordBatch</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">column</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span> <span class="k">for</span> <span class="n">column</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">columns</span><span class="p">],</span> <span class="n">schema</span><span class="o">=</span><span class="n">table</span><span class="o">.</span><span class="n">schema</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_orbit_accessor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">accessor</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;One Arrow crossing for the four orbit-producing accessors.&quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
+
+        <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span>
+            <span class="n">Orbits</span><span class="p">,</span>
+            <span class="n">_rust_native</span><span class="o">.</span><span class="n">lambert_solution_orbit_arrow</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_record_batch</span><span class="p">(),</span> <span class="n">accessor</span><span class="p">),</span>
+        <span class="p">)</span>
 
 <div class="viewcode-block" id="LambertSolutions.c3_departure">
 <a class="viewcode-back" href="../../../reference/api/adam_core.missions.porkchop.html#adam_core.missions.porkchop.LambertSolutions.c3_departure">[docs]</a>
@@ -825,22 +791,36 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Return the v infinity in au/d.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
-                    <span class="p">[</span>
-                        <span class="s2">&quot;solution_departure_vx&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;solution_departure_vy&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;solution_departure_vz&quot;</span><span class="p">,</span>
-                    <span class="p">]</span>
-                <span class="p">)</span>
-            <span class="p">)</span>
-            <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
-                    <span class="p">[</span><span class="s2">&quot;departure_body_vx&quot;</span><span class="p">,</span> <span class="s2">&quot;departure_body_vy&quot;</span><span class="p">,</span> <span class="s2">&quot;departure_body_vz&quot;</span><span class="p">]</span>
-                <span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+            <span class="n">_rust_native</span><span class="o">.</span><span class="n">vinf_numpy</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+                    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
+                            <span class="p">[</span>
+                                <span class="s2">&quot;solution_departure_vx&quot;</span><span class="p">,</span>
+                                <span class="s2">&quot;solution_departure_vy&quot;</span><span class="p">,</span>
+                                <span class="s2">&quot;solution_departure_vz&quot;</span><span class="p">,</span>
+                            <span class="p">]</span>
+                        <span class="p">)</span>
+                    <span class="p">),</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+                    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
+                            <span class="p">[</span>
+                                <span class="s2">&quot;departure_body_vx&quot;</span><span class="p">,</span>
+                                <span class="s2">&quot;departure_body_vy&quot;</span><span class="p">,</span>
+                                <span class="s2">&quot;departure_body_vz&quot;</span><span class="p">,</span>
+                            <span class="p">]</span>
+                        <span class="p">)</span>
+                    <span class="p">),</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+                <span class="p">),</span>
             <span class="p">),</span>
-            <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 
@@ -850,22 +830,32 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Return the v infinity in au/d.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
-                    <span class="p">[</span>
-                        <span class="s2">&quot;solution_arrival_vx&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;solution_arrival_vy&quot;</span><span class="p">,</span>
-                        <span class="s2">&quot;solution_arrival_vz&quot;</span><span class="p">,</span>
-                    <span class="p">]</span>
-                <span class="p">)</span>
-            <span class="p">)</span>
-            <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
-                    <span class="p">[</span><span class="s2">&quot;arrival_body_vx&quot;</span><span class="p">,</span> <span class="s2">&quot;arrival_body_vy&quot;</span><span class="p">,</span> <span class="s2">&quot;arrival_body_vz&quot;</span><span class="p">]</span>
-                <span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+            <span class="n">_rust_native</span><span class="o">.</span><span class="n">vinf_numpy</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+                    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
+                            <span class="p">[</span>
+                                <span class="s2">&quot;solution_arrival_vx&quot;</span><span class="p">,</span>
+                                <span class="s2">&quot;solution_arrival_vy&quot;</span><span class="p">,</span>
+                                <span class="s2">&quot;solution_arrival_vz&quot;</span><span class="p">,</span>
+                            <span class="p">]</span>
+                        <span class="p">)</span>
+                    <span class="p">),</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+                    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">select</span><span class="p">(</span>
+                            <span class="p">[</span><span class="s2">&quot;arrival_body_vx&quot;</span><span class="p">,</span> <span class="s2">&quot;arrival_body_vy&quot;</span><span class="p">,</span> <span class="s2">&quot;arrival_body_vz&quot;</span><span class="p">]</span>
+                        <span class="p">)</span>
+                    <span class="p">),</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+                <span class="p">),</span>
             <span class="p">),</span>
-            <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
         <span class="p">)</span></div>
 
 
@@ -875,9 +865,32 @@
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Return the time of flight in days.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">arrival_time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span>
-            <span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span>
-        <span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">departure_time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span></div>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+        <span class="c1"># One Rust crossing computes arrival.mjd() - departure.mjd().</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+            <span class="n">_rust_native</span><span class="o">.</span><span class="n">timestamp_mjd_difference_numpy</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">arrival_time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">arrival_time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">arrival_time</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">departure_time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">departure_time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                    <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">,</span>
+                <span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">departure_time</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+        <span class="p">)</span></div>
 </div>
 
 
@@ -921,37 +934,30 @@
     <span class="p">),</span> <span class="s2">&quot;All arrays must have the same length&quot;</span>
     <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">vx</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;At least one departure vector is required&quot;</span>
 
-    <span class="c1"># Create unit direction vectors from the velocity vectors</span>
-    <span class="c1"># Normalize the velocity vectors to get direction only</span>
-    <span class="n">velocity_magnitude</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">vx</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">vy</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">vz</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
-    <span class="n">direction_x</span> <span class="o">=</span> <span class="n">vx</span> <span class="o">/</span> <span class="n">velocity_magnitude</span>
-    <span class="n">direction_y</span> <span class="o">=</span> <span class="n">vy</span> <span class="o">/</span> <span class="n">velocity_magnitude</span>
-    <span class="n">direction_z</span> <span class="o">=</span> <span class="n">vz</span> <span class="o">/</span> <span class="n">velocity_magnitude</span>
+    <span class="c1"># Preserve NumPy&#39;s legacy divide-by-zero warning for undefined zero</span>
+    <span class="c1"># directions; normalization itself remains one Rust crossing.</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">((</span><span class="n">vx</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">vy</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">vz</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">)):</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 
-    <span class="c1"># Create CartesianCoordinates with the direction as position (on unit sphere)</span>
-    <span class="c1"># and zero velocity since we only care about the direction</span>
-    <span class="n">direction_coords</span> <span class="o">=</span> <span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">time</span><span class="o">=</span><span class="n">times</span><span class="p">,</span>
-        <span class="n">x</span><span class="o">=</span><span class="n">direction_x</span><span class="p">,</span>  <span class="c1"># Unit vector pointing in velocity direction</span>
-        <span class="n">y</span><span class="o">=</span><span class="n">direction_y</span><span class="p">,</span>
-        <span class="n">z</span><span class="o">=</span><span class="n">direction_z</span><span class="p">,</span>
-        <span class="n">vx</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">vx</span><span class="p">),</span>  <span class="c1"># No velocity needed for direction</span>
-        <span class="n">vy</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">vy</span><span class="p">),</span>
-        <span class="n">vz</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">vz</span><span class="p">),</span>
-        <span class="c1"># From our departing origin.</span>
-        <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_OriginCodes</span><span class="p">(</span><span class="n">departure_origin</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">vx</span><span class="p">)),</span>
-        <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span>
-    <span class="p">)</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">&quot;invalid value encountered in divide&quot;</span><span class="p">,</span> <span class="ne">RuntimeWarning</span><span class="p">,</span> <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span>
+        <span class="p">)</span>
 
-    <span class="c1"># Transform direction to equatorial frame for proper RA/Dec coordinates</span>
-    <span class="c1"># These are inertial celestial coordinates, suitable for any departure origin</span>
-    <span class="n">spherical</span> <span class="o">=</span> <span class="n">transform_coordinates</span><span class="p">(</span>
-        <span class="n">direction_coords</span><span class="p">,</span>
-        <span class="n">SphericalCoordinates</span><span class="p">,</span>
-        <span class="n">frame_out</span><span class="o">=</span><span class="s2">&quot;equatorial&quot;</span><span class="p">,</span>
-        <span class="n">origin_out</span><span class="o">=</span><span class="n">departure_origin</span><span class="p">,</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">ensure_spice_backend</span><span class="p">,</span> <span class="n">table_from_record_batch</span>
+
+    <span class="n">ensure_spice_backend</span><span class="p">()</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">departure_spherical_coordinates_arrow</span><span class="p">(</span>
+        <span class="n">departure_origin</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">times</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">times</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+        <span class="n">times</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+        <span class="n">frame</span><span class="p">,</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">vx</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">vy</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">vz</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
     <span class="p">)</span>
-    <span class="k">return</span> <span class="n">spherical</span></div>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">SphericalCoordinates</span><span class="p">,</span> <span class="n">result</span><span class="p">)</span></div>
 
 
 
@@ -991,40 +997,52 @@
 <span class="sd">    Orbits</span>
 <span class="sd">        The propagated orbits over the specified time range.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="c1"># if body is an Orbit, ensure its origin is the propagation_origin</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">ensure_spice_backend</span><span class="p">,</span> <span class="n">table_from_record_batch</span>
+
+    <span class="n">ensure_spice_backend</span><span class="p">()</span>
     <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">body</span><span class="p">,</span> <span class="n">Orbits</span><span class="p">):</span>
+        <span class="c1"># Orbit normalization and target-grid construction are one Rust</span>
+        <span class="c1"># crossing. Actual propagation remains the explicit provider boundary.</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates.transform</span><span class="w"> </span><span class="kn">import</span> <span class="n">_coordinate_record_batch</span>
+
+        <span class="n">coordinate_batch</span><span class="p">,</span> <span class="n">days</span><span class="p">,</span> <span class="n">nanos</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">prepare_orbit_propagation_arrow</span><span class="p">(</span>
+            <span class="n">_coordinate_record_batch</span><span class="p">(</span><span class="n">body</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span> <span class="s2">&quot;cartesian&quot;</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">start_time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">start_time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+            <span class="n">start_time</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">end_time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">end_time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+            <span class="n">end_time</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+            <span class="n">step_size</span><span class="p">,</span>
+            <span class="n">propagation_origin</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
+        <span class="p">)</span>
         <span class="n">body</span> <span class="o">=</span> <span class="n">body</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
             <span class="s2">&quot;coordinates&quot;</span><span class="p">,</span>
-            <span class="n">transform_coordinates</span><span class="p">(</span>
-                <span class="n">body</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-                <span class="n">representation_out</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="p">,</span>
-                <span class="n">frame_out</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-                <span class="n">origin_out</span><span class="o">=</span><span class="n">propagation_origin</span><span class="p">,</span>
-            <span class="p">),</span>
+            <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">coordinate_batch</span><span class="p">),</span>
         <span class="p">)</span>
-
-    <span class="n">times</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span>
-        <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span>
-            <span class="n">start_time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">mjd</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">(),</span>
-            <span class="n">end_time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">mjd</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">(),</span>
-            <span class="n">step_size</span><span class="p">,</span>
-        <span class="p">),</span>
-        <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="c1"># get orbits for the body at specified times</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">body</span><span class="p">,</span> <span class="n">Orbits</span><span class="p">):</span>
+        <span class="n">times</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="n">days</span><span class="p">,</span> <span class="n">nanos</span><span class="o">=</span><span class="n">nanos</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
         <span class="n">propagator</span> <span class="o">=</span> <span class="n">propagator_class</span><span class="p">()</span>
         <span class="n">orbits</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">propagate_orbits</span><span class="p">(</span><span class="n">body</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">max_processes</span><span class="o">=</span><span class="n">max_processes</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="c1"># For major bodies, create an Orbits object with the body&#39;s origin code as the orbit_id</span>
-        <span class="n">coordinates</span> <span class="o">=</span> <span class="n">get_perturber_state</span><span class="p">(</span>
-            <span class="n">body</span><span class="p">,</span> <span class="n">times</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span> <span class="n">origin</span><span class="o">=</span><span class="n">propagation_origin</span>
+        <span class="c1"># Major-body preparation is one Rust crossing: input-scale conversion,</span>
+        <span class="c1"># arange-compatible TDB grid construction, cached SPICE state lookup,</span>
+        <span class="c1"># unit conversion, and coordinate batch assembly.</span>
+        <span class="n">coordinate_batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">prepare_major_body_orbits_arrow</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">start_time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">start_time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+            <span class="n">start_time</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">end_time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">end_time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">),</span>
+            <span class="n">end_time</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+            <span class="n">step_size</span><span class="p">,</span>
+            <span class="n">body</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+            <span class="n">propagation_origin</span><span class="o">.</span><span class="n">value</span><span class="p">,</span>
+            <span class="n">propagation_origin</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="c1"># Create orbit IDs based on the body name and time index</span>
-        <span class="n">orbit_ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">body</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">coordinates</span><span class="p">))</span>
+        <span class="n">coordinates</span> <span class="o">=</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">coordinate_batch</span><span class="p">)</span>
         <span class="n">orbits</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbit_ids</span><span class="p">,</span>
+            <span class="n">orbit_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">body</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">coordinates</span><span class="p">)),</span>
             <span class="n">coordinates</span><span class="o">=</span><span class="n">coordinates</span><span class="p">,</span>
         <span class="p">)</span>
 
@@ -1047,94 +1065,54 @@
 <span class="sd">    Generate data for a porkchop plot by solving Lambert&#39;s problem for a grid of</span>
 <span class="sd">    departure and arrival times.</span>
 
-<span class="sd">    Implementation: a single Rust call covers meshgrid + time-order filter +</span>
-<span class="sd">    batched Lambert with rayon-internal parallelism. No Ray dispatch.</span>
+<span class="sd">    Implementation: one Arrow crossing. Rust decodes both Orbits</span>
+<span class="sd">    RecordBatches, sorts each side chronologically, validates the shared</span>
+<span class="sd">    frame/origin contract, runs meshgrid + time-order filter + rayon-batched</span>
+<span class="sd">    Lambert, and returns the finished LambertSolutions RecordBatch.</span>
 
 <span class="sd">    `max_processes` is accepted for API compatibility; the Rust kernel</span>
 <span class="sd">    auto-detects available cores via rayon&#39;s default thread pool.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">del</span> <span class="n">max_processes</span>  <span class="c1"># API compat — rayon auto-detects</span>
 
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbits_to_record_batch</span>
+
     <span class="k">assert</span> <span class="p">(</span>
         <span class="n">departure_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">frame</span> <span class="o">==</span> <span class="n">arrival_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">frame</span>
     <span class="p">),</span> <span class="s2">&quot;Departure and arrival frames must be the same&quot;</span>
     <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">departure_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">unique</span><span class="p">())</span> <span class="o">==</span> <span class="mi">1</span>
     <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">arrival_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">unique</span><span class="p">())</span> <span class="o">==</span> <span class="mi">1</span>
-
     <span class="k">assert</span> <span class="p">(</span>
         <span class="n">departure_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
         <span class="o">==</span> <span class="n">arrival_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
     <span class="p">),</span> <span class="s2">&quot;Departure and arrival origins must be the same&quot;</span>
 
-    <span class="n">departure_orbits</span> <span class="o">=</span> <span class="n">_sort_orbits_by_time_if_needed</span><span class="p">(</span><span class="n">departure_orbits</span><span class="p">)</span>
-    <span class="n">arrival_orbits</span> <span class="o">=</span> <span class="n">_sort_orbits_by_time_if_needed</span><span class="p">(</span><span class="n">arrival_orbits</span><span class="p">)</span>
-
-    <span class="n">n_dep</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">departure_orbits</span><span class="p">)</span>
-    <span class="n">n_arr</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">arrival_orbits</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">n_dep</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">n_arr</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">departure_orbits</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">arrival_orbits</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">LambertSolutions</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
 
-    <span class="n">dep_times_mjd</span> <span class="o">=</span> <span class="n">departure_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span>
-        <span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span>
-    <span class="p">)</span>
-    <span class="n">arr_times_mjd</span> <span class="o">=</span> <span class="n">arrival_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">dep_states</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
-        <span class="n">departure_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
-    <span class="p">)</span>
-    <span class="n">arr_states</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
-        <span class="n">arrival_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
-    <span class="p">)</span>
-
-    <span class="n">mu_arr</span> <span class="o">=</span> <span class="n">Origin</span><span class="o">.</span><span class="n">from_OriginCodes</span><span class="p">(</span><span class="n">propagation_origin</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">mu</span><span class="p">()</span>
-    <span class="n">mu</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">mu_arr</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
-
-    <span class="n">rust_out</span> <span class="o">=</span> <span class="n">porkchop_grid_numpy</span><span class="p">(</span>
-        <span class="n">dep_states</span><span class="p">,</span>
-        <span class="n">dep_times_mjd</span><span class="p">,</span>
-        <span class="n">arr_states</span><span class="p">,</span>
-        <span class="n">arr_times_mjd</span><span class="p">,</span>
-        <span class="n">mu</span><span class="p">,</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">generate_porkchop_data_arrow</span><span class="p">(</span>
+        <span class="n">orbits_to_record_batch</span><span class="p">(</span><span class="n">departure_orbits</span><span class="p">),</span>
+        <span class="n">orbits_to_record_batch</span><span class="p">(</span><span class="n">arrival_orbits</span><span class="p">),</span>
+        <span class="n">propagation_origin</span><span class="o">.</span><span class="n">name</span><span class="p">,</span>
         <span class="n">prograde</span><span class="p">,</span>
         <span class="n">max_iter</span><span class="p">,</span>
         <span class="n">tol</span><span class="p">,</span>
-        <span class="n">tol</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="n">dep_idx</span><span class="p">,</span> <span class="n">arr_idx</span><span class="p">,</span> <span class="n">v1</span><span class="p">,</span> <span class="n">v2</span> <span class="o">=</span> <span class="n">rust_out</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">dep_idx</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">result</span><span class="o">.</span><span class="n">num_rows</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">LambertSolutions</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-
-    <span class="n">dep_idx_i64</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">dep_idx</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-    <span class="n">arr_idx_i64</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">arr_idx</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-    <span class="n">departure_coordinates</span> <span class="o">=</span> <span class="n">departure_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">dep_idx_i64</span><span class="p">)</span>
-    <span class="n">arrival_coordinates</span> <span class="o">=</span> <span class="n">arrival_orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">arr_idx_i64</span><span class="p">)</span>
-    <span class="n">origins</span> <span class="o">=</span> <span class="n">Origin</span><span class="o">.</span><span class="n">from_OriginCodes</span><span class="p">(</span><span class="n">propagation_origin</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">dep_idx</span><span class="p">))</span>
-
-    <span class="k">return</span> <span class="n">LambertSolutions</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">departure_body_id</span><span class="o">=</span><span class="n">departure_orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">dep_idx_i64</span><span class="p">),</span>
-        <span class="n">departure_time</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
-        <span class="n">departure_body_x</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">x</span><span class="p">,</span>
-        <span class="n">departure_body_y</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">y</span><span class="p">,</span>
-        <span class="n">departure_body_z</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">z</span><span class="p">,</span>
-        <span class="n">departure_body_vx</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">vx</span><span class="p">,</span>
-        <span class="n">departure_body_vy</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">vy</span><span class="p">,</span>
-        <span class="n">departure_body_vz</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">vz</span><span class="p">,</span>
-        <span class="n">arrival_body_id</span><span class="o">=</span><span class="n">arrival_orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">arr_idx_i64</span><span class="p">),</span>
-        <span class="n">arrival_time</span><span class="o">=</span><span class="n">arrival_coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
-        <span class="n">arrival_body_x</span><span class="o">=</span><span class="n">arrival_coordinates</span><span class="o">.</span><span class="n">x</span><span class="p">,</span>
-        <span class="n">arrival_body_y</span><span class="o">=</span><span class="n">arrival_coordinates</span><span class="o">.</span><span class="n">y</span><span class="p">,</span>
-        <span class="n">arrival_body_z</span><span class="o">=</span><span class="n">arrival_coordinates</span><span class="o">.</span><span class="n">z</span><span class="p">,</span>
-        <span class="n">arrival_body_vx</span><span class="o">=</span><span class="n">arrival_coordinates</span><span class="o">.</span><span class="n">vx</span><span class="p">,</span>
-        <span class="n">arrival_body_vy</span><span class="o">=</span><span class="n">arrival_coordinates</span><span class="o">.</span><span class="n">vy</span><span class="p">,</span>
-        <span class="n">arrival_body_vz</span><span class="o">=</span><span class="n">arrival_coordinates</span><span class="o">.</span><span class="n">vz</span><span class="p">,</span>
-        <span class="n">solution_departure_vx</span><span class="o">=</span><span class="n">v1</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-        <span class="n">solution_departure_vy</span><span class="o">=</span><span class="n">v1</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-        <span class="n">solution_departure_vz</span><span class="o">=</span><span class="n">v1</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-        <span class="n">solution_arrival_vx</span><span class="o">=</span><span class="n">v2</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-        <span class="n">solution_arrival_vy</span><span class="o">=</span><span class="n">v2</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-        <span class="n">solution_arrival_vz</span><span class="o">=</span><span class="n">v2</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-        <span class="n">frame</span><span class="o">=</span><span class="n">departure_coordinates</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
-        <span class="n">origin</span><span class="o">=</span><span class="n">origins</span><span class="p">,</span>
-    <span class="p">)</span></div>
+    <span class="n">metadata</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">metadata</span> <span class="ow">or</span> <span class="p">{})</span>
+    <span class="n">table</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">Table</span><span class="o">.</span><span class="n">from_batches</span><span class="p">([</span><span class="n">result</span><span class="p">])</span><span class="o">.</span><span class="n">replace_schema_metadata</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="sa">b</span><span class="s2">&quot;frame&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="sa">b</span><span class="s2">&quot;adam_core_frame&quot;</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;unspecified&quot;</span><span class="p">),</span>
+            <span class="sa">b</span><span class="s2">&quot;departure_time.scale&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="sa">b</span><span class="s2">&quot;adam_core_departure_time_scale&quot;</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;tdb&quot;</span>
+            <span class="p">),</span>
+            <span class="sa">b</span><span class="s2">&quot;arrival_time.scale&quot;</span><span class="p">:</span> <span class="n">metadata</span><span class="o">.</span><span class="n">get</span><span class="p">(</span>
+                <span class="sa">b</span><span class="s2">&quot;adam_core_arrival_time_scale&quot;</span><span class="p">,</span> <span class="sa">b</span><span class="s2">&quot;tdb&quot;</span>
+            <span class="p">),</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">LambertSolutions</span><span class="o">.</span><span class="n">from_pyarrow</span><span class="p">(</span><span class="n">table</span><span class="p">)</span></div>
 
 
 
@@ -1207,6 +1185,17 @@
 <span class="sd">    fig : plotly.graph_objects.Figure</span>
 <span class="sd">        The Plotly figure object.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Plotting libraries and Astropy date formatting are explicit provider</span>
+    <span class="c1"># boundaries rather than normal computation/runtime dependencies.</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">plotly.graph_objects</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">go</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">astropy.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Time</span>
+    <span class="k">except</span> <span class="ne">ModuleNotFoundError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ImportError</span><span class="p">(</span>
+            <span class="s2">&quot;Plotly and Astropy are required for porkchop plotting; &quot;</span>
+            <span class="s2">&quot;install adam-core[plots]&quot;</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+
     <span class="c1"># --- Extract basic raw data ---</span>
     <span class="n">c3_departure_au_d2</span> <span class="o">=</span> <span class="n">porkchop_data</span><span class="o">.</span><span class="n">c3_departure</span><span class="p">()</span>  <span class="c1"># C3 departure in (AU/day)^2</span>
     <span class="n">vinf_arrival_au_day</span> <span class="o">=</span> <span class="n">porkchop_data</span><span class="o">.</span><span class="n">vinf_arrival</span><span class="p">()</span>  <span class="c1"># V∞ arrival in AU/day</span>
@@ -1721,7 +1710,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

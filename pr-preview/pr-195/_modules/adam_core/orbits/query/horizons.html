@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -418,194 +428,21 @@
 <span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">astroquery.jplhorizons</span><span class="w"> </span><span class="kn">import</span> <span class="n">Horizons</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">...coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">...coordinates.cometary</span><span class="w"> </span><span class="kn">import</span> <span class="n">CometaryCoordinates</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">...coordinates.keplerian</span><span class="w"> </span><span class="kn">import</span> <span class="n">KeplerianCoordinates</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">...coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">...coordinates.spherical</span><span class="w"> </span><span class="kn">import</span> <span class="n">SphericalCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">...observers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observers</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">...time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">...utils.iter</span><span class="w"> </span><span class="kn">import</span> <span class="n">_iterate_chunks</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">...utils.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">_raise_compatible_http_error</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..ephemeris</span><span class="w"> </span><span class="kn">import</span> <span class="n">Ephemeris</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_get_horizons_vectors</span><span class="p">(</span>
-    <span class="n">object_ids</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">],</span>
-    <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">,</span>
-    <span class="n">location</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;@sun&quot;</span><span class="p">,</span>
-    <span class="n">id_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smallbody&quot;</span><span class="p">,</span>
-    <span class="n">aberrations</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;geometric&quot;</span><span class="p">,</span>
-    <span class="n">refplane</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Query JPL Horizons (through astroquery) for an object&#39;s</span>
-<span class="sd">    state vectors at the given times.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    object_ids : Union[List, `~numpy.ndarray`] (N)</span>
-<span class="sd">        Object IDs / designations recognizable by HORIZONS.</span>
-<span class="sd">    times : Timestamp (M)</span>
-<span class="sd">        Time at which to gather state vectors.</span>
-<span class="sd">    location : str, optional</span>
-<span class="sd">        Location of the origin typically a NAIF code.</span>
-<span class="sd">        (&#39;0&#39; or &#39;@ssb&#39; for solar system barycenter, &#39;10&#39; or &#39;@sun&#39; for heliocenter)</span>
-<span class="sd">        [Default = &#39;@sun&#39;]</span>
-<span class="sd">    id_type : {&#39;majorbody&#39;, &#39;smallbody&#39;, &#39;designation&#39;,</span>
-<span class="sd">               &#39;name&#39;, &#39;asteroid_name&#39;, &#39;comet_name&#39;, &#39;id&#39;}</span>
-<span class="sd">        ID type, Horizons will find closest match under any given type.</span>
-<span class="sd">    aberrations : {&#39;geometric&#39;, &#39;astrometric&#39;, &#39;apparent&#39;}</span>
-<span class="sd">        Adjust state for one of three different aberrations.</span>
-<span class="sd">    refplane : {&#39;ecliptic&#39;, &#39;earth&#39;}</span>
-<span class="sd">        Reference plane for state vectors.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    vectors : `~pandas.DataFrame`</span>
-<span class="sd">        Dataframe containing the full cartesian state, r, r_rate, delta, delta_rate and light time</span>
-<span class="sd">        of the object at each time.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">dfs</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">obj_id</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">object_ids</span><span class="p">):</span>
-        <span class="n">obj</span> <span class="o">=</span> <span class="n">Horizons</span><span class="p">(</span>
-            <span class="nb">id</span><span class="o">=</span><span class="n">obj_id</span><span class="p">,</span>
-            <span class="n">epochs</span><span class="o">=</span><span class="n">times</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">jd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-            <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
-            <span class="n">id_type</span><span class="o">=</span><span class="n">id_type</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">vectors</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">vectors</span><span class="p">(</span>
-            <span class="n">refplane</span><span class="o">=</span><span class="n">refplane</span><span class="p">,</span> <span class="n">aberrations</span><span class="o">=</span><span class="n">aberrations</span><span class="p">,</span> <span class="n">cache</span><span class="o">=</span><span class="kc">False</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
-        <span class="n">vectors</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s2">05d</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="n">dfs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">vectors</span><span class="p">)</span>
-
-    <span class="n">vectors</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">dfs</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">vectors</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span>
-        <span class="n">by</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="s2">&quot;datetime_jd&quot;</span><span class="p">],</span>
-        <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_time_batch</span><span class="p">(</span><span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">RecordBatch</span><span class="p">:</span>
+    <span class="n">table</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">combine_chunks</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">RecordBatch</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;days&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span> <span class="n">table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;nanos&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="mi">0</span><span class="p">)],</span>
+        <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;days&quot;</span><span class="p">,</span> <span class="s2">&quot;nanos&quot;</span><span class="p">],</span>
     <span class="p">)</span>
-    <span class="k">return</span> <span class="n">vectors</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_get_horizons_elements</span><span class="p">(</span>
-    <span class="n">object_ids</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">],</span>
-    <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">,</span>
-    <span class="n">location</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;@sun&quot;</span><span class="p">,</span>
-    <span class="n">id_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smallbody&quot;</span><span class="p">,</span>
-    <span class="n">refplane</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Query JPL Horizons (through astroquery) for an object&#39;s</span>
-<span class="sd">    elements at the given times.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    object_ids : Union[List, `~numpy.ndarray`] (N)</span>
-<span class="sd">        Object IDs / designations recognizable by HORIZONS.</span>
-<span class="sd">    times : Timestamp</span>
-<span class="sd">        Time at which to gather state vectors.</span>
-<span class="sd">    location : str, optional</span>
-<span class="sd">        Location of the origin typically a NAIF code.</span>
-<span class="sd">        (&#39;0&#39; or &#39;@ssb&#39; for solar system barycenter, &#39;10&#39; or &#39;@sun&#39; for heliocenter)</span>
-<span class="sd">        [Default = &#39;@sun&#39;]</span>
-<span class="sd">    id_type : {&#39;majorbody&#39;, &#39;smallbody&#39;, &#39;designation&#39;,</span>
-<span class="sd">               &#39;name&#39;, &#39;asteroid_name&#39;, &#39;comet_name&#39;, &#39;id&#39;}</span>
-<span class="sd">        ID type, Horizons will find closest match under any given type.</span>
-<span class="sd">    refplane : {&#39;ecliptic&#39;, &#39;earth&#39;}</span>
-<span class="sd">        Reference plane for orbital elements.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    elements : `~pandas.DataFrame`</span>
-<span class="sd">        Dataframe containing the full cartesian state, r, r_rate, delta, delta_rate and light time</span>
-<span class="sd">        of the object at each time.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">dfs</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">obj_id</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">object_ids</span><span class="p">):</span>
-        <span class="n">obj</span> <span class="o">=</span> <span class="n">Horizons</span><span class="p">(</span>
-            <span class="nb">id</span><span class="o">=</span><span class="n">obj_id</span><span class="p">,</span>
-            <span class="n">epochs</span><span class="o">=</span><span class="n">times</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
-            <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
-            <span class="n">id_type</span><span class="o">=</span><span class="n">id_type</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">elements</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">elements</span><span class="p">(</span>
-            <span class="n">refsystem</span><span class="o">=</span><span class="s2">&quot;J2000&quot;</span><span class="p">,</span> <span class="n">refplane</span><span class="o">=</span><span class="n">refplane</span><span class="p">,</span> <span class="n">tp_type</span><span class="o">=</span><span class="s2">&quot;absolute&quot;</span><span class="p">,</span> <span class="n">cache</span><span class="o">=</span><span class="kc">False</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
-        <span class="n">elements</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s2">05d</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="n">dfs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">elements</span><span class="p">)</span>
-
-    <span class="n">elements</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">dfs</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">elements</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span>
-        <span class="n">by</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="s2">&quot;datetime_jd&quot;</span><span class="p">],</span>
-        <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">elements</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_get_horizons_ephemeris</span><span class="p">(</span>
-    <span class="n">object_ids</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">],</span>
-    <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">,</span>
-    <span class="n">location</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">id_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;smallbody&quot;</span><span class="p">,</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Query JPL Horizons (through astroquery) for an object&#39;s</span>
-<span class="sd">    predicted ephemeris as seen from a given location at the given times.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    object_ids : Union[List, `~numpy.ndarray`] (N)</span>
-<span class="sd">        Object IDs / designations recognizable by HORIZONS.</span>
-<span class="sd">    times : Timestamp</span>
-<span class="sd">        Time at which to gather state vectors.</span>
-<span class="sd">    location : str, optional</span>
-<span class="sd">        Location of the origin typically a NAIF code or MPC observatory code</span>
-<span class="sd">    id_type : {&#39;majorbody&#39;, &#39;smallbody&#39;, &#39;designation&#39;,</span>
-<span class="sd">               &#39;name&#39;, &#39;asteroid_name&#39;, &#39;comet_name&#39;, &#39;id&#39;}</span>
-<span class="sd">        ID type, Horizons will find closest match under any given type.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    ephemeris : `~pandas.DataFrame`</span>
-<span class="sd">        Dataframe containing the predicted ephemerides of the given objects</span>
-<span class="sd">        as seen from the observer location at the given times.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">dfs</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">jd_utc</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;utc&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">jd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">obj_id</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">object_ids</span><span class="p">):</span>
-        <span class="n">obj</span> <span class="o">=</span> <span class="n">Horizons</span><span class="p">(</span>
-            <span class="nb">id</span><span class="o">=</span><span class="n">obj_id</span><span class="p">,</span>
-            <span class="n">epochs</span><span class="o">=</span><span class="n">jd_utc</span><span class="p">,</span>
-            <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
-            <span class="n">id_type</span><span class="o">=</span><span class="n">id_type</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">ephemerides</span><span class="p">(</span>
-            <span class="c1"># RA, DEC, r, r_rate, delta, delta_rate, lighttime</span>
-            <span class="c1"># quantities=&quot;1, 2, 19, 20, 21&quot;,</span>
-            <span class="n">extra_precision</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-            <span class="n">cache</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
-        <span class="p">)</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
-        <span class="n">ephemeris</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s2">05d</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
-        <span class="n">ephemeris</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;jd_utc&quot;</span><span class="p">,</span> <span class="n">jd_utc</span><span class="p">)</span>
-        <span class="n">ephemeris</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="s2">&quot;observatory_code&quot;</span><span class="p">,</span> <span class="n">location</span><span class="p">)</span>
-
-        <span class="n">dfs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ephemeris</span><span class="p">)</span>
-
-    <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">dfs</span><span class="p">)</span>
-    <span class="n">ephemeris</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span>
-        <span class="n">by</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="s2">&quot;datetime_jd&quot;</span><span class="p">,</span> <span class="s2">&quot;observatory_code&quot;</span><span class="p">],</span>
-        <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">ephemeris</span>
 
 
 <div class="viewcode-block" id="query_horizons_ephemeris">
@@ -613,56 +450,31 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">query_horizons_ephemeris</span><span class="p">(</span>
     <span class="n">object_ids</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">List</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">],</span> <span class="n">observers</span><span class="p">:</span> <span class="n">Observers</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Ephemeris</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Query JPL Horizons (through astroquery) for an object&#39;s predicted ephemeris</span>
-<span class="sd">    as seen from a given location at the given times.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Query JPL Horizons for predicted ephemerides at observer epochs.&quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
 
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    object_ids : Union[List, `~numpy.ndarray`] (N)</span>
-<span class="sd">        Object IDs / designations recognizable by HORIZONS.</span>
-<span class="sd">    observers : `~adam_core.observers.observers.Observers`</span>
-<span class="sd">        Observers object containing the location and times</span>
-<span class="sd">        of the observers.</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">..._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
 
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    ephemeris : `~pandas.DataFrame`</span>
-<span class="sd">        Dataframe containing the predicted ephemerides of the given objects</span>
-<span class="sd">        as seen from the observer location at the given times.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">dfs</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">observatory_code</span><span class="p">,</span> <span class="n">observers_i</span> <span class="ow">in</span> <span class="n">observers</span><span class="o">.</span><span class="n">iterate_codes</span><span class="p">():</span>
-        <span class="n">_ephemeris</span> <span class="o">=</span> <span class="n">_get_horizons_ephemeris</span><span class="p">(</span>
-            <span class="n">object_ids</span><span class="p">,</span>
-            <span class="n">observers_i</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
-            <span class="n">observatory_code</span><span class="p">,</span>
+    <span class="n">times</span> <span class="o">=</span> <span class="n">observers</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span>
+    <span class="n">time</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">combine_chunks</span><span class="p">()</span>
+    <span class="n">observer_table</span> <span class="o">=</span> <span class="n">observers</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">combine_chunks</span><span class="p">()</span>
+    <span class="n">observer_batch</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">RecordBatch</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span>
+        <span class="p">[</span>
+            <span class="n">observer_table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;code&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;days&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">&quot;nanos&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">chunk</span><span class="p">(</span><span class="mi">0</span><span class="p">),</span>
+        <span class="p">],</span>
+        <span class="n">names</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;code&quot;</span><span class="p">,</span> <span class="s2">&quot;days&quot;</span><span class="p">,</span> <span class="s2">&quot;nanos&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">query_horizons_ephemeris_arrow</span><span class="p">(</span>
+            <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">object_ids</span><span class="p">],</span>
+            <span class="n">observer_batch</span><span class="p">,</span>
+            <span class="n">times</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="n">dfs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">_ephemeris</span><span class="p">)</span>
-
-    <span class="n">dfs</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">dfs</span><span class="p">,</span> <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-    <span class="n">dfs</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span>
-        <span class="n">by</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">,</span> <span class="s2">&quot;datetime_jd&quot;</span><span class="p">,</span> <span class="s2">&quot;observatory_code&quot;</span><span class="p">],</span>
-        <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-        <span class="n">ignore_index</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">Ephemeris</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">orbit_id</span><span class="o">=</span><span class="n">dfs</span><span class="p">[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">],</span>
-        <span class="n">object_id</span><span class="o">=</span><span class="n">dfs</span><span class="p">[</span><span class="s2">&quot;targetname&quot;</span><span class="p">],</span>
-        <span class="c1"># Convert from minutes to days</span>
-        <span class="n">light_time</span><span class="o">=</span><span class="n">dfs</span><span class="p">[</span><span class="s2">&quot;lighttime&quot;</span><span class="p">]</span> <span class="o">/</span> <span class="mi">1440</span><span class="p">,</span>
-        <span class="n">alpha</span><span class="o">=</span><span class="n">dfs</span><span class="p">[</span><span class="s2">&quot;alpha&quot;</span><span class="p">],</span>
-        <span class="n">coordinates</span><span class="o">=</span><span class="n">SphericalCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">time</span><span class="o">=</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">from_jd</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">dfs</span><span class="p">[</span><span class="s2">&quot;datetime_jd&quot;</span><span class="p">]),</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;utc&quot;</span><span class="p">),</span>
-            <span class="n">lon</span><span class="o">=</span><span class="n">dfs</span><span class="p">[</span><span class="s2">&quot;RA&quot;</span><span class="p">],</span>
-            <span class="n">lat</span><span class="o">=</span><span class="n">dfs</span><span class="p">[</span><span class="s2">&quot;DEC&quot;</span><span class="p">],</span>
-            <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="n">dfs</span><span class="p">[</span><span class="s2">&quot;observatory_code&quot;</span><span class="p">]),</span>
-            <span class="n">frame</span><span class="o">=</span><span class="s2">&quot;ecliptic&quot;</span><span class="p">,</span>
-        <span class="p">),</span>
-    <span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">ephemeris</span></div>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="n">_raise_compatible_http_error</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">Ephemeris</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span></div>
 
 
 
@@ -676,158 +488,24 @@
     <span class="n">aberrations</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;geometric&quot;</span><span class="p">,</span>
     <span class="n">id_type</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">    Query JPL Horizons (through astroquery) for an object&#39;s state vectors or elements at the given times.</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Query JPL Horizons for state vectors or osculating elements.&quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
 
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    object_ids : npt.ArrayLike (N)</span>
-<span class="sd">        Object IDs / designations recognizable by HORIZONS.</span>
-<span class="sd">    times : Timestamp (M)</span>
-<span class="sd">        Time at which to gather state vectors.</span>
-<span class="sd">    coordinate_type : {&#39;cartesian&#39;, &#39;keplerian&#39;, &#39;cometary&#39;}</span>
-<span class="sd">        Type of orbital elements to return.</span>
-<span class="sd">    location : str, optional</span>
-<span class="sd">        Location of the origin typically a NAIF code.</span>
-<span class="sd">        (&#39;0&#39; or &#39;@ssb&#39; for solar system barycenter, &#39;10&#39; or &#39;@sun&#39; for heliocenter)</span>
-<span class="sd">        [Default = &#39;@sun&#39;]</span>
-<span class="sd">    id_type : {&#39;majorbody&#39;, &#39;smallbody&#39;, &#39;designation&#39;,</span>
-<span class="sd">                &#39;name&#39;, &#39;asteroid_name&#39;, &#39;comet_name&#39;, &#39;id&#39;}</span>
-<span class="sd">        ID type, Horizons will find closest match under any given type.</span>
-<span class="sd">    aberrations : {&#39;geometric&#39;, &#39;astrometric&#39;, &#39;apparent&#39;}</span>
-<span class="sd">        Adjust state for one of three different aberrations.</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">..._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
 
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    orbits : `~adam_core.orbits.orbits.Orbits`</span>
-<span class="sd">        Orbits object containing the state vectors or elements of the object at each time.</span>
-<span class="sd">    &quot;&quot;&quot;</span>
-    <span class="n">chunk_size</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="mi">50</span>  <span class="c1"># This is based on the Horizon&#39;s limit of 50-75 times before it fails</span>
-    <span class="p">)</span>
-    <span class="n">total_orbits_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Orbits</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Must have at least one time&quot;</span>
-
-    <span class="c1"># Sort times to make sure they are in order</span>
-    <span class="n">times</span> <span class="o">=</span> <span class="n">times</span><span class="o">.</span><span class="n">sort_by</span><span class="p">([</span><span class="s2">&quot;days&quot;</span><span class="p">,</span> <span class="s2">&quot;nanos&quot;</span><span class="p">])</span>
-
-    <span class="k">for</span> <span class="n">times_i</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">):</span>
-
-        <span class="k">if</span> <span class="n">coordinate_type</span> <span class="o">==</span> <span class="s2">&quot;cartesian&quot;</span><span class="p">:</span>
-            <span class="n">vectors</span> <span class="o">=</span> <span class="n">_get_horizons_vectors</span><span class="p">(</span>
-                <span class="n">object_ids</span><span class="p">,</span>
-                <span class="n">times_i</span><span class="p">,</span>
-                <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
-                <span class="n">id_type</span><span class="o">=</span><span class="n">id_type</span><span class="p">,</span>
-                <span class="n">aberrations</span><span class="o">=</span><span class="n">aberrations</span><span class="p">,</span>
-            <span class="p">)</span>
-
-            <span class="n">times</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_jd</span><span class="p">(</span><span class="n">vectors</span><span class="p">[</span><span class="s2">&quot;datetime_jd&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
-            <span class="n">origin</span> <span class="o">=</span> <span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SUN&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">))])</span>
-            <span class="n">frame</span> <span class="o">=</span> <span class="s2">&quot;ecliptic&quot;</span>
-            <span class="n">coordinates</span> <span class="o">=</span> <span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">time</span><span class="o">=</span><span class="n">times</span><span class="p">,</span>
-                <span class="n">x</span><span class="o">=</span><span class="n">vectors</span><span class="p">[</span><span class="s2">&quot;x&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">y</span><span class="o">=</span><span class="n">vectors</span><span class="p">[</span><span class="s2">&quot;y&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">z</span><span class="o">=</span><span class="n">vectors</span><span class="p">[</span><span class="s2">&quot;z&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">vx</span><span class="o">=</span><span class="n">vectors</span><span class="p">[</span><span class="s2">&quot;vx&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">vy</span><span class="o">=</span><span class="n">vectors</span><span class="p">[</span><span class="s2">&quot;vy&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">vz</span><span class="o">=</span><span class="n">vectors</span><span class="p">[</span><span class="s2">&quot;vz&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">,</span>
-                <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">orbit_id</span> <span class="o">=</span> <span class="n">vectors</span><span class="p">[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
-            <span class="n">object_id</span> <span class="o">=</span> <span class="n">vectors</span><span class="p">[</span><span class="s2">&quot;targetname&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
-
-            <span class="n">orbits</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbit_id</span><span class="p">,</span> <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span> <span class="n">coordinates</span><span class="o">=</span><span class="n">coordinates</span>
-            <span class="p">)</span>
-
-            <span class="n">total_orbits_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
-
-        <span class="k">elif</span> <span class="n">coordinate_type</span> <span class="o">==</span> <span class="s2">&quot;keplerian&quot;</span><span class="p">:</span>
-            <span class="n">elements</span> <span class="o">=</span> <span class="n">_get_horizons_elements</span><span class="p">(</span>
-                <span class="n">object_ids</span><span class="p">,</span>
-                <span class="n">times_i</span><span class="p">,</span>
-                <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
-                <span class="n">id_type</span><span class="o">=</span><span class="n">id_type</span><span class="p">,</span>
-            <span class="p">)</span>
-
-            <span class="n">times</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_jd</span><span class="p">(</span>
-                <span class="n">elements</span><span class="p">[</span><span class="s2">&quot;datetime_jd&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">origin</span> <span class="o">=</span> <span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SUN&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">))])</span>
-            <span class="n">frame</span> <span class="o">=</span> <span class="s2">&quot;ecliptic&quot;</span>
-            <span class="n">coordinates</span> <span class="o">=</span> <span class="n">KeplerianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">time</span><span class="o">=</span><span class="n">times</span><span class="p">,</span>
-                <span class="n">a</span><span class="o">=</span><span class="n">elements</span><span class="p">[</span><span class="s2">&quot;a&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">e</span><span class="o">=</span><span class="n">elements</span><span class="p">[</span><span class="s2">&quot;e&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">i</span><span class="o">=</span><span class="n">elements</span><span class="p">[</span><span class="s2">&quot;incl&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">raan</span><span class="o">=</span><span class="n">elements</span><span class="p">[</span><span class="s2">&quot;Omega&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">ap</span><span class="o">=</span><span class="n">elements</span><span class="p">[</span><span class="s2">&quot;w&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">M</span><span class="o">=</span><span class="n">elements</span><span class="p">[</span><span class="s2">&quot;M&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">,</span>
-                <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">orbit_id</span> <span class="o">=</span> <span class="n">elements</span><span class="p">[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
-            <span class="n">object_id</span> <span class="o">=</span> <span class="n">elements</span><span class="p">[</span><span class="s2">&quot;targetname&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
-
-            <span class="n">orbits</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbit_id</span><span class="p">,</span>
-                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
-                <span class="n">coordinates</span><span class="o">=</span><span class="n">coordinates</span><span class="o">.</span><span class="n">to_cartesian</span><span class="p">(),</span>
-            <span class="p">)</span>
-
-            <span class="n">total_orbits_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
-
-        <span class="k">elif</span> <span class="n">coordinate_type</span> <span class="o">==</span> <span class="s2">&quot;cometary&quot;</span><span class="p">:</span>
-            <span class="n">elements</span> <span class="o">=</span> <span class="n">_get_horizons_elements</span><span class="p">(</span>
-                <span class="n">object_ids</span><span class="p">,</span>
-                <span class="n">times_i</span><span class="p">,</span>
-                <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
-                <span class="n">id_type</span><span class="o">=</span><span class="n">id_type</span><span class="p">,</span>
-            <span class="p">)</span>
-
-            <span class="n">tp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_jd</span><span class="p">(</span><span class="n">elements</span><span class="p">[</span><span class="s2">&quot;Tp_jd&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
-            <span class="n">times</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_jd</span><span class="p">(</span><span class="n">elements</span><span class="p">[</span><span class="s2">&quot;datetime_jd&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span>
-            <span class="n">origin</span> <span class="o">=</span> <span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;SUN&quot;</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">))])</span>
-            <span class="n">frame</span> <span class="o">=</span> <span class="s2">&quot;ecliptic&quot;</span>
-            <span class="n">coordinates</span> <span class="o">=</span> <span class="n">CometaryCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">time</span><span class="o">=</span><span class="n">times</span><span class="p">,</span>
-                <span class="n">q</span><span class="o">=</span><span class="n">elements</span><span class="p">[</span><span class="s2">&quot;q&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">e</span><span class="o">=</span><span class="n">elements</span><span class="p">[</span><span class="s2">&quot;e&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">i</span><span class="o">=</span><span class="n">elements</span><span class="p">[</span><span class="s2">&quot;incl&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">raan</span><span class="o">=</span><span class="n">elements</span><span class="p">[</span><span class="s2">&quot;Omega&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">ap</span><span class="o">=</span><span class="n">elements</span><span class="p">[</span><span class="s2">&quot;w&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
-                <span class="n">tp</span><span class="o">=</span><span class="n">tp</span><span class="o">.</span><span class="n">mjd</span><span class="p">(),</span>
-                <span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">,</span>
-                <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">orbit_id</span> <span class="o">=</span> <span class="n">elements</span><span class="p">[</span><span class="s2">&quot;orbit_id&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
-            <span class="n">object_id</span> <span class="o">=</span> <span class="n">elements</span><span class="p">[</span><span class="s2">&quot;targetname&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
-
-            <span class="n">orbits</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbit_id</span><span class="p">,</span>
-                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
-                <span class="n">coordinates</span><span class="o">=</span><span class="n">coordinates</span><span class="o">.</span><span class="n">to_cartesian</span><span class="p">(),</span>
-            <span class="p">)</span>
-
-            <span class="n">total_orbits_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
-
-        <span class="k">else</span><span class="p">:</span>
-            <span class="n">err</span> <span class="o">=</span> <span class="s2">&quot;coordinate_type should be one of {&#39;cartesian&#39;, &#39;keplerian&#39;, &#39;cometary&#39;}&quot;</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
-
-    <span class="n">total_orbits</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">total_orbits_list</span><span class="p">)</span> <span class="k">if</span> <span class="n">total_orbits_list</span> <span class="k">else</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-    <span class="p">)</span>
-    <span class="c1"># Sort orbits by time</span>
-    <span class="n">total_orbits</span> <span class="o">=</span> <span class="n">total_orbits</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-        <span class="p">[</span><span class="s2">&quot;coordinates.time.days&quot;</span><span class="p">,</span> <span class="s2">&quot;coordinates.time.nanos&quot;</span><span class="p">]</span>
-    <span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">total_orbits</span></div>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">query_horizons_arrow</span><span class="p">(</span>
+            <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">object_ids</span><span class="p">],</span>
+            <span class="n">_time_batch</span><span class="p">(</span><span class="n">times</span><span class="p">),</span>
+            <span class="n">times</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">coordinate_type</span><span class="p">),</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">location</span><span class="p">),</span>
+            <span class="nb">str</span><span class="p">(</span><span class="n">aberrations</span><span class="p">),</span>
+            <span class="n">id_type</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+        <span class="n">_raise_compatible_http_error</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">Orbits</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span></div>
 
 </pre></div>
         </article>
@@ -847,7 +525,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             

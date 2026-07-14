@@ -203,6 +203,7 @@
 <ul>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/releasing.html">Release Process</a></li>
 </ul>
 </li>
 <li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
@@ -217,6 +218,7 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
@@ -272,6 +274,7 @@
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
@@ -314,6 +317,7 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
 </ul>
 </li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
@@ -332,24 +336,32 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
 </ul>
 </li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
 </ul>
 </li>
-<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
 </ul>
 </li>
@@ -357,13 +369,13 @@
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
 </ul>
 </li>
-<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
 <li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
 </ul>
 </li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.chunking.html">adam_core.utils.chunking module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
@@ -371,8 +383,6 @@
 </ul>
 </li>
 <li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.parallel.html">adam_core.parallel module</a></li>
-<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.ray_cluster.html">adam_core.ray_cluster module</a></li>
 </ul>
 </li>
 </ul>
@@ -417,13 +427,12 @@
           <h1>Source code for adam_core.orbit_determination.od</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Type</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Type</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">ray</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">scipy.linalg</span><span class="w"> </span><span class="kn">import</span> <span class="n">solve</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">CoordinateCovariances</span>
@@ -431,10 +440,9 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.residuals</span><span class="w"> </span><span class="kn">import</span> <span class="n">Residuals</span><span class="p">,</span> <span class="n">compute_residuals_ndarray</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..parallel</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_backend</span><span class="p">,</span> <span class="n">resolve_max_processes</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.iter</span><span class="w"> </span><span class="kn">import</span> <span class="n">_iterate_chunk_indices</span><span class="p">,</span> <span class="n">_iterate_chunks</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.iter</span><span class="w"> </span><span class="kn">import</span> <span class="n">_iterate_chunks</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.outliers</span><span class="w"> </span><span class="kn">import</span> <span class="n">calculate_max_outliers</span>
 
@@ -530,27 +538,26 @@
     <span class="k">return</span> <span class="n">od_orbits</span><span class="p">,</span> <span class="n">od_orbit_members</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_od_chunk_worker</span><span class="p">(</span>
-    <span class="n">orbit_ids</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">str_</span><span class="p">],</span>
-    <span class="n">orbit_ids_indices</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span>
-    <span class="n">orbits</span><span class="p">:</span> <span class="n">FittedOrbits</span><span class="p">,</span>
-    <span class="n">orbit_members</span><span class="p">:</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_od_native</span><span class="p">(</span>
+    <span class="n">prop</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+    <span class="n">orbit</span><span class="p">:</span> <span class="n">FittedOrbits</span><span class="p">,</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
-    <span class="n">propagator</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Propagator</span><span class="p">],</span>
-    <span class="n">rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">100</span><span class="p">,</span>
-    <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span>
-    <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
-    <span class="n">contamination_percentage</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
-    <span class="n">delta</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">,</span>
-    <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">20</span><span class="p">,</span>
-    <span class="n">method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">&quot;central&quot;</span><span class="p">,</span> <span class="s2">&quot;finite&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;central&quot;</span><span class="p">,</span>
-    <span class="n">propagator_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{},</span>
+    <span class="n">rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">contamination_percentage</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">delta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">max_iter</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">method</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]:</span>
-    <span class="n">orbit_ids_chunk</span> <span class="o">=</span> <span class="n">orbit_ids</span><span class="p">[</span><span class="n">orbit_ids_indices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="p">:</span> <span class="n">orbit_ids_indices</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
-    <span class="k">return</span> <span class="n">od_worker</span><span class="p">(</span>
-        <span class="n">orbit_ids_chunk</span><span class="p">,</span>
-        <span class="n">orbits</span><span class="p">,</span>
-        <span class="n">orbit_members</span><span class="p">,</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;One-crossing `od` on a propagator exposing the fused native `od_fit`</span>
+<span class="sd">    work unit (the Rust adam-assist backend). The entire differential</span>
+<span class="sd">    correction loop — delta bounding, finite/central perturbation batching,</span>
+<span class="sd">    weighted normal equations, condition/covariance rejections, acceptance</span>
+<span class="sd">    bookkeeping, and chi2-ranked outlier retries — executes in Rust; Python</span>
+<span class="sd">    only wraps the returned arrays as the public tables.&quot;&quot;&quot;</span>
+    <span class="n">output</span> <span class="o">=</span> <span class="n">prop</span><span class="o">.</span><span class="n">od_fit</span><span class="p">(</span>
+        <span class="n">orbit</span><span class="p">,</span>
         <span class="n">observations</span><span class="p">,</span>
         <span class="n">rchi2_threshold</span><span class="o">=</span><span class="n">rchi2_threshold</span><span class="p">,</span>
         <span class="n">min_obs</span><span class="o">=</span><span class="n">min_obs</span><span class="p">,</span>
@@ -559,9 +566,50 @@
         <span class="n">delta</span><span class="o">=</span><span class="n">delta</span><span class="p">,</span>
         <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
         <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span>
-        <span class="n">propagator</span><span class="o">=</span><span class="n">propagator</span><span class="p">,</span>
-        <span class="n">propagator_kwargs</span><span class="o">=</span><span class="n">propagator_kwargs</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">output</span><span class="p">[</span><span class="s2">&quot;found&quot;</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">(),</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;state&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">covariance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;covariance&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+    <span class="n">od_orbit</span> <span class="o">=</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
+        <span class="n">object_id</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">object_id</span><span class="p">,</span>
+        <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">y</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">],</span>
+            <span class="n">z</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span>
+            <span class="n">vx</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">4</span><span class="p">],</span>
+            <span class="n">vy</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">4</span><span class="p">:</span><span class="mi">5</span><span class="p">],</span>
+            <span class="n">vz</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">5</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span>
+            <span class="n">covariance</span><span class="o">=</span><span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span><span class="n">covariance</span><span class="p">),</span>
+            <span class="n">time</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
+            <span class="n">origin</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
+            <span class="n">frame</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">arc_length</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;arc_length&quot;</span><span class="p">]],</span>
+        <span class="n">num_obs</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;num_obs&quot;</span><span class="p">]],</span>
+        <span class="n">chi2</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;chi2&quot;</span><span class="p">]],</span>
+        <span class="n">reduced_chi2</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;reduced_chi2&quot;</span><span class="p">]],</span>
+        <span class="n">iterations</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;iterations&quot;</span><span class="p">]],</span>
+        <span class="n">success</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;improved&quot;</span><span class="p">]],</span>
+        <span class="n">status_code</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="n">residuals</span> <span class="o">=</span> <span class="n">Residuals</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">values</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;residual_values&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+        <span class="n">chi2</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;residual_chi2&quot;</span><span class="p">],</span>
+        <span class="n">dof</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;residual_dof&quot;</span><span class="p">],</span>
+        <span class="n">probability</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;residual_probability&quot;</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="n">outlier</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">&quot;outlier&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+    <span class="n">od_orbit_members</span> <span class="o">=</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">orbit_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span> <span class="n">orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">&quot;object&quot;</span><span class="p">),</span>
+        <span class="n">obs_id</span><span class="o">=</span><span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+        <span class="n">residuals</span><span class="o">=</span><span class="n">residuals</span><span class="p">,</span>
+        <span class="n">solution</span><span class="o">=~</span><span class="n">outlier</span><span class="p">,</span>
+        <span class="n">outlier</span><span class="o">=</span><span class="n">outlier</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">od_orbit</span><span class="p">,</span> <span class="n">od_orbit_members</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">od</span><span class="p">(</span>
@@ -583,6 +631,24 @@
     <span class="k">if</span> <span class="n">method</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;central&quot;</span><span class="p">,</span> <span class="s2">&quot;finite&quot;</span><span class="p">]:</span>
         <span class="n">err</span> <span class="o">=</span> <span class="s2">&quot;method should be one of &#39;central&#39; or &#39;finite&#39;.&quot;</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">err</span><span class="p">)</span>
+
+    <span class="c1"># One-crossing Rust path: propagators exposing the fused native `od_fit`</span>
+    <span class="c1"># work unit (the supported Rust adam-assist backend) run the whole loop</span>
+    <span class="c1"># behind one crossing. The retained Python loop below is the documented</span>
+    <span class="c1"># compatibility fallback for providers without the native work unit.</span>
+    <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">prop</span><span class="p">,</span> <span class="s2">&quot;od_fit&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">_od_native</span><span class="p">(</span>
+            <span class="n">prop</span><span class="p">,</span>
+            <span class="n">orbit</span><span class="p">,</span>
+            <span class="n">observations</span><span class="p">,</span>
+            <span class="n">rchi2_threshold</span><span class="p">,</span>
+            <span class="n">min_obs</span><span class="p">,</span>
+            <span class="n">min_arc_length</span><span class="p">,</span>
+            <span class="n">contamination_percentage</span><span class="p">,</span>
+            <span class="n">delta</span><span class="p">,</span>
+            <span class="n">max_iter</span><span class="p">,</span>
+            <span class="n">method</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="n">obs_ids_all</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">coords</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span>
@@ -995,9 +1061,9 @@
 <div class="viewcode-block" id="differential_correction">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.od.html#adam_core.orbit_determination.od.differential_correction">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">differential_correction</span><span class="p">(</span>
-    <span class="n">orbits</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">],</span>
-    <span class="n">orbit_members</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">],</span>
-    <span class="n">observations</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="n">OrbitDeterminationObservations</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">],</span>
+    <span class="n">orbits</span><span class="p">:</span> <span class="n">FittedOrbits</span><span class="p">,</span>
+    <span class="n">orbit_members</span><span class="p">:</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Propagator</span><span class="p">],</span>
     <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">,</span>
     <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
@@ -1027,45 +1093,19 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="n">time_start</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">perf_counter</span><span class="p">()</span>
     <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Running differential correction...&quot;</span><span class="p">)</span>
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">):</span>
-        <span class="n">orbits_ref</span> <span class="o">=</span> <span class="n">orbits</span>
-        <span class="n">orbits</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Retrieved orbits from the object store.&quot;</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">orbit_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">orbits</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span> <span class="n">orbit_ids</span><span class="p">))</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Applied mask to orbit members.&quot;</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">orbits_ref</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbit_members</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">):</span>
-        <span class="n">orbit_members_ref</span> <span class="o">=</span> <span class="n">orbit_members</span>
-        <span class="n">orbit_members</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">orbit_members</span><span class="p">)</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Retrieved orbit members from the object store.&quot;</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">obs_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">orbit_members</span> <span class="o">=</span> <span class="n">orbit_members</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span>
-                <span class="n">pc</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">orbit_members</span><span class="o">.</span><span class="n">obs_id</span><span class="p">,</span> <span class="n">obs_ids</span><span class="p">)</span>
-            <span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Applied mask to orbit members.&quot;</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">orbit_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">orbit_members</span> <span class="o">=</span> <span class="n">orbit_members</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span>
-                <span class="n">pc</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">orbit_members</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span> <span class="n">orbit_ids</span><span class="p">)</span>
-            <span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Applied mask to orbit members.&quot;</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">orbit_members_ref</span> <span class="o">=</span> <span class="kc">None</span>
-
-    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">ray</span><span class="o">.</span><span class="n">ObjectRef</span><span class="p">):</span>
-        <span class="n">observations_ref</span> <span class="o">=</span> <span class="n">observations</span>
-        <span class="n">observations</span> <span class="o">=</span> <span class="n">ray</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Retrieved observations from the object store.&quot;</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">obs_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">observations</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">obs_ids</span><span class="p">))</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Applied mask to observations.&quot;</span><span class="p">)</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">observations_ref</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># Object-store inputs were part of the retired Ray execution contract.</span>
+    <span class="c1"># Plain-table filtering remains available through the compatibility</span>
+    <span class="c1"># selectors and occurs before the serial provider fallback.</span>
+    <span class="k">if</span> <span class="n">orbit_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">orbits</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span> <span class="n">orbit_ids</span><span class="p">))</span>
+        <span class="n">orbit_members</span> <span class="o">=</span> <span class="n">orbit_members</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span>
+            <span class="n">pc</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">orbit_members</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span> <span class="n">orbit_ids</span><span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">obs_ids</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">orbit_members</span> <span class="o">=</span> <span class="n">orbit_members</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span>
+            <span class="n">pc</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">orbit_members</span><span class="o">.</span><span class="n">obs_id</span><span class="p">,</span> <span class="n">obs_ids</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">observations</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">obs_ids</span><span class="p">))</span>
 
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbit_members</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Received no orbits or orbit members.&quot;</span><span class="p">)</span>
@@ -1083,87 +1123,28 @@
     <span class="n">od_orbits_chunks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="n">od_orbit_members_chunks</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">FittedOrbitMembers</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
 
-    <span class="n">max_processes</span> <span class="o">=</span> <span class="n">resolve_max_processes</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span>
-
-    <span class="k">if</span> <span class="n">max_processes</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="n">backend</span> <span class="o">=</span> <span class="n">get_backend</span><span class="p">(</span><span class="n">max_processes</span><span class="p">)</span>
-        <span class="n">refs_to_free</span> <span class="o">=</span> <span class="p">[]</span>
-
-        <span class="n">orbit_ids_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">orbit_ids</span><span class="p">)</span>
-        <span class="n">orbit_ids</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">orbit_ids_ref</span><span class="p">)</span>
-        <span class="n">refs_to_free</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">orbit_ids_ref</span><span class="p">)</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Placed orbit IDs in the object store.&quot;</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">orbits_ref</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">orbits_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
-            <span class="n">orbits</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">orbits_ref</span><span class="p">)</span>
-            <span class="n">refs_to_free</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">orbits_ref</span><span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Placed orbits in the object store.&quot;</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">orbit_members_ref</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">orbit_members_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">orbit_members</span><span class="p">)</span>
-            <span class="n">orbit_members</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">orbit_members_ref</span><span class="p">)</span>
-            <span class="n">refs_to_free</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">orbit_members_ref</span><span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Placed orbit members in the object store.&quot;</span><span class="p">)</span>
-
-        <span class="k">if</span> <span class="n">observations_ref</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">observations_ref</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
-            <span class="n">refs_to_free</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">observations_ref</span><span class="p">)</span>
-            <span class="n">observations</span> <span class="o">=</span> <span class="n">backend</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">observations_ref</span><span class="p">)</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Placed observations in the object store.&quot;</span><span class="p">)</span>
-
-        <span class="n">args_iter</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="p">(</span>
-                <span class="n">orbit_ids_ref</span><span class="p">,</span>
-                <span class="n">orbit_ids_indices</span><span class="p">,</span>
-                <span class="n">orbits_ref</span><span class="p">,</span>
-                <span class="n">orbit_members_ref</span><span class="p">,</span>
-                <span class="n">observations_ref</span><span class="p">,</span>
-                <span class="n">propagator</span><span class="p">,</span>
-                <span class="n">rchi2_threshold</span><span class="p">,</span>
-                <span class="n">min_obs</span><span class="p">,</span>
-                <span class="n">min_arc_length</span><span class="p">,</span>
-                <span class="n">contamination_percentage</span><span class="p">,</span>
-                <span class="n">delta</span><span class="p">,</span>
-                <span class="n">max_iter</span><span class="p">,</span>
-                <span class="n">method</span><span class="p">,</span>
-                <span class="n">propagator_kwargs</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="k">for</span> <span class="n">orbit_ids_indices</span> <span class="ow">in</span> <span class="n">_iterate_chunk_indices</span><span class="p">(</span><span class="n">orbit_ids</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">)</span>
+    <span class="c1"># `max_processes` remains accepted for compatibility. Native providers</span>
+    <span class="c1"># execute inside Rust; non-native providers use this deterministic serial</span>
+    <span class="c1"># fallback rather than resurrecting Python callable/object-store execution.</span>
+    <span class="k">del</span> <span class="n">max_processes</span>
+    <span class="k">for</span> <span class="n">orbit_ids_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">orbit_ids</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">):</span>
+        <span class="n">od_orbits_chunk</span><span class="p">,</span> <span class="n">od_orbit_members_chunk</span> <span class="o">=</span> <span class="n">od_worker</span><span class="p">(</span>
+            <span class="n">orbit_ids_chunk</span><span class="p">,</span>
+            <span class="n">orbits</span><span class="p">,</span>
+            <span class="n">orbit_members</span><span class="p">,</span>
+            <span class="n">observations</span><span class="p">,</span>
+            <span class="n">rchi2_threshold</span><span class="o">=</span><span class="n">rchi2_threshold</span><span class="p">,</span>
+            <span class="n">min_obs</span><span class="o">=</span><span class="n">min_obs</span><span class="p">,</span>
+            <span class="n">min_arc_length</span><span class="o">=</span><span class="n">min_arc_length</span><span class="p">,</span>
+            <span class="n">contamination_percentage</span><span class="o">=</span><span class="n">contamination_percentage</span><span class="p">,</span>
+            <span class="n">delta</span><span class="o">=</span><span class="n">delta</span><span class="p">,</span>
+            <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
+            <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span>
+            <span class="n">propagator</span><span class="o">=</span><span class="n">propagator</span><span class="p">,</span>
+            <span class="n">propagator_kwargs</span><span class="o">=</span><span class="n">propagator_kwargs</span><span class="p">,</span>
         <span class="p">)</span>
-        <span class="k">for</span> <span class="n">od_orbits_chunk</span><span class="p">,</span> <span class="n">od_orbit_members_chunk</span> <span class="ow">in</span> <span class="n">backend</span><span class="o">.</span><span class="n">map_unordered</span><span class="p">(</span>
-            <span class="n">_od_chunk_worker</span><span class="p">,</span>
-            <span class="n">args_iter</span><span class="p">,</span>
-            <span class="n">worker_options</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;num_returns&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;num_cpus&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span>
-        <span class="p">):</span>
-            <span class="n">od_orbits_chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">od_orbits_chunk</span><span class="p">)</span>
-            <span class="n">od_orbit_members_chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">od_orbit_members_chunk</span><span class="p">)</span>
-
-        <span class="n">backend</span><span class="o">.</span><span class="n">free</span><span class="p">(</span><span class="n">refs_to_free</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">refs_to_free</span><span class="p">:</span>
-            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">&quot;Removed </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">refs_to_free</span><span class="p">)</span><span class="si">}</span><span class="s2"> references from the object store.&quot;</span>
-            <span class="p">)</span>
-
-    <span class="k">else</span><span class="p">:</span>
-        <span class="k">for</span> <span class="n">orbit_ids_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">orbit_ids</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">):</span>
-            <span class="n">od_orbits_chunk</span><span class="p">,</span> <span class="n">od_orbit_members_chunk</span> <span class="o">=</span> <span class="n">od_worker</span><span class="p">(</span>
-                <span class="n">orbit_ids_chunk</span><span class="p">,</span>
-                <span class="n">orbits</span><span class="p">,</span>
-                <span class="n">orbit_members</span><span class="p">,</span>
-                <span class="n">observations</span><span class="p">,</span>
-                <span class="n">rchi2_threshold</span><span class="o">=</span><span class="n">rchi2_threshold</span><span class="p">,</span>
-                <span class="n">min_obs</span><span class="o">=</span><span class="n">min_obs</span><span class="p">,</span>
-                <span class="n">min_arc_length</span><span class="o">=</span><span class="n">min_arc_length</span><span class="p">,</span>
-                <span class="n">contamination_percentage</span><span class="o">=</span><span class="n">contamination_percentage</span><span class="p">,</span>
-                <span class="n">delta</span><span class="o">=</span><span class="n">delta</span><span class="p">,</span>
-                <span class="n">max_iter</span><span class="o">=</span><span class="n">max_iter</span><span class="p">,</span>
-                <span class="n">method</span><span class="o">=</span><span class="n">method</span><span class="p">,</span>
-                <span class="n">propagator</span><span class="o">=</span><span class="n">propagator</span><span class="p">,</span>
-                <span class="n">propagator_kwargs</span><span class="o">=</span><span class="n">propagator_kwargs</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">od_orbits_chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">od_orbits_chunk</span><span class="p">)</span>
-            <span class="n">od_orbit_members_chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">od_orbit_members_chunk</span><span class="p">)</span>
+        <span class="n">od_orbits_chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">od_orbits_chunk</span><span class="p">)</span>
+        <span class="n">od_orbit_members_chunks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">od_orbit_members_chunk</span><span class="p">)</span>
 
     <span class="n">od_orbits</span> <span class="o">=</span> <span class="p">(</span>
         <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">od_orbits_chunks</span><span class="p">)</span> <span class="k">if</span> <span class="n">od_orbits_chunks</span> <span class="k">else</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
@@ -1200,7 +1181,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-05-19</div>
+              Last updated on 2026-07-14</div>
           </div>
           <div class="right-details">
             
