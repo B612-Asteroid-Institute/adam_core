@@ -28,6 +28,14 @@ def main() -> int:
     maturin = shutil.which("maturin")
     if maturin is None:
         raise SystemExit("maturin is not installed in the active environment")
+    pip_check = subprocess.run(
+        [sys.executable, "-m", "pip", "--version"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    if pip_check.returncode:
+        subprocess.check_call([sys.executable, "-m", "ensurepip", "--upgrade"])
     env = dict(os.environ)
     env.setdefault("CARGO_NET_GIT_FETCH_WITH_CLI", "true")
     return subprocess.call(

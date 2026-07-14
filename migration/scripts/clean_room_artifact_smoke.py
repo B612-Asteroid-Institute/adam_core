@@ -13,6 +13,7 @@ import importlib.metadata
 import json
 import os
 import platform
+import re
 import site
 import sys
 import time
@@ -27,6 +28,47 @@ import quivr as qv
 REPORT_SCHEMA_VERSION = 2
 OBJECT_ID = "99942 Apophis"
 TARGET_OFFSETS_DAYS = np.array([1.0, 7.0, 30.0], dtype=np.float64)
+PINNED_APOPHIS_EPOCH_MJD_TDB = 59215.0
+PINNED_APOPHIS_STATE = np.array(
+    [
+        -0.4098530841678254,
+        0.9621648472038595,
+        -0.06096604136465475,
+        -0.015075524121655987,
+        -0.004107955457204797,
+        -0.00013931296759505984,
+    ],
+    dtype=np.float64,
+)
+
+
+def _retryable_provider_http_error(error: Exception) -> bool:
+    status_match = re.search(r"status code (\d{3})", str(error))
+    status_code = int(status_match.group(1)) if status_match else None
+    return status_code == 429 or (status_code is not None and status_code >= 500)
+
+
+def _pinned_apophis_orbit() -> Any:
+    from adam_core.coordinates import CartesianCoordinates, Origin
+    from adam_core.orbits import Orbits
+    from adam_core.time import Timestamp
+
+    values = PINNED_APOPHIS_STATE
+    return Orbits.from_kwargs(
+        orbit_id=[OBJECT_ID],
+        object_id=["99942 Apophis (2004 MN4)"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[values[0]],
+            y=[values[1]],
+            z=[values[2]],
+            vx=[values[3]],
+            vy=[values[4]],
+            vz=[values[5]],
+            time=Timestamp.from_mjd([PINNED_APOPHIS_EPOCH_MJD_TDB], scale="tdb"),
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
 
 
 def _resolved_module_path(module: Any) -> Path:
@@ -322,15 +364,31 @@ def main() -> int:
     )
 
     def live_orbit_fetch() -> dict[str, Any]:
+        import requests
         from adam_core.orbits.query.sbdb import query_sbdb_new
 
-        orbits = query_sbdb_new(
-            [OBJECT_ID],
-            max_concurrent_requests=1,
-            timeout_s=60.0,
-            max_attempts=5,
-            orbit_id_from_input=True,
-        )
+        provider_status = "available"
+        provider_error = None
+        orbit_source = "live_sbdb"
+        try:
+            orbits = query_sbdb_new(
+                [OBJECT_ID],
+                max_concurrent_requests=1,
+                timeout_s=60.0,
+                max_attempts=5,
+                orbit_id_from_input=True,
+            )
+        except requests.HTTPError as error:
+            message = str(error)
+            if not _retryable_provider_http_error(error):
+                raise
+            # Provider availability is external to wheel integrity. Continue
+            # all computation checks with the last reviewed live Apophis state
+            # while recording the provider failure explicitly in the report.
+            provider_status = "unavailable"
+            provider_error = message
+            orbit_source = "pinned_live_sbdb_fallback_2026-07-12"
+            orbits = _pinned_apophis_orbit()
         if len(orbits) != 1:
             raise AssertionError(f"expected one fetched orbit, received {len(orbits)}")
         if orbits.orbit_id.to_pylist() != [OBJECT_ID]:
@@ -347,6 +405,9 @@ def main() -> int:
         state["orbits"] = orbits
         state["epoch"] = epoch
         return {
+            "provider_status": provider_status,
+            "provider_error": provider_error,
+            "orbit_source": orbit_source,
             "object_id": orbits.object_id.to_pylist()[0],
             "orbit_id": orbits.orbit_id.to_pylist()[0],
             "epoch_mjd_tdb": epoch,

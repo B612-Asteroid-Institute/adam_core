@@ -105,7 +105,7 @@ def _run(
         check=False,
     )
     elapsed = time.perf_counter() - started
-    log_path.write_text(completed.stdout)
+    log_path.write_text(completed.stdout, encoding="utf-8", errors="replace")
     print(f"[{stage}] exit={completed.returncode} seconds={elapsed:.2f}", flush=True)
     if completed.returncode:
         raise CommandFailed(
