@@ -422,6 +422,37 @@ fn fill_phase_geometry_tile(
     has_invalid
 }
 
+#[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
+fn fill_phase_geometry_tile(
+    object_pos: &[f64],
+    observer_pos: &[f64],
+    row_offset: usize,
+    rd_sq: &mut [f64],
+    cos_clamped: &mut [f64],
+) -> bool {
+    let mut has_invalid = false;
+    for k in 0..rd_sq.len() {
+        let base = (row_offset + k) * 3;
+        let ox = object_pos[base];
+        let oy = object_pos[base + 1];
+        let oz = object_pos[base + 2];
+        let bx = observer_pos[base];
+        let by = observer_pos[base + 1];
+        let bz = observer_pos[base + 2];
+        let dx = ox - bx;
+        let dy = oy - by;
+        let dz = oz - bz;
+        let r_sq = ox * ox + oy * oy + oz * oz;
+        let delta_sq = dx * dx + dy * dy + dz * dz;
+        let dot = ox * bx + oy * by + oz * bz;
+        let product = r_sq * delta_sq;
+        rd_sq[k] = product;
+        cos_clamped[k] = ((r_sq - dot) / product.sqrt()).clamp(-1.0, 1.0);
+        has_invalid |= !r_sq.is_finite() || !delta_sq.is_finite() || r_sq <= 0.0 || delta_sq <= 0.0;
+    }
+    has_invalid
+}
+
 /// Fused NEON pass that streams `(object_pos, observer_pos)` once and writes
 /// `rd_sq` plus `tan²(α/2)` directly. Used by the magnitude / fused / predict
 /// pipelines. Returns `true` for any non-finite/≤0 geometry row.
@@ -506,6 +537,39 @@ fn fill_mag_geometry_tile(
         has_invalid |=
             !r_sq_v.is_finite() || !delta_sq_v.is_finite() || r_sq_v <= 0.0 || delta_sq_v <= 0.0;
         k += 1;
+    }
+    has_invalid
+}
+
+#[cfg(all(target_os = "macos", not(target_arch = "aarch64")))]
+fn fill_mag_geometry_tile(
+    object_pos: &[f64],
+    observer_pos: &[f64],
+    row_offset: usize,
+    rd_sq: &mut [f64],
+    tan_half_sq: &mut [f64],
+) -> bool {
+    let mut has_invalid = false;
+    for k in 0..rd_sq.len() {
+        let base = (row_offset + k) * 3;
+        let ox = object_pos[base];
+        let oy = object_pos[base + 1];
+        let oz = object_pos[base + 2];
+        let bx = observer_pos[base];
+        let by = observer_pos[base + 1];
+        let bz = observer_pos[base + 2];
+        let dx = ox - bx;
+        let dy = oy - by;
+        let dz = oz - bz;
+        let r_sq = ox * ox + oy * oy + oz * oz;
+        let delta_sq = dx * dx + dy * dy + dz * dz;
+        let dot = ox * bx + oy * by + oz * bz;
+        let product = r_sq * delta_sq;
+        let denom = product.sqrt();
+        let numer = (r_sq - dot).clamp(-denom, denom);
+        rd_sq[k] = product;
+        tan_half_sq[k] = (denom - numer) / (denom + numer);
+        has_invalid |= !r_sq.is_finite() || !delta_sq.is_finite() || r_sq <= 0.0 || delta_sq <= 0.0;
     }
     has_invalid
 }
