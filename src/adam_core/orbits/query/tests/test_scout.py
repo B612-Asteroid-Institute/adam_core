@@ -3,12 +3,33 @@
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
+import requests
 
 from ..scout import (
+    _request_scout_json,
     ScoutOrbit,
     query_scout_observations,
     scout_orbits_to_variant_orbits,
 )
+
+
+def test_scout_request_retries_transient_failure() -> None:
+    class Response:
+        def __init__(self, status_code: int):
+            self.status_code = status_code
+
+        def raise_for_status(self) -> None:
+            if self.status_code >= 400:
+                raise requests.HTTPError(response=self)
+
+        def json(self) -> dict:
+            return {"ok": True}
+
+    responses = iter([Response(502), Response(200)])
+    payload = _request_scout_json(
+        http_get=lambda *args, **kwargs: next(responses), retry_delay_s=0
+    )
+    assert payload == {"ok": True}
 
 
 def test_query_scout_observations_uses_file_membership() -> None:

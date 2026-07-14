@@ -1,5 +1,6 @@
 import hashlib
 import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -20,6 +21,31 @@ from ...time import Timestamp
 from ..variants import VariantOrbits
 
 logger = logging.getLogger(__name__)
+_SCOUT_API_URL = "https://ssd-api.jpl.nasa.gov/scout.api"
+
+
+def _request_scout_json(
+    *,
+    params: dict[str, Any] | None = None,
+    timeout_s: float = 30.0,
+    max_attempts: int = 3,
+    retry_delay_s: float = 0.5,
+    http_get: Callable[..., Any] = requests.get,
+) -> Any:
+    """Fetch Scout JSON with bounded retries for transient HTTP failures."""
+    attempts = max(1, int(max_attempts))
+    for attempt in range(attempts):
+        try:
+            response = http_get(_SCOUT_API_URL, params=params, timeout=timeout_s)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            retryable = status is None or status == 429 or status >= 500
+            if not retryable or attempt + 1 >= attempts:
+                raise
+            time.sleep(retry_delay_s * (2**attempt))
+    raise RuntimeError("unreachable Scout retry state")
 
 
 class ScoutObjectSummary(qv.Table):
@@ -90,10 +116,7 @@ def get_scout_objects() -> ScoutObjectSummary:
     scout_objects : `~adam_core.orbits.query.scout.ScoutObjectSummary`
         Table containing the summary of all objects.
     """
-    url = "https://ssd-api.jpl.nasa.gov/scout.api"
-    response = requests.get(url)
-    response.raise_for_status()
-    data = response.json()
+    data = _request_scout_json()
     data = data["data"]
     table = pa.Table.from_pylist(data, schema=ScoutObjectSummary.schema)
     return ScoutObjectSummary.from_pyarrow(table)
@@ -198,16 +221,13 @@ def query_scout_observations(
     """
     object_ids = [ids] if isinstance(ids, str) else list(ids)
     snapshots: list[ScoutObservations] = []
-    url = "https://ssd-api.jpl.nasa.gov/scout.api"
     for object_id_value in object_ids:
         object_id = str(object_id_value)
-        response = http_get(
-            url,
+        payload = _request_scout_json(
             params={"tdes": object_id, "file": "mpc"},
-            timeout=timeout_s,
+            timeout_s=timeout_s,
+            http_get=http_get,
         )
-        response.raise_for_status()
-        payload = response.json()
         if not isinstance(payload, dict) or payload.get("error"):
             detail = payload.get("error") if isinstance(payload, dict) else None
             raise RuntimeError(f"Scout observation lookup failed for {object_id}: {detail}")
@@ -294,13 +314,11 @@ def query_scout(ids: npt.ArrayLike) -> VariantOrbits:
     orbits : `~adam_core.orbits.VariantOrbits`
         Table containing the orbits of the objects
     """
-    url = "https://ssd-api.jpl.nasa.gov/scout.api?tdes={}&orbits=1"
-
     variant_orbits = VariantOrbits.empty()
     for object_id in ids:
-        response = requests.get(url.format(object_id))
-        response.raise_for_status()
-        data = response.json()
+        data = _request_scout_json(
+            params={"tdes": str(object_id), "orbits": "1"}
+        )
         data = data["orbits"]["data"]
 
         # Convert from list of rows to list of columns
