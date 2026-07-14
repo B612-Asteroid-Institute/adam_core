@@ -884,11 +884,13 @@ def _coverage_summary(rows: list[dict]) -> str:
     )
     lines.append("")
     lines.append(
-        f"**Rust-native top-level**: {len(rust_native_apis)} of "
-        f"{len(declared_apis)} declared public APIs run end-to-end in Rust "
-        "(`rust_native_top_level=true`). Every other row still enters through "
-        "a Python facade or PyO3 wrapper; the full-port goal is only met for "
-        "a surface once its top-level workflow itself runs in Rust."
+        f"**Direct pure-Rust benchmark entrypoints**: {len(rust_native_apis)} of "
+        f"{len(declared_apis)} registry rows bypass Python entirely "
+        "(`rust_native_top_level=true`). This field describes the benchmark "
+        "entrypoint, not migration completeness: `public facade` and `thin "
+        "wrapper` rows satisfy the migration contract when one crossing owns "
+        "the adam-core computation. Complete-surface disposition is governed "
+        "by `migration/public_surface/manifest.json` and its domain audits."
     )
     if backend_candidate_ids:
         lines.append("")
