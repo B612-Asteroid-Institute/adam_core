@@ -1058,7 +1058,10 @@ fn predict_magnitudes_bandpass_numpy<'py>(
     let dt_slice = dt_arr
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("delta_table must be contiguous"))?;
-    let out = PyArray1::<f64>::zeros(py, n, false);
+    // SAFETY: the kernel below writes every element before the array is
+    // exposed to Python. Avoiding NumPy's redundant zero-fill matters for
+    // large public prediction batches.
+    let out = unsafe { PyArray1::<f64>::new(py, [n], false) };
     {
         let mut out_rw = numpy::PyArrayMethods::readwrite(&out);
         let out_slice = out_rw
