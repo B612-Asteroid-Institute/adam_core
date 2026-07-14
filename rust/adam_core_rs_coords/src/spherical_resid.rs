@@ -20,6 +20,11 @@ const DEG2RAD: f64 = std::f64::consts::PI / 180.0;
 /// either tiny (n=10), small (n=2000), or large (n=20_000). Keep these
 /// kernels serial up to 4096 rows to avoid the per-call Rayon spawn tax.
 const RAYON_SERIAL_THRESHOLD_ROWS: usize = 4096;
+// Longitude wrapping touches one strided scalar per row, so Rayon overhead and
+// memory-bandwidth contention outweigh its tiny arithmetic through the largest
+// governed batch. The covariance correction below does enough row work to keep
+// the lower shared threshold.
+const BOUND_LONGITUDE_SERIAL_THRESHOLD_ROWS: usize = 262_144;
 
 /// Wrap a single longitude residual (degrees) to [-180, 180] and flip
 /// sign on the 0°/360° boundary crossing per the convention:
@@ -60,7 +65,7 @@ pub fn bound_longitude_residuals_flat(
     assert_eq!(observed_flat.len(), n * d);
     assert_eq!(residuals_flat.len(), n * d);
     assert!(d >= 2, "spherical residuals require at least 2 dimensions");
-    if n <= RAYON_SERIAL_THRESHOLD_ROWS || rayon::current_num_threads() == 1 {
+    if n <= BOUND_LONGITUDE_SERIAL_THRESHOLD_ROWS || rayon::current_num_threads() == 1 {
         for (row, obs) in residuals_flat.chunks_mut(d).zip(observed_flat.chunks(d)) {
             bound_longitude_one_row(row, obs);
         }

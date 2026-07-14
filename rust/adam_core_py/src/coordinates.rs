@@ -759,12 +759,19 @@ fn bound_longitude_residuals_numpy<'py>(
     let res_slice = res
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("residuals must be contiguous"))?;
-    // Copy residuals into an owned mutable buffer for the in-place op.
-    let mut buf = res_slice.to_vec();
-    bound_longitude_residuals_flat(obs_slice, &mut buf, n, d);
-    let arr = ndarray::Array2::from_shape_vec((n, d), buf)
-        .map_err(|e| PyValueError::new_err(format!("shape: {e}")))?;
-    Ok(arr.into_pyarray(py))
+    // SAFETY: copy_from_slice initializes every output element before the
+    // array is visible to Python. Mutating that output directly avoids an
+    // intermediate Vec and ndarray ownership conversion for large batches.
+    let output = unsafe { PyArray2::<f64>::new(py, [n, d], false) };
+    {
+        let mut output_rw = numpy::PyArrayMethods::readwrite(&output);
+        let output_slice = output_rw
+            .as_slice_mut()
+            .map_err(|_| PyValueError::new_err("allocated residual output must be contiguous"))?;
+        output_slice.copy_from_slice(res_slice);
+        bound_longitude_residuals_flat(obs_slice, output_slice, n, d);
+    }
+    Ok(output)
 }
 
 /// Column-only longitude wrap: reads column 1 of `observed` and `residuals`
