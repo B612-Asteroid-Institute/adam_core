@@ -1,0 +1,7 @@
+adam\_core.photometry.bandpasses.vendor module
+==============================================
+
+.. automodule:: adam_core.photometry.bandpasses.vendor
+   :members:
+   :show-inheritance:
+   :undoc-members:
