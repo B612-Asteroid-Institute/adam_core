@@ -259,6 +259,6 @@ jobs:
           output-file-path: bench.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           comment-always: true
-          fail-threshold: '200%'
-          alert-threshold: '150%'
+          fail-threshold: '50%'
+          alert-threshold: '25%'
           auto-push: false

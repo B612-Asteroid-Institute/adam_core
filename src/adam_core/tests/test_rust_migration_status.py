@@ -15,8 +15,8 @@ from migration.parity import (
     _legacy_runner,
     _native_rust_runner,
     _oracle,
-    _timing_cache,
     _threading,
+    _timing_cache,
     comparison_metadata,
     parity_fixed,
     parity_fuzz,
@@ -1041,7 +1041,7 @@ def test_legacy_relevant_untracked_status_filters_non_code(monkeypatch) -> None:
 
 
 def test_legacy_identity_fails_loudly_when_checkout_commit_drifts(monkeypatch) -> None:
-    expected = "4c1fbc4cd1a67b1e8527f20dce0b853b9a4022ac"
+    expected = "936cc636096fcfefcee3e1310c21528444f39546"
     actual = "0000000000000000000000000000000000000000"
 
     def fake_git_output(args: list[str], *, cwd: Path) -> str:

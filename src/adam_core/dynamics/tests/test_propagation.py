@@ -290,23 +290,19 @@ def test_benchmark_propagate_2body_single(benchmark, orbital_elements):
     benchmark(propagate_2body, orbits[0], times=times)
 
 
-@pytest.mark.benchmark(group="propagate_2body")
-def test_benchmark_propagate_2body_single_matrix(benchmark, propagated_orbits):
-    # Clear the jax cache
-    pass  # cache clear no longer needed (no JAX)
-
-    def benchmark_function():
-        n_orbits = [1, 5, 20]
-        n_times = [1, 10, 100]
-
-        for n_orbits_i, n_times_i in itertools.product(n_orbits, n_times):
-            times = Timestamp.from_mjd(
-                np.arange(0, n_times_i, 1),
-                scale="tdb",
-            )
-            propagate_2body(propagated_orbits[:n_orbits_i], times=times)
-
-    benchmark(benchmark_function)
+@pytest.mark.parametrize("n_orbits", [1, 5, 20], ids=lambda value: f"orbits={value}")
+@pytest.mark.parametrize("n_times", [1, 10, 100], ids=lambda value: f"times={value}")
+@pytest.mark.benchmark(group="propagate_2body_matrix")
+def test_benchmark_propagate_2body_matrix(
+    benchmark, propagated_orbits, n_orbits, n_times
+):
+    times = Timestamp.from_mjd(np.arange(0, n_times, 1), scale="tdb")
+    result = benchmark(
+        propagate_2body,
+        propagated_orbits[:n_orbits],
+        times=times,
+    )
+    assert len(result) == n_orbits * n_times
 
 
 def test_propagate_2body_single_preserves_physical_parameters():

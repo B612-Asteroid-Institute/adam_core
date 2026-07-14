@@ -81,6 +81,8 @@ def make_case():
 
 
 def main():
+    # This downstream ASSIST fixture intentionally uses .legacy-assist-venv;
+    # unlike the adam-core oracle, its compatible package pair remains pinned.
     payload = {
         "legacy_commit": "4c1fbc4cd1a67b1e8527f20dce0b853b9a4022ac",
         "case": make_case(),

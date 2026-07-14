@@ -1029,22 +1029,16 @@ def test_Timestamp_rescale_correctness(scale1, scale2):
     )
 
 
-@pytest.mark.benchmark(group="timestamp_rescale")
+@pytest.mark.benchmark(group="timestamp_rescale_rust")
 @pytest.mark.parametrize("scale1", ["tai", "utc", "tdb", "tt"])
 @pytest.mark.parametrize("scale2", ["tai", "utc", "tdb", "tt"])
-@pytest.mark.parametrize("version", ["astropy", "new"])
-def test_Timestamp_rescale_benchmark(benchmark, scale1, scale2, version):
-    # Compare speed of the new rescale implementation with astropy.
-    # Don't bother checking ut1, since we still use astropy for that.
-    # Don't check correctness here. It is checked in the function above.
+def test_timestamp_rescale_benchmark(benchmark, scale1, scale2):
+    # UT1 remains an explicit Astropy/IERS provider boundary and is not mixed
+    # into the default-runtime Rust benchmark identity.
     original = Timestamp.from_kwargs(
         days=RESCALE_DAYS,
         nanos=RESCALE_NANOS,
         scale=scale1,
     )
-
-    if version == "astropy":
-        benchmark(original.rescale_astropy, scale2)
-    else:
-        rescaled = benchmark(original.rescale, scale2)
-        assert rescaled.scale == scale2
+    rescaled = benchmark(original.rescale, scale2)
+    assert rescaled.scale == scale2

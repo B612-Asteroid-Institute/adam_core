@@ -10,8 +10,8 @@ from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...time import Timestamp
 from ...utils.spice_backend import get_backend
-from ..orbits import Orbits
 from ..arrow_bridge import orbits_to_ipc
+from ..orbits import Orbits
 from ..spice_kernel import (
     fit_chebyshev,
     orbits_to_spk,

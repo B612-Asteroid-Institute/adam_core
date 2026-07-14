@@ -1,7 +1,12 @@
 [package]
 name = "adam_core_py"
 version = "0.5.6"
-edition = "2021"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+publish = false
 
 [lib]
 name = "_rust_native"
@@ -22,6 +27,6 @@ chrono = { version = "0.4", default-features = false, features = ["std"] }
 chrono-tz = "0.10"
 tzf-rs = { version = "1.3.6", default-features = false, features = ["bundled"] }
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
-adam_core_rs_coords = { path = "../adam_core_rs_coords" }
-adam_core_rs_orbit_determination = { path = "../adam_core_rs_orbit_determination" }
-adam_core_rs_spice = { path = "../adam_core_rs_spice" }
+adam_core_rs_coords = { version = "0.1.0", path = "../adam_core_rs_coords" }
+adam_core_rs_orbit_determination = { version = "0.1.0", path = "../adam_core_rs_orbit_determination" }
+adam_core_rs_spice = { version = "0.1.0", path = "../adam_core_rs_spice" }

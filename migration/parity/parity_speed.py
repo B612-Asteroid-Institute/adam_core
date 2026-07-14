@@ -100,7 +100,7 @@ LEGACY_REPO_ROOT = Path(
 # recapturing the legacy speed baseline.
 EXPECTED_LEGACY_GIT_COMMIT = os.environ.get(
     "ADAM_CORE_LEGACY_EXPECTED_GIT_COMMIT",
-    "4c1fbc4cd1a67b1e8527f20dce0b853b9a4022ac",
+    "936cc636096fcfefcee3e1310c21528444f39546",
 ).strip()
 LEGACY_RELEVANT_UNTRACKED_PREFIXES = (
     "src/",

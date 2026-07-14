@@ -5,6 +5,23 @@ Active migration gates are separated from frozen historical
 Rust-vs-legacy evidence. The rule is simple: do not claim a live
 Rust-vs-legacy speedup from any path where the "legacy" side can call Rust.
 
+Timing and Cache Policy
+-----------------------
+
+Python ``pytest-benchmark`` rows measure public compatibility facades and are
+compared with like-for-like public baselines. Native diagnostic columns are
+measured inside Rust with ``std::time::Instant``; Python, PyO3, NumPy, PyArrow,
+and quivr conversion is outside every native sample. Legacy/current Python
+controls migration performance gates; native timings diagnose the Rust kernel
+but do not replace the public comparison.
+
+Semantic result caches are cleared before each compute warmup and timed sample,
+while imported modules, loaded kernels, thread pools, and process/JIT state stay
+warm. Cache-hit latency is a separate benchmark identity and must never stand
+in for SPICE or observer computation. Input, oracle, facade, process version,
+or cache-policy changes require an intentional benchmark identity rotation and
+fresh evidence.
+
 Active Gates
 ------------
 
@@ -49,6 +66,11 @@ and is not overwritten by active runs. The broad final snapshot is
 ``migration/artifacts/history/rust_vs_legacy_final_snapshot_2026-04-23.json``;
 one-off historical artifacts in the same directory are dated and may support
 specific promotion or waiver decisions.
+
+Permanent post-migration CI keeps deterministic runtime tests and Rust latency
+regressions without requiring a frozen legacy environment. Cross-runtime
+legacy/current/native artifacts are conversion evidence and are recaptured when
+migration identities change; they are not a permanent release dependency.
 
 New Or Changed APIs
 -------------------

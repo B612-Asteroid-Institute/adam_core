@@ -1694,7 +1694,7 @@ fn observatory_lon_lat_values(
     Ok((lon_out, lat_out))
 }
 
-fn observatory_timezone_values(
+pub(crate) fn observatory_timezone_values(
     longitude: &[f64],
     cos_phi: &[f64],
     sin_phi: &[f64],

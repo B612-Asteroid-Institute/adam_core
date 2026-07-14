@@ -66,7 +66,7 @@ def main():
     time_output = ensure_input_time_scale(utc_results, inputs.coordinates.time)
     origin_output = ensure_input_origin_and_frame(inputs, results)
     payload = {
-        "legacy_commit": "4c1fbc4cd1a67b1e8527f20dce0b853b9a4022ac",
+        "legacy_commit": "936cc636096fcfefcee3e1310c21528444f39546",
         "time_scale": {
             "days": time_output.coordinates.time.days.to_pylist(),
             "nanos": time_output.coordinates.time.nanos.to_pylist(),

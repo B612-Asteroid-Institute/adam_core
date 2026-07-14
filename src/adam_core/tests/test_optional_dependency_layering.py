@@ -15,6 +15,7 @@ def test_default_dependency_metadata_keeps_optional_providers_out() -> None:
     assert not any(dependency.startswith("healpy") for dependency in normalized)
     assert not any(dependency.startswith("timezonefinder") for dependency in normalized)
     assert not any(dependency.startswith("h3") for dependency in normalized)
+    assert not any(dependency.startswith("jax") for dependency in normalized)
 
 
 def test_normal_runtime_imports_do_not_load_astropy_or_astroquery() -> None:
@@ -28,7 +29,7 @@ def test_normal_runtime_imports_do_not_load_astropy_or_astroquery() -> None:
         import adam_core.time
         import adam_core.utils.mpc
 
-        optional_roots = {"astropy", "astroquery", "healpy", "timezonefinder", "h3"}
+        optional_roots = {"astropy", "astroquery", "healpy", "timezonefinder", "h3", "jax"}
         loaded = sorted(
             name for name in sys.modules if name.split(".", 1)[0] in optional_roots
         )

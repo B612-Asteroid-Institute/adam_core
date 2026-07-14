@@ -1,7 +1,12 @@
 [package]
 name = "adam_core_rs_coords"
 version = "0.1.0"
-edition = "2021"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "Rust-native coordinates, dynamics, photometry, and table workflows for adam-core"
 
 [dependencies]
 rayon = "1.11"
@@ -10,8 +15,8 @@ arrow-buffer = "54"
 arrow-schema = "54"
 parquet = { version = "54", default-features = false, features = ["arrow", "snap", "zstd"] }
 erfars = "0.2"
-adam_core_rs_autodiff = { path = "../adam_core_rs_autodiff" }
-adam_core_rs_orbit_determination = { path = "../adam_core_rs_orbit_determination" }
+adam_core_rs_autodiff = { version = "0.1.0", path = "../adam_core_rs_autodiff" }
+adam_core_rs_orbit_determination = { version = "0.1.0", path = "../adam_core_rs_orbit_determination" }
 # Pure-rust dense linalg with hand-tuned SIMD (NEON, AVX2/512). Used for
 # weighted_mean / weighted_covariance GEMV/GEMM and unblocks future
 # Cholesky/LU/QR/eigen kernels (sigma-point sampling, ATWA solve, etc.).
@@ -19,6 +24,8 @@ faer = "0.22"
 # JSON marshalling for the ObsContext render/parse boundary (bead
 # personal-cmy.26); preserve_order keeps Python dict insertion order.
 serde_json = { version = "1", features = ["preserve_order"] }
+statrs = "0.18"
+nalgebra = "0.33"
 
 [lib]
 path = "src/lib.rs"

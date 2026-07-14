@@ -155,6 +155,36 @@ expected bad/insufficient data comes back as an ``insufficient_data`` row carryi
 id. Unexpected (programmer/contract) errors are re-raised with the offending object
 id attached rather than swallowed.
 
+Multiple Apparitions: Solve Each, Keep the Most Confident
+---------------------------------------------------------
+
+If your photometry spans more than one apparition (observing seasons separated
+by months), do not pool it into a single solve. Apparitions differ in viewing
+aspect, noise, and nightly cadence, so each has its own alias structure -- and
+one of them often samples the rotation cleanly where the densest one locks onto
+a sampling alias or hedges. ``estimate_rotation_period_best_apparition``
+partitions the observations at gaps longer than ``apparition_gap_days``
+(default 120), solves each apparition independently, and returns the most
+confident result (verdict rank, then amplitude SNR; the rule never sees any
+reference answer).
+
+.. code-block:: python
+
+   from adam_core.photometry import estimate_rotation_period_best_apparition
+
+   result = estimate_rotation_period_best_apparition(observations)
+   # result.confidence_flags[0] includes "apparition_selected_<k>_of_<n>"
+
+Measured on the 118-object LCDB standard-candle calibration set, this policy
+raised confident (``single_period``) results from 35 to 43 objects while the
+strict precision of those claims *improved* (0.80 to 0.84) and no new
+wrong-family claim appeared. The safety is measured on that set, not
+structural: a clean apparition can still be an alias, so the verdict semantics
+are unchanged. Requiring a second apparition to corroborate before claiming was
+also tested and is deliberately **not** applied: on the calibration set it only
+removed correct claims, because an object's systematic harmonic aliases repeat
+across apparitions and corroboration therefore does not catch them.
+
 Performance
 -----------
 
@@ -181,6 +211,8 @@ Entry Points
   exposures / heliocentric coordinates.
 * ``estimate_rotation_period_from_detections_grouped``: many objects; guarantees one
   result row per id.
+* ``estimate_rotation_period_best_apparition``: multi-apparition photometry of one
+  object; solves each apparition and keeps the most confident result.
 * ``RotationPeriodObservations.from_point_source_observations``: build the
   observations table (e.g. to inspect or reuse) without solving.
 

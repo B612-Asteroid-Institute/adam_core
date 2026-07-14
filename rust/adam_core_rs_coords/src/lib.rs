@@ -48,6 +48,16 @@ pub use observations::{
     PointSourceDetectionBatch, SourceCatalogBatch, TimeColumn,
 };
 
+pub mod rotation_period;
+pub use rotation_period::{
+    alias_bucket as rotation_alias_bucket, estimate_rotation_period,
+    estimate_rotation_period_best_apparition, estimate_rotation_period_grouped,
+    harmonic_adjusted_error_pct as rotation_harmonic_adjusted_error_pct,
+    near_day_alias as rotation_near_day_alias, relative_error_pct as rotation_relative_error_pct,
+    within_tolerance as rotation_within_tolerance, RotationPeriodConfig, RotationPeriodEstimate,
+    RotationPeriodInput, HARMONIC_FACTORS as ROTATION_HARMONIC_FACTORS,
+};
+
 pub mod generic;
 pub use generic::{
     cartesian_to_cometary6, cartesian_to_geodetic6, cartesian_to_keplerian6,

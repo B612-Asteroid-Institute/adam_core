@@ -1,0 +1,62 @@
+name: Rust crate release candidate
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust/**"
+      - ".github/workflows/rust-crate-*.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Test publishable workspace
+        run: |
+          set -euo pipefail
+          cargo fmt --all -- --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo test --workspace
+      - name: Package and verify crates once in publication order
+        run: |
+          set -euo pipefail
+          rm -rf target/package crate-dist
+          mkdir -p crate-dist .cargo
+          cp Cargo.lock /tmp/Cargo.lock.before
+          cat > .cargo/config.toml <<'EOF'
+          [patch.crates-io]
+          adam_core_rs_autodiff = { path = "rust/adam_core_rs_autodiff" }
+          adam_core_rs_coords = { path = "rust/adam_core_rs_coords" }
+          adam_core_rs_kernel_data = { path = "rust/adam_core_rs_kernel_data" }
+          adam_core_rs_orbit_determination = { path = "rust/adam_core_rs_orbit_determination" }
+          adam_core_rs_spice = { path = "rust/adam_core_rs_spice" }
+          EOF
+          for crate in \
+            adam_core_rs_kernel_data \
+            adam_core_rs_autodiff \
+            adam_core_rs_coords \
+            adam_core_rs_spice \
+            adam_core_rs_orbit_determination \
+            adam_core
+          do
+            cargo package -p "$crate"
+          done
+          rm .cargo/config.toml
+          rmdir .cargo
+          cmp Cargo.lock /tmp/Cargo.lock.before
+          cp target/package/*.crate crate-dist/
+          test "$(find crate-dist -name '*.crate' | wc -l | tr -d ' ')" = 6
+          sha256sum crate-dist/*.crate | sort | tee crate-dist/SHA256SUMS
+      - name: Upload exact crate publication set
+        uses: actions/upload-artifact@v4
+        with:
+          name: rust-crate-publication-set
+          path: crate-dist/
+          if-no-files-found: error

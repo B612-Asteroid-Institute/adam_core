@@ -172,6 +172,7 @@ def main() -> int:
             "healpy",
             "timezonefinder",
             "h3",
+            "jax",
         )
         unexpectedly_installed = []
         for distribution in forbidden_optional_distributions:
@@ -194,6 +195,8 @@ def main() -> int:
             or name.startswith("astroquery.")
             or name == "healpy"
             or name.startswith("healpy.")
+            or name == "jax"
+            or name.startswith("jax.")
         )
         if eagerly_loaded:
             raise AssertionError(f"optional providers were imported: {eagerly_loaded}")
@@ -295,6 +298,8 @@ def main() -> int:
             or name.startswith("astroquery.")
             or name == "healpy"
             or name.startswith("healpy.")
+            or name == "jax"
+            or name.startswith("jax.")
         )
         if loaded_optional_modules:
             raise AssertionError(

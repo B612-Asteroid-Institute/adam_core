@@ -17,6 +17,8 @@ mod od_ops;
 mod orbit_determination;
 mod photometry;
 mod query_clients;
+mod rotation_observations;
+mod rotation_period;
 mod spice;
 mod timestamp_ops;
 mod variant_ephemeris;
@@ -32,6 +34,8 @@ fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     od_ops::register(m)?;
     photometry::register(m)?;
     query_clients::register(m)?;
+    rotation_observations::register(m)?;
+    rotation_period::register(m)?;
     orbit_determination::register(m)?;
     spice::register(m)?;
     timestamp_ops::register(m)?;

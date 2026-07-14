@@ -12,7 +12,9 @@ description = "Core libraries for the ADAM platform"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 classifiers = [
-  "Operating System :: OS Independent",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Operating System :: POSIX :: Linux",
   "Development Status :: 4 - Beta",
   "Intended Audience :: Science/Research",
   "License :: OSI Approved :: MIT License",
@@ -50,6 +52,9 @@ legacy-sbdb = [
 ]
 healpix = [
     "healpy",
+]
+jax = [
+    "jax",
 ]
 plots = [
     "astropy",

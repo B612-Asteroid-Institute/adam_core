@@ -130,7 +130,7 @@ def main():
     OUT.write_text(
         json.dumps(
             {
-                "legacy_commit": "4c1fbc4cd1a67b1e8527f20dce0b853b9a4022ac",
+                "legacy_commit": "936cc636096fcfefcee3e1310c21528444f39546",
                 "vx": vx.tolist(),
                 "vy": vy.tolist(),
                 "vz": vz.tolist(),

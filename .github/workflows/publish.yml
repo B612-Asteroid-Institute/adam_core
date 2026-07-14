@@ -1,41 +1,139 @@
-name: Publish a release to PyPI
+name: Publish tested adam-core wheels
 
 on:
   workflow_dispatch:
     inputs:
-      test_pypi:
-        type: boolean
-        default: false
-        description: "Publish to the test PyPI instance, https://test.pypi.org/"
+      acceptance_run_id:
+        description: Successful Release candidate wheel matrix run ID for this exact commit
+        required: true
+        type: string
+      repository:
+        description: Destination index
+        required: true
+        default: testpypi
+        type: choice
+        options:
+          - testpypi
+          - pypi
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
 
 jobs:
-  build:
-    permissions:
-      id-token: write
+  collect-tested-artifacts:
+    name: Collect and verify already-tested wheels
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3
-    - name: Set up Rust
-      uses: dtolnay/rust-toolchain@stable
-    - name: Set up PDM
-      uses: pdm-project/setup-pdm@v4
-      with:
-        python-version: "3.11"
-    - name: Install build dependencies
-      run: pdm install -G test
-    - name: Build native adam_core wheel
-      run: pdm run wheel-build
-    - name: Verify native wheel artifact
-      run: pdm run wheel-inspect
-    - name: Publish adam_core to Test PyPI
-      if: ${{ inputs.test_pypi }}
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        password: ${{ secrets.TEST_PYPI_SECRET }}
-        repository-url: https://test.pypi.org/legacy/
-    - name: Publish adam_core to PyPI
-      if: ${{ ! inputs.test_pypi }}
-      uses: pypa/gh-action-pypi-publish@release/v1
-      with:
-        password: ${{ secrets.PYPI_SECRET }}
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+
+      - name: Set up artifact-verification Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install wheel filename parser
+        run: |
+          python -m pip install --only-binary=:all: packaging
+
+      - name: Verify acceptance run provenance and success
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ACCEPTANCE_RUN_ID: ${{ inputs.acceptance_run_id }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          RUN_JSON="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${ACCEPTANCE_RUN_ID}")"
+          test "$(jq -r .conclusion <<<"$RUN_JSON")" = success
+          test "$(jq -r .head_sha <<<"$RUN_JSON")" = "$EXPECTED_SHA"
+          test "$(jq -r .name <<<"$RUN_JSON")" = "Release candidate wheel matrix"
+
+      - name: Download exact acceptance artifacts
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.acceptance_run_id }}
+          github-token: ${{ github.token }}
+          pattern: wheel-acceptance-*
+          path: acceptance-artifacts
+
+      - name: Aggregate adam-core wheels without rebuilding
+        run: |
+          set -euo pipefail
+          mkdir dist
+          find acceptance-artifacts -type f -name 'adam_core-*.whl' -exec cp '{}' dist/ ';'
+          test "$(find dist -maxdepth 1 -name 'adam_core-*.whl' | wc -l | tr -d ' ')" = 15
+          python - <<'PY'
+          from pathlib import Path
+          from packaging.utils import parse_wheel_filename
+
+          wheels = sorted(Path("dist").glob("*.whl"))
+          expected_python = {"cp311", "cp312", "cp313"}
+          expected_platforms = {
+              "manylinux_2_17_x86_64",
+              "manylinux_2_17_aarch64",
+              "macosx_11_0_arm64",
+              "macosx_10_12_x86_64",
+              "win_amd64",
+          }
+          combinations = set()
+          for wheel in wheels:
+              name, _, _, tags = parse_wheel_filename(wheel.name)
+              if name != "adam-core":
+                  raise SystemExit(f"unexpected package in dist: {wheel}")
+              for tag in tags:
+                  combinations.add((tag.interpreter, tag.platform))
+          expected = {
+              (python, platform)
+              for python in expected_python
+              for platform in expected_platforms
+          }
+          missing = expected - combinations
+          if missing:
+              raise SystemExit(f"missing supported wheel combinations: {sorted(missing)}")
+          PY
+          sha256sum dist/*.whl | sort | tee dist/SHA256SUMS
+
+      - name: Upload verified publication set
+        uses: actions/upload-artifact@v4
+        with:
+          name: adam-core-tested-publication-set
+          path: dist/
+          if-no-files-found: error
+
+  publish-testpypi:
+    name: Publish exact wheels to TestPyPI
+    if: inputs.repository == 'testpypi'
+    needs: collect-tested-artifacts
+    runs-on: ubuntu-latest
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/p/adam-core
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: adam-core-tested-publication-set
+          path: dist
+      - name: Remove checksum manifest from upload directory
+        run: rm dist/SHA256SUMS
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+  publish-pypi:
+    name: Publish exact wheels to PyPI
+    if: inputs.repository == 'pypi'
+    needs: collect-tested-artifacts
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/adam-core
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: adam-core-tested-publication-set
+          path: dist
+      - name: Remove checksum manifest from upload directory
+        run: rm dist/SHA256SUMS
+      - uses: pypa/gh-action-pypi-publish@release/v1

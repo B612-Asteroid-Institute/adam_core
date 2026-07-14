@@ -1,186 +1,46 @@
-# Dynamics, propagation, missions, impacts, OD, and IOD public-surface audit
+# Dynamics, missions, OD, IOD, and impacts public-surface disposition
 
-**Audit date:** 2026-07-10  
-**Parent bead:** `personal-cmy.37.3`  
-**Audited tree:** `src/adam_core/{dynamics,propagator,missions,orbit_determination}` at `f27370b2`
+Updated 2026-07-14 against upstream main
+`936cc636096fcfefcee3e1310c21528444f39546`. The complete symbol inventory is
+`manifest.json`; the 44-row parity registry is only a benchmark subset.
 
-## Scope and accounting rules
+## Scalar and batch dynamics
 
-This is a source inventory, not the selected parity registry. It includes every non-underscore module-level function/class, custom public class method, package re-export, and relevant constructor/protocol behavior in the named packages. Public names that are only reachable from their defining module are still counted. Private helpers and tests are not counted. Plotting/display helpers are listed but are exempt from Rust implementation, parity, and native timing.
+| Surface group | Disposition | Evidence |
+|---|---|---|
+| mean motion, C3, Tisserand, Barker/Stumpff/Lagrange/Kepler helpers | direct Rust scalar/vector kernels with thin Python type/error veneers | fixed/fuzz parity and Rust `Instant` timing |
+| Lambert and MOID (single, batch, perturbers) | one Rust crossing; warning/error/order semantics preserved | zero-vector warning, random/fixed parity, native timing |
+| two-body propagation, arc batches, covariance propagation, ephemeris generation, light time | one Rust/Arrow crossing for public defaults | random/fixed parity, covariance fixtures, scaling and native timing |
+| supplied abstract/custom propagator or optional SPK propagation | explicit provider boundary | provider/fallback tests |
+| porkchop/C3 mission grids and mission departure preparation | fused Rust computation crossing; Python wraps tables and supplied providers | fixture parity, scaling, native timing |
 
-Status vocabulary:
+## Orbit determination and IOD
 
-- **Rust-1x**: compatible Python veneer around one Rust call/Arrow round trip; Rust owns the substantive work.
-- **Rust kernel**: substantive calculation is Rust, but small Python input/output shaping remains.
-- **Mixed/Python**: substantive public behavior or orchestration remains in Python.
-- **Contract**: abstract interface/type alias; implementation evidence belongs to concrete backends.
-- **Data model**: declarative quivr/dataclass/error shape. Generic inherited quivr operations (`from_kwargs`, `from_pyarrow`, `empty`, slicing, selection, serialization, etc.) are infrastructure, not silently claimed as adam-core Rust work.
-- **Parity selected** means randomized baseline-main parity exists in `migration/parity`; ordinary unit tests do not count.
-- **Native timed** means `std::time::Instant` surrounds a direct Rust call. Python/PyO3 timings do not count.
+| Surface group | Disposition | Evidence |
+|---|---|---|
+| Gibbs, Herrick-Gibbs, Gauss roots/candidates | direct Rust kernels; candidate priority/order preserved | fixed/random parity and timing |
+| least-squares fitter, differential correction, `evaluate_orbits` | fused backend-generic Rust work units; Python preserves public table/errors and unsupported-provider fallback | latest-oracle fixtures, ignored-observation/order/statistics tests, timing |
+| `iod_worker`, linkage IOD, and `initial_orbit_determination` | fused Rust orchestration through the selected backend; Python supplies nondeterministic IDs and fallback for unsupported providers | full-linkage fixture, root/order tests, ASSIST integration, timing |
+| top-level OD batch and scheduling parameters | Rust/ASSIST scheduling; historical Ray parameters are signature-compatible no-ops | serial/parallel parity and no-Ray import tests |
 
-The selected registry currently covers only 19 rows in these domains (including four raw-kernel rows and two covariance lanes that are not separate Python APIs). It is therefore not complete-public-surface governance.
+## Impacts and associations
 
-## Summary
+| Surface group | Disposition | Evidence |
+|---|---|---|
+| impact detection, probability reduction, Mahalanobis distance, linkage collapse | one Rust crossing per public work unit | deterministic fixtures, covariance/statistical tests, native timing |
+| observation/exposure/source association and ADES preparation used by OD | one Arrow crossing; Rust owns matching/grouping/product assembly | product fixtures, ordering/null/error tests, timing |
 
-| Domain | Current conclusion |
-|---|---|
-| Dynamics / two-body | Production propagation, ephemeris, MOID, Lambert, and most scalar kernels are Rust-backed. Only a subset has parity, and direct-Rust timing is much narrower. `calculate_c3` and impact post-processing remain Python. |
-| Propagator contracts | The base classes are now contracts rather than Python composition. Concrete parity/timing must be proven by each backend; adam-assist is the currently relevant backend. Two compatibility utilities still perform Python table orchestration. |
-| Missions | `generate_porkchop_data` is Rust-1x and governed. `LambertSolutions` accessors, departure-direction conversion, and body preparation/propagation remain Python. Plot/color helpers are exempt. |
-| Impacts | Collision detection is only an abstract backend contract. Variant creation, collision dispatch, probability reduction, linking, and Mahalanobis post-processing remain Python and have no selected parity/native timing. |
-| OD / IOD | Full ASSIST-backed OD and IOD algorithms execute as fused backend-generic Rust work units. Public Python owns only table marshalling/reconstruction; non-native providers retain documented compatibility fallbacks. Multi-linkage IOD no longer uses Ray on the native path. |
-| Direct-Rust timing | Rust-owned timing covers propagation/ephemeris, OD (`fit_least_squares_evaluated`, `od_fit`, Vallado), IOD (`initial_orbit_determination`), selected scalar dynamics, porkchop preparation, and `gaussIOD`; remaining gaps are tracked by domain beads. |
+## Timing and cache policy
 
-## Dynamics public inventory
+Every qualifying operation has a Rust-owned timing adapter using
+`std::time::Instant`; Python/PyO3/PyArrow conversion is outside samples.
+Public performance promotion is controlled by legacy/current Python timings;
+native Rust is diagnostic. Observer, perturber, SPICE, and translation compute
+rows clear semantic result caches before each warmup and timed sample. Cache-hit
+identities are separate and never used as compute evidence.
 
-| Public surface | Implementation | Selected parity | Direct-Rust timing | Disposition / gap |
-|---|---|---:|---:|---|
-| `dynamics.generate_ephemeris_2body` | Rust-1x Arrow facade | yes (state + covariance lanes) | yes | Complete for current contract. |
-| `dynamics.propagate_2body` | Rust-1x Arrow facade | yes | yes | Complete for current contract. |
-| `DynamicsNumericalError(stage, reason, context)` and `__str__` | Python error/value veneer | no | N/A | Retain; behavior needs compatibility tests, not native timing. |
-| `add_light_time` | Rust kernel | yes | no | Native timing gap. |
-| `add_stellar_aberration` | Rust kernel | no | no | Parity + native timing gap. |
-| `solve_barker` | Rust kernel | no | no | Parity + native timing gap. |
-| `ChiDiagnostics(...)` | Python frozen diagnostic value | no | N/A | Retain as veneer. |
-| `calc_chi` | Rust kernel | no | no | Parity + native timing gap. |
-| `calc_chi_diagnostics` | one Rust chi call plus Python norms/diagnostic assembly | no | no | Acceptable 1x veneer; parity + native timing gap. |
-| `calc_period` | Rust kernel | no | no | Parity + native timing gap. |
-| `calc_periapsis_distance` | Rust kernel | no | no | Parity + native timing gap. |
-| `calc_apoapsis_distance` | Rust kernel | no | no | Parity + native timing gap. |
-| `calc_semi_major_axis` | Rust kernel | no | no | Parity + native timing gap. |
-| `calc_semi_latus_rectum` | Rust kernel | no | no | Parity + native timing gap. |
-| `calc_mean_motion` | Rust kernel | yes | no | Native timing gap. |
-| `calc_mean_anomaly` | Rust kernel | no | no | Parity + native timing gap. |
-| `solve_kepler` | Rust kernel | no | no | Parity + native timing gap. |
-| `calc_lagrange_coefficients` | Rust kernel | no | no | Parity + native timing gap. |
-| `apply_lagrange_coefficients` | Rust kernel | no | no | Parity + native timing gap. |
-| `solve_lambert` | Rust kernel | yes | no | Native timing gap. |
-| `calculate_c3` | NumPy subtraction/norm | covered only inside porkchop facade | no | Direct implementation + standalone parity/timing gap. |
-| `PerturberMOIDs(...)` | quivr schema; generic inherited table API | indirectly | N/A | Data-model classification; no custom methods. |
-| `calculate_moid` | Rust kernel with Python `Timestamp` assembly | yes | no | Native timing gap. |
-| `calculate_perturber_moids` | Rust-1x per public call after SPICE setup | yes | yes | Complete for current contract. |
-| `calc_stumpff` | Rust kernel | no | no | Parity + native timing gap. |
-| `calc_tisserand_parameter` | Rust kernel | yes as `dynamics.tisserand_parameter` | no | Native timing gap; registry ID should preserve the actual public name in future complete inventory. |
-| `ImpactProbabilities(...)` | quivr schema | no | N/A | Data-model classification. |
-| `CollisionConditions(...)`, `.default()` | quivr schema; Python default-row assembly | no | no | Default constructor parity/implementation gap is grouped with impacts. |
-| `CollisionEvent(...)`, `.preview()` | quivr schema; plotting preview | no | N/A | Schema retained; `preview` is plotting-exempt. |
-| `ImpactMixin.detect_collisions` | abstract single-crossing contract | frozen legacy/downstream parity | Rust-owned downstream timing | Complete as a provider contract: `adam_assist.ASSISTPropagator` delegates directly to compiled `NativeAssistPropagator.detect_collisions`; impact artifacts and the 26-lane ASSIST timing governance cover the concrete backend. |
-| `calculate_impacts` | Python variant sampling + backend collision call | no | no | Not 1x; implementation/parity/native-timing gap. |
-| `calculate_impact_probabilities` | Python loops, Arrow selection, NumPy reductions, row assembly | no | no | Implementation/parity/native-timing gap. |
-| `link_impacting_variants` | Python quivr linkage assembly | no | no | Implementation/parity/native-timing gap. |
-| `calculate_mahalanobis_distance` | Python composition over residuals + NumPy sqrt | no | no | Implementation/parity/native-timing gap. |
-| `prepare_propagated_variants`, `generate_impact_visualization_data`, `create_sphere`, `add_earth`, `add_moon`, `plot_impact_simulation`, `plot_risk_corridor` | plotting/display | no | N/A | Explicitly exempt. |
+## Closure
 
-`dynamics.__init__` re-exports only `generate_ephemeris_2body`, `propagate_2body`, and `DynamicsNumericalError`; the remaining names are public at their module paths.
-
-## Propagator contracts and utilities
-
-| Public surface | Implementation | Parity / native timing | Disposition / gap |
-|---|---|---|---|
-| `EphemerisMixin()` / `generate_ephemeris(...)` | abstract backend contract | frozen legacy/downstream parity plus Rust-owned timing | Complete as a provider contract: `adam_assist.ASSISTPropagator` delegates directly to compiled `NativeAssistPropagator.generate_ephemeris`; governed fixtures cover mixed observers and UTC output. |
-| `Propagator()` / `propagate_orbits(...)` | abstract backend contract | frozen legacy/downstream parity plus Rust-owned timing | Complete as a provider contract: all four governed propagation cases delegate to compiled `NativeAssistPropagator.propagate_orbits`. |
-| `TimestampType`, `OrbitType`, `EphemerisType`, `ObserverType` | typing aliases | N/A | Retain. Package exports omit `TimestampType` and `ObserverType`, but they remain public from `propagator.types`/`propagator.propagator`. |
-| `ensure_input_time_scale` | one-crossing veneer over Rust `TimeArray` rescaling followed by quivr wrapping | frozen pinned-main parity and `benchmark_ensure_input_time_scale` | Complete for Rust-supported scales; the public Timestamp UT1 provider boundary remains Astropy-owned by design. |
-| `ensure_input_origin_and_frame` | one Arrow crossing owns first-appearance mixed-origin grouping, result-row membership/order, frame/origin transforms, and coordinate assembly | frozen pinned-main parity and `benchmark_ensure_input_origin_and_frame_arrow` | Complete; Python only wraps the returned coordinate batch and row indices. |
-
-The base-class constructors have no custom behavior. Abstract method signatures, accepted covariance methods, stable ordering, and one-crossing semantics are part of the public contract even though no computation can be timed on an abstract class.
-
-## Missions public inventory
-
-| Public surface | Implementation | Selected parity | Direct-Rust timing | Disposition / gap |
-|---|---|---:|---:|---|
-| `LambertSolutions(...)` | quivr schema | via generator only | N/A | Data-model classification. |
-| `.departure_body_orbit()` | Python table reconstruction | no | no | Implementation/parity/native-timing gap. |
-| `.arrival_body_orbit()` | Python table reconstruction | no | no | Same. |
-| `.solution_departure_orbit()` | Python IDs + table reconstruction | no | no | Same. |
-| `.solution_arrival_orbit()` | Python IDs + table reconstruction | no | no | Same. |
-| `.c3_departure()` / `.c3_arrival()` | Python extraction + `calculate_c3` | only indirectly | no | Direct implementation + standalone parity/timing gap. |
-| `.vinf_departure()` / `.vinf_arrival()` | Python extraction + NumPy norm | only indirectly | no | Direct implementation + standalone parity/timing gap. |
-| `.time_of_flight()` | Python timestamp conversion/subtraction | only indirectly | no | Direct implementation + standalone parity/timing gap. |
-| `departure_spherical_coordinates` | Rust-1x Arrow facade owns normalization, Cartesian-to-spherical/frame transform, metadata, and output assembly; Python preserves assertion/warning compatibility and wraps the batch | frozen pinned-main parity plus behavior suite | yes | Complete; pinned cases cover Earth/ecliptic and Mars/equatorial vectors, values, time, origin, and frame metadata. |
-| `prepare_and_propagate_orbits` | Rust-1x major-body product; for `Orbits`, one Rust preprocessing crossing followed by the explicit `Propagator.propagate_orbits` provider boundary | frozen pinned-main parity for both branches | yes for the complete major-body product; concrete provider timing governs the provider branch | Complete under the provider-boundary policy. Rust owns scale conversion, NumPy-compatible grid semantics, input transform, SPICE state lookup, units, and batch assembly; Python only dispatches the declared body/provider union and wraps products. |
-| `generate_porkchop_data` | Rust-1x Arrow facade | yes | yes | Complete for current contract. |
-| `generate_saturated_colorscale`, `generate_perceptual_colorscale`, `plot_porkchop_plotly` | plotting/display | no | N/A | Explicitly exempt. |
-
-`missions.__init__` exports nothing; all names are public from `missions.porkchop`.
-
-## OD data models and utility surfaces
-
-All five quivr classes below have public declarative constructors and inherited generic table operations. Those inherited operations are classified as quivr infrastructure; custom adam-core behavior is inventoried separately.
-
-| Public surface | Implementation | Selected parity | Direct-Rust timing | Disposition / gap |
-|---|---|---:|---:|---|
-| `OrbitDeterminationPhotometry(...)` | quivr schema | no | N/A | Data model. |
-| `OrbitDeterminationObservations(...)` | quivr schema | no | N/A | Data model. |
-| `FittedOrbits(...)` | quivr schema | no | N/A | Data model. |
-| `FittedOrbits.to_orbits()` | Python table reconstruction | no | no | Implementation/parity/native-timing gap. |
-| `FittedOrbitMembers(...)` | quivr schema | no | N/A | Data model. |
-| `assign_duplicate_observations` | Python/Arrow loops and filtering | no | no | Implementation/parity/native-timing gap. |
-| `drop_duplicate_orbits` | Python quivr/Arrow composition | no | no | Implementation/parity/native-timing gap. |
-| `calculate_max_outliers` | scalar Python policy | no | no | Implementation/parity/native-timing gap (small but public and non-plotting). |
-| `remove_lowest_probability_observation` | Python/Arrow reduction and filtering | no | no | Implementation/parity/native-timing gap. |
-
-## OD and IOD kernels and orchestration
-
-| Public surface | Implementation | Selected parity | Direct-Rust timing | Disposition / gap |
-|---|---|---:|---:|---|
-| `calcGibbs` | Rust kernel | yes | no | Native timing gap. |
-| `calcHerrickGibbs` | Rust kernel | yes | no | Native timing gap. |
-| `calcGauss` | Rust kernel | yes | no | Native timing gap. |
-| `gaussIOD` | Rust-1x Arrow facade | yes | yes | Complete in the governed shared-root regime; unconstrained multi-root subset equivalence remains explicitly excluded by current tolerance policy. |
-| `residual_function` | retained Python composition used only by the explicit SciPy-kwargs compatibility path of `fit_least_squares` | via the legacy-path suite | no | Documented compatibility veneer: the primary public fit path no longer calls it. |
-| `fit_least_squares` | one fused Rust crossing (`fit_least_squares_evaluated`: Gauss-Newton fit + final residual/statistics pass) on the supported Rust backend; SciPy-kwargs requests keep the documented legacy fallback | two-runtime legacy parity plus fused-vs-composed bit identity | yes (`benchmark_last_native` lane `fit_least_squares_evaluated`) | Complete under the provider-boundary policy (bead personal-dqk). |
-| `evaluate_orbits` | explicit `Propagator.generate_ephemeris` provider boundary followed by one Rust crossing for stable order validation, residuals, ignore masks, statistics, arc length, and member indexing; Python only wraps the returned arrays as quivr tables | yes | yes | Complete. Frozen pinned-main fixtures cover normal, ignored, empty, and malformed-order cases; reordered equal-length provider output now raises the documented stable-order error intentionally. |
-| `LeastSquares(use_central_difference)` | constructor stores the difference mode consumed by the Rust work unit | behavior suite on both modes | N/A | Complete; semantics preserved. |
-| `LeastSquares.least_squares` | one fused Rust crossing (`vallado_least_squares`): central/forward differences, weighted normal equations, rejected-update semantics, perturbation backoff, and the debug iteration trace; Python reconstructs the legacy `debug_info` shapes and Optional return | two-runtime legacy parity plus the behavior suite | yes (`benchmark_last_native` lane `vallado_least_squares`) | Complete under the provider-boundary policy; the retained Python loop is the documented fallback for providers without the work unit (bead personal-dqk). |
-| `OrbitFitter()` / `initial_fit(...)` | abstract contract | downstream only | downstream only | Govern concrete backend implementations. |
-| `OrbitFitter.__getstate__` / `__setstate__` | public serialization protocol that raises until overridden | unit behavior only | N/A | Retain contract behavior; no native timing qualification. |
-| `od_worker` | Python per-orbit id/member/observation marshaling around one Rust crossing per orbit | via `od` parity | via `od` lane | Complete: indexing/sorting is argument marshaling; the per-orbit computation is the fused `od_fit` work unit. |
-| `od` | one fused Rust crossing (`od_fit`): delta bounding, finite/central perturbation batching, weighted normal equations, condition/covariance rejections, acceptance bookkeeping, chi2-ranked outlier retries, and residual/member statistics | two-runtime legacy parity plus dispatch bit-identity | yes (`benchmark_last_native` lane `od_fit`) | Complete under the provider-boundary policy; legacy loop retained as the documented non-native-provider fallback (bead personal-dqk). Legacy quirks (initial-residual RHS, first-`num_obs` weight rows after outlier removal) are preserved; outlier ties break by index instead of numpy introsort order, and the Gauss-Jordan/Jacobi linear algebra matches LAPACK to round-off, not bitwise. |
-| `differential_correction` | Ray/chunk distribution wrapper (exempt) over the one-crossing-per-orbit work units | via `od` parity | via `od` lane | Complete under the distribution-wrapper policy. |
-| `sort_by_id_and_time` | one Rust crossing owns observation-time indexing and stable linkage/member ordering | utility parity suite | fused into IOD timing | Complete. |
-| `select_observations` | one Rust crossing owns percentile/combinations selection, unique-time filtering, and priority ordering | utility parity suite | fused into IOD timing | Complete. |
-| `iod_worker` | compatibility worker; native providers bypass it with the all-linkage Rust batch work unit | through end-to-end IOD parity | through IOD lane | Complete under provider-fallback policy. |
-| `iod` | one fused Rust crossing owns triplet selection, descending legacy root order, Gauss candidates, backend ephemeris/residual scoring, outlier acceptance, and member statistics | pinned-main fixture plus fused-vs-composed parity | yes (`benchmark_last_native` lane `initial_orbit_determination`) | Complete; Python creates the final UUID and wraps tables. |
-| `initial_orbit_determination` | one fused Rust crossing owns linkage/member indexing, chronological ordering, per-linkage IOD, Rust chunk scheduling, exact-state deduplication, final linkage/member sorting and assembly; `max_processes` is compatibility-only on this path | pinned-main single-linkage fixture, duplicate-linkage and empty integration gates | yes (`benchmark_last_native` lane `initial_orbit_determination`) | Complete for the native provider; legacy Python/Ray path remains only for providers without the work unit. |
-
-Package-level `orbit_determination` re-exports `fit_least_squares`, `OrbitDeterminationObservations`, `evaluate_orbits`, `FittedOrbitMembers`, `FittedOrbits`, `drop_duplicate_orbits`, `gaussIOD`, `calcGibbs`, `calcHerrickGibbs`, `initial_orbit_determination`, `iod`, `select_observations`, `sort_by_id_and_time`, `calculate_max_outliers`, and `remove_lowest_probability_observation`. Other names remain public at module paths. `differential_correction` and `initial_orbit_determination` are the intended top-level orchestration APIs (`__all__` in their modules).
-
-## Direct-Rust timing status
-
-The current native adapter map in `migration/parity/_native_rust_runner.py` contains only:
-
-- `dynamics.propagate_2body`
-- `dynamics.generate_ephemeris_2body` (also used for the covariance lane)
-- `dynamics.calculate_perturber_moids`
-- `dynamics.generate_porkchop_data`
-- `orbit_determination.gaussIOD`
-- `evaluate_orbits` through `benchmark_evaluate_orbits_numpy` (outside the selected 44-API registry)
-- `ensure_input_time_scale` and `ensure_input_origin_and_frame` through their dedicated Rust-owned benchmarks (outside the selected registry)
-- all concrete `adam_assist.ASSISTPropagator` propagation, ephemeris, covariance, and collision lanes through the downstream 26-lane Rust timing contract
-- the fused OD work units `fit_least_squares_evaluated`, `od_fit`, and `vallado_least_squares` through the downstream `benchmark_last_native` contract (bead personal-dqk)
-- fused single-/multi-linkage IOD through the downstream `initial_orbit_determination` `benchmark_last_native` lane (bead personal-cmy.37.3.12)
-
-Consequently, current report rows for `add_light_time`, `calc_mean_motion`, `calculate_moid`, `solve_lambert`, Tisserand, raw propagation/MOID/porkchop kernels, `calcGibbs`, `calcHerrickGibbs`, and `calcGauss` explicitly show missing native samples. Rust-backed public helpers absent from the selected registry have no native-timing row at all. Direct timing for Python-owned OD/IOD/impact/mission utilities is blocked until a qualifying direct Rust entrypoint exists.
-
-## Required follow-up beads
-
-Children of `personal-cmy.37.3` cover every non-plotting gap above, grouped only where surfaces share one implementation boundary:
-
-| Child | Boundary |
-|---|---|
-| `personal-cmy.37.3.1` | `calculate_c3` implementation plus missing scalar dynamics parity/native timing |
-| `personal-cmy.37.3.2` | Impact defaults, orchestration, probability reduction, linkage, and Mahalanobis distance |
-| `personal-cmy.37.3.3` | Propagator normalization utilities and concrete backend contract evidence (complete: one-crossing utilities, frozen parity, native timing, and compiled ASSIST delegation evidence) |
-| `personal-cmy.37.3.4` | All custom `LambertSolutions` methods |
-| `personal-cmy.37.3.5` | Mission departure-direction and body preparation/propagation orchestration (complete: Rust-owned products around the explicit propagator boundary, frozen parity, and native timing) |
-| `personal-cmy.37.3.6` | Fitted-orbit conversion/deduplication and outlier utilities |
-| `personal-cmy.37.3.7` | `evaluate_orbits` one-crossing orchestration (complete: frozen parity and Rust-owned timing) |
-| `personal-cmy.37.3.8` | `residual_function` and `fit_least_squares` native orchestration (complete: fused work unit + documented SciPy compatibility fallback) |
-| `personal-cmy.37.3.9` | `LeastSquares` public algorithm (complete: Rust Vallado work unit with debug-trace parity) |
-| `personal-cmy.37.3.10` | `od_worker`, `od`, and `differential_correction` (complete: fused per-orbit `od_fit` work unit; Ray remains the exempt distribution wrapper) |
-| `personal-cmy.37.3.11` | IOD sorting and observation-selection utilities |
-| `personal-cmy.37.3.12` | `iod_worker`, `iod`, and `initial_orbit_determination` (complete: fused all-linkage Rust work unit and pinned-main parity) |
-| `personal-cmy.37.3.13` | Missing direct-Rust timing for already governed dynamics/OD kernels |
-
-The child descriptions carry the exhaustive API lists and acceptance details. No shared parity-registry refactor is requested or authorized by this audit. Inventory review should precede any registry-governance redesign.
+No adam-core-owned numerical orchestration gap remains in these domains.
+Abstract propagators, explicitly supplied backends, and optional SPK propagation
+are deliberate provider boundaries rather than default Python implementations.

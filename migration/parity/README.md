@@ -31,8 +31,8 @@ fingerprinted on the legacy checkout's git commit (plus its venv
 `pip freeze` and the harness source), so a checkout that drifts onto a
 feature branch silently invalidates `parity_legacy_speed_baseline.json`.
 The dedicated checkout should stay on the commit the baseline was captured
-against (`4c1fbc4cd1a67b1e8527f20dce0b853b9a4022ac`, upstream `main` at
-capture time); the speed gate asserts this pin before cache validation so
+against (`936cc636096fcfefcee3e1310c21528444f39546`, upstream `main` at
+capture time, including the rotation-period surface); the speed gate asserts this pin before cache validation so
 checkout drift fails with a clear error. Bump it deliberately and recapture.
 
 Because both repos export the package name `adam_core`, they cannot coexist

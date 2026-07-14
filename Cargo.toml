@@ -1,5 +1,6 @@
 [workspace]
 members = [
+  "rust/adam_core",
   "rust/adam_core_rs_autodiff",
   "rust/adam_core_rs_coords",
   "rust/adam_core_rs_orbit_determination",
@@ -8,3 +9,10 @@ members = [
   "rust/adam_core_py",
 ]
 resolver = "2"
+
+[workspace.package]
+edition = "2021"
+license = "MIT"
+repository = "https://github.com/B612-Asteroid-Institute/adam_core"
+homepage = "https://github.com/B612-Asteroid-Institute/adam_core"
+rust-version = "1.87"

@@ -111,7 +111,7 @@ def main():
     ordering_error = make_case(2, 3)
     ordering_error[2].ephemeris = ordering_error[2].ephemeris.take([0, 1, 2, 3, 4])
     payload = {
-        "legacy_commit": "4c1fbc4cd1a67b1e8527f20dce0b853b9a4022ac",
+        "legacy_commit": "936cc636096fcfefcee3e1310c21528444f39546",
         "normal": result(make_case(4, 8), None),
         "ignored": result(make_case(4, 8), ["obs001", "obs006"]),
         "empty": error(empty),

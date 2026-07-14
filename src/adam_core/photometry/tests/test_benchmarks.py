@@ -12,6 +12,7 @@ from ..magnitude import (
     convert_magnitude,
 )
 
+
 def _make_benchmark_case(n: int = 2048):
     rng = np.random.default_rng(123)
     time = Timestamp.from_mjd(np.full(n, 60000), scale="tdb")

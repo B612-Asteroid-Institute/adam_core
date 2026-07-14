@@ -1,127 +1,69 @@
 # Remaining Rust support surface
 
-Updated after the Arrow-native epic (`personal-cmy.36`) and ASSIST ownership
-handoff (`personal-yio`). “Unsupported” is separated from missing benchmark
-instrumentation: a blank native timing is not a runtime support failure.
+Updated 2026-07-14 after integrating upstream main at
+`936cc636096fcfefcee3e1310c21528444f39546`.
 
 ## Runtime support summary
 
-- **Selected adam-core parity registry only:** 44/44 registered surfaces have a
-  Rust-backed compatible Python path (34 public Rust defaults, 9 Rust raw
-  kernels, and `Observers.from_codes` with a Rust default plus fallback). This
-  is not the complete public API; `personal-cmy.37` is auditing exported class
-  methods, constructors, inherited table operations, I/O helpers, and other
-  functions omitted from the benchmark registry.
-- **Typed-table Arrow audit:** complete; every audited typed-table surface is a
-  one-crossing Arrow facade or explicitly classified as a NumPy-flat numeric
-  kernel.
-- **adam-assist package semantics:** Rust-backed propagation, sampled covariance,
-  ephemeris, collision/impact workflows, and per-orbit least-squares are
-  available through `adam_assist.ASSISTPropagator`.
+- The authoritative complete inventory is
+  `migration/public_surface/manifest.json`: **576 symbols / 66 constants**.
+  Domain dispositions are recorded under `migration/public_surface/`.
+- The 44-row parity registry remains a selected migration benchmark set, not a
+  public-API count. All enforced rows pass; raw-kernel diagnostic rows do not
+  control public promotion.
+- Every adam-core-owned non-plotting operation is Rust-backed, a thin compatible
+  veneer over a native crossing, generic quivr/dataclass infrastructure, static
+  data, or an explicit provider boundary.
+- The complete latest-main `photometry.rotation` surface is present. Rust owns
+  the estimator, frequency fits, confidence/alias policy, apparition selection,
+  grouped solves, default observation assembly, and native timing.
+- `adam-assist` owns ASSIST propagation, sampled covariance, ephemeris,
+  collision/impact, OD/IOD, and scheduling orchestration. It consumes
+  `libassist-sys` and `librebound-sys` directly; no `assist-rs` v2 is planned.
 
-## Known Python/mixed class methods omitted from the 44-API registry
+## Explicit compatibility and provider boundaries
 
-The complete audit is in progress, but the orbit-table surface alone already
-contains material omissions:
+These are supported boundaries, not hidden default backends:
 
-- `Orbits.group_by_orbit_id`: Python/PyArrow grouping loop.
-- `Orbits.dynamical_class`: Python orchestration across coordinate conversion
-  and the Rust classification kernel; not one Rust method crossing.
-- `Orbits.preview`: intentional Python/Plotly UI path.
-- `VariantOrbits.link_to_orbits`: Python/quivr linkage construction.
-- `VariantOrbits.collapse` and `collapse_by_object_id`: Python grouping/loops,
-  repeated Rust weighted-covariance calls, and Python table reconstruction.
-- `VariantEphemeris.link_to_ephemeris`, `collapse`, `collapse_by_object_id`, and
-  `collapse_sigma_points_orbit_major`: Python or mixed Python/Rust composition.
-- `Ephemeris.link_to_observers`: Python time coercion/linkage orchestration.
-- Inherited quivr table methods are Python/PyArrow infrastructure and were not
-  counted as Rust-owned adam-core methods.
+- plotting/display and `Orbits.preview`;
+- Astropy object conversion and UT1/IERS data;
+- the historical Astroquery `SBDB.query` monkeypatch seam;
+- Healpy compatibility helpers;
+- the opt-in historical JAX batch-fit module (the public rotation estimator
+  always uses Rust);
+- abstract/external propagator calls and optional SPK propagation;
+- live network providers and user-supplied/custom observer providers; and
+- generic quivr projection, linkage, table construction, and serialization
+  infrastructure where no adam-core algorithm is performed.
 
-## Supported only as Python + Rust composition (not yet Rust-only)
+Ordinary TAI/TT/UTC/TDB conversion, ISO formatting, observing-night calculation,
+geographic timezone lookup, SBDB access, HEALPix operations, MPC observers,
+photometry, and default product generation do not require those optional
+providers.
 
-1. **Top-level OD batch / differential correction** (`personal-cmy.33.4`).
-   The ASSIST per-orbit Gauss-Newton fit is Rust-native, but adam-core still
-   performs post-fit `evaluate_orbits` and multi-orbit scheduling in Python/Ray.
-   Fit + evaluation + batch distribution are not one Rust crossing.
-2. **Top-level IOD orchestration** (`personal-cmy.33.10`).
-   `calcGauss` and `gaussIOD` are Rust-backed, but `iod_worker` candidate
-   selection, iterative refinement/differential correction, linkage batching,
-   and Ray distribution remain Python orchestration.
-3. **Space-based/custom-kernel observer fallback** (`personal-cmy.33.7`).
-   Ground MPC-code `Observers.from_codes` is Arrow-native Rust. Space-based or
-   custom-kernel cases can still fall back to Python rather than staying in the
-   single Rust crossing.
-4. **Network and file-product facades (intentional I/O boundary).** SBDB,
-   Horizons, NEOCC, Scout, OEM, and OpenSpace-facing Python APIs retain Python
-   HTTP/file orchestration; deterministic numeric parsing/rendering is Rust
-   where migrated. A standalone Rust HTTP/product client is not currently a
-   migration requirement.
+## Pure-Rust distribution work
 
-## Not yet independently deployable as a pure-Rust stack
+The workspace now contains publishable permissive domain crates plus the public
+`adam_core` umbrella crate. Crate metadata includes versions, licenses,
+repository provenance, MSRV, and versioned path dependencies. Release-candidate
+CI tests the workspace and packages crates in dependency order; trusted
+publishing is prepared but cannot be enabled until crates.io receives each
+crate's first manual release. No crate is published as part of this migration.
 
-1. **Kernel/data discovery** (`personal-3uy`). Rust SPICE/ASSIST still relies on
-   BSP assets distributed by Python data packages or explicit paths. Dedicated
-   Rust data crates / first-class asset discovery are not complete.
-2. **Published Rust crates/API.** The internal adam-core crates and downstream
-   `adam_assist_rs` are buildable, but are not yet a stable, versioned standalone
-   Rust SDK replacing the Python distributions.
-3. **Upstream ASSIST primitive release** (`personal-cmy.8`). The downstream
-   backend remains pinned to assist-rs PR #11 revision pending merge/publication.
+Large BSP assets remain external because they exceed crates.io limits.
+`adam_core_rs_kernel_data` resolves them automatically in this order: explicit
+override, installed Python package, cache, then verified wheel download. Offline
+mode and installed-package discovery are tested without duplicate files.
 
-## Runtime-supported surfaces missing qualifying native-Rust timing
+## Native artifact targets
 
-These APIs run Rust today, but lack a Rust-owned `Instant` adapter, so the
-native column remains blank under `personal-98v.1`:
+The supported wheel matrix is CPython 3.11-3.13 on manylinux 2.17 x86-64 and
+AArch64, macOS Apple silicon and Intel, and Windows x86-64. Musllinux is
+unsupported. Release publication downloads the exact clean-room-tested
+artifacts and does not rebuild wheels.
 
-- `coordinates.cartesian_to_cometary`
-- `coordinates.cartesian_to_geodetic`
-- `coordinates.cartesian_to_keplerian`
-- `coordinates.cartesian_to_spherical`
-- `coordinates.cometary.to_cartesian`
-- `coordinates.keplerian.to_cartesian`
-- `coordinates.residuals.apply_cosine_latitude_correction`
-- `coordinates.residuals.bound_longitude_residuals`
-- `coordinates.residuals.calculate_chi2`
-- `coordinates.rotate_cartesian_time_varying`
-- `coordinates.spherical.to_cartesian`
-- `coordinates.transform_coordinates_with_covariance`
-- `dynamics.add_light_time`
-- `dynamics.calc_mean_motion`
-- `dynamics.calculate_moid`
-- `dynamics.calculate_moid_batch`
-- `dynamics.propagate_2body_along_arc`
-- `dynamics.propagate_2body_arc_batch`
-- `dynamics.propagate_2body_with_covariance`
-- `dynamics.solve_lambert`
-- `dynamics.tisserand_parameter`
-- `missions.porkchop_grid`
-- `orbits.classify_orbits`
-- `photometry.calculate_apparent_magnitude_v`
-- `photometry.calculate_apparent_magnitude_v_and_phase_angle`
-- `photometry.calculate_phase_angle`
-- `photometry.fit_absolute_magnitude_grouped`
-- `photometry.fit_absolute_magnitude_rows`
-- `photometry.predict_magnitudes`
-- `statistics.weighted_covariance`
-- `statistics.weighted_mean`
+## Deferred
 
-All adam-assist benchmark lanes (17 propagation, 6 covariance, and 3 collision
-lanes) likewise lack Rust-owned `Instant` adapters. Their public veneer speedups
-are valid; native-Rust speedups must remain blank until downstream adapters are
-implemented.
-
-## Surfaces with qualifying native-Rust timing today
-
-- `coordinates.residuals.Residuals.calculate`
-- `coordinates.transform_coordinates`
-- `dynamics.calculate_perturber_moids`
-- `dynamics.generate_ephemeris_2body`
-- `dynamics.generate_ephemeris_2body_with_covariance`
-- `dynamics.generate_porkchop_data`
-- `dynamics.propagate_2body`
-- `observers.Observers.from_codes`
-- `orbit_determination.calcGauss`
-- `orbit_determination.calcGibbs`
-- `orbit_determination.calcHerrickGibbs`
-- `orbit_determination.gaussIOD`
-- `orbits.VariantOrbits.create`
+Serialized Arrow `RecordBatch` transport remains deferred (`personal-cmy.11`)
+until a concrete second process/consumer needs it; adding serialization now
+would add copies without improving the in-process Rust APIs.

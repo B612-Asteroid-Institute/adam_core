@@ -864,7 +864,9 @@ def relative_error_pct(p_rec: float, p_true: float) -> float:
     float
         ``100 * |p_rec - p_true| / p_true``.
     """
-    return float(100.0 * abs(float(p_rec) - float(p_true)) / float(p_true))
+    from adam_core import _rust_native as _rn
+
+    return float(_rn.rotation_relative_error_pct(float(p_rec), float(p_true)))
 
 
 def harmonic_adjusted_error_pct(p_rec: float, p_true: float) -> tuple[float, float]:
@@ -885,10 +887,12 @@ def harmonic_adjusted_error_pct(p_rec: float, p_true: float) -> tuple[float, flo
         The minimum harmonic-adjusted error in percent, and the factor ``f``
         that achieves it.
     """
-    factors = np.asarray(HARMONIC_FACTORS, dtype=np.float64)
-    errors = np.abs(float(p_rec) * factors - float(p_true)) / float(p_true)
-    best = int(np.argmin(errors))
-    return float(100.0 * errors[best]), float(factors[best])
+    from adam_core import _rust_native as _rn
+
+    error, factor = _rn.rotation_harmonic_adjusted_error_pct(
+        float(p_rec), float(p_true)
+    )
+    return float(error), float(factor)
 
 
 def alias_bucket(best_factor: float) -> str:
@@ -906,24 +910,9 @@ def alias_bucket(best_factor: float) -> str:
         ``"3/4x"``, ``"4/3x"``, ``"3/2x"``, ``"2x"``, ``"3x"``, ``"4x"``, or
         ``"other"`` if no factor is within 5% of ``best_factor``.
     """
-    labels: list[tuple[float, str]] = [
-        (1.0, "1x"),
-        (0.25, "1/4x"),
-        (1.0 / 3.0, "1/3x"),
-        (0.5, "1/2x"),
-        (2.0 / 3.0, "2/3x"),
-        (0.75, "3/4x"),
-        (4.0 / 3.0, "4/3x"),
-        (1.5, "3/2x"),
-        (2.0, "2x"),
-        (3.0, "3x"),
-        (4.0, "4x"),
-    ]
-    factor = float(best_factor)
-    for value, label in labels:
-        if abs(factor - value) <= 0.05 * value:
-            return label
-    return "other"
+    from adam_core import _rust_native as _rn
+
+    return str(_rn.rotation_alias_bucket(float(best_factor)))
 
 
 def within_tolerance(p_rec: float, p_true: float, tolerance_fraction: float) -> bool:
@@ -946,7 +935,13 @@ def within_tolerance(p_rec: float, p_true: float, tolerance_fraction: float) -> 
     bool
         ``True`` if ``relative_error_pct(p_rec, p_true) <= tolerance_fraction * 100``.
     """
-    return bool(relative_error_pct(p_rec, p_true) <= float(tolerance_fraction) * 100.0)
+    from adam_core import _rust_native as _rn
+
+    return bool(
+        _rn.rotation_within_tolerance(
+            float(p_rec), float(p_true), float(tolerance_fraction)
+        )
+    )
 
 
 def near_day_alias(
@@ -974,17 +969,10 @@ def near_day_alias(
     bool
         ``True`` if a day-alias relationship holds.
     """
-    p_rec = float(p_rec_hours)
-    p_true = float(p_true_hours)
-    if p_rec <= 0.0 or p_true <= 0.0:
-        return False
-    f_rec = 24.0 / p_rec
-    f_true = 24.0 / p_true
-    tol = float(tolerance_fraction)
-    for n in (1, 2):
-        for aliased in (f_true + n, f_true - n):
-            if aliased <= 0.0:
-                continue
-            if abs(f_rec - aliased) / f_true <= tol:
-                return True
-    return False
+    from adam_core import _rust_native as _rn
+
+    return bool(
+        _rn.rotation_near_day_alias(
+            float(p_rec_hours), float(p_true_hours), float(tolerance_fraction)
+        )
+    )

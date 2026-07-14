@@ -2,13 +2,14 @@ import numpy as np
 import pytest
 
 from ...time import Timestamp
+from ...utils.spice import clear_spkez_cache
 from ..cartesian import CartesianCoordinates
 from ..cometary import CometaryCoordinates
 from ..covariances import CoordinateCovariances
 from ..keplerian import KeplerianCoordinates
 from ..origin import Origin, OriginCodes
 from ..spherical import SphericalCoordinates
-from ..transform import transform_coordinates
+from ..transform import clear_translation_cache, transform_coordinates
 
 
 @pytest.mark.parametrize(
@@ -29,9 +30,6 @@ from ..transform import transform_coordinates
 def test_benchmark_transform_cartesian_coordinates(
     benchmark, representation, frame, origin, size
 ):
-    if origin == OriginCodes.SOLAR_SYSTEM_BARYCENTER:
-        pytest.skip("barycenter transform not yet implemented")
-
     if frame == "ecliptic":
         frame_in = "equatorial"
     else:
@@ -44,23 +42,35 @@ def test_benchmark_transform_cartesian_coordinates(
         vx=np.array([1] * size),
         vy=np.array([1] * size),
         vz=np.array([1] * size),
-        time=Timestamp.from_mjd([50000] * size),
+        time=Timestamp.from_mjd([50000] * size, scale="tdb"),
         origin=Origin.from_kwargs(code=["SUN"] * size),
         frame=frame_in,
     )
-    benchmark(
+
+    def clear_result_caches() -> None:
+        clear_translation_cache()
+        clear_spkez_cache()
+
+    result = benchmark.pedantic(
         transform_coordinates,
-        from_coords,
-        representation_out=representation,
-        frame_out=frame,
-        origin_out=origin,
+        args=(from_coords,),
+        kwargs={
+            "representation_out": representation,
+            "frame_out": frame,
+            "origin_out": origin,
+        },
+        setup=clear_result_caches,
+        rounds=7,
+        warmup_rounds=1,
+        iterations=1,
     )
+    assert len(result) == size
 
 
 @pytest.mark.benchmark(group="coordinate_covariances")
-def test_benchmark_CoordinateCovariances_to_matrix(benchmark):
-
-    covariances_filled = [np.random.random(36) for _ in range(500)]
+def test_benchmark_coordinate_covariances_to_matrix(benchmark):
+    rng = np.random.default_rng(0)
+    covariances_filled = [rng.random(36) for _ in range(500)]
     covariances_missing = [None for _ in range(500)]
     coordinate_covariances = CoordinateCovariances.from_kwargs(
         values=covariances_filled + covariances_missing
@@ -69,8 +79,8 @@ def test_benchmark_CoordinateCovariances_to_matrix(benchmark):
 
 
 @pytest.mark.benchmark(group="coordinate_covariances")
-def test_benchmark_CoordinateCovariances_from_matrix(benchmark):
-
-    covariances = np.random.random((1000, 6, 6))
+def test_benchmark_coordinate_covariances_from_matrix(benchmark):
+    rng = np.random.default_rng(0)
+    covariances = rng.random((1000, 6, 6))
     covariances[500:, :, :] = np.nan
     benchmark(CoordinateCovariances.from_matrix, covariances)

@@ -24,6 +24,17 @@ Boundary Selection Rule
 - Use an Arrow boundary for table-centric APIs that require schema/null semantics.
 - For high-level entrypoints, use a single Python->Rust boundary crossing per call and execute the full internal pipeline in Rust before returning results.
 
+Complete Surface Status
+-----------------------
+
+The authoritative latest-main inventory is
+``migration/public_surface/manifest.json`` (576 symbols / 66 constants). The
+selected parity registry is a benchmark set, not the public-surface count.
+Every adam-core-owned non-plotting operation is either Rust-backed, a thin
+single-crossing compatibility veneer, or an explicitly documented provider
+boundary. The API examples below describe boundary contracts; they are not an
+exhaustive migration-status list.
+
 Migration Surface Scope Rule
 ----------------------------
 
@@ -55,7 +66,7 @@ Current Migrated APIs
   - Rust entrypoint: ``adam_core._rust_native.keplerian_to_cartesian_numpy``.
   - Error behavior: raises ``ValueError`` on shape/length mismatch.
 
-- ``coordinates.transform_coordinates`` (partial Rust high-level dispatcher)
+- ``coordinates.transform_coordinates`` (Rust high-level dispatcher with explicit provider boundaries)
   - Boundary: Python coordinate tables, with a single internal crossing into ``adam_core._rust_native.transform_coordinates_numpy`` for supported paths.
   - Current Rust-supported single-crossing paths: ``cartesian|spherical|keplerian -> cartesian|spherical|geodetic|keplerian`` with unchanged origin and NaN covariances; frame support includes unchanged frame and ``equatorial <-> ecliptic``.
   - Unsupported paths remain whole-call Python execution (no mixed Python<->Rust ping-pong within one call).
@@ -113,7 +124,9 @@ Fallback and Waivers
 
 - If a Rust-backed API cannot satisfy parity/performance criteria, keep that
   API off the migrated production surface or record an explicit waiver. Do not
-  add rustless production fallbacks.
+  add rustless production fallbacks. Optional Astropy/UT1, Astroquery
+  monkeypatch, Healpy, plotting, external propagator, and live provider calls
+  are explicit compatibility/provider boundaries rather than default backends.
 - Waivers are tracked in ``migration/waivers.yaml`` with owner and review date.
 
 Status Registry

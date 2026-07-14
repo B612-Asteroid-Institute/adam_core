@@ -1,0 +1,55 @@
+name: Publish tested Rust crates
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: Successful Rust crate release candidate run ID for this exact commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: crates-io
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify candidate run provenance and success
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          RUN_JSON="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}")"
+          test "$(jq -r .conclusion <<<"$RUN_JSON")" = success
+          test "$(jq -r .head_sha <<<"$RUN_JSON")" = "$EXPECTED_SHA"
+          test "$(jq -r .name <<<"$RUN_JSON")" = "Rust crate release candidate"
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+          name: rust-crate-publication-set
+          path: accepted-crates
+      - name: Verify the exact tested package archives
+        run: |
+          set -euo pipefail
+          sha256sum -c accepted-crates/SHA256SUMS
+          test "$(find accepted-crates -maxdepth 1 -name '*.crate' | wc -l | tr -d ' ')" = 6
+          python migration/scripts/publish_crate_archives.py --archives accepted-crates
+      - name: Acquire crates.io trusted-publishing token
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: Upload the exact tested archives in dependency order
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+        run: |
+          python migration/scripts/publish_crate_archives.py \
+            --archives accepted-crates \
+            --execute

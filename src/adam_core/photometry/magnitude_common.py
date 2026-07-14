@@ -7,8 +7,8 @@ import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 
-from .bandpasses.api import _composition_args, _data_dir_str
 from .bandpasses.api import assert_filter_ids_have_curves  # noqa: F401
+from .bandpasses.api import _composition_args, _data_dir_str
 from .bandpasses.api import compute_mix_integrals as _compute_bandpass_mix_integrals
 from .bandpasses.api import get_integrals as _get_bandpass_integrals
 
@@ -38,22 +38,6 @@ def hg_phase_correction(
     phi2 = np.exp(-_HG_PHI2_SCALE * np.power(tan_half, _HG_PHI2_EXP))
     phase = np.clip((1.0 - G) * phi1 + G * phi2, _HG_PHASE_FLOOR, None)
     return -2.5 * np.log10(phase)
-
-
-def _hg_phase_correction_from_cos_jax(
-    cos_phase: jnp.ndarray,
-    G: jnp.ndarray,
-) -> jnp.ndarray:
-    """H-G phase correction in magnitudes, from ``cos`` of the phase angle (JAX kernels).
-
-    Same coefficients as :func:`hg_phase_correction`, but takes ``cos_phase`` directly
-    (avoiding ``arccos``) via the identity ``tan(alpha/2) = sqrt((1 - cos) / (1 + cos))``.
-    """
-    tan_half = jnp.sqrt((1.0 - cos_phase) / (1.0 + cos_phase))
-    phi1 = jnp.exp(-_HG_PHI1_SCALE * tan_half**_HG_PHI1_EXP)
-    phi2 = jnp.exp(-_HG_PHI2_SCALE * tan_half**_HG_PHI2_EXP)
-    phase_function = (1.0 - G) * phi1 + G * phi2
-    return -2.5 * jnp.log10(phase_function)
 
 
 @lru_cache(maxsize=1)

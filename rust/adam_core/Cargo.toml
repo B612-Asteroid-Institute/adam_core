@@ -1,0 +1,18 @@
+[package]
+name = "adam_core"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "Public Rust API for adam-core asteroid and orbital-mechanics workflows"
+keywords = ["astronomy", "asteroids", "orbits", "spice"]
+categories = ["science"]
+
+[dependencies]
+adam_core_rs_autodiff = { version = "0.1.0", path = "../adam_core_rs_autodiff" }
+adam_core_rs_coords = { version = "0.1.0", path = "../adam_core_rs_coords" }
+adam_core_rs_kernel_data = { version = "0.1.0", path = "../adam_core_rs_kernel_data" }
+adam_core_rs_orbit_determination = { version = "0.1.0", path = "../adam_core_rs_orbit_determination" }
+adam_core_rs_spice = { version = "0.1.0", path = "../adam_core_rs_spice" }

@@ -31,7 +31,7 @@ fn int_column(values: &PyReadonlyArray1<'_, i64>, label: &str) -> PyResult<Vec<i
         .ok_or_else(|| PyValueError::new_err(format!("{label} must be contiguous")))
 }
 
-fn time_array(days: &[i64], nanos: &[i64], scale: &str) -> PyResult<TimeArray> {
+pub(crate) fn time_array(days: &[i64], nanos: &[i64], scale: &str) -> PyResult<TimeArray> {
     let scale = TimeScale::parse(scale).map_err(|err| PyValueError::new_err(err.to_string()))?;
     TimeArray::new(
         scale,
@@ -122,7 +122,7 @@ fn parse_iso_values(values: &[String], scale: TimeScale) -> PyResult<(Vec<i64>, 
         .map(|parts| parts.into_iter().unzip())
 }
 
-fn parse_timezones(names: &[String]) -> PyResult<Vec<Tz>> {
+pub(crate) fn parse_timezones(names: &[String]) -> PyResult<Vec<Tz>> {
     let mut parsed = HashMap::<&str, Tz>::new();
     names
         .iter()
@@ -139,7 +139,11 @@ fn parse_timezones(names: &[String]) -> PyResult<Vec<Tz>> {
         .collect()
 }
 
-fn observing_nights(days: &[i64], nanos: &[i64], timezones: &[Tz]) -> PyResult<Vec<i64>> {
+pub(crate) fn observing_nights(
+    days: &[i64],
+    nanos: &[i64],
+    timezones: &[Tz],
+) -> PyResult<Vec<i64>> {
     if days.len() != nanos.len() || days.len() != timezones.len() {
         return Err(PyValueError::new_err(
             "days, nanos, and timezones must have equal length",
