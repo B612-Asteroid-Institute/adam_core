@@ -1,15 +1,20 @@
-"""Parsing helpers for MPC's legacy 80-column observation format.
+"""Typed MPC 80-column optical observations.
 
-This module intentionally parses only self-contained optical astrometry rows.
+The parser intentionally supports only self-contained optical astrometry rows.
 Radar, satellite, and roving-observer records require companion lines and are
 rejected rather than partially interpreted.
 """
 
 from __future__ import annotations
 
-import dataclasses
 import datetime
 from decimal import Decimal, InvalidOperation, ROUND_FLOOR, ROUND_HALF_EVEN
+
+import pyarrow as pa
+import quivr as qv
+from quivr.validators import and_, ge, le
+
+from ..time import Timestamp
 
 NANOSECONDS_PER_DAY = 86_400_000_000_000
 _MJD_EPOCH = datetime.date(1858, 11, 17)
@@ -20,28 +25,42 @@ class Obs80ParseError(ValueError):
     """An MPC 80-column record is malformed or unsupported."""
 
 
-@dataclasses.dataclass(frozen=True)
-class OpticalObs80:
-    """One parsed, self-contained optical MPC 80-column observation."""
+class OpticalObs80(qv.Table):
+    """Self-contained optical observations parsed from MPC 80-column rows."""
 
-    raw_line: str
-    designation: str
-    discovery: bool
-    note1: str | None
-    note2: str | None
-    observatory_code: str
-    obstime_days_utc: int
-    obstime_nanos_utc: int
-    ra_deg: float
-    dec_deg: float
-    mag: float | None
-    band: str | None
-    astrometric_catalog: str | None
-    reference: str | None
+    raw_line = qv.LargeStringColumn()
+    designation = qv.LargeStringColumn()
+    discovery = qv.BooleanColumn()
+    note1 = qv.LargeStringColumn(nullable=True)
+    note2 = qv.LargeStringColumn(nullable=True)
+    observatory_code = qv.LargeStringColumn()
+    time = Timestamp.as_column()
+    ra_deg = qv.Float64Column(validator=and_(ge(0), le(360)))
+    dec_deg = qv.Float64Column(validator=and_(ge(-90), le(90)))
+    mag = qv.Float64Column(nullable=True)
+    band = qv.LargeStringColumn(nullable=True)
+    astrometric_catalog = qv.LargeStringColumn(nullable=True)
+    reference = qv.LargeStringColumn(nullable=True)
 
-    @property
-    def obstime_mjd_utc(self) -> float:
-        return self.obstime_days_utc + self.obstime_nanos_utc / NANOSECONDS_PER_DAY
+
+class ScoutObservations(qv.Table):
+    """One or more authoritative JPL Scout ``file=mpc`` snapshots.
+
+    Snapshot metadata is repeated per observation so filtered/sliced tables
+    retain their source hash, API signature, and ordering without side data.
+    ``declared_n_obs`` is Scout's summary metadata; membership is exclusively
+    defined by ``snapshot_observation_count`` and the nested observations.
+    """
+
+    object_id = qv.LargeStringColumn()
+    solution_date_utc = qv.LargeStringColumn(nullable=True)
+    declared_n_obs = qv.Int64Column(nullable=True)
+    snapshot_sha256 = qv.LargeStringColumn()
+    snapshot_observation_count = qv.Int64Column()
+    signature_version = qv.LargeStringColumn(nullable=True)
+    signature_source = qv.LargeStringColumn(nullable=True)
+    observation_index = qv.Int64Column()
+    observation = OpticalObs80.as_column()
 
 
 def _parse_decimal(raw: str, *, field: str) -> Decimal:
@@ -115,20 +134,7 @@ def _parse_dec(raw: str) -> float:
 
 
 def parse_optical_obs80(raw: str) -> OpticalObs80:
-    """Parse one self-contained optical MPC 80-column record.
-
-    Parameters
-    ----------
-    raw
-        A line containing at least the standard 80 columns. Trailing content
-        is ignored.
-
-    Raises
-    ------
-    Obs80ParseError
-        If the record is malformed or is a two-line radar, satellite, or
-        roving-observer record.
-    """
+    """Parse one self-contained optical MPC 80-column record."""
     if not isinstance(raw, str) or len(raw) < 80:
         raise Obs80ParseError("record is shorter than 80 columns")
     line = raw[:80]
@@ -150,37 +156,46 @@ def parse_optical_obs80(raw: str) -> OpticalObs80:
         raise Obs80ParseError("invalid magnitude") from exc
 
     obstime_days, obstime_nanos = _parse_obstime(line[15:32])
-    return OpticalObs80(
-        raw_line=line,
-        designation=designation,
-        discovery=line[12] == "*",
-        note1=line[13].strip() or None,
-        note2=note2,
-        observatory_code=observatory_code,
-        obstime_days_utc=obstime_days,
-        obstime_nanos_utc=obstime_nanos,
-        ra_deg=_parse_ra(line[32:44]),
-        dec_deg=_parse_dec(line[44:56]),
-        mag=magnitude,
-        band=line[70].strip() or None,
-        astrometric_catalog=line[71].strip() or None,
-        reference=line[72:77].strip() or None,
+    return OpticalObs80.from_kwargs(
+        raw_line=[line],
+        designation=[designation],
+        discovery=[line[12] == "*"],
+        note1=[line[13].strip() or None],
+        note2=[note2],
+        observatory_code=[observatory_code],
+        time=Timestamp.from_kwargs(
+            days=[obstime_days], nanos=[obstime_nanos], scale="utc"
+        ),
+        ra_deg=[_parse_ra(line[32:44])],
+        dec_deg=[_parse_dec(line[44:56])],
+        mag=pa.array([magnitude], type=pa.float64()),
+        band=[line[70].strip() or None],
+        astrometric_catalog=[line[71].strip() or None],
+        reference=[line[72:77].strip() or None],
     )
 
 
-def parse_optical_obs80_file(raw: str) -> list[OpticalObs80]:
+def parse_optical_obs80_file(raw: str, *, strict: bool = True) -> OpticalObs80:
     """Parse every nonblank optical row in an MPC-format text file.
 
-    Failure is row-local: unsupported or malformed records are omitted. Callers
-    that require strict completeness should compare the returned row count to
-    the source's declared observation count.
+    Parameters
+    ----------
+    raw
+        MPC-format file contents.
+    strict
+        Raise on the first malformed/unsupported row. If false, omit invalid
+        rows. Scout snapshot ingestion uses the strict default so it can never
+        expose a partial fitted observation set.
     """
     parsed: list[OpticalObs80] = []
-    for line in str(raw or "").splitlines():
+    for line_number, line in enumerate(str(raw or "").splitlines(), start=1):
         if not line.strip():
             continue
         try:
             parsed.append(parse_optical_obs80(line))
-        except Obs80ParseError:
-            continue
-    return parsed
+        except Obs80ParseError as exc:
+            if strict:
+                raise Obs80ParseError(f"line {line_number}: {exc}") from exc
+    if not parsed:
+        return OpticalObs80.empty()
+    return qv.concatenate(parsed)

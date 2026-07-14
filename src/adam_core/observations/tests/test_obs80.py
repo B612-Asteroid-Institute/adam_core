@@ -15,22 +15,24 @@ def test_parse_standard_scout_neocp_optical_record() -> None:
         "     A11EpSe*0C2026 07 08.17725719 41 24.185-30 19 19.42         19.35oVNEOCPW68"
     )
 
-    assert parsed.designation == "A11EpSe"
-    assert parsed.discovery is True
-    assert parsed.note1 == "0"
-    assert parsed.note2 == "C"
-    assert parsed.observatory_code == "W68"
-    assert parsed.obstime_days_utc == 61229
-    assert parsed.obstime_nanos_utc == int(
-        (Decimal("0.177257") * Decimal(NANOSECONDS_PER_DAY)).to_integral_value()
-    )
-    assert parsed.ra_deg == pytest.approx(295.3507708333333)
-    assert parsed.dec_deg == pytest.approx(-30.32206111111111)
-    assert parsed.mag == pytest.approx(19.35)
-    assert parsed.band == "o"
-    assert parsed.astrometric_catalog == "V"
-    assert parsed.reference == "NEOCP"
-    assert parsed.obstime_mjd_utc == pytest.approx(61229.177257)
+    assert len(parsed) == 1
+    assert parsed.designation.to_pylist() == ["A11EpSe"]
+    assert parsed.discovery.to_pylist() == [True]
+    assert parsed.note1.to_pylist() == ["0"]
+    assert parsed.note2.to_pylist() == ["C"]
+    assert parsed.observatory_code.to_pylist() == ["W68"]
+    assert parsed.time.scale == "utc"
+    assert parsed.time.days.to_pylist() == [61229]
+    assert parsed.time.nanos.to_pylist() == [
+        int((Decimal("0.177257") * Decimal(NANOSECONDS_PER_DAY)).to_integral_value())
+    ]
+    assert parsed.ra_deg[0].as_py() == pytest.approx(295.3507708333333)
+    assert parsed.dec_deg[0].as_py() == pytest.approx(-30.32206111111111)
+    assert parsed.mag[0].as_py() == pytest.approx(19.35)
+    assert parsed.band.to_pylist() == ["o"]
+    assert parsed.astrometric_catalog.to_pylist() == ["V"]
+    assert parsed.reference.to_pylist() == ["NEOCP"]
+    assert parsed.time.mjd()[0].as_py() == pytest.approx(61229.177257)
 
 
 def test_parse_record_with_space_padded_precision() -> None:
@@ -38,23 +40,25 @@ def test_parse_record_with_space_padded_precision() -> None:
         "     A11EpSe KC2026 07 14.53636 19 37 22.30 -29 16 44.5          19.0 GVNEOCPE23"
     )
 
-    assert parsed.designation == "A11EpSe"
-    assert parsed.note1 == "K"
-    assert parsed.note2 == "C"
-    assert parsed.observatory_code == "E23"
-    assert parsed.mag == pytest.approx(19.0)
+    assert parsed.designation.to_pylist() == ["A11EpSe"]
+    assert parsed.note1.to_pylist() == ["K"]
+    assert parsed.note2.to_pylist() == ["C"]
+    assert parsed.observatory_code.to_pylist() == ["E23"]
+    assert parsed.mag[0].as_py() == pytest.approx(19.0)
 
 
-def test_file_parser_omits_unsupported_two_line_rows() -> None:
+def test_file_parser_is_strict_by_default() -> None:
     optical = "     ST26G06  C2026 07 08.33794520 25 33.638-00 47 36.82         19.62GVNEOCPU68"
     satellite = optical[:14] + "S" + optical[15:]
 
-    parsed = parse_optical_obs80_file(f"{optical}\n{satellite}\n")
+    with pytest.raises(Obs80ParseError, match="line 2.*two-line"):
+        parse_optical_obs80_file(f"{optical}\n{satellite}\n")
 
+    parsed = parse_optical_obs80_file(
+        f"{optical}\n{satellite}\n", strict=False
+    )
     assert len(parsed) == 1
-    assert parsed[0].designation == "ST26G06"
-    with pytest.raises(Obs80ParseError, match="two-line"):
-        parse_optical_obs80(satellite)
+    assert parsed.designation.to_pylist() == ["ST26G06"]
 
 
 def test_parser_rejects_malformed_rows() -> None:

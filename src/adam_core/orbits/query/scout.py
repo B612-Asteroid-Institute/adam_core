@@ -1,4 +1,7 @@
+import hashlib
 import logging
+from collections.abc import Callable
+from typing import Any
 
 import numpy.typing as npt
 import pyarrow as pa
@@ -8,6 +11,11 @@ import requests
 
 from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.origin import Origin
+from ...observations.obs80 import (
+    Obs80ParseError,
+    ScoutObservations,
+    parse_optical_obs80_file,
+)
 from ...time import Timestamp
 from ..variants import VariantOrbits
 
@@ -174,6 +182,96 @@ def scout_orbits_to_variant_orbits(
     )
 
     return variants
+
+
+def query_scout_observations(
+    ids: npt.ArrayLike,
+    *,
+    timeout_s: float = 30.0,
+    http_get: Callable[..., Any] = requests.get,
+) -> ScoutObservations:
+    """Query authoritative fitted observations from JPL Scout.
+
+    Scout's ``file=mpc`` payload exclusively defines snapshot membership.
+    ``nObs`` is retained as metadata but is not used to add/remove records: in
+    live Scout data it can differ from the file row count.
+    """
+    object_ids = [ids] if isinstance(ids, str) else list(ids)
+    snapshots: list[ScoutObservations] = []
+    url = "https://ssd-api.jpl.nasa.gov/scout.api"
+    for object_id_value in object_ids:
+        object_id = str(object_id_value)
+        response = http_get(
+            url,
+            params={"tdes": object_id, "file": "mpc"},
+            timeout=timeout_s,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, dict) or payload.get("error"):
+            detail = payload.get("error") if isinstance(payload, dict) else None
+            raise RuntimeError(f"Scout observation lookup failed for {object_id}: {detail}")
+
+        raw_file = payload.get("fileMPC")
+        if not isinstance(raw_file, str) or not raw_file.strip():
+            raise RuntimeError(f"Scout returned no file=mpc snapshot for {object_id}")
+        try:
+            observations = parse_optical_obs80_file(raw_file)
+        except Obs80ParseError as exc:
+            raise RuntimeError(
+                f"Scout returned an invalid file=mpc snapshot for {object_id}: {exc}"
+            ) from exc
+        if len(observations) == 0:
+            raise RuntimeError(f"Scout returned an empty file=mpc snapshot for {object_id}")
+        if any(value != object_id for value in observations.designation.to_pylist()):
+            raise RuntimeError(
+                f"Scout file=mpc designation mismatch for requested object {object_id}"
+            )
+
+        declared_n_obs_raw = payload.get("nObs")
+        try:
+            declared_n_obs = (
+                int(declared_n_obs_raw) if declared_n_obs_raw is not None else None
+            )
+        except (TypeError, ValueError):
+            declared_n_obs = None
+        if declared_n_obs is not None and declared_n_obs != len(observations):
+            logger.warning(
+                "Scout nObs differs from file=mpc membership for %s: "
+                "nObs=%d file=%d; file=mpc remains authoritative",
+                object_id,
+                declared_n_obs,
+                len(observations),
+            )
+
+        signature = payload.get("signature")
+        if not isinstance(signature, dict):
+            signature = {}
+        n = len(observations)
+        snapshots.append(
+            ScoutObservations.from_kwargs(
+                object_id=pa.repeat(object_id, n),
+                solution_date_utc=pa.array(
+                    [payload.get("lastRun")] * n, type=pa.large_string()
+                ),
+                declared_n_obs=pa.array([declared_n_obs] * n, type=pa.int64()),
+                snapshot_sha256=pa.repeat(
+                    hashlib.sha256(raw_file.encode("utf-8")).hexdigest(), n
+                ),
+                snapshot_observation_count=pa.repeat(n, n),
+                signature_version=pa.array(
+                    [signature.get("version")] * n, type=pa.large_string()
+                ),
+                signature_source=pa.array(
+                    [signature.get("source")] * n, type=pa.large_string()
+                ),
+                observation_index=pa.array(range(n), type=pa.int64()),
+                observation=observations,
+            )
+        )
+    if not snapshots:
+        return ScoutObservations.empty()
+    return qv.concatenate(snapshots)
 
 
 def query_scout(ids: npt.ArrayLike) -> VariantOrbits:

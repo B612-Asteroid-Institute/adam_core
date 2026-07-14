@@ -4,7 +4,57 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 
-from ..scout import ScoutOrbit, scout_orbits_to_variant_orbits
+from ..scout import (
+    ScoutOrbit,
+    query_scout_observations,
+    scout_orbits_to_variant_orbits,
+)
+
+
+def test_query_scout_observations_uses_file_membership() -> None:
+    lines = [
+        "     A11EpSe*0C2026 07 08.17725719 41 24.185-30 19 19.42         19.35oVNEOCPW68",
+        "     A11EpSe KC2026 07 14.53636 19 37 22.30 -29 16 44.5          19.0 GVNEOCPE23",
+    ]
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                "objectName": "A11EpSe",
+                # Deliberately differs: file=mpc, not nObs, is authoritative.
+                "nObs": 1,
+                "lastRun": "2026-07-14 13:33",
+                "signature": {
+                    "version": "1.3",
+                    "source": "NASA/JPL Scout API",
+                },
+                "fileMPC": "\n".join(lines) + "\n",
+            }
+
+    calls = []
+
+    def get(*args, **kwargs):
+        calls.append((args, kwargs))
+        return Response()
+
+    observations = query_scout_observations(["A11EpSe"], http_get=get)
+
+    assert len(observations) == 2
+    assert observations.object_id.to_pylist() == ["A11EpSe", "A11EpSe"]
+    assert observations.declared_n_obs.to_pylist() == [1, 1]
+    assert observations.snapshot_observation_count.to_pylist() == [2, 2]
+    assert observations.observation_index.to_pylist() == [0, 1]
+    assert observations.observation.designation.to_pylist() == [
+        "A11EpSe",
+        "A11EpSe",
+    ]
+    assert observations.observation.time.scale == "utc"
+    assert len(set(observations.snapshot_sha256.to_pylist())) == 1
+    assert observations.signature_version.to_pylist() == ["1.3", "1.3"]
+    assert calls[0][1]["params"] == {"tdes": "A11EpSe", "file": "mpc"}
 
 
 def test_scout_orbits_to_variant_orbits():
