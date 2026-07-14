@@ -531,7 +531,11 @@ fn fill_mag_geometry_tile(
         let numer = r_sq_v - dot;
         let rd_sq_v = r_sq_v * delta_sq_v;
         let denom = rd_sq_v.sqrt();
-        let clamped = numer.clamp(-denom, denom);
+        let clamped = if denom.is_nan() {
+            f64::NAN
+        } else {
+            numer.clamp(-denom, denom)
+        };
         rd_sq[k] = rd_sq_v;
         tan_half_sq[k] = (denom - clamped) / (denom + clamped);
         has_invalid |=
@@ -566,7 +570,11 @@ fn fill_mag_geometry_tile(
         let dot = ox * bx + oy * by + oz * bz;
         let product = r_sq * delta_sq;
         let denom = product.sqrt();
-        let numer = (r_sq - dot).clamp(-denom, denom);
+        let numer = if denom.is_nan() {
+            f64::NAN
+        } else {
+            (r_sq - dot).clamp(-denom, denom)
+        };
         rd_sq[k] = product;
         tan_half_sq[k] = (denom - numer) / (denom + numer);
         has_invalid |= !r_sq.is_finite() || !delta_sq.is_finite() || r_sq <= 0.0 || delta_sq <= 0.0;
@@ -1434,6 +1442,25 @@ mod tests {
         assert!(alpha[0].is_nan());
         let mag = calculate_apparent_magnitude_v_flat(&[18.0], &obj, &obs, &[0.15]);
         assert!(mag[0].is_nan());
+
+        // Exercise a full SIMD tile plus the odd scalar tail on macOS. The
+        // tail must preserve NaN output rather than passing NaN clamp bounds.
+        #[cfg(target_os = "macos")]
+        {
+            let rows = 65;
+            let tiled_obj = vec![0.0; rows * 3];
+            let mut tiled_obs = vec![0.0; rows * 3];
+            for observer in tiled_obs.chunks_exact_mut(3) {
+                observer[0] = 1.0;
+            }
+            let tiled_mag = calculate_apparent_magnitude_v_flat(
+                &vec![18.0; rows],
+                &tiled_obj,
+                &tiled_obs,
+                &vec![0.15; rows],
+            );
+            assert!(tiled_mag.iter().all(|value| value.is_nan()));
+        }
     }
 
     #[test]
