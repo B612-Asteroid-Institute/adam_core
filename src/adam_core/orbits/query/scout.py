@@ -265,8 +265,11 @@ def query_scout_observations(
             )
 
         signature = payload.get("signature")
-        if not isinstance(signature, dict):
-            signature = {}
+        if not isinstance(signature, dict) or str(signature.get("version")) != "1.3":
+            raise RuntimeError(
+                "Unsupported or missing Scout API signature for "
+                f"{object_id}: {signature!r}"
+            )
         n = len(observations)
         snapshots.append(
             ScoutObservations.from_kwargs(
