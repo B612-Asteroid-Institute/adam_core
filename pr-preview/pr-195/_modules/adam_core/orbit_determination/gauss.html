@@ -524,6 +524,8 @@
 <span class="sd">        Correct for light-travel time. [Default True]</span>
 <span class="sd">    mu : float, optional</span>
 <span class="sd">        Gravitational parameter (GM) of the attracting body in AU**3 / day**2.</span>
+<span class="sd">        The same value is used for candidate geometry and velocity. This fixes</span>
+<span class="sd">        the legacy implementation&#39;s physically inconsistent split-``mu`` path.</span>
 <span class="sd">    max_iter : int, optional</span>
 <span class="sd">        Reserved for future use; currently ignored by the Rust kernel.</span>
 <span class="sd">    tol : float, optional</span>

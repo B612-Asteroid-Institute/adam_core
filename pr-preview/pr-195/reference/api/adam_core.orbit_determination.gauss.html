@@ -493,7 +493,9 @@ equatorial coordinates.</p>
 <li><p><strong>coords_obs</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><em>ndarray</em></a><em> (</em><em>3</em><em>, </em><em>3</em><em>)</em>) – Heliocentric position vectors of the observer at the three times in AU.</p></li>
 <li><p><strong>velocity_method</strong> (<em>{'gauss'</em><em>, </em><em>'gibbs'</em><em>, </em><em>'herrick+gibbs'}</em><em>, </em><em>optional</em>) – Method for the velocity at the second observation. [Default ‘gibbs’]</p></li>
 <li><p><strong>light_time</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – Correct for light-travel time. [Default True]</p></li>
-<li><p><strong>mu</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>optional</em>) – Gravitational parameter (GM) of the attracting body in AU**3 / day**2.</p></li>
+<li><p><strong>mu</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>optional</em>) – Gravitational parameter (GM) of the attracting body in AU**3 / day**2.
+The same value is used for candidate geometry and velocity. This fixes
+the legacy implementation’s physically inconsistent split-<code class="docutils literal notranslate"><span class="pre">mu</span></code> path.</p></li>
 <li><p><strong>max_iter</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>, </em><em>optional</em>) – Reserved for future use; currently ignored by the Rust kernel.</p></li>
 <li><p><strong>tol</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>optional</em>) – Reserved for future use; currently ignored by the Rust kernel.</p></li>
 </ul>
