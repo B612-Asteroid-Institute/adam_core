@@ -26,11 +26,13 @@ pip install "adam_core[jax]"          # Historical explicit JAX bridge
 pip install "adam_core[plots]"        # Plotting and date-axis formatting
 ```
 
-Native wheels support CPython 3.11-3.13 on manylinux 2.17+ x86-64/AArch64,
-macOS Apple silicon/Intel, and Windows x86-64. Musllinux is not a supported
-release target. Python installs reuse kernel data from the active environment;
-pure-Rust consumers use override -> installed-Python -> cache -> checksummed
-wheel resolution, with ``ADAM_CORE_KERNEL_OFFLINE=1`` disabling downloads.
+Native wheels support CPython 3.11-3.13 on manylinux 2.17+ x86-64/AArch64 and
+macOS Apple silicon/Intel. Windows is deferred because the required
+``libassist-sys 1.2.1`` acceptance stack depends on upstream ASSIST's POSIX
+memory mapping; musllinux is also unsupported. Python installs reuse kernel
+data from the active environment; pure-Rust consumers use override ->
+installed-Python -> cache -> checksummed wheel resolution, with
+``ADAM_CORE_KERNEL_OFFLINE=1`` disabling downloads.
 
 ASSIST propagation is provided by the separate ``adam-assist`` distribution as
 ``adam_assist.ASSISTPropagator``. ``adam-assist`` owns the orchestration layer

@@ -6,9 +6,10 @@ This file contains notable changes in adam-core
 
 ### Added
 
-- Native CPython 3.11-3.13 wheels for manylinux 2.17 x86-64/AArch64,
-  macOS Apple silicon/Intel, and Windows x86-64, with clean-room artifact
-  acceptance and build-once trusted-publishing automation.
+- Native CPython 3.11-3.13 wheels for manylinux 2.17 x86-64/AArch64 and
+  macOS Apple silicon/Intel, with clean-room artifact acceptance and build-once
+  trusted-publishing automation. Windows is deferred while upstream ASSIST
+  requires POSIX memory mapping.
 - Rust-native rotation-period estimation, grouped detection workflows, and
   best-apparition selection, including Rust-owned timing samples.
 - Automatic kernel-data resolution for pure-Rust consumers: explicit override,

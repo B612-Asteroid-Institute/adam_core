@@ -54,11 +54,6 @@ jobs:
             system: Darwin-x86_64
             family: native
             wheel_tag: macosx*x86_64
-          - name: windows-x86_64
-            runner: windows-latest
-            system: Windows-AMD64
-            family: native
-            wheel_tag: win_amd64
     steps:
       - name: Checkout adam-core candidate
         uses: actions/checkout@v4

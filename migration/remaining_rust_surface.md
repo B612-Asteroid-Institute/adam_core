@@ -58,9 +58,11 @@ mode and installed-package discovery are tested without duplicate files.
 ## Native artifact targets
 
 The supported wheel matrix is CPython 3.11-3.13 on manylinux 2.17 x86-64 and
-AArch64, macOS Apple silicon and Intel, and Windows x86-64. Musllinux is
-unsupported. Release publication downloads the exact clean-room-tested
-artifacts and does not rebuild wheels.
+AArch64 and macOS Apple silicon and Intel: 12 wheels per distribution.
+Windows is deferred because ``libassist-sys 1.2.1`` uses upstream ASSIST's
+POSIX memory-mapping implementation; musllinux is unsupported. Release
+publication downloads the exact clean-room-tested artifacts and does not
+rebuild wheels.
 
 ## Deferred
 

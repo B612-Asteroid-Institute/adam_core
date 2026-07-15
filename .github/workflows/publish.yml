@@ -63,7 +63,7 @@ jobs:
           set -euo pipefail
           mkdir dist
           find acceptance-artifacts -type f -name 'adam_core-*.whl' -exec cp '{}' dist/ ';'
-          test "$(find dist -maxdepth 1 -name 'adam_core-*.whl' | wc -l | tr -d ' ')" = 15
+          test "$(find dist -maxdepth 1 -name 'adam_core-*.whl' | wc -l | tr -d ' ')" = 12
           python - <<'PY'
           from pathlib import Path
           from packaging.utils import parse_wheel_filename
@@ -75,7 +75,6 @@ jobs:
               "manylinux_2_17_aarch64",
               "macosx_11_0_arm64",
               "macosx_10_12_x86_64",
-              "win_amd64",
           }
           combinations = set()
           for wheel in wheels:
