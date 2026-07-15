@@ -18,7 +18,7 @@ Updated 2026-07-14 against upstream main
 
 | Surface group | Disposition | Evidence |
 |---|---|---|
-| Gibbs, Herrick-Gibbs, Gauss roots/candidates | direct Rust kernels; candidate priority/order preserved | fixed/random parity and timing |
+| Gibbs, Herrick-Gibbs, Gauss roots/candidates | direct Rust kernels; candidate priority/order preserved; a supplied central-body `mu` consistently governs geometry and velocity rather than reproducing the legacy split-`mu` bug | fixed/random parity, custom-`mu` regression, and timing |
 | least-squares fitter, differential correction, `evaluate_orbits` | fused backend-generic Rust work units; Python preserves public table/errors and unsupported-provider fallback | latest-oracle fixtures, ignored-observation/order/statistics tests, timing |
 | `iod_worker`, linkage IOD, and `initial_orbit_determination` | fused Rust orchestration through the selected backend; Python supplies nondeterministic IDs and fallback for unsupported providers | full-linkage fixture, root/order tests, ASSIST integration, timing |
 | top-level OD batch and scheduling parameters | Rust/ASSIST scheduling; historical Ray parameters are signature-compatible no-ops | serial/parallel parity and no-Ray import tests |

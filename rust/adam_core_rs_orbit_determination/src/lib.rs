@@ -208,3 +208,35 @@ pub fn gauss_iod_orbits_from_roots(
 
     (epochs, orbits_flat)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gibbs_velocity_scales_with_supplied_mu() {
+        let r1 = [1.2, 0.1, 0.02];
+        let r2 = [1.1, 0.2, 0.03];
+        let r3 = [0.97, 0.31, 0.045];
+        let mu = 0.000_295_912_208_284_119_56;
+        let full = calc_gibbs_row(r1, r2, r3, mu);
+        let half = calc_gibbs_row(r1, r2, r3, 0.5 * mu);
+        for axis in 0..3 {
+            assert!((half[axis] - full[axis] / 2.0_f64.sqrt()).abs() < 1e-15);
+        }
+    }
+
+    #[test]
+    fn gauss_and_herrick_gibbs_velocities_use_supplied_mu() {
+        let r1 = [1.2, 0.1, 0.02];
+        let r2 = [1.1, 0.2, 0.03];
+        let r3 = [0.97, 0.31, 0.045];
+        let mu = 0.000_295_912_208_284_119_56;
+        let gauss_full = calc_gauss_row(r1, r2, r3, 0.0, 2.0, 5.0, mu);
+        let gauss_half = calc_gauss_row(r1, r2, r3, 0.0, 2.0, 5.0, 0.5 * mu);
+        let herrick_full = calc_herrick_gibbs_row(r1, r2, r3, 0.0, 2.0, 5.0, mu);
+        let herrick_half = calc_herrick_gibbs_row(r1, r2, r3, 0.0, 2.0, 5.0, 0.5 * mu);
+        assert_ne!(gauss_full, gauss_half);
+        assert_ne!(herrick_full, herrick_half);
+    }
+}

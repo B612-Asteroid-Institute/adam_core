@@ -92,6 +92,8 @@ def gaussIOD(
         Correct for light-travel time. [Default True]
     mu : float, optional
         Gravitational parameter (GM) of the attracting body in AU**3 / day**2.
+        The same value is used for candidate geometry and velocity. This fixes
+        the legacy implementation's physically inconsistent split-``mu`` path.
     max_iter : int, optional
         Reserved for future use; currently ignored by the Rust kernel.
     tol : float, optional

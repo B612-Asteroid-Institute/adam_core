@@ -31,6 +31,9 @@ This file contains notable changes in adam-core
   symmetric positive definite. Singular or indefinite matrices raise
   `ValueError`; NaN diagonal entries still raise, and NaN off-diagonal entries
   are treated as zero with a warning for legacy compatibility.
+- `gaussIOD(mu=...)` now uses the supplied central-body gravitational parameter
+  consistently for candidate geometry and velocity. The legacy implementation
+  incorrectly reverted to the solar constant inside its velocity helpers.
 
 ### Compatibility
 
