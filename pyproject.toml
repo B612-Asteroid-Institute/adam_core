@@ -139,7 +139,7 @@ target-version = ["py311"]
 profile = "black"
 
 [tool.pytest.ini_options]
-norecursedirs = ["__pypackages__"]
+norecursedirs = ["__pypackages__", ".ci"]
 markers = [
     "integration: exercises installed data/runtime integrations rather than a hermetic unit seam",
 ]

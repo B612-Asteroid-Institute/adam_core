@@ -118,9 +118,20 @@ def test_iod_fused_matches_pinned_legacy_fixture(real_data):
         iterate=False,
         light_time=True,
     )
-    np.testing.assert_allclose(
-        fitted.coordinates.values, fixture["state"], rtol=0, atol=4e-12
-    )
+    # This preliminary orbit is mildly ill-conditioned with respect to the
+    # platform libm RA/Dec conversion: two one-ULP cosine differences change
+    # the largest positive Gauss root by 1.3244e-11 AU. Fixed-input legacy
+    # NumPy and migrated Rust agree on each platform. Keep component-specific
+    # bounds for the cross-platform, macOS-arm64-generated fixture; see
+    # migration/iod_platform_numerics_2026-07-15.md.
+    state_atol = [4e-12, 2e-11, 4e-12, 4e-13, 4e-13, 4e-13]
+    for axis, atol in enumerate(state_atol):
+        np.testing.assert_allclose(
+            fitted.coordinates.values[:, axis],
+            np.asarray(fixture["state"])[:, axis],
+            rtol=0,
+            atol=atol,
+        )
     np.testing.assert_allclose(fitted.arc_length, fixture["arc_length"], rtol=0, atol=0)
     np.testing.assert_array_equal(fitted.num_obs, fixture["num_obs"])
     np.testing.assert_allclose(fitted.chi2, fixture["chi2"], rtol=1e-7, atol=2e-5)
@@ -156,9 +167,10 @@ def test_iod_fused_matches_composed_path(real_data):
     composed, composed_members = iod(
         observations[:10], propagator=ComposedASSISTPropagator, **kwargs
     )
-    np.testing.assert_allclose(
-        fused.coordinates.values, composed.coordinates.values, rtol=0, atol=4e-12
-    )
+    # Candidate generation is the same Rust Gauss kernel on both paths, so
+    # this exact check also guards adam-core's MU/C ownership at the fused
+    # provider boundary.
+    np.testing.assert_array_equal(fused.coordinates.values, composed.coordinates.values)
     np.testing.assert_allclose(
         fused_members.residuals.to_array(),
         composed_members.residuals.to_array(),

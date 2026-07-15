@@ -8,6 +8,7 @@ import numpy.typing as npt
 import pyarrow as pa
 import quivr as qv
 
+from ..constants import Constants as c
 from ..coordinates import CartesianCoordinates
 from ..coordinates.origin import Origin
 from ..coordinates.residuals import Residuals
@@ -205,6 +206,11 @@ def _native_initial_orbit_determination(
         observation_selection_method=observation_selection_method,
         light_time=light_time,
         chunk_size=chunk_size,
+        # The legacy adam-core loop owns Gauss IOD and uses its DE44x
+        # constants. Keep that ownership explicit when a provider fuses the
+        # loop rather than inheriting provider-local defaults.
+        mu=c.MU,
+        speed_of_light=c.C,
     )
     return _tables_from_native_iod(output)
 
