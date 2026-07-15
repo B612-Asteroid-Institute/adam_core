@@ -12,10 +12,11 @@ files, and exercises public SBDB, observer, ephemeris, and ASSIST workflows.
 Publication jobs download those accepted artifacts by workflow run ID; they do
 not check out a builder or rebuild wheels.
 
-The supported matrix is CPython 3.11-3.13 on manylinux 2.17 x86-64 and AArch64,
-macOS Apple silicon and Intel, and Windows x86-64 (15 wheels per distribution).
-The workflow checks runner architecture, exact wheel count, and platform tags.
-Musllinux is deliberately unsupported.
+The supported matrix is CPython 3.11-3.13 on manylinux 2.17 x86-64 and AArch64
+and macOS Apple silicon and Intel (12 wheels per distribution). The workflow
+checks runner architecture, exact wheel count, and platform tags. Windows is
+deferred because ``libassist-sys 1.2.1`` requires the upstream ASSIST POSIX
+memory-mapping implementation; musllinux is also deliberately unsupported.
 
 Trusted publishing
 ------------------

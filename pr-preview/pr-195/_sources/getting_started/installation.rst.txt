@@ -20,9 +20,13 @@ The native release matrix supports CPython 3.11, 3.12, and 3.13 on:
 
 * manylinux 2.17+ x86-64;
 * manylinux 2.17+ AArch64;
-* macOS 11+ Apple silicon;
-* macOS Intel x86-64; and
-* Windows x86-64.
+* macOS 11+ Apple silicon; and
+* macOS Intel x86-64.
+
+Windows wheels are deferred because the reviewed ``libassist-sys 1.2.1``
+backend used by the required adam-assist acceptance stack wraps upstream
+ASSIST code that depends on POSIX ``sys/mman.h``. Windows source builds are not
+a supported substitute, and no unreviewed compatibility port is bundled.
 
 These wheels are built once, installed and exercised by the clean-room
 acceptance suite, and only those exact tested files are eligible for

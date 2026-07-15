@@ -451,10 +451,13 @@
 <ul class="simple">
 <li><p>manylinux 2.17+ x86-64;</p></li>
 <li><p>manylinux 2.17+ AArch64;</p></li>
-<li><p>macOS 11+ Apple silicon;</p></li>
-<li><p>macOS Intel x86-64; and</p></li>
-<li><p>Windows x86-64.</p></li>
+<li><p>macOS 11+ Apple silicon; and</p></li>
+<li><p>macOS Intel x86-64.</p></li>
 </ul>
+<p>Windows wheels are deferred because the reviewed <code class="docutils literal notranslate"><span class="pre">libassist-sys</span> <span class="pre">1.2.1</span></code>
+backend used by the required adam-assist acceptance stack wraps upstream
+ASSIST code that depends on POSIX <code class="docutils literal notranslate"><span class="pre">sys/mman.h</span></code>. Windows source builds are not
+a supported substitute, and no unreviewed compatibility port is bundled.</p>
 <p>These wheels are built once, installed and exercised by the clean-room
 acceptance suite, and only those exact tested files are eligible for
 publication. <code class="docutils literal notranslate"><span class="pre">musllinux</span></code> is not a supported release target: the SPICE and
@@ -586,7 +589,7 @@ pdm<span class="w"> </span>run<span class="w"> </span>docs-check
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-14</div>
+              Last updated on 2026-07-15</div>
           </div>
           <div class="right-details">
             

@@ -446,10 +446,11 @@ proves offline installed-package kernel discovery without duplicate cache
 files, and exercises public SBDB, observer, ephemeris, and ASSIST workflows.
 Publication jobs download those accepted artifacts by workflow run ID; they do
 not check out a builder or rebuild wheels.</p>
-<p>The supported matrix is CPython 3.11-3.13 on manylinux 2.17 x86-64 and AArch64,
-macOS Apple silicon and Intel, and Windows x86-64 (15 wheels per distribution).
-The workflow checks runner architecture, exact wheel count, and platform tags.
-Musllinux is deliberately unsupported.</p>
+<p>The supported matrix is CPython 3.11-3.13 on manylinux 2.17 x86-64 and AArch64
+and macOS Apple silicon and Intel (12 wheels per distribution). The workflow
+checks runner architecture, exact wheel count, and platform tags. Windows is
+deferred because <code class="docutils literal notranslate"><span class="pre">libassist-sys</span> <span class="pre">1.2.1</span></code> requires the upstream ASSIST POSIX
+memory-mapping implementation; musllinux is also deliberately unsupported.</p>
 </section>
 <section id="trusted-publishing">
 <h2>Trusted publishing<a class="headerlink" href="#trusted-publishing" title="Link to this heading">¶</a></h2>
@@ -520,7 +521,7 @@ validation.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-14</div>
+              Last updated on 2026-07-15</div>
           </div>
           <div class="right-details">
             
