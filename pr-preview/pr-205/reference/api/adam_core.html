@@ -325,6 +325,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -912,6 +913,25 @@
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Orbits.schema"><code class="docutils literal notranslate"><span class="pre">Orbits.schema</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory"><code class="docutils literal notranslate"><span class="pre">Trajectory</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.coverage_end"><code class="docutils literal notranslate"><span class="pre">Trajectory.coverage_end</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.coverage_end_mjd"><code class="docutils literal notranslate"><span class="pre">Trajectory.coverage_end_mjd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.coverage_start"><code class="docutils literal notranslate"><span class="pre">Trajectory.coverage_start</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.coverage_start_mjd"><code class="docutils literal notranslate"><span class="pre">Trajectory.coverage_start_mjd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.epoch_mjd"><code class="docutils literal notranslate"><span class="pre">Trajectory.epoch_mjd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.is_maneuver_boundary"><code class="docutils literal notranslate"><span class="pre">Trajectory.is_maneuver_boundary</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.max_propagation_days"><code class="docutils literal notranslate"><span class="pre">Trajectory.max_propagation_days</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.object_id"><code class="docutils literal notranslate"><span class="pre">Trajectory.object_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.object_ids"><code class="docutils literal notranslate"><span class="pre">Trajectory.object_ids()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.orbit"><code class="docutils literal notranslate"><span class="pre">Trajectory.orbit</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.schema"><code class="docutils literal notranslate"><span class="pre">Trajectory.schema</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.segment_for"><code class="docutils literal notranslate"><span class="pre">Trajectory.segment_for()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.segment_id"><code class="docutils literal notranslate"><span class="pre">Trajectory.segment_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.source"><code class="docutils literal notranslate"><span class="pre">Trajectory.source</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.source_version"><code class="docutils literal notranslate"><span class="pre">Trajectory.source_version</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Trajectory.validate_coverage"><code class="docutils literal notranslate"><span class="pre">Trajectory.validate_coverage()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantOrbits"><code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantOrbits.collapse"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.collapse()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.VariantOrbits.collapse_by_object_id"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.collapse_by_object_id()</span></code></a></li>
@@ -972,6 +992,10 @@
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.spice_kernel.html#adam_core.orbits.spice_kernel.orbits_to_spk"><code class="docutils literal notranslate"><span class="pre">orbits_to_spk()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.spice_kernel.html#adam_core.orbits.spice_kernel.write_spkw03_segment"><code class="docutils literal notranslate"><span class="pre">write_spkw03_segment()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.spice_kernel.html#adam_core.orbits.spice_kernel.write_spkw09_segment"><code class="docutils literal notranslate"><span class="pre">write_spkw09_segment()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory"><code class="docutils literal notranslate"><span class="pre">Trajectory</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html">adam_core.orbits.variants module</a><ul>
@@ -1310,7 +1334,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-14</div>
+              Last updated on 2026-07-15</div>
           </div>
           <div class="right-details">
             
@@ -1345,7 +1369,7 @@
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=a1311bcc"></script>
+</div><script src="../../_static/documentation_options.js?v=c35c9795"></script>
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

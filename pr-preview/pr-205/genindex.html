@@ -323,6 +323,7 @@
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -979,6 +980,13 @@
 
         <ul>
           <li><a href="reference/api/adam_core.orbits.spice_kernel.html#module-adam_core.orbits.spice_kernel">module</a>
+</li>
+        </ul></li>
+        <li>
+    adam_core.orbits.trajectory
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#module-adam_core.orbits.trajectory">module</a>
 </li>
         </ul></li>
         <li>
@@ -1674,8 +1682,6 @@
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.collapse">(adam_core.orbits.variants.VariantOrbits method)</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.collapse_by_object_id">collapse_by_object_id() (adam_core.orbits.VariantOrbits method)</a>
 
         <ul>
@@ -1684,6 +1690,8 @@
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.collapse_by_object_id">(adam_core.orbits.variants.VariantOrbits method)</a>
 </li>
         </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.collapse_sigma_points_orbit_major">collapse_sigma_points_orbit_major() (adam_core.orbits.variants.VariantEphemeris method)</a>
 </li>
         <li><a href="reference/api/adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.CollisionEvent.collision_coordinates">collision_coordinates (adam_core.dynamics.impacts.CollisionEvent attribute)</a>
@@ -1810,6 +1818,30 @@
         </ul></li>
         <li><a href="reference/api/adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates.covariance_km">covariance_km() (adam_core.coordinates.cartesian.CartesianCoordinates method)</a>
 </li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.coverage_end">coverage_end (adam_core.orbits.Trajectory attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.coverage_end">(adam_core.orbits.trajectory.Trajectory attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.coverage_end_mjd">coverage_end_mjd() (adam_core.orbits.Trajectory method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.coverage_end_mjd">(adam_core.orbits.trajectory.Trajectory method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.coverage_start">coverage_start (adam_core.orbits.Trajectory attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.coverage_start">(adam_core.orbits.trajectory.Trajectory attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.coverage_start_mjd">coverage_start_mjd() (adam_core.orbits.Trajectory method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.coverage_start_mjd">(adam_core.orbits.trajectory.Trajectory method)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.create">create() (adam_core.orbits.VariantOrbits class method)</a>
 
         <ul>
@@ -2052,6 +2084,12 @@
           <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutOrbit.epoch">(adam_core.orbits.query.scout.ScoutOrbit attribute)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.epoch_mjd">epoch_mjd() (adam_core.orbits.Trajectory method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.epoch_mjd">(adam_core.orbits.trajectory.Trajectory method)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.time.time.html#adam_core.time.time.Timestamp.equals">equals() (adam_core.time.time.Timestamp method)</a>
 
         <ul>
@@ -2070,14 +2108,14 @@
           <li><a href="reference/api/adam_core.time.html#adam_core.time.Timestamp.equals_scalar">(adam_core.time.Timestamp method)</a>
 </li>
         </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.estimate_absolute_magnitude_v_from_detections">estimate_absolute_magnitude_v_from_detections() (in module adam_core.photometry)</a>
 
         <ul>
           <li><a href="reference/api/adam_core.photometry.absolute_magnitude.html#adam_core.photometry.absolute_magnitude.estimate_absolute_magnitude_v_from_detections">(in module adam_core.photometry.absolute_magnitude)</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.estimate_absolute_magnitude_v_from_detections_grouped">estimate_absolute_magnitude_v_from_detections_grouped() (in module adam_core.photometry)</a>
 
         <ul>
@@ -2610,10 +2648,10 @@
 </li>
         <li><a href="reference/api/adam_core.orbit_determination.orbit_fitter.html#adam_core.orbit_determination.orbit_fitter.OrbitFitter.initial_fit">initial_fit() (adam_core.orbit_determination.orbit_fitter.OrbitFitter method)</a>
 </li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.initial_orbit_determination">initial_orbit_determination() (in module adam_core.orbit_determination.iod)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.ray_cluster.html#adam_core.ray_cluster.initialize_use_ray">initialize_use_ray() (in module adam_core.ray_cluster)</a>
 </li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.SubmitterObsContext.institution">institution (adam_core.observations.ades.SubmitterObsContext attribute)</a>
@@ -2638,6 +2676,12 @@
         </ul></li>
         <li><a href="reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances.is_all_nan">is_all_nan() (adam_core.coordinates.covariances.CoordinateCovariances method)</a>
 </li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.is_maneuver_boundary">is_maneuver_boundary (adam_core.orbits.Trajectory attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.is_maneuver_boundary">(adam_core.orbits.trajectory.Trajectory attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.RotationPeriodResult.is_period_doubled">is_period_doubled (adam_core.photometry.rotation.core.RotationPeriodResult attribute)</a>
 
         <ul>
@@ -2948,6 +2992,12 @@
           <li><a href="reference/api/adam_core.time.html#adam_core.time.Timestamp.max">(adam_core.time.Timestamp method)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.max_propagation_days">max_propagation_days (adam_core.orbits.Trajectory attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.max_propagation_days">(adam_core.orbits.trajectory.Trajectory attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableOrbitalKepler.max_size">max_size (adam_core.orbits.openspace.renderable.RenderableOrbitalKepler attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.ImpactProbabilities.maximum_impact_time">maximum_impact_time (adam_core.dynamics.impacts.ImpactProbabilities attribute)</a>
@@ -3159,6 +3209,8 @@
           <li><a href="reference/api/adam_core.orbits.query.scout.html#module-adam_core.orbits.query.scout">adam_core.orbits.query.scout</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.spice_kernel.html#module-adam_core.orbits.spice_kernel">adam_core.orbits.spice_kernel</a>
+</li>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#module-adam_core.orbits.trajectory">adam_core.orbits.trajectory</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#module-adam_core.orbits.variants">adam_core.orbits.variants</a>
 </li>
@@ -3406,6 +3458,10 @@
 </li>
           <li><a href="reference/api/adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.object_id">(adam_core.orbits.orbits.Orbits attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.object_id">(adam_core.orbits.Trajectory attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.object_id">(adam_core.orbits.trajectory.Trajectory attribute)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.object_id">(adam_core.orbits.VariantOrbits attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.object_id">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
@@ -3419,6 +3475,12 @@
           <li><a href="reference/api/adam_core.photometry.html#adam_core.photometry.GroupedRotationPeriodResults.object_id">(adam_core.photometry.GroupedRotationPeriodResults attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.photometry.rotation.core.html#adam_core.photometry.rotation.core.GroupedRotationPeriodResults.object_id">(adam_core.photometry.rotation.core.GroupedRotationPeriodResults attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.object_ids">object_ids() (adam_core.orbits.Trajectory method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.object_ids">(adam_core.orbits.trajectory.Trajectory method)</a>
 </li>
         </ul></li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.SoftwareObsContext.objectDetection">objectDetection (adam_core.observations.ades.SoftwareObsContext attribute)</a>
@@ -3487,6 +3549,8 @@
           <li><a href="reference/api/adam_core.observers.observers.html#adam_core.observers.observers.Observers">(class in adam_core.observers.observers)</a>
 </li>
         </ul></li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.observations.html#adam_core.observations.Exposures.observers">observers() (adam_core.observations.Exposures method)</a>
 
         <ul>
@@ -3497,8 +3561,6 @@
           <li><a href="reference/api/adam_core.observations.html#adam_core.observations.SourceCatalog.observers">(adam_core.observations.SourceCatalog method)</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations.obsSubID">obsSubID (adam_core.observations.ades.ADESObservations attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADESObservations.obsTime">obsTime (adam_core.observations.ades.ADESObservations attribute)</a>
@@ -3515,6 +3577,12 @@
 
         <ul>
           <li><a href="reference/api/adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80">(class in adam_core.observations.obs80)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.orbit">orbit (adam_core.orbits.Trajectory attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.orbit">(adam_core.orbits.trajectory.Trajectory attribute)</a>
 </li>
         </ul></li>
         <li><a href="reference/api/adam_core.orbits.oem_io.html#adam_core.orbits.oem_io.orbit_from_oem">orbit_from_oem() (in module adam_core.orbits.oem_io)</a>
@@ -4220,6 +4288,10 @@
 </li>
           <li><a href="reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutOrbit.schema">(adam_core.orbits.query.scout.ScoutOrbit attribute)</a>
 </li>
+          <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.schema">(adam_core.orbits.Trajectory attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.schema">(adam_core.orbits.trajectory.Trajectory attribute)</a>
+</li>
           <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits.schema">(adam_core.orbits.VariantOrbits attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris.schema">(adam_core.orbits.variants.VariantEphemeris attribute)</a>
@@ -4291,6 +4363,18 @@
           <li><a href="reference/api/adam_core.observations.exposures.html#adam_core.observations.exposures.Exposures.seeing">(adam_core.observations.exposures.Exposures attribute)</a>
 </li>
         </ul></li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.segment_for">segment_for() (adam_core.orbits.Trajectory method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.segment_for">(adam_core.orbits.trajectory.Trajectory method)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.segment_id">segment_id (adam_core.orbits.Trajectory attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.segment_id">(adam_core.orbits.trajectory.Trajectory attribute)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableOrbitalKepler.segment_quality">segment_quality (adam_core.orbits.openspace.renderable.RenderableOrbitalKepler attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.translation.html#adam_core.orbits.openspace.translation.KeplerTranslation.semi_major_axis">semi_major_axis (adam_core.orbits.openspace.translation.KeplerTranslation attribute)</a>
@@ -4307,10 +4391,10 @@
           <li><a href="reference/api/adam_core.utils.spice.html#adam_core.utils.spice.setup_SPICE">(in module adam_core.utils.spice)</a>
 </li>
         </ul></li>
-        <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableTrailTrajectory.show_full_trail">show_full_trail (adam_core.orbits.openspace.renderable.RenderableTrailTrajectory attribute)</a>
-</li>
     </ul></td>
     <td style="width: 33%; vertical-align: top;"><ul>
+        <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableTrailTrajectory.show_full_trail">show_full_trail (adam_core.orbits.openspace.renderable.RenderableTrailTrajectory attribute)</a>
+</li>
         <li><a href="reference/api/adam_core.coordinates.keplerian.html#adam_core.coordinates.keplerian.KeplerianCoordinates.sigma_a">sigma_a (adam_core.coordinates.keplerian.KeplerianCoordinates property)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.geodetics.html#adam_core.coordinates.geodetics.GeodeticCoordinates.sigma_alt">sigma_alt (adam_core.coordinates.geodetics.GeodeticCoordinates property)</a>
@@ -4473,10 +4557,20 @@
 </li>
         <li><a href="reference/api/adam_core.dynamics.lambert.html#adam_core.dynamics.lambert.solve_lambert">solve_lambert() (in module adam_core.dynamics.lambert)</a>
 </li>
-        <li><a href="reference/api/adam_core.photometry.bandpasses.html#adam_core.photometry.bandpasses.BandpassCurves.source">source (adam_core.photometry.bandpasses.BandpassCurves attribute)</a>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.source">source (adam_core.orbits.Trajectory attribute)</a>
 
         <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.source">(adam_core.orbits.trajectory.Trajectory attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.photometry.bandpasses.html#adam_core.photometry.bandpasses.BandpassCurves.source">(adam_core.photometry.bandpasses.BandpassCurves attribute)</a>
+</li>
           <li><a href="reference/api/adam_core.photometry.bandpasses.tables.html#adam_core.photometry.bandpasses.tables.BandpassCurves.source">(adam_core.photometry.bandpasses.tables.BandpassCurves attribute)</a>
+</li>
+        </ul></li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.source_version">source_version (adam_core.orbits.Trajectory attribute)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.source_version">(adam_core.orbits.trajectory.Trajectory attribute)</a>
 </li>
         </ul></li>
         <li><a href="reference/api/adam_core.observations.html#adam_core.observations.SourceCatalog">SourceCatalog (class in adam_core.observations)</a>
@@ -4559,6 +4653,8 @@
           <li><a href="reference/api/adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris.table">(adam_core.orbits.ephemeris.Ephemeris attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits.table">(adam_core.orbits.orbits.Orbits attribute)</a>
+</li>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.table">(adam_core.orbits.trajectory.Trajectory attribute)</a>
 </li>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.table">(adam_core.orbits.variants.VariantOrbits attribute)</a>
 </li>
@@ -4751,6 +4847,12 @@
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.renderable.html#adam_core.orbits.openspace.renderable.RenderableOrbitalKepler.trail_width">trail_width (adam_core.orbits.openspace.renderable.RenderableOrbitalKepler attribute)</a>
 </li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory">Trajectory (class in adam_core.orbits)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory">(class in adam_core.orbits.trajectory)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.orbits.openspace.assets.html#adam_core.orbits.openspace.assets.Asset.transform">transform (adam_core.orbits.openspace.assets.Asset attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.orbits.openspace.translation.html#adam_core.orbits.openspace.translation.Transform">Transform (class in adam_core.orbits.openspace.translation)</a>
@@ -4853,6 +4955,12 @@
 </li>
         <li><a href="reference/api/adam_core.dynamics.chi.html#adam_core.dynamics.chi.ChiDiagnostics.v_norm">v_norm (adam_core.dynamics.chi.ChiDiagnostics attribute)</a>
 </li>
+        <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.Trajectory.validate_coverage">validate_coverage() (adam_core.orbits.Trajectory method)</a>
+
+        <ul>
+          <li><a href="reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.validate_coverage">(adam_core.orbits.trajectory.Trajectory method)</a>
+</li>
+        </ul></li>
         <li><a href="reference/api/adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates.values">values (adam_core.coordinates.cartesian.CartesianCoordinates property)</a>
 
         <ul>
@@ -4885,14 +4993,14 @@
 </li>
         <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris">VariantEphemeris (class in adam_core.orbits.variants)</a>
 </li>
+    </ul></td>
+    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.orbits.html#adam_core.orbits.VariantOrbits">VariantOrbits (class in adam_core.orbits)</a>
 
         <ul>
           <li><a href="reference/api/adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits">(class in adam_core.orbits.variants)</a>
 </li>
         </ul></li>
-    </ul></td>
-    <td style="width: 33%; vertical-align: top;"><ul>
         <li><a href="reference/api/adam_core.dynamics.impacts.html#adam_core.dynamics.impacts.ImpactProbabilities.variants">variants (adam_core.dynamics.impacts.ImpactProbabilities attribute)</a>
 </li>
         <li><a href="reference/api/adam_core.coordinates.geodetics.html#adam_core.coordinates.geodetics.GeodeticCoordinates.veast">veast (adam_core.coordinates.geodetics.GeodeticCoordinates attribute)</a>
@@ -5055,7 +5163,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-14</div>
+              Last updated on 2026-07-15</div>
           </div>
           <div class="right-details">
             
@@ -5070,7 +5178,7 @@
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=a1311bcc"></script>
+</div><script src="_static/documentation_options.js?v=c35c9795"></script>
     <script src="_static/doctools.js?v=9bcbadda"></script>
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/scripts/furo.js?v=46bd48cc"></script>
