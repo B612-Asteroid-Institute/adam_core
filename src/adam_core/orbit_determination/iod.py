@@ -20,7 +20,7 @@ from . import (
     OrbitDeterminationObservations,
     drop_duplicate_orbits,
 )
-from .gauss import C, MU, gaussIOD
+from .gauss import MU, C, gaussIOD
 from .outliers import calculate_max_outliers
 
 logger = logging.getLogger(__name__)
