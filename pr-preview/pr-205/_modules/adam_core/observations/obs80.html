@@ -432,7 +432,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">Decimal</span><span class="p">,</span> <span class="n">InvalidOperation</span><span class="p">,</span> <span class="n">ROUND_FLOOR</span><span class="p">,</span> <span class="n">ROUND_HALF_EVEN</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">decimal</span><span class="w"> </span><span class="kn">import</span> <span class="n">ROUND_FLOOR</span><span class="p">,</span> <span class="n">ROUND_HALF_EVEN</span><span class="p">,</span> <span class="n">Decimal</span><span class="p">,</span> <span class="n">InvalidOperation</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
@@ -577,7 +577,7 @@
     <span class="k">if</span> <span class="n">note2</span> <span class="ow">in</span> <span class="n">_UNSUPPORTED_TWO_LINE_TYPES</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">Obs80ParseError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;unsupported two-line record type </span><span class="si">{</span><span class="n">note2</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-    <span class="n">designation</span> <span class="o">=</span> <span class="n">line</span><span class="p">[</span><span class="mi">5</span><span class="p">:</span><span class="mi">12</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+    <span class="n">designation</span> <span class="o">=</span> <span class="n">line</span><span class="p">[:</span><span class="mi">12</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
     <span class="n">observatory_code</span> <span class="o">=</span> <span class="n">line</span><span class="p">[</span><span class="mi">77</span><span class="p">:</span><span class="mi">80</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">designation</span><span class="p">:</span>
         <span class="k">raise</span> <span class="n">Obs80ParseError</span><span class="p">(</span><span class="s2">&quot;missing designation&quot;</span><span class="p">)</span>
@@ -656,7 +656,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-15</div>
+              Last updated on 2026-07-16</div>
           </div>
           <div class="right-details">
             
@@ -671,7 +671,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=c35c9795"></script>
+</div><script src="../../../_static/documentation_options.js?v=e9ddc4b5"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
