@@ -8,7 +8,7 @@ rejected rather than partially interpreted.
 from __future__ import annotations
 
 import datetime
-from decimal import Decimal, InvalidOperation, ROUND_FLOOR, ROUND_HALF_EVEN
+from decimal import ROUND_FLOOR, ROUND_HALF_EVEN, Decimal, InvalidOperation
 
 import pyarrow as pa
 import quivr as qv
@@ -142,7 +142,7 @@ def parse_optical_obs80(raw: str) -> OpticalObs80:
     if note2 in _UNSUPPORTED_TWO_LINE_TYPES:
         raise Obs80ParseError(f"unsupported two-line record type {note2}")
 
-    designation = line[5:12].strip()
+    designation = line[:12].strip()
     observatory_code = line[77:80].strip()
     if not designation:
         raise Obs80ParseError("missing designation")

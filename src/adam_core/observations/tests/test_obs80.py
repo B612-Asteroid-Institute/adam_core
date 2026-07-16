@@ -47,6 +47,14 @@ def test_parse_record_with_space_padded_precision() -> None:
     assert parsed.mag[0].as_py() == pytest.approx(19.0)
 
 
+def test_parse_numbered_optical_record() -> None:
+    parsed = parse_optical_obs80(
+        "00001       *0C2026 07 08.17725719 41 24.185-30 19 19.42         19.35oVNEOCPW68"
+    )
+
+    assert parsed.designation.to_pylist() == ["00001"]
+
+
 def test_file_parser_is_strict_by_default() -> None:
     optical = "     ST26G06  C2026 07 08.33794520 25 33.638-00 47 36.82         19.62GVNEOCPU68"
     satellite = optical[:14] + "S" + optical[15:]
@@ -54,9 +62,7 @@ def test_file_parser_is_strict_by_default() -> None:
     with pytest.raises(Obs80ParseError, match="line 2.*two-line"):
         parse_optical_obs80_file(f"{optical}\n{satellite}\n")
 
-    parsed = parse_optical_obs80_file(
-        f"{optical}\n{satellite}\n", strict=False
-    )
+    parsed = parse_optical_obs80_file(f"{optical}\n{satellite}\n", strict=False)
     assert len(parsed) == 1
     assert parsed.designation.to_pylist() == ["ST26G06"]
 

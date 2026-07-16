@@ -6,8 +6,8 @@ import pyarrow.compute as pc
 import requests
 
 from ..scout import (
-    _request_scout_json,
     ScoutOrbit,
+    _request_scout_json,
     query_scout_observations,
     scout_orbits_to_variant_orbits,
 )

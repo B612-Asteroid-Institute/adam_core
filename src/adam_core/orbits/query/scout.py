@@ -230,7 +230,9 @@ def query_scout_observations(
         )
         if not isinstance(payload, dict) or payload.get("error"):
             detail = payload.get("error") if isinstance(payload, dict) else None
-            raise RuntimeError(f"Scout observation lookup failed for {object_id}: {detail}")
+            raise RuntimeError(
+                f"Scout observation lookup failed for {object_id}: {detail}"
+            )
 
         raw_file = payload.get("fileMPC")
         if not isinstance(raw_file, str) or not raw_file.strip():
@@ -242,7 +244,9 @@ def query_scout_observations(
                 f"Scout returned an invalid file=mpc snapshot for {object_id}: {exc}"
             ) from exc
         if len(observations) == 0:
-            raise RuntimeError(f"Scout returned an empty file=mpc snapshot for {object_id}")
+            raise RuntimeError(
+                f"Scout returned an empty file=mpc snapshot for {object_id}"
+            )
         if any(value != object_id for value in observations.designation.to_pylist()):
             raise RuntimeError(
                 f"Scout file=mpc designation mismatch for requested object {object_id}"
@@ -319,9 +323,7 @@ def query_scout(ids: npt.ArrayLike) -> VariantOrbits:
     """
     variant_orbits = VariantOrbits.empty()
     for object_id in ids:
-        data = _request_scout_json(
-            params={"tdes": str(object_id), "orbits": "1"}
-        )
+        data = _request_scout_json(params={"tdes": str(object_id), "orbits": "1"})
         data = data["orbits"]["data"]
 
         # Convert from list of rows to list of columns
