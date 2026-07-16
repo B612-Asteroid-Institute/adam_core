@@ -24,6 +24,46 @@ logger = logging.getLogger(__name__)
 _SCOUT_API_URL = "https://ssd-api.jpl.nasa.gov/scout.api"
 
 
+class ScoutQueryError(RuntimeError):
+    """A structured failure while querying JPL Scout."""
+
+    error_type = "query_error"
+    http_status = 502
+    retryable = False
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        object_id: str | None = None,
+        upstream_status: int | None = None,
+    ) -> None:
+        self.object_id = object_id
+        self.upstream_status = upstream_status
+        super().__init__(message)
+
+
+class ScoutObjectNotFoundError(ScoutQueryError):
+    """The requested live Scout object no longer exists."""
+
+    error_type = "not_found"
+    http_status = 404
+
+
+class ScoutServiceUnavailableError(ScoutQueryError):
+    """Scout remained unavailable after bounded retries."""
+
+    error_type = "service_unavailable"
+    http_status = 503
+    retryable = True
+
+
+class ScoutResponseError(ScoutQueryError):
+    """Scout returned an unsupported or malformed successful response."""
+
+    error_type = "invalid_response"
+
+
 def _request_scout_json(
     *,
     params: dict[str, Any] | None = None,
@@ -46,6 +86,70 @@ def _request_scout_json(
                 raise
             time.sleep(retry_delay_s * (2**attempt))
     raise RuntimeError("unreachable Scout retry state")
+
+
+def _request_scout_object_json(
+    object_id: str,
+    *,
+    params: dict[str, Any],
+    timeout_s: float,
+    max_attempts: int,
+    retry_delay_s: float,
+    http_get: Callable[..., Any],
+) -> dict[str, Any]:
+    """Fetch one object product and map lifecycle/transport failures."""
+    try:
+        payload = _request_scout_json(
+            params=params,
+            timeout_s=timeout_s,
+            max_attempts=max_attempts,
+            retry_delay_s=retry_delay_s,
+            http_get=http_get,
+        )
+    except requests.RequestException as exc:
+        upstream_status = getattr(getattr(exc, "response", None), "status_code", None)
+        if upstream_status == 404:
+            raise ScoutObjectNotFoundError(
+                f"Scout object {object_id!r} was not found",
+                object_id=object_id,
+                upstream_status=upstream_status,
+            ) from exc
+        if upstream_status is None or upstream_status == 429 or upstream_status >= 500:
+            raise ScoutServiceUnavailableError(
+                f"Scout is temporarily unavailable for {object_id!r}; retry later",
+                object_id=object_id,
+                upstream_status=upstream_status,
+            ) from exc
+        raise ScoutQueryError(
+            f"Scout request failed for {object_id!r} with HTTP {upstream_status}",
+            object_id=object_id,
+            upstream_status=upstream_status,
+        ) from exc
+
+    if not isinstance(payload, dict):
+        raise ScoutResponseError(
+            f"Scout returned a non-object response for {object_id!r}",
+            object_id=object_id,
+        )
+    if payload.get("error"):
+        raise ScoutObjectNotFoundError(
+            f"Scout object {object_id!r} is unavailable: {payload['error']}",
+            object_id=object_id,
+        )
+    return payload
+
+
+def _require_scout_signature(
+    payload: dict[str, Any], *, object_id: str
+) -> dict[str, Any]:
+    signature = payload.get("signature")
+    if not isinstance(signature, dict) or str(signature.get("version")) != "1.3":
+        raise ScoutResponseError(
+            "Unsupported or missing Scout API signature for "
+            f"{object_id}: {signature!r}",
+            object_id=object_id,
+        )
+    return signature
 
 
 class ScoutObjectSummary(qv.Table):
@@ -211,6 +315,8 @@ def query_scout_observations(
     ids: npt.ArrayLike,
     *,
     timeout_s: float = 30.0,
+    max_attempts: int = 3,
+    retry_delay_s: float = 0.5,
     http_get: Callable[..., Any] = requests.get,
 ) -> ScoutObservations:
     """Query authoritative fitted observations from JPL Scout.
@@ -223,33 +329,38 @@ def query_scout_observations(
     snapshots: list[ScoutObservations] = []
     for object_id_value in object_ids:
         object_id = str(object_id_value)
-        payload = _request_scout_json(
+        payload = _request_scout_object_json(
+            object_id,
             params={"tdes": object_id, "file": "mpc"},
             timeout_s=timeout_s,
+            max_attempts=max_attempts,
+            retry_delay_s=retry_delay_s,
             http_get=http_get,
         )
-        if not isinstance(payload, dict) or payload.get("error"):
-            detail = payload.get("error") if isinstance(payload, dict) else None
-            raise RuntimeError(
-                f"Scout observation lookup failed for {object_id}: {detail}"
-            )
+        signature = _require_scout_signature(payload, object_id=object_id)
 
         raw_file = payload.get("fileMPC")
         if not isinstance(raw_file, str) or not raw_file.strip():
-            raise RuntimeError(f"Scout returned no file=mpc snapshot for {object_id}")
+            raise ScoutResponseError(
+                f"Scout returned no file=mpc snapshot for {object_id}",
+                object_id=object_id,
+            )
         try:
             observations = parse_optical_obs80_file(raw_file)
         except Obs80ParseError as exc:
-            raise RuntimeError(
-                f"Scout returned an invalid file=mpc snapshot for {object_id}: {exc}"
+            raise ScoutResponseError(
+                f"Scout returned an invalid file=mpc snapshot for {object_id}: {exc}",
+                object_id=object_id,
             ) from exc
         if len(observations) == 0:
-            raise RuntimeError(
-                f"Scout returned an empty file=mpc snapshot for {object_id}"
+            raise ScoutResponseError(
+                f"Scout returned an empty file=mpc snapshot for {object_id}",
+                object_id=object_id,
             )
         if any(value != object_id for value in observations.designation.to_pylist()):
-            raise RuntimeError(
-                f"Scout file=mpc designation mismatch for requested object {object_id}"
+            raise ScoutResponseError(
+                f"Scout file=mpc designation mismatch for requested object {object_id}",
+                object_id=object_id,
             )
 
         declared_n_obs_raw = payload.get("nObs")
@@ -268,12 +379,6 @@ def query_scout_observations(
                 len(observations),
             )
 
-        signature = payload.get("signature")
-        if not isinstance(signature, dict) or str(signature.get("version")) != "1.3":
-            raise RuntimeError(
-                "Unsupported or missing Scout API signature for "
-                f"{object_id}: {signature!r}"
-            )
         n = len(observations)
         snapshots.append(
             ScoutObservations.from_kwargs(
@@ -301,7 +406,14 @@ def query_scout_observations(
     return qv.concatenate(snapshots)
 
 
-def query_scout(ids: npt.ArrayLike) -> VariantOrbits:
+def query_scout(
+    ids: npt.ArrayLike,
+    *,
+    timeout_s: float = 30.0,
+    max_attempts: int = 3,
+    retry_delay_s: float = 0.5,
+    http_get: Callable[..., Any] = requests.get,
+) -> VariantOrbits:
     """
     Query the Scout API for a list of objects by id
 
@@ -321,15 +433,42 @@ def query_scout(ids: npt.ArrayLike) -> VariantOrbits:
     orbits : `~adam_core.orbits.VariantOrbits`
         Table containing the orbits of the objects
     """
+    object_ids = [ids] if isinstance(ids, str) else list(ids)
     variant_orbits = VariantOrbits.empty()
-    for object_id in ids:
-        data = _request_scout_json(params={"tdes": str(object_id), "orbits": "1"})
-        data = data["orbits"]["data"]
+    for object_id_value in object_ids:
+        object_id = str(object_id_value)
+        payload = _request_scout_object_json(
+            object_id,
+            params={"tdes": object_id, "orbits": "1"},
+            timeout_s=timeout_s,
+            max_attempts=max_attempts,
+            retry_delay_s=retry_delay_s,
+            http_get=http_get,
+        )
+        _require_scout_signature(payload, object_id=object_id)
+        orbits_payload = payload.get("orbits")
+        rows = orbits_payload.get("data") if isinstance(orbits_payload, dict) else None
+        if not isinstance(rows, list):
+            raise ScoutResponseError(
+                f"Scout response for {object_id!r} is missing orbits.data",
+                object_id=object_id,
+            )
+        if not rows:
+            raise ScoutObjectNotFoundError(
+                f"Scout returned no orbit samples for {object_id!r}",
+                object_id=object_id,
+            )
 
-        # Convert from list of rows to list of columns
-        data = list(map(list, zip(*data)))
-        table = pa.Table.from_arrays(data, schema=ScoutOrbit.schema)
-        scout_orbits = ScoutOrbit.from_pyarrow(table)
+        try:
+            # Convert from list of rows to list of columns.
+            columns = list(map(list, zip(*rows)))
+            table = pa.Table.from_arrays(columns, schema=ScoutOrbit.schema)
+            scout_orbits = ScoutOrbit.from_pyarrow(table)
+        except (TypeError, ValueError, pa.ArrowException) as exc:
+            raise ScoutResponseError(
+                f"Scout returned invalid orbit samples for {object_id!r}: {exc}",
+                object_id=object_id,
+            ) from exc
         object_variants = scout_orbits_to_variant_orbits(object_id, scout_orbits)
         variant_orbits = qv.concatenate([variant_orbits, object_variants])
 

@@ -3,11 +3,16 @@
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
+import pytest
 import requests
 
 from ..scout import (
+    ScoutObjectNotFoundError,
     ScoutOrbit,
+    ScoutResponseError,
+    ScoutServiceUnavailableError,
     _request_scout_json,
+    query_scout,
     query_scout_observations,
     scout_orbits_to_variant_orbits,
 )
@@ -30,6 +35,139 @@ def test_scout_request_retries_transient_failure() -> None:
         http_get=lambda *args, **kwargs: next(responses), retry_delay_s=0
     )
     assert payload == {"ok": True}
+
+
+def _orbit_payload() -> dict:
+    return {
+        "signature": {"version": "1.3", "source": "NASA/JPL Scout API"},
+        "orbits": {
+            "data": [
+                [
+                    0,
+                    "2457581.871499164",
+                    "0.3357123709445450",
+                    "0.9083681207232809",
+                    "2457636.871738402",
+                    "111.41193497296813",
+                    "244.46138666195648",
+                    "16.61087545506555",
+                    "24.694617",
+                    None,
+                    None,
+                    "0.0321364995",
+                    None,
+                    "1.0e99",
+                    0,
+                ]
+            ]
+        },
+    }
+
+
+def test_query_scout_accepts_scalar_object_id() -> None:
+    calls = []
+
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return _orbit_payload()
+
+    def get(*args, **kwargs):
+        calls.append((args, kwargs))
+        return Response()
+
+    variants = query_scout("A11EpSe", http_get=get)
+
+    assert len(variants) == 1
+    assert variants.object_id.to_pylist() == ["A11EpSe"]
+    assert calls[0][1]["params"] == {"tdes": "A11EpSe", "orbits": "1"}
+
+
+def test_query_scout_maps_error_payload_to_structured_not_found() -> None:
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {"error": "specified object was not found"}
+
+    with pytest.raises(ScoutObjectNotFoundError) as caught:
+        query_scout("vanished", http_get=lambda *args, **kwargs: Response())
+
+    assert caught.value.object_id == "vanished"
+    assert caught.value.error_type == "not_found"
+    assert caught.value.http_status == 404
+    assert caught.value.retryable is False
+
+
+def test_query_scout_maps_exhausted_transient_http_to_503() -> None:
+    calls = 0
+
+    class Response:
+        status_code = 503
+
+        def raise_for_status(self) -> None:
+            raise requests.HTTPError(response=self)
+
+    def get(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return Response()
+
+    with pytest.raises(ScoutServiceUnavailableError) as caught:
+        query_scout(
+            "A11EpSe",
+            http_get=get,
+            max_attempts=2,
+            retry_delay_s=0,
+        )
+
+    assert calls == 2
+    assert caught.value.object_id == "A11EpSe"
+    assert caught.value.error_type == "service_unavailable"
+    assert caught.value.http_status == 503
+    assert caught.value.upstream_status == 503
+    assert caught.value.retryable is True
+
+
+def test_query_scout_rejects_missing_orbits_and_signature() -> None:
+    class Response:
+        def __init__(self, payload: dict):
+            self.payload = payload
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return self.payload
+
+    with pytest.raises(ScoutResponseError, match="signature"):
+        query_scout(
+            "A11EpSe",
+            http_get=lambda *args, **kwargs: Response({"orbits": {"data": []}}),
+        )
+    with pytest.raises(ScoutResponseError, match="orbits.data"):
+        query_scout(
+            "A11EpSe",
+            http_get=lambda *args, **kwargs: Response(
+                {
+                    "signature": {"version": "1.3"},
+                    "orbits": {},
+                }
+            ),
+        )
+    with pytest.raises(ScoutResponseError, match="invalid orbit samples"):
+        query_scout(
+            "A11EpSe",
+            http_get=lambda *args, **kwargs: Response(
+                {
+                    "signature": {"version": "1.3"},
+                    "orbits": {"data": [["not", "a", "ScoutOrbit"]]},
+                }
+            ),
+        )
 
 
 def test_query_scout_observations_uses_file_membership() -> None:

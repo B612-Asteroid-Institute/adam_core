@@ -151,9 +151,13 @@ Live NEOCP Semantics and Recovery
 Scout is a live service, not a durable NEOCP catalog. A designation returned by
 ``get_scout_objects()`` can be updated, replaced, or disappear before the next
 request. Transport errors, HTTP 429 responses, and server errors receive
-bounded retries. A missing designation, an API error payload, an empty or
-invalid ``fileMPC`` value, a designation mismatch, or an unsupported signature
-fails closed.
+bounded retries. An exhausted transient failure raises
+``ScoutServiceUnavailableError`` with ``http_status=503`` and
+``retryable=True``; a valid error payload for a vanished designation raises
+``ScoutObjectNotFoundError`` with ``http_status=404``. A malformed response, an
+empty or invalid ``fileMPC`` value, a designation mismatch, or an unsupported
+signature fails closed as ``ScoutResponseError``. Each structured exception
+also carries the requested ``object_id`` and any upstream HTTP status.
 
 For operational ingestion, treat such a failure as a reason to refresh the
 active-object list and reconcile the candidate's lifecycle. Do not substitute
