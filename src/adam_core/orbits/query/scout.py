@@ -132,8 +132,39 @@ def _request_scout_object_json(
             object_id=object_id,
         )
     if payload.get("error"):
-        raise ScoutObjectNotFoundError(
-            f"Scout object {object_id!r} is unavailable: {payload['error']}",
+        detail = str(payload["error"])
+        normalized = detail.casefold()
+        if any(
+            token in normalized
+            for token in (
+                "not found",
+                "no object",
+                "does not exist",
+                "unknown object",
+                "invalid designation",
+            )
+        ):
+            raise ScoutObjectNotFoundError(
+                f"Scout object {object_id!r} is unavailable: {detail}",
+                object_id=object_id,
+            )
+        if any(
+            token in normalized
+            for token in (
+                "temporar",
+                "service unavailable",
+                "timeout",
+                "try again",
+                "rate limit",
+                "internal server",
+            )
+        ):
+            raise ScoutServiceUnavailableError(
+                f"Scout is temporarily unavailable for {object_id!r}: {detail}",
+                object_id=object_id,
+            )
+        raise ScoutResponseError(
+            f"Scout returned an error for {object_id!r}: {detail}",
             object_id=object_id,
         )
     return payload

@@ -102,6 +102,22 @@ def test_query_scout_maps_error_payload_to_structured_not_found() -> None:
     assert caught.value.retryable is False
 
 
+def test_query_scout_maps_transient_error_payload_to_503() -> None:
+    class Response:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {"error": "service temporarily unavailable; try again"}
+
+    with pytest.raises(ScoutServiceUnavailableError) as caught:
+        query_scout("A11EpSe", http_get=lambda *args, **kwargs: Response())
+
+    assert caught.value.object_id == "A11EpSe"
+    assert caught.value.http_status == 503
+    assert caught.value.retryable is True
+
+
 def test_query_scout_maps_exhausted_transient_http_to_503() -> None:
     calls = 0
 
