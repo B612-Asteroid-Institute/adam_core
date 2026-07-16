@@ -568,8 +568,39 @@
             <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="k">if</span> <span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">):</span>
-        <span class="k">raise</span> <span class="n">ScoutObjectNotFoundError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">&quot;Scout object </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2"> is unavailable: </span><span class="si">{</span><span class="n">payload</span><span class="p">[</span><span class="s1">&#39;error&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+        <span class="n">detail</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">payload</span><span class="p">[</span><span class="s2">&quot;error&quot;</span><span class="p">])</span>
+        <span class="n">normalized</span> <span class="o">=</span> <span class="n">detail</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="n">token</span> <span class="ow">in</span> <span class="n">normalized</span>
+            <span class="k">for</span> <span class="n">token</span> <span class="ow">in</span> <span class="p">(</span>
+                <span class="s2">&quot;not found&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;no object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;does not exist&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;unknown object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;invalid designation&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="n">ScoutObjectNotFoundError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scout object </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2"> is unavailable: </span><span class="si">{</span><span class="n">detail</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="n">token</span> <span class="ow">in</span> <span class="n">normalized</span>
+            <span class="k">for</span> <span class="n">token</span> <span class="ow">in</span> <span class="p">(</span>
+                <span class="s2">&quot;temporar&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;service unavailable&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;timeout&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;try again&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;rate limit&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;internal server&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="n">ScoutServiceUnavailableError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scout is temporarily unavailable for </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2">: </span><span class="si">{</span><span class="n">detail</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">raise</span> <span class="n">ScoutResponseError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Scout returned an error for </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2">: </span><span class="si">{</span><span class="n">detail</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
             <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="k">return</span> <span class="n">payload</span>
@@ -960,7 +991,7 @@
       
     </aside>
   </div>
-</div><script src="../../../../_static/documentation_options.js?v=fbaa2ba0"></script>
+</div><script src="../../../../_static/documentation_options.js?v=671dd013"></script>
     <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>
