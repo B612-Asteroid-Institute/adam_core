@@ -575,9 +575,13 @@ set.</p>
 <p>Scout is a live service, not a durable NEOCP catalog. A designation returned by
 <code class="docutils literal notranslate"><span class="pre">get_scout_objects()</span></code> can be updated, replaced, or disappear before the next
 request. Transport errors, HTTP 429 responses, and server errors receive
-bounded retries. A missing designation, an API error payload, an empty or
-invalid <code class="docutils literal notranslate"><span class="pre">fileMPC</span></code> value, a designation mismatch, or an unsupported signature
-fails closed.</p>
+bounded retries. An exhausted transient failure raises
+<code class="docutils literal notranslate"><span class="pre">ScoutServiceUnavailableError</span></code> with <code class="docutils literal notranslate"><span class="pre">http_status=503</span></code> and
+<code class="docutils literal notranslate"><span class="pre">retryable=True</span></code>; a valid error payload for a vanished designation raises
+<code class="docutils literal notranslate"><span class="pre">ScoutObjectNotFoundError</span></code> with <code class="docutils literal notranslate"><span class="pre">http_status=404</span></code>. A malformed response, an
+empty or invalid <code class="docutils literal notranslate"><span class="pre">fileMPC</span></code> value, a designation mismatch, or an unsupported
+signature fails closed as <code class="docutils literal notranslate"><span class="pre">ScoutResponseError</span></code>. Each structured exception
+also carries the requested <code class="docutils literal notranslate"><span class="pre">object_id</span></code> and any upstream HTTP status.</p>
 <p>For operational ingestion, treat such a failure as a reason to refresh the
 active-object list and reconcile the candidate’s lifecycle. Do not substitute
 <code class="docutils literal notranslate"><span class="pre">nObs</span></code> for file membership or retain a partially parsed snapshot. Persist the
@@ -707,7 +711,7 @@ candidates and need a defensible uncertainty-aware pointing recommendation.</p>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=1af63626"></script>
+</div><script src="../_static/documentation_options.js?v=fbaa2ba0"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
