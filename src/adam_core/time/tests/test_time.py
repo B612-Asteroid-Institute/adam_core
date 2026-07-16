@@ -844,6 +844,11 @@ def test_Timestamp_rescale_correctness(scale1, scale2):
     if "tdb" in [scale1, scale2]:
         astropy_tolerance = 32_000
 
+    # UT1 is delegated through Astropy/ERFA. Its floating-point TDB conversion
+    # can quantize a round trip by one nanosecond for remote epochs as IERS data
+    # and dependency versions change; preserve exactness for every other pair.
+    round_trip_tolerance = 1 if {scale1, scale2} == {"tdb", "ut1"} else 0
+
     original = Timestamp.from_kwargs(
         days=RESCALE_DAYS,
         nanos=RESCALE_NANOS,
@@ -858,7 +863,7 @@ def test_Timestamp_rescale_correctness(scale1, scale2):
         original,
         round_tripped,
         f"round trip match from {scale1} to {scale2}",
-        0,  # tolerance
+        round_trip_tolerance,
     )
     assert check_delta(
         rescaled, baseline, f"match going from {scale1} to {scale2}", astropy_tolerance
