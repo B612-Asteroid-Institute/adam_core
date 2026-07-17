@@ -78,7 +78,7 @@ jobs:
       - name: Verify exact tested package archives and metadata
         run: |
           set -euo pipefail
-          sha256sum -c accepted-crates/SHA256SUMS
+          (cd accepted-crates && sha256sum -c SHA256SUMS)
           test "$(find accepted-crates -maxdepth 1 -name '*.crate' | wc -l | tr -d ' ')" = 6
           python migration/scripts/publish_crate_archives.py \
             --archives accepted-crates \

@@ -69,7 +69,7 @@ jobs:
           cmp Cargo.lock /tmp/Cargo.lock.before
           cp target/package/*.crate crate-dist/
           test "$(find crate-dist -name '*.crate' | wc -l | tr -d ' ')" = 6
-          sha256sum crate-dist/*.crate | sort | tee crate-dist/SHA256SUMS
+          (cd crate-dist && sha256sum *.crate | sort | tee SHA256SUMS)
           python migration/scripts/publish_crate_archives.py \
             --archives crate-dist \
             --expected-version "$RUST_PREVIEW_VERSION"
