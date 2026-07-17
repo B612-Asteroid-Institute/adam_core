@@ -48,6 +48,18 @@ pub use observations::{
     PointSourceDetectionBatch, SourceCatalogBatch, TimeColumn,
 };
 
+pub mod obs80;
+pub use obs80::{
+    optical_obs80_record_batch, parse_optical_obs80_file, parse_optical_obs80_line, Obs80Error,
+    OpticalObs80Record,
+};
+
+pub mod trajectory;
+pub use trajectory::{
+    trajectory_mjd, trajectory_object_ids, trajectory_segment_index, validate_trajectory,
+    TrajectoryData,
+};
+
 pub mod rotation_period;
 pub use rotation_period::{
     alias_bucket as rotation_alias_bucket, estimate_rotation_period,

@@ -1,6 +1,6 @@
 # Public surface audit: I/O, queries, products, and utilities
 
-Audit date: 2026-07-11
+Audit date: 2026-07-17
 
 Parent bead: `personal-cmy.37.4`
 
@@ -65,7 +65,7 @@ query paths depend on them, but they are not counted as public API commitments.
 |---|---|---|
 | Horizons | complete one-crossing Rust HTTP products | Rust owns API URLs, HTTP, 50-epoch chunking, CSV protocol parsing, target-name compatibility, ordering, element conversion, nulls, and nested Orbits/Ephemeris Arrow assembly; Python only projects time/code columns and wraps the returned batch |
 | NEOCC | complete one-crossing Rust HTTP product | Rust owns URL cleaning, HTTPS, OEF parsing, validation, covariance/state conversion, physical parameters, ordering, and nested Arrow assembly |
-| Scout | complete one-crossing Rust HTTP products | Rust owns summary and sampled-orbit HTTP, schema parsing, cometary conversion, variant IDs/order, and ScoutObjectSummary/VariantOrbits Arrow assembly |
+| Scout | complete one-crossing Rust HTTP products | Rust owns summary, sampled-orbit, and `file=mpc` HTTP/retry protocols; structured lifecycle errors; API 1.3 signature checks; strict Obs80 parsing; SHA-256/provenance metadata; cometary conversion; IDs/order; and ScoutObjectSummary/VariantOrbits/ScoutObservations Arrow assembly. Explicitly injected `http_get` remains the compatibility provider seam. |
 | SBDB | complete one-crossing Rust HTTP products | Both exports use the direct Rust client; Rust owns validation, fair-use sequential requests, timeout/retry/backoff, missing filtering, normalization, covariance/state conversion, physical parameters, order, and nested Arrow assembly |
 | ADES PSV | fused Rust writer/parser plus observation/context kernels | Public writer/parser each satisfy one crossing; Python only reconstructs compatibility dataclasses/quivr objects |
 | OEM | fused Rust product writer/reader plus KVN engine | Writer and reader each satisfy one crossing (ecliptic rotation, sort, metadata, unit/covariance conversion, orbit-id and table assembly in Rust); ITRF93 pre-transform stays on the Rust `transform_coordinates` crossing; propagated writer remains a declared propagator-provider boundary |
@@ -108,7 +108,7 @@ Public package export `query_neocc` is a one-crossing veneer. Rust owns designat
 
 #### Scout
 
-Public package export `query_scout` and module-public `get_scout_objects`/`scout_orbits_to_variant_orbits` each cross once into Rust. Rust owns both Scout protocols, summary schema/null parsing, per-object sampled-orbit fan-out, cometary conversion, IDs/order, and exact ScoutObjectSummary/VariantOrbits Arrow assembly. The quivr classes remain generic schemas.
+Public package exports `query_scout` and `query_scout_observations`, plus module-public `get_scout_objects`/`scout_orbits_to_variant_orbits`, each cross once into Rust on the canonical default path. Rust owns all three Scout protocols, bounded retry/backoff, structured not-found/service/response classification, API 1.3 signature validation, summary schema/null parsing, per-object sampled-orbit fan-out, strict `file=mpc` Obs80 parsing, designation checks, SHA-256 and provenance metadata, cometary conversion, IDs/order, and exact ScoutObjectSummary/VariantOrbits/ScoutObservations Arrow assembly. Explicitly supplied `http_get` is retained as an external provider/monkeypatch compatibility seam. The quivr classes and Python exception names remain generic compatibility schemas.
 
 #### SBDB
 

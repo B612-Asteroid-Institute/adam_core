@@ -1,12 +1,12 @@
 # Remaining Rust support surface
 
-Updated 2026-07-14 after integrating upstream main at
-`936cc636096fcfefcee3e1310c21528444f39546`.
+Updated 2026-07-17 after integrating upstream main at
+`9b756803ab3afbe11e33df9e57d30a28e7976b92`.
 
 ## Runtime support summary
 
 - The authoritative complete inventory is
-  `migration/public_surface/manifest.json`: **576 symbols / 66 constants**.
+  `migration/public_surface/manifest.json`: **595 symbols / 67 constants**.
   Domain dispositions are recorded under `migration/public_surface/`.
 - The 44-row parity registry remains a selected migration benchmark set, not a
   public-API count. All enforced rows pass; raw-kernel diagnostic rows do not
@@ -17,6 +17,9 @@ Updated 2026-07-14 after integrating upstream main at
 - The complete latest-main `photometry.rotation` surface is present. Rust owns
   the estimator, frequency fits, confidence/alias policy, apparition selection,
   grouped solves, default observation assembly, and native timing.
+- The `9b756803` additions are present: Rust owns MPC Obs80 parsing/Arrow
+  assembly, Scout `file=mpc` acquisition/signature/hash/snapshot products, and
+  all six custom validity-bounded `Trajectory` methods with native timing.
 - `adam-assist` owns ASSIST propagation, sampled covariance, ephemeris,
   collision/impact, OD/IOD, and scheduling orchestration. It consumes
   `libassist-sys` and `librebound-sys` directly; no `assist-rs` v2 is planned.
@@ -32,7 +35,8 @@ These are supported boundaries, not hidden default backends:
 - the opt-in historical JAX batch-fit module (the public rotation estimator
   always uses Rust);
 - abstract/external propagator calls and optional SPK propagation;
-- live network providers and user-supplied/custom observer providers; and
+- explicitly injected HTTP/network providers and user-supplied/custom observer
+  providers (default Scout/SBDB/NEOCC/Horizons clients are Rust-owned); and
 - generic quivr projection, linkage, table construction, and serialization
   infrastructure where no adam-core algorithm is performed.
 

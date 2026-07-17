@@ -1,16 +1,21 @@
-use crate::http::{get_text, percent_encode};
+use crate::http::{get_text, get_text_with_status, percent_encode};
 use adam_core_rs_coords::{
-    cometary_to_cartesian6, transform_with_covariance_flat6, CoordinateBatch,
-    CoordinateRepresentation, CovarianceBatch, CovarianceUnits, DataFrame, IntoNestedRecordBatch,
-    ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
-    PhysicalParametersBatch, Representation, TimeArray, TimeScale, VariantId,
+    cometary_to_cartesian6, optical_obs80_record_batch, parse_optical_obs80_file,
+    transform_with_covariance_flat6, CoordinateBatch, CoordinateRepresentation, CovarianceBatch,
+    CovarianceUnits, DataFrame, IntoNestedRecordBatch, ObjectId, OrbitBatch, OrbitId,
+    OrbitVariantBatch, OriginArray, OriginId, PhysicalParametersBatch, Representation, TimeArray,
+    TimeScale, VariantId,
 };
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
-use arrow_array::{Array, ArrayRef, Int64Array, Int8Array, LargeStringArray, RecordBatch};
+use arrow_array::{
+    Array, ArrayRef, Int64Array, Int8Array, LargeStringArray, RecordBatch, StructArray,
+};
 use arrow_schema::{DataType, Field, Schema};
 use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use serde_json::{Map, Value};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
 use std::hint::black_box;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -122,6 +127,168 @@ fn next_recorded(
     } else {
         get_text(url, Duration::from_secs(60), service)
     }
+}
+
+fn scout_error(
+    kind: &str,
+    object_id: &str,
+    upstream_status: Option<u16>,
+    message: impl Into<String>,
+) -> PyErr {
+    value_error(format!(
+        "__SCOUT_ERROR__:{}",
+        serde_json::json!({
+            "kind": kind,
+            "object_id": object_id,
+            "upstream_status": upstream_status,
+            "message": message.into(),
+        })
+    ))
+}
+
+fn validate_scout_payload(object_id: &str, payload: &str) -> PyResult<Value> {
+    let value: Value = serde_json::from_str(payload).map_err(|error| {
+        scout_error(
+            "response",
+            object_id,
+            None,
+            format!("Scout returned invalid JSON for {object_id:?}: {error}"),
+        )
+    })?;
+    if !value.is_object() {
+        return Err(scout_error(
+            "response",
+            object_id,
+            None,
+            format!("Scout returned a non-object response for {object_id:?}"),
+        ));
+    }
+    if let Some(detail) = value.get("error").filter(|value| !value.is_null()) {
+        let detail = detail
+            .as_str()
+            .map(str::to_string)
+            .unwrap_or_else(|| detail.to_string());
+        let normalized = detail.to_lowercase();
+        let kind = if [
+            "not found",
+            "no object",
+            "does not exist",
+            "unknown object",
+            "invalid designation",
+        ]
+        .iter()
+        .any(|token| normalized.contains(token))
+        {
+            "not_found"
+        } else if [
+            "temporar",
+            "service unavailable",
+            "timeout",
+            "try again",
+            "rate limit",
+            "internal server",
+        ]
+        .iter()
+        .any(|token| normalized.contains(token))
+        {
+            "service_unavailable"
+        } else {
+            "response"
+        };
+        let message = match kind {
+            "not_found" => format!("Scout object {object_id:?} is unavailable: {detail}"),
+            "service_unavailable" => {
+                format!("Scout is temporarily unavailable for {object_id:?}: {detail}")
+            }
+            _ => format!("Scout returned an error for {object_id:?}: {detail}"),
+        };
+        return Err(scout_error(kind, object_id, None, message));
+    }
+    Ok(value)
+}
+
+fn require_scout_signature<'a>(payload: &'a Value, object_id: &str) -> PyResult<&'a Value> {
+    let signature = payload.get("signature");
+    if signature
+        .and_then(|value| value.as_object())
+        .and_then(|value| value.get("version"))
+        .and_then(Value::as_str)
+        != Some("1.3")
+    {
+        return Err(scout_error(
+            "response",
+            object_id,
+            None,
+            format!(
+                "Unsupported or missing Scout API signature for {object_id}: {}",
+                signature.map_or_else(|| "null".to_string(), Value::to_string)
+            ),
+        ));
+    }
+    Ok(signature.expect("validated Scout signature exists"))
+}
+
+#[allow(clippy::too_many_arguments)]
+fn scout_object_payload(
+    object_id: &str,
+    query: &str,
+    timeout_s: f64,
+    max_attempts: usize,
+    retry_delay_s: f64,
+    recorded: Option<&[String]>,
+    cursor: &mut usize,
+) -> PyResult<Value> {
+    if let Some(recorded) = recorded {
+        let payload = recorded
+            .get(*cursor)
+            .ok_or_else(|| value_error("not enough recorded Scout responses"))?;
+        *cursor += 1;
+        return validate_scout_payload(object_id, payload);
+    }
+    let url = format!("{SCOUT_URL}?tdes={}&{query}", percent_encode(object_id));
+    let attempts = max_attempts.max(1);
+    let timeout = Duration::try_from_secs_f64(timeout_s)
+        .map_err(|error| value_error(format!("invalid Scout timeout: {error}")))?;
+    for attempt in 0..attempts {
+        match get_text_with_status(&url, timeout, "Scout") {
+            Ok(payload) => return validate_scout_payload(object_id, &payload),
+            Err(error) => {
+                let status = error.status;
+                if status == Some(404) {
+                    return Err(scout_error(
+                        "not_found",
+                        object_id,
+                        status,
+                        format!("Scout object {object_id:?} was not found"),
+                    ));
+                }
+                let retryable = status.is_none_or(|value| value == 429 || value >= 500);
+                if !retryable {
+                    return Err(scout_error(
+                        "query",
+                        object_id,
+                        status,
+                        format!("Scout request failed for {object_id:?} with HTTP {status:?}"),
+                    ));
+                }
+                if attempt + 1 == attempts {
+                    return Err(scout_error(
+                        "service_unavailable",
+                        object_id,
+                        status,
+                        format!("Scout is temporarily unavailable for {object_id:?}; retry later"),
+                    ));
+                }
+                std::thread::sleep(
+                    Duration::try_from_secs_f64(retry_delay_s * 2.0_f64.powi(attempt as i32))
+                        .map_err(|error| {
+                            value_error(format!("invalid Scout retry delay: {error}"))
+                        })?,
+                );
+            }
+        }
+    }
+    unreachable!("Scout attempts are always at least one")
 }
 
 fn neocc_orbits(
@@ -384,6 +551,9 @@ fn scout_rows(payload: &str) -> PyResult<Vec<Map<String, Value>>> {
 
 fn scout_variants(
     object_ids: &[String],
+    timeout_s: f64,
+    max_attempts: usize,
+    retry_delay_s: f64,
     recorded: Option<&[String]>,
 ) -> PyResult<OrbitVariantBatch> {
     let mut cursor = 0usize;
@@ -393,14 +563,57 @@ fn scout_variants(
     let mut states = Vec::new();
     let mut epochs_jd = Vec::new();
     for object_id in object_ids {
-        let url = format!("{SCOUT_URL}?tdes={}&orbits=1", percent_encode(object_id));
-        let payload = next_recorded(recorded, &mut cursor, &url, "Scout")?;
-        let rows = scout_rows(&payload)?;
+        let payload = scout_object_payload(
+            object_id,
+            "orbits=1",
+            timeout_s,
+            max_attempts,
+            retry_delay_s,
+            recorded,
+            &mut cursor,
+        )?;
+        require_scout_signature(&payload, object_id)?;
+        let rows_value = payload.get("orbits").and_then(|value| value.get("data"));
+        if !rows_value.is_some_and(Value::is_array) {
+            return Err(scout_error(
+                "response",
+                object_id,
+                None,
+                format!("Scout response for {object_id:?} is missing orbits.data"),
+            ));
+        }
+        if rows_value
+            .and_then(Value::as_array)
+            .is_some_and(Vec::is_empty)
+        {
+            return Err(scout_error(
+                "not_found",
+                object_id,
+                None,
+                format!("Scout returned no orbit samples for {object_id:?}"),
+            ));
+        }
+        let payload_text = payload.to_string();
+        let rows = scout_rows(&payload_text).map_err(|error| {
+            scout_error(
+                "response",
+                object_id,
+                None,
+                format!("Scout returned invalid orbit samples for {object_id:?}: {error}"),
+            )
+        })?;
         let normalized = adam_core_rs_coords::scout_normalize_orbits_json(
             object_id,
             &serde_json::to_string(&rows).map_err(|err| value_error(err.to_string()))?,
         )
-        .map_err(|err| value_error(err.to_string()))?;
+        .map_err(|error| {
+            scout_error(
+                "response",
+                object_id,
+                None,
+                format!("Scout returned invalid orbit samples for {object_id:?}: {error}"),
+            )
+        })?;
         let normalized = parse_json(&normalized, "normalized Scout")?;
         let coords = matrix_rows(&normalized, "coords_cometary")?;
         let times = number_array(&normalized, "times_jd")?;
@@ -415,7 +628,11 @@ fn scout_variants(
                 .collect::<Vec<_>>(),
         )
         .map_err(|err| value_error(err.to_string()))?;
-        let rounded = mjd_values(&time_array);
+        let rounded = mjd_values(
+            &time_array
+                .rescale(TimeScale::Tdb)
+                .map_err(|err| value_error(err.to_string()))?,
+        );
         for (row, cometary) in coords.iter().enumerate() {
             states.push(cometary_to_cartesian6::<f64>(
                 cometary,
@@ -489,15 +706,263 @@ fn query_neocc_arrow<'py>(
         .map_err(|err| value_error(err.to_string()))
 }
 
+#[derive(Debug)]
+struct ScoutObservationRow {
+    object_id: String,
+    solution_date_utc: Option<String>,
+    declared_n_obs: Option<i64>,
+    snapshot_sha256: String,
+    snapshot_observation_count: i64,
+    signature_version: Option<String>,
+    signature_source: Option<String>,
+    observation_index: i64,
+    observation: adam_core_rs_coords::OpticalObs80Record,
+}
+
+#[allow(clippy::too_many_arguments)]
+fn scout_observations_batch(
+    object_ids: &[String],
+    timeout_s: f64,
+    max_attempts: usize,
+    retry_delay_s: f64,
+    recorded: Option<&[String]>,
+) -> PyResult<RecordBatch> {
+    let mut cursor = 0usize;
+    let mut rows = Vec::new();
+    for object_id in object_ids {
+        let payload = scout_object_payload(
+            object_id,
+            "file=mpc",
+            timeout_s,
+            max_attempts,
+            retry_delay_s,
+            recorded,
+            &mut cursor,
+        )?;
+        let signature = require_scout_signature(&payload, object_id)?;
+        let raw_file = payload
+            .get("fileMPC")
+            .and_then(Value::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| {
+                scout_error(
+                    "response",
+                    object_id,
+                    None,
+                    format!("Scout returned no file=mpc snapshot for {object_id}"),
+                )
+            })?;
+        let observations = parse_optical_obs80_file(raw_file, true).map_err(|error| {
+            scout_error(
+                "response",
+                object_id,
+                None,
+                format!("Scout returned an invalid file=mpc snapshot for {object_id}: {error}"),
+            )
+        })?;
+        if observations.is_empty() {
+            return Err(scout_error(
+                "response",
+                object_id,
+                None,
+                format!("Scout returned an empty file=mpc snapshot for {object_id}"),
+            ));
+        }
+        if observations
+            .iter()
+            .any(|observation| observation.designation != *object_id)
+        {
+            return Err(scout_error(
+                "response",
+                object_id,
+                None,
+                format!("Scout file=mpc designation mismatch for requested object {object_id}"),
+            ));
+        }
+        let declared_n_obs = payload.get("nObs").and_then(|value| {
+            value
+                .as_i64()
+                .or_else(|| value.as_str().and_then(|value| value.parse::<i64>().ok()))
+        });
+        let hash = format!("{:x}", Sha256::digest(raw_file.as_bytes()));
+        let count = observations.len() as i64;
+        let solution_date_utc = payload
+            .get("lastRun")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let signature_version = signature
+            .get("version")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        let signature_source = signature
+            .get("source")
+            .and_then(Value::as_str)
+            .map(str::to_string);
+        for (index, observation) in observations.into_iter().enumerate() {
+            rows.push(ScoutObservationRow {
+                object_id: object_id.clone(),
+                solution_date_utc: solution_date_utc.clone(),
+                declared_n_obs,
+                snapshot_sha256: hash.clone(),
+                snapshot_observation_count: count,
+                signature_version: signature_version.clone(),
+                signature_source: signature_source.clone(),
+                observation_index: index as i64,
+                observation,
+            });
+        }
+    }
+
+    let observation_batch = optical_obs80_record_batch(
+        &rows
+            .iter()
+            .map(|row| row.observation.clone())
+            .collect::<Vec<_>>(),
+    )
+    .map_err(|error| value_error(error.to_string()))?;
+    let observation = StructArray::try_new(
+        observation_batch.schema().fields().clone(),
+        observation_batch.columns().to_vec(),
+        None,
+    )
+    .map_err(|error| value_error(error.to_string()))?;
+    let fields = vec![
+        Field::new("object_id", DataType::LargeUtf8, false),
+        Field::new("solution_date_utc", DataType::LargeUtf8, true),
+        Field::new("declared_n_obs", DataType::Int64, true),
+        Field::new("snapshot_sha256", DataType::LargeUtf8, false),
+        Field::new("snapshot_observation_count", DataType::Int64, false),
+        Field::new("signature_version", DataType::LargeUtf8, true),
+        Field::new("signature_source", DataType::LargeUtf8, true),
+        Field::new("observation_index", DataType::Int64, false),
+        Field::new("observation", observation.data_type().clone(), true),
+    ];
+    let strings =
+        |values: Vec<&str>| -> ArrayRef { Arc::new(LargeStringArray::from_iter_values(values)) };
+    let optional_strings =
+        |values: Vec<Option<&str>>| -> ArrayRef { Arc::new(LargeStringArray::from_iter(values)) };
+    let arrays: Vec<ArrayRef> = vec![
+        strings(rows.iter().map(|row| row.object_id.as_str()).collect()),
+        optional_strings(
+            rows.iter()
+                .map(|row| row.solution_date_utc.as_deref())
+                .collect(),
+        ),
+        Arc::new(Int64Array::from(
+            rows.iter()
+                .map(|row| row.declared_n_obs)
+                .collect::<Vec<_>>(),
+        )),
+        strings(
+            rows.iter()
+                .map(|row| row.snapshot_sha256.as_str())
+                .collect(),
+        ),
+        Arc::new(Int64Array::from_iter_values(
+            rows.iter().map(|row| row.snapshot_observation_count),
+        )),
+        optional_strings(
+            rows.iter()
+                .map(|row| row.signature_version.as_deref())
+                .collect(),
+        ),
+        optional_strings(
+            rows.iter()
+                .map(|row| row.signature_source.as_deref())
+                .collect(),
+        ),
+        Arc::new(Int64Array::from_iter_values(
+            rows.iter().map(|row| row.observation_index),
+        )),
+        Arc::new(observation),
+    ];
+    let mut metadata = HashMap::new();
+    metadata.insert(
+        "adam_core_schema".to_string(),
+        "ScoutObservations.nested.quivr.v1".to_string(),
+    );
+    metadata.insert("adam_core_schema_version".to_string(), "1".to_string());
+    metadata.insert("observation.time.scale".to_string(), "utc".to_string());
+    RecordBatch::try_new(
+        Arc::new(Schema::new_with_metadata(fields, metadata)),
+        arrays,
+    )
+    .map_err(|error| value_error(error.to_string()))
+}
+
 #[pyfunction]
-#[pyo3(signature = (recorded_response=None))]
+#[pyo3(signature = (object_ids, recorded_responses=None, timeout_s=30.0, max_attempts=3, retry_delay_s=0.5))]
+fn query_scout_observations_arrow<'py>(
+    py: Python<'py>,
+    object_ids: Vec<String>,
+    recorded_responses: Option<Vec<String>>,
+    timeout_s: f64,
+    max_attempts: usize,
+    retry_delay_s: f64,
+) -> PyResult<PyObject> {
+    let batch = py.allow_threads(|| {
+        scout_observations_batch(
+            &object_ids,
+            timeout_s,
+            max_attempts,
+            retry_delay_s,
+            recorded_responses.as_deref(),
+        )
+    })?;
+    batch
+        .to_pyarrow(py)
+        .map_err(|error| value_error(error.to_string()))
+}
+
+#[pyfunction]
+#[pyo3(signature = (recorded_response=None, timeout_s=30.0, max_attempts=3, retry_delay_s=0.5))]
 fn get_scout_objects_arrow<'py>(
     py: Python<'py>,
     recorded_response: Option<String>,
+    timeout_s: f64,
+    max_attempts: usize,
+    retry_delay_s: f64,
 ) -> PyResult<PyObject> {
     let payload = match recorded_response {
         Some(payload) => payload,
-        None => get_text(SCOUT_URL, Duration::from_secs(60), "Scout")?,
+        None => {
+            let timeout = Duration::try_from_secs_f64(timeout_s)
+                .map_err(|error| value_error(format!("invalid Scout timeout: {error}")))?;
+            let attempts = max_attempts.max(1);
+            let mut last_error = None;
+            let mut result = None;
+            for attempt in 0..attempts {
+                match get_text_with_status(SCOUT_URL, timeout, "Scout") {
+                    Ok(payload) => {
+                        result = Some(payload);
+                        break;
+                    }
+                    Err(error) => {
+                        let retryable = error
+                            .status
+                            .is_none_or(|status| status == 429 || status >= 500);
+                        last_error = Some(error.to_string());
+                        if !retryable || attempt + 1 == attempts {
+                            break;
+                        }
+                        std::thread::sleep(
+                            Duration::try_from_secs_f64(
+                                retry_delay_s * 2.0_f64.powi(attempt as i32),
+                            )
+                            .map_err(|error| {
+                                value_error(format!("invalid Scout retry delay: {error}"))
+                            })?,
+                        );
+                    }
+                }
+            }
+            result.ok_or_else(|| {
+                PyRuntimeError::new_err(format!(
+                    "Scout query failed after {attempts} attempts: {}",
+                    last_error.unwrap_or_else(|| "unknown error".to_string())
+                ))
+            })?
+        }
     };
     scout_summary_batch(&payload)?
         .to_pyarrow(py)
@@ -535,10 +1000,11 @@ fn scout_orbits_to_variants_arrow<'py>(
         rows.push(Value::Array(values));
     }
     let payload = serde_json::json!({
+        "signature": {"version": "1.3", "source": "recorded"},
         "orbits": {"fields": names, "data": rows}
     })
     .to_string();
-    let output = scout_variants(&[object_id.to_string()], Some(&[payload]))?;
+    let output = scout_variants(&[object_id.to_string()], 30.0, 1, 0.0, Some(&[payload]))?;
     output
         .into_nested_record_batch()
         .map_err(|err| value_error(err.to_string()))?
@@ -547,13 +1013,24 @@ fn scout_orbits_to_variants_arrow<'py>(
 }
 
 #[pyfunction]
-#[pyo3(signature = (object_ids, recorded_responses=None))]
+#[pyo3(signature = (object_ids, recorded_responses=None, timeout_s=30.0, max_attempts=3, retry_delay_s=0.5))]
 fn query_scout_arrow<'py>(
     py: Python<'py>,
     object_ids: Vec<String>,
     recorded_responses: Option<Vec<String>>,
+    timeout_s: f64,
+    max_attempts: usize,
+    retry_delay_s: f64,
 ) -> PyResult<PyObject> {
-    let output = py.allow_threads(|| scout_variants(&object_ids, recorded_responses.as_deref()))?;
+    let output = py.allow_threads(|| {
+        scout_variants(
+            &object_ids,
+            timeout_s,
+            max_attempts,
+            retry_delay_s,
+            recorded_responses.as_deref(),
+        )
+    })?;
     output
         .into_nested_record_batch()
         .map_err(|err| value_error(err.to_string()))?
@@ -802,6 +1279,9 @@ fn benchmark_query_client_processing(
             "scout" => {
                 black_box(scout_variants(
                     &vec!["recorded".to_string(); payloads.len()],
+                    30.0,
+                    1,
+                    0.0,
                     Some(&payloads),
                 )?);
             }
@@ -809,6 +1289,30 @@ fn benchmark_query_client_processing(
                 for payload in &payloads {
                     black_box(scout_summary_batch(payload)?);
                 }
+            }
+            "scout-observations" => {
+                let object_ids = payloads
+                    .iter()
+                    .map(|payload| -> PyResult<String> {
+                        let value = parse_json(payload, "recorded Scout observations")?;
+                        let raw_file = value
+                            .get("fileMPC")
+                            .and_then(Value::as_str)
+                            .ok_or_else(|| value_error("recorded Scout payload missing fileMPC"))?;
+                        parse_optical_obs80_file(raw_file, true)
+                            .map_err(|error| value_error(error.to_string()))?
+                            .first()
+                            .map(|record| record.designation.clone())
+                            .ok_or_else(|| value_error("recorded Scout fileMPC is empty"))
+                    })
+                    .collect::<PyResult<Vec<_>>>()?;
+                black_box(scout_observations_batch(
+                    &object_ids,
+                    30.0,
+                    1,
+                    0.0,
+                    Some(&payloads),
+                )?);
             }
             "sbdb" => {
                 black_box(sbdb_orbits(
@@ -846,6 +1350,7 @@ pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(get_scout_objects_arrow, module)?)?;
     module.add_function(wrap_pyfunction!(scout_orbits_to_variants_arrow, module)?)?;
     module.add_function(wrap_pyfunction!(query_scout_arrow, module)?)?;
+    module.add_function(wrap_pyfunction!(query_scout_observations_arrow, module)?)?;
     module.add_function(wrap_pyfunction!(query_sbdb_arrow, module)?)?;
     module.add_function(wrap_pyfunction!(benchmark_query_client_processing, module)?)?;
     Ok(())

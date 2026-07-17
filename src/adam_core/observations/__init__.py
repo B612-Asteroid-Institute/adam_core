@@ -13,6 +13,7 @@ from .ades import (
 from .associations import Associations
 from .detections import PointSourceDetections
 from .exposures import Exposures
+from .obs80 import OpticalObs80, ScoutObservations
 from .photometry import Photometry
 from .source_catalog import SourceCatalog
 
@@ -20,6 +21,8 @@ __all__ = [
     "Associations",
     "Exposures",
     "PointSourceDetections",
+    "OpticalObs80",
+    "ScoutObservations",
     "Photometry",
     "SourceCatalog",
 ]

@@ -69,9 +69,16 @@ def to_quivr_metadata(table: pa.Table) -> pa.Table:
     scale = metadata.get(b"adam_core_time_scale", b"utc").decode()
     prefix = b"coordinates." if "coordinates" in table.column_names else b""
     quivr_metadata = {
-        prefix + b"frame": frame.encode(),
-        prefix + b"time.scale": scale.encode(),
+        key: value
+        for key, value in metadata.items()
+        if b"." in key and not key.startswith(b"adam_core")
     }
+    quivr_metadata.update(
+        {
+            prefix + b"frame": frame.encode(),
+            prefix + b"time.scale": scale.encode(),
+        }
+    )
     if "aberrated_coordinates" in table.column_names:
         aberrated_frame = metadata.get(b"adam_core_aberrated_frame", b"ecliptic")
         aberrated_scale = metadata.get(

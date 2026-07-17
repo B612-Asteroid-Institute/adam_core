@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import statistics
 import sys
 from pathlib import Path
 from typing import Any, Optional
@@ -39,6 +40,9 @@ from migration.parity import (
 
 DEFAULT_PARITY_ARTIFACT = Path("migration/artifacts/parity_gate.json")
 DEFAULT_SPEED_ARTIFACT = Path("migration/artifacts/parity_speed_cold_warm.json")
+DEFAULT_LATEST_MAIN_ARTIFACT = Path(
+    "migration/artifacts/latest_main_additions_parity.json"
+)
 
 # GPL ASSIST lane artifacts. These compare the Rust GPL backend
 # (downstream adam-assist over assist-rs + adam-core contracts) against the current
@@ -477,6 +481,96 @@ def _format_seconds(value: float | None) -> str:
     if value < 1.0:
         return f"{value * 1.0e3:.2f}ms"
     return f"{value:.3f}s"
+
+
+def _flatten_timing_samples(value: Any) -> list[float]:
+    if isinstance(value, (int, float)):
+        return [float(value)]
+    if isinstance(value, list):
+        return [sample for item in value for sample in _flatten_timing_samples(item)]
+    return []
+
+
+def _format_latest_main_additions(path: Path) -> str:
+    if not path.exists():
+        return ""
+    artifact = json.loads(path.read_text())
+    parity = artifact.get("parity", {})
+    metadata_exact = parity.get("scout_orbit_metadata_exact", {})
+    rows = [
+        (
+            "Obs80 parser/file",
+            bool(parity.get("obs80_exact")) and bool(parity.get("obs80_errors_exact")),
+            "exact tables and error contracts",
+        ),
+        (
+            "Trajectory six-method surface",
+            bool(parity.get("trajectory_exact")),
+            "exact values, half-open selection, gaps, and validation errors",
+        ),
+        (
+            "Scout file=mpc observations",
+            bool(parity.get("scout_observations_exact")),
+            "exact nested table, ordering, signature, hash, and metadata",
+        ),
+        (
+            "Scout sampled orbits",
+            bool(metadata_exact) and all(metadata_exact.values()),
+            "metadata exact; max state abs difference "
+            f"{float(parity.get('scout_orbit_max_abs_difference', math.inf)):.3g}",
+        ),
+    ]
+    lines = [
+        "## Upstream 9b756803 Additions",
+        "",
+        f"Oracle: `{artifact.get('oracle_commit', 'unknown')}`. Overall status: "
+        f"**{str(artifact.get('status', 'unknown')).upper()}**. This supplemental "
+        "conversion fixture covers public APIs added after the historical 44-API "
+        "oracle pin; it does not rotate the older benchmark identity.",
+        "",
+        "| Surface | Result | Evidence |",
+        "|---|---|---|",
+    ]
+    lines.extend(
+        f"| {surface} | {'PASS' if passed else 'FAIL'} | {evidence} |"
+        for surface, passed, evidence in rows
+    )
+
+    oracle = artifact.get("python_control_timings", {}).get("oracle_seconds", {})
+    current = artifact.get("python_control_timings", {}).get("current_seconds", {})
+    speedups = artifact.get("python_control_timings", {}).get("speedup", {})
+    native = artifact.get("native_rust_instant_timings", {})
+    native_keys = {
+        "obs80_file_seconds": "obs80_seconds",
+        "trajectory_validate_seconds": "trajectory_validate_seconds",
+        "trajectory_segment_seconds": "trajectory_segment_seconds",
+        "scout_observations_processing_seconds": "scout_observations_seconds",
+        "scout_orbits_processing_seconds": "scout_orbits_seconds",
+    }
+    labels = {
+        "obs80_file_seconds": "Obs80 file parse (200 rows)",
+        "trajectory_validate_seconds": "Trajectory validate (256 segments)",
+        "trajectory_segment_seconds": "Trajectory segment lookup (256 segments)",
+        "scout_observations_processing_seconds": "Scout observation response processing",
+        "scout_orbits_processing_seconds": "Scout orbit response processing",
+    }
+    lines.extend(
+        [
+            "",
+            "| Operation | upstream Python p50 | current facade p50 | speedup | native Rust-Instant p50 |",
+            "|---|---:|---:|---:|---:|",
+        ]
+    )
+    for key, label in labels.items():
+        samples = _flatten_timing_samples(native.get(native_keys[key], []))
+        native_p50 = statistics.median(samples) if samples else None
+        lines.append(
+            f"| {label} | {_format_seconds(oracle.get(key))} | "
+            f"{_format_seconds(current.get(key))} | "
+            f"{float(speedups.get(key, math.nan)):.2f}x | "
+            f"{_format_seconds(native_p50)} |"
+        )
+    return "\n".join(lines)
 
 
 def _format_timing_pair(data: dict[str, Any]) -> str:
@@ -1356,6 +1450,17 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--latest-main-artifact",
+        type=Path,
+        default=DEFAULT_LATEST_MAIN_ARTIFACT,
+        help="Supplemental parity/timing artifact for APIs added at upstream 9b756803.",
+    )
+    p.add_argument(
+        "--latest-main-only",
+        action="store_true",
+        help="Render only the supplemental upstream-9b756803 section.",
+    )
+    p.add_argument(
         "--no-speed",
         action="store_true",
         help="Only print parity tolerance/RCA table.",
@@ -1416,6 +1521,9 @@ def _build_arg_parser() -> argparse.ArgumentParser:
 def main(argv: Optional[list[str]] = None) -> int:
     parser = _build_arg_parser()
     args = parser.parse_args(argv)
+    if args.latest_main_only:
+        print(_format_latest_main_additions(args.latest_main_artifact))
+        return 0
     if args.simple_timings and args.no_speed:
         parser.error("--simple-timings cannot be combined with --no-speed")
     if args.simple_timings and args.speed_long:
@@ -1494,6 +1602,10 @@ def main(argv: Optional[list[str]] = None) -> int:
             assist_md = _format_assist_section()
             if assist_md:
                 sections.extend(["", assist_md])
+        if requested_api_ids is None:
+            latest_main_md = _format_latest_main_additions(args.latest_main_artifact)
+            if latest_main_md:
+                sections.extend(["", latest_main_md])
     report = "\n".join(sections)
 
     print(report)

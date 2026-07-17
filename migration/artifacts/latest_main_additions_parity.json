@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "oracle_commit": "9b756803ab3afbe11e33df9e57d30a28e7976b92",
+  "current_git_head": "e18833a0e486ca2080b2993ba15373099e780887",
+  "surface": [
+    "parse_optical_obs80",
+    "parse_optical_obs80_file",
+    "query_scout",
+    "query_scout_observations",
+    "Trajectory.coverage_start_mjd",
+    "Trajectory.coverage_end_mjd",
+    "Trajectory.epoch_mjd",
+    "Trajectory.object_ids",
+    "Trajectory.validate_coverage",
+    "Trajectory.segment_for"
+  ],
+  "parity": {
+    "obs80_exact": true,
+    "obs80_errors_exact": true,
+    "trajectory_exact": true,
+    "scout_observations_exact": true,
+    "scout_orbit_metadata_exact": {
+      "orbit_id": true,
+      "object_id": true,
+      "variant_id": true,
+      "time_days": true,
+      "time_nanos": true,
+      "time_scale": true,
+      "origin": true,
+      "frame": true
+    },
+    "scout_orbit_max_abs_difference": 0.0
+  },
+  "python_control_timings": {
+    "oracle_seconds": {
+      "obs80_file_seconds": 0.047565207816660404,
+      "trajectory_validate_seconds": 0.00035679154098033905,
+      "trajectory_segment_seconds": 0.0003520417958498001,
+      "scout_observations_processing_seconds": 0.0011310828849673271,
+      "scout_orbits_processing_seconds": 0.0015589995309710503
+    },
+    "current_seconds": {
+      "obs80_file_seconds": 0.0003800848498940468,
+      "trajectory_validate_seconds": 5.924981087446213e-05,
+      "trajectory_segment_seconds": 0.00013195723295211792,
+      "scout_observations_processing_seconds": 0.0002398751676082611,
+      "scout_orbits_processing_seconds": 0.00014841556549072266
+    },
+    "speedup": {
+      "obs80_file_seconds": 125.14365629127226,
+      "trajectory_validate_seconds": 6.021817381599837,
+      "trajectory_segment_seconds": 2.667847665292756,
+      "scout_observations_processing_seconds": 4.715297945365036,
+      "scout_orbits_processing_seconds": 10.504285893574297
+    }
+  },
+  "native_rust_instant_timings": {
+    "obs80_seconds": [
+      [
+        0.000245833,
+        0.000240542,
+        0.000239333,
+        0.000238625,
+        0.000239
+      ],
+      [
+        0.000238,
+        0.000237833,
+        0.000238458,
+        0.000237958,
+        0.000238166
+      ],
+      [
+        0.0002415,
+        0.000238625,
+        0.000238167,
+        0.000237375,
+        0.000237791
+      ]
+    ],
+    "scout_observations_seconds": [
+      [
+        1.9292e-05,
+        1.8583e-05,
+        1.8416e-05,
+        1.9e-05,
+        1.7958e-05
+      ],
+      [
+        1.8125e-05,
+        1.7708e-05,
+        1.7667e-05,
+        1.775e-05,
+        1.7333e-05
+      ],
+      [
+        1.7334e-05,
+        1.7209e-05,
+        1.7209e-05,
+        1.7125e-05,
+        1.7125e-05
+      ]
+    ],
+    "scout_orbits_seconds": [
+      [
+        1.5583e-05,
+        1.3708e-05,
+        1.3125e-05,
+        1.2584e-05,
+        1.2542e-05
+      ],
+      [
+        1.25e-05,
+        1.2583e-05,
+        1.2417e-05,
+        1.2458e-05,
+        1.2375e-05
+      ],
+      [
+        1.2292e-05,
+        1.225e-05,
+        1.2292e-05,
+        1.2333e-05,
+        1.2458e-05
+      ]
+    ],
+    "trajectory_validate_seconds": [
+      [
+        7.916e-06,
+        7.75e-06,
+        8.25e-06,
+        9.167e-06,
+        1.025e-05
+      ],
+      [
+        9.333e-06,
+        9.417e-06,
+        9.416e-06,
+        9.25e-06,
+        9.417e-06
+      ],
+      [
+        9.292e-06,
+        9.333e-06,
+        9.458e-06,
+        9.375e-06,
+        9.458e-06
+      ]
+    ],
+    "trajectory_segment_seconds": [
+      [
+        1.542e-06,
+        1.542e-06,
+        1.542e-06,
+        1.542e-06,
+        1.5e-06
+      ],
+      [
+        1.542e-06,
+        1.541e-06,
+        1.542e-06,
+        1.5e-06,
+        1.5e-06
+      ],
+      [
+        1.5e-06,
+        1.5e-06,
+        1.5e-06,
+        1.5e-06,
+        1.5e-06
+      ]
+    ]
+  },
+  "status": "passed"
+}

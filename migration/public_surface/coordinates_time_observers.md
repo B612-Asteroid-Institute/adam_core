@@ -1,7 +1,7 @@
 # Coordinates, time, origins, and observers public-surface disposition
 
-Updated 2026-07-14 against upstream main
-`936cc636096fcfefcee3e1310c21528444f39546`. The symbol-level authority is
+Updated 2026-07-17 against upstream main
+`9b756803ab3afbe11e33df9e57d30a28e7976b92`. The symbol-level authority is
 `manifest.json`; this document supplies the grouped disposition referenced by
 those rows.
 

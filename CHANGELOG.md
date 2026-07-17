@@ -14,6 +14,9 @@ This file contains notable changes in adam-core
   best-apparition selection, including Rust-owned timing samples.
 - Automatic kernel-data resolution for pure-Rust consumers: explicit override,
   installed Python package, cache, then checksummed wheel download.
+- Upstream `main` at `9b756803` is integrated: MPC Obs80 parsing, strict Scout
+  `file=mpc` snapshots and lifecycle errors, and validity-bounded Trajectory
+  methods are Rust-owned behind compatible Python schemas.
 
 ### Changed
 

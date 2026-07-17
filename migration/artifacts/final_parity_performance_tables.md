@@ -190,3 +190,22 @@ Legacy cache freshness: warm: 132 entries, captured 2026-07-14T14:34:45+00:00 to
 | `photometry.predict_magnitudes` | thin wrapper | rows=10<br>legacy adam_core 19.1µs/20.2µs; current Python 3.3µs/3.5µs; native Rust 0.6µs/0.6µs; Python/native 5.65x/5.92x<br>legacy/current p50 5.80x; p95 5.84x; cold —<br>PASS; waiver — | rows=2000<br>legacy adam_core 139.5µs/169.7µs; current Python 36.9µs/37.0µs; native Rust 24.8µs/25.0µs; Python/native 1.49x/1.48x<br>legacy/current p50 3.78x; p95 4.58x; cold 19.25x<br>PASS; waiver — | orbits=1000 × observers=50 (50000 rows)<br>legacy adam_core 837.7µs/965.3µs; current Python 442.0µs/593.1µs; native Rust 421.5µs/709.5µs; Python/native 1.05x/0.84x<br>legacy/current p50 1.90x; p95 1.63x; cold 14.14x<br>PASS; waiver — |
 | `statistics.weighted_covariance` | raw kernel | rows=10<br>legacy adam_core 2.8µs/3.0µs; current Python 1.7µs/1.8µs; native Rust 0.3µs/0.4µs; Python/native 5.24x/4.89x<br>legacy/current p50 1.60x; p95 1.61x; cold —<br>DIAG PASS; waiver — | rows=2000<br>legacy adam_core 31.6µs/36.2µs; current Python 58.3µs/59.6µs; native Rust 56.6µs/57.7µs; Python/native 1.03x/1.03x<br>legacy/current p50 0.54x; p95 0.61x; cold 0.41x<br>DIAG FAIL; waiver — | rows=50000<br>legacy adam_core 993.3µs/1.18ms; current Python 1.36ms/1.40ms; native Rust 1.35ms/1.41ms; Python/native 1.00x/1.00x<br>legacy/current p50 0.73x; p95 0.84x; cold 0.65x<br>DIAG FAIL; waiver — |
 | `statistics.weighted_mean` | raw kernel | rows=10<br>legacy adam_core 0.8µs/0.8µs; current Python 1.2µs/1.3µs; native Rust 0.1µs/0.1µs; Python/native 14.88x/10.33x<br>legacy/current p50 0.60x; p95 0.65x; cold —<br>DIAG FAIL; waiver — | rows=2000<br>legacy adam_core 3.5µs/3.8µs; current Python 23.7µs/24.0µs; native Rust 22.3µs/22.5µs; Python/native 1.07x/1.06x<br>legacy/current p50 0.15x; p95 0.16x; cold 0.38x<br>DIAG FAIL; waiver — | rows=50000<br>legacy adam_core 67.7µs/69.1µs; current Python 543.5µs/559.7µs; native Rust 540.3µs/544.4µs; Python/native 1.01x/1.03x<br>legacy/current p50 0.12x; p95 0.12x; cold 0.70x<br>DIAG FAIL; waiver — |
+
+## Upstream 9b756803 Additions
+
+Oracle: `9b756803ab3afbe11e33df9e57d30a28e7976b92`. Overall status: **PASSED**. This supplemental conversion fixture covers public APIs added after the historical 44-API oracle pin; it does not rotate the older benchmark identity.
+
+| Surface | Result | Evidence |
+|---|---|---|
+| Obs80 parser/file | PASS | exact tables and error contracts |
+| Trajectory six-method surface | PASS | exact values, half-open selection, gaps, and validation errors |
+| Scout file=mpc observations | PASS | exact nested table, ordering, signature, hash, and metadata |
+| Scout sampled orbits | PASS | metadata exact; max state abs difference 0 |
+
+| Operation | upstream Python p50 | current facade p50 | speedup | native Rust-Instant p50 |
+|---|---:|---:|---:|---:|
+| Obs80 file parse (200 rows) | 47.57ms | 380.1µs | 125.14x | 238.5µs |
+| Trajectory validate (256 segments) | 356.8µs | 59.2µs | 6.02x | 9.3µs |
+| Trajectory segment lookup (256 segments) | 352.0µs | 132.0µs | 2.67x | 1.5µs |
+| Scout observation response processing | 1.13ms | 239.9µs | 4.72x | 17.7µs |
+| Scout orbit response processing | 1.56ms | 148.4µs | 10.50x | 12.5µs |

@@ -1,7 +1,7 @@
 # Dynamics, missions, OD, IOD, and impacts public-surface disposition
 
-Updated 2026-07-14 against upstream main
-`936cc636096fcfefcee3e1310c21528444f39546`. The complete symbol inventory is
+Updated 2026-07-17 against upstream main
+`9b756803ab3afbe11e33df9e57d30a28e7976b92`. The complete symbol inventory is
 `manifest.json`; the 44-row parity registry is only a benchmark subset.
 
 ## Scalar and batch dynamics

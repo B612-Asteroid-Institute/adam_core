@@ -1,6 +1,6 @@
 # Public-surface audit: observations and source catalogs
 
-Audit date: 2026-07-11  
+Audit date: 2026-07-17
 Parent bead: `personal-cmy.37.7`  
 Scope: every public class, function, custom method, and relevant inherited operation under `src/adam_core/observations`.
 
@@ -20,6 +20,15 @@ Only plotting/display may remain Python. Unchanged quivr constructors, descripto
 | `ADES_to_string` | one fused Rust crossing owns UTC rescale, all context/observation rendering, validation, and final assembly | frozen writer fixture plus Rust-Instant fused timing | Compatible veneer |
 | `ADES_string_to_tables` | one fused Rust crossing owns observation/context parsing, warning inputs, and nested Arrow encoding; Python reconstructs declared compatibility objects | frozen parser fixture plus Rust-Instant fused timing | Compatible veneer |
 | `observations_to_ipc`, `observations_from_ipc`, `round_trip_observations` | migration transport/codec diagnostics | exact round trips; native timing N/Q | Keep classified, not domain migration credit |
+
+## MPC 80-column and Scout snapshot observations
+
+| Public API | Current ownership | Parity/timing | Disposition |
+|---|---|---|---|
+| `parse_optical_obs80`, `parse_optical_obs80_file` | one Rust crossing owns strict/non-strict row selection, fixed-column parsing, half-even fractional-day nanoseconds, validation, nullable fields, and finished nested Arrow assembly | upstream `9b756803` examples and malformed-row contracts, Rust unit coverage, full-table tests, and Rust-Instant parser/assembly timing | Compatible veneer |
+| `OpticalObs80`, `ScoutObservations`, `Obs80ParseError`, `NANOSECONDS_PER_DAY` | generic quivr schemas plus compatibility exception/constant; deterministic parsing and snapshot assembly are Rust-owned | schema, metadata, hash, ordering, and snapshot tests | Compatibility data/schema |
+
+Scout `file=mpc` acquisition, signature validation, SHA-256, snapshot metadata, strict Obs80 parsing, and nested `ScoutObservations` assembly are covered with the query clients in `orbits.md` and `io_queries_utilities.md`.
 
 ## Associations, detections, and exposures
 
@@ -53,4 +62,4 @@ This domain defines no plotting APIs. Therefore no adam-core-owned method above 
 
 ## Closure
 
-The observations domain is complete. The ADES product task (`personal-cmy.37.4.3`) and all three observation-domain implementation children (`personal-cmy.37.7.1`, `.37.7.2`, `.37.7.3`) are closed: every deterministic grouping, projection, HEALPix, time, and observer workflow executes in Rust behind a one-crossing veneer with parity coverage (frozen legacy fixtures, healpy-oracle equality, legacy-valued unit tests, fused-vs-legacy assertions) and Rust-Instant timing. The remaining Python is limited to declared compatibility wrapping, computation-free generic quivr projections/constructors, generic `Linkage` key selection, and null-bearing compatibility inputs. Space/custom observer codes now share the Rust `Observers.from_codes` crossing.
+The observations domain is complete against upstream `9b756803ab3afbe11e33df9e57d30a28e7976b92`. The ADES product task (`personal-cmy.37.4.3`) and all three observation-domain implementation children (`personal-cmy.37.7.1`, `.37.7.2`, `.37.7.3`) are closed: every deterministic grouping, projection, HEALPix, time, and observer workflow executes in Rust behind a one-crossing veneer with parity coverage (frozen legacy fixtures, healpy-oracle equality, legacy-valued unit tests, fused-vs-legacy assertions) and Rust-Instant timing. The remaining Python is limited to declared compatibility wrapping, computation-free generic quivr projections/constructors, generic `Linkage` key selection, and null-bearing compatibility inputs. Space/custom observer codes now share the Rust `Observers.from_codes` crossing.

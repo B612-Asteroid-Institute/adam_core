@@ -13,6 +13,7 @@ mod dynamics;
 mod horizons;
 mod http;
 mod native_benchmarks;
+mod obs80;
 mod od_ops;
 mod orbit_determination;
 mod photometry;
@@ -21,6 +22,7 @@ mod rotation_observations;
 mod rotation_period;
 mod spice;
 mod timestamp_ops;
+mod trajectory;
 mod variant_ephemeris;
 
 #[pymodule]
@@ -31,6 +33,7 @@ fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     dynamics::register(m)?;
     horizons::register(m)?;
     native_benchmarks::register(m)?;
+    obs80::register(m)?;
     od_ops::register(m)?;
     photometry::register(m)?;
     query_clients::register(m)?;
@@ -39,6 +42,7 @@ fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     orbit_determination::register(m)?;
     spice::register(m)?;
     timestamp_ops::register(m)?;
+    trajectory::register(m)?;
     variant_ephemeris::register(m)?;
     Ok(())
 }

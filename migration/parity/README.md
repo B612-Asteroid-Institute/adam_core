@@ -35,6 +35,14 @@ against (`936cc636096fcfefcee3e1310c21528444f39546`, upstream `main` at
 capture time, including the rotation-period surface); the speed gate asserts this pin before cache validation so
 checkout drift fails with a clear error. Bump it deliberately and recapture.
 
+Obs80, strict Scout snapshots, and `Trajectory` were added later at upstream
+`9b756803ab3afbe11e33df9e57d30a28e7976b92`, so they cannot be evaluated by
+the older 44-API oracle. Their exact conversion parity, Python-control
+performance, and Rust-Instant timing are captured separately by
+`migration/scripts/capture_latest_main_additions_parity.py` in
+`migration/artifacts/latest_main_additions_parity.json`. This supplemental lane
+does not silently rotate the established benchmark/cache identity.
+
 Because both repos export the package name `adam_core`, they cannot coexist
 in one Python venv. We invoke the legacy implementation through a
 **subprocess** running inside `.legacy-venv` (gitignored, set up once):

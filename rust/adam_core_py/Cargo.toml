@@ -22,6 +22,7 @@ arrow-ipc = "54"
 arrow-schema = "54"
 parquet = { version = "54", default-features = false, features = ["arrow", "zstd"] }
 serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.10"
 pathdiff = "0.2"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 chrono-tz = "0.10"
