@@ -454,31 +454,51 @@ checks runner architecture, exact wheel count, and platform tags. Windows is
 deferred because <code class="docutils literal notranslate"><span class="pre">libassist-sys</span> <span class="pre">1.2.1</span></code> requires the upstream ASSIST POSIX
 memory-mapping implementation; musllinux is also deliberately unsupported.</p>
 </section>
+<section id="preview-versions-and-opt-in-installation">
+<h2>Preview versions and opt-in installation<a class="headerlink" href="#preview-versions-and-opt-in-installation" title="Link to this heading">¶</a></h2>
+<p>The migration preview is <code class="docutils literal notranslate"><span class="pre">adam-core==0.5.6rc1</span></code> on PyPI. The public Rust
+crates use <code class="docutils literal notranslate"><span class="pre">0.1.0-rc.1</span></code> and exact internal requirements such as
+<code class="docutils literal notranslate"><span class="pre">=0.1.0-rc.1</span></code>. Pip and Cargo exclude prereleases from ordinary resolution;
+preview consumers must opt in with an exact pin. The Python wheel contains the
+Python veneer and compiled <code class="docutils literal notranslate"><span class="pre">adam_core._rust_native</span></code> extension, so Python
+consumers do not need to install the component crates from crates.io.</p>
+<p>The current stable PyPI release remains the default for <code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span>
+<span class="pre">adam-core</span></code>. A public preview is still visible and intentionally installable by
+anyone who supplies <code class="docutils literal notranslate"><span class="pre">--pre</span></code> or the exact version. Use a private package index
+instead if public visibility is unacceptable.</p>
+</section>
 <section id="trusted-publishing">
 <h2>Trusted publishing<a class="headerlink" href="#trusted-publishing" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">publish.yml</span></code> uses GitHub/PyPI OIDC with environment protection, not a stored
-API token. Its manual input is the successful release-candidate workflow run
-ID. The collector verifies the run name, successful conclusion, and exact head
-SHA before assembling only <code class="docutils literal notranslate"><span class="pre">adam_core</span></code> wheels. TestPyPI and PyPI are separate
-protected environments. The first release of each Rust crate must be made
-manually before crates.io can attach an OIDC trusted publisher. Subsequent
-crate publication verifies checksums and uploads the exact candidate <code class="docutils literal notranslate"><span class="pre">.crate</span></code>
-archives through the Cargo registry protocol without repackaging or compiling.
-For each first release, use the same
-<code class="docutils literal notranslate"><span class="pre">migration/scripts/publish_crate_archives.py</span> <span class="pre">--execute</span></code> path with a manually
-scoped token and the reviewed candidate artifact set; do not run <code class="docutils literal notranslate"><span class="pre">cargo</span>
-<span class="pre">publish</span></code> against a fresh package.</p>
+<p><code class="docutils literal notranslate"><span class="pre">publish.yml</span></code> uses GitHub/PyPI OIDC with protected <code class="docutils literal notranslate"><span class="pre">testpypi-preview</span></code> and
+<code class="docutils literal notranslate"><span class="pre">pypi-preview</span></code> environments. Its manual inputs include the successful
+release-candidate run ID, exact version, and a confirmation containing the
+version, commit SHA, and destination. The collector verifies the run name,
+successful conclusion, exact head SHA, RC-only version, wheel metadata, and the
+complete 12-wheel matrix before assembling only <code class="docutils literal notranslate"><span class="pre">adam_core</span></code> wheels.</p>
+<p>The first release of each Rust crate uses a manually scoped token held only in
+the protected <code class="docutils literal notranslate"><span class="pre">crates-io-preview</span></code> environment; crates.io can attach an OIDC
+trusted publisher after that crate exists. Crate publication verifies the same
+explicit confirmation, candidate provenance, checksums, archive metadata,
+prerelease versions, and exact internal dependency pins, then uploads the exact
+candidate <code class="docutils literal notranslate"><span class="pre">.crate</span></code> archives in dependency order without repackaging or
+compiling. The bootstrap token must be revoked after owners and trusted
+publishers are configured.</p>
 </section>
 <section id="release-order">
 <h2>Release order<a class="headerlink" href="#release-order" title="Link to this heading">¶</a></h2>
 <p>After review and approval:</p>
 <ol class="arabic simple">
-<li><p>publish the reviewed permissive adam-core Rust crates in dependency order;</p></li>
-<li><p>publish the exact accepted <code class="docutils literal notranslate"><span class="pre">adam-core</span></code> wheel set and verify it from the
+<li><p>publish <code class="docutils literal notranslate"><span class="pre">adam_core_rs_autodiff</span></code> and
+<code class="docutils literal notranslate"><span class="pre">adam_core_rs_orbit_determination</span></code>;</p></li>
+<li><p>publish <code class="docutils literal notranslate"><span class="pre">adam_core_rs_coords</span></code>, <code class="docutils literal notranslate"><span class="pre">adam_core_rs_spice</span></code>,
+<code class="docutils literal notranslate"><span class="pre">adam_core_rs_kernel_data</span></code>, then the <code class="docutils literal notranslate"><span class="pre">adam_core</span></code> umbrella crate;</p></li>
+<li><p>publish the exact accepted <code class="docutils literal notranslate"><span class="pre">adam-core</span></code> RC wheel set and verify it from the
 public index;</p></li>
-<li><p>test <code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> against that public adam-core release;</p></li>
-<li><p>publish the exact accepted <code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> wheel set; and</p></li>
-<li><p>repeat the clean-room public-index smoke test.</p></li>
+<li><p>replace adam-assist’s temporary vendored core crates with exact public RC
+dependencies and test <code class="docutils literal notranslate"><span class="pre">adam-assist==0.4.0rc1</span></code> against the public
+<code class="docutils literal notranslate"><span class="pre">adam-core==0.5.6rc1</span></code> release;</p></li>
+<li><p>publish the exact accepted <code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> RC wheel set; and</p></li>
+<li><p>run the precovery-v2 clean package-manager smoke test with exact pins.</p></li>
 </ol>
 <p><code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> owns ASSIST orchestration and consumes released
 <code class="docutils literal notranslate"><span class="pre">libassist-sys</span></code> and <code class="docutils literal notranslate"><span class="pre">librebound-sys</span></code> directly. Do not publish an
@@ -546,6 +566,7 @@ validation.</p>
             <ul>
 <li><a class="reference internal" href="#">Release Process</a><ul>
 <li><a class="reference internal" href="#artifact-policy">Artifact policy</a></li>
+<li><a class="reference internal" href="#preview-versions-and-opt-in-installation">Preview versions and opt-in installation</a></li>
 <li><a class="reference internal" href="#trusted-publishing">Trusted publishing</a></li>
 <li><a class="reference internal" href="#release-order">Release order</a></li>
 </ul>

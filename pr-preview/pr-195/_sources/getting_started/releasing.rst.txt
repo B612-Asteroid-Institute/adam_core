@@ -18,33 +18,56 @@ checks runner architecture, exact wheel count, and platform tags. Windows is
 deferred because ``libassist-sys 1.2.1`` requires the upstream ASSIST POSIX
 memory-mapping implementation; musllinux is also deliberately unsupported.
 
+Preview versions and opt-in installation
+----------------------------------------
+
+The migration preview is ``adam-core==0.5.6rc1`` on PyPI. The public Rust
+crates use ``0.1.0-rc.1`` and exact internal requirements such as
+``=0.1.0-rc.1``. Pip and Cargo exclude prereleases from ordinary resolution;
+preview consumers must opt in with an exact pin. The Python wheel contains the
+Python veneer and compiled ``adam_core._rust_native`` extension, so Python
+consumers do not need to install the component crates from crates.io.
+
+The current stable PyPI release remains the default for ``pip install
+adam-core``. A public preview is still visible and intentionally installable by
+anyone who supplies ``--pre`` or the exact version. Use a private package index
+instead if public visibility is unacceptable.
+
 Trusted publishing
 ------------------
 
-``publish.yml`` uses GitHub/PyPI OIDC with environment protection, not a stored
-API token. Its manual input is the successful release-candidate workflow run
-ID. The collector verifies the run name, successful conclusion, and exact head
-SHA before assembling only ``adam_core`` wheels. TestPyPI and PyPI are separate
-protected environments. The first release of each Rust crate must be made
-manually before crates.io can attach an OIDC trusted publisher. Subsequent
-crate publication verifies checksums and uploads the exact candidate ``.crate``
-archives through the Cargo registry protocol without repackaging or compiling.
-For each first release, use the same
-``migration/scripts/publish_crate_archives.py --execute`` path with a manually
-scoped token and the reviewed candidate artifact set; do not run ``cargo
-publish`` against a fresh package.
+``publish.yml`` uses GitHub/PyPI OIDC with protected ``testpypi-preview`` and
+``pypi-preview`` environments. Its manual inputs include the successful
+release-candidate run ID, exact version, and a confirmation containing the
+version, commit SHA, and destination. The collector verifies the run name,
+successful conclusion, exact head SHA, RC-only version, wheel metadata, and the
+complete 12-wheel matrix before assembling only ``adam_core`` wheels.
+
+The first release of each Rust crate uses a manually scoped token held only in
+the protected ``crates-io-preview`` environment; crates.io can attach an OIDC
+trusted publisher after that crate exists. Crate publication verifies the same
+explicit confirmation, candidate provenance, checksums, archive metadata,
+prerelease versions, and exact internal dependency pins, then uploads the exact
+candidate ``.crate`` archives in dependency order without repackaging or
+compiling. The bootstrap token must be revoked after owners and trusted
+publishers are configured.
 
 Release order
 -------------
 
 After review and approval:
 
-#. publish the reviewed permissive adam-core Rust crates in dependency order;
-#. publish the exact accepted ``adam-core`` wheel set and verify it from the
+#. publish ``adam_core_rs_autodiff`` and
+   ``adam_core_rs_orbit_determination``;
+#. publish ``adam_core_rs_coords``, ``adam_core_rs_spice``,
+   ``adam_core_rs_kernel_data``, then the ``adam_core`` umbrella crate;
+#. publish the exact accepted ``adam-core`` RC wheel set and verify it from the
    public index;
-#. test ``adam-assist`` against that public adam-core release;
-#. publish the exact accepted ``adam-assist`` wheel set; and
-#. repeat the clean-room public-index smoke test.
+#. replace adam-assist's temporary vendored core crates with exact public RC
+   dependencies and test ``adam-assist==0.4.0rc1`` against the public
+   ``adam-core==0.5.6rc1`` release;
+#. publish the exact accepted ``adam-assist`` RC wheel set; and
+#. run the precovery-v2 clean package-manager smoke test with exact pins.
 
 ``adam-assist`` owns ASSIST orchestration and consumes released
 ``libassist-sys`` and ``librebound-sys`` directly. Do not publish an
