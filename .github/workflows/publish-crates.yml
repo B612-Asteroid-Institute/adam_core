@@ -1,0 +1,97 @@
+name: Publish tested Rust crate previews
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_run_id:
+        description: Successful Rust crate release candidate run ID for this exact commit
+        required: true
+        type: string
+      expected_version:
+        description: Exact prerelease shared by all six crates
+        required: true
+        default: 0.1.0-rc.1
+        type: string
+      authentication:
+        description: First releases require the protected bootstrap token; later releases use OIDC
+        required: true
+        default: bootstrap-token
+        type: choice
+        options:
+          - bootstrap-token
+          - trusted-publishing
+      confirmation:
+        description: Type "publish <version> from <sha> to crates.io"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+env:
+  PYTHON_PREVIEW_VERSION: "0.5.6rc1"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: crates-io-preview
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Verify exact RC tag and irreversible-action confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/tags/v$PYTHON_PREVIEW_VERSION"
+          test "$CONFIRMATION" = "publish $EXPECTED_VERSION from $EXPECTED_SHA to crates.io"
+      - name: Verify source prerelease versions and exact internal pins
+        run: |
+          python migration/scripts/verify_preview_versions.py \
+            --python-version "$PYTHON_PREVIEW_VERSION" \
+            --rust-version "${{ inputs.expected_version }}"
+      - name: Verify candidate run provenance and success
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_RUN_ID: ${{ inputs.candidate_run_id }}
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          RUN_JSON="$(gh api "/repos/${GITHUB_REPOSITORY}/actions/runs/${CANDIDATE_RUN_ID}")"
+          test "$(jq -r .conclusion <<<"$RUN_JSON")" = success
+          test "$(jq -r .head_sha <<<"$RUN_JSON")" = "$EXPECTED_SHA"
+          test "$(jq -r .name <<<"$RUN_JSON")" = "Rust crate release candidate"
+          case "$(jq -r .event <<<"$RUN_JSON")" in
+            push|workflow_dispatch) ;;
+            *) echo "crate candidate must be built from an exact push or workflow-dispatch checkout" >&2; exit 1 ;;
+          esac
+      - uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ inputs.candidate_run_id }}
+          github-token: ${{ github.token }}
+          name: rust-crate-publication-set
+          path: accepted-crates
+      - name: Verify exact tested package archives and metadata
+        run: |
+          set -euo pipefail
+          (cd accepted-crates && sha256sum -c SHA256SUMS)
+          test "$(find accepted-crates -maxdepth 1 -name '*.crate' | wc -l | tr -d ' ')" = 6
+          python migration/scripts/publish_crate_archives.py \
+            --archives accepted-crates \
+            --expected-version "${{ inputs.expected_version }}"
+      - name: Acquire crates.io trusted-publishing token
+        if: inputs.authentication == 'trusted-publishing'
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: Upload exact reviewed archives in dependency order
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ inputs.authentication == 'bootstrap-token' && secrets.CRATES_IO_BOOTSTRAP_TOKEN || steps.auth.outputs.token }}
+        run: |
+          python migration/scripts/publish_crate_archives.py \
+            --archives accepted-crates \
+            --expected-version "${{ inputs.expected_version }}" \
+            --execute
