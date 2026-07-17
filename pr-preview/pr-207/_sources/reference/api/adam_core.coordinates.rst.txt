@@ -1,0 +1,27 @@
+adam\_core.coordinates package
+==============================
+
+.. automodule:: adam_core.coordinates
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.coordinates.cartesian
+   adam_core.coordinates.cometary
+   adam_core.coordinates.covariances
+   adam_core.coordinates.geodetics
+   adam_core.coordinates.jacobian
+   adam_core.coordinates.keplerian
+   adam_core.coordinates.origin
+   adam_core.coordinates.residuals
+   adam_core.coordinates.spherical
+   adam_core.coordinates.transform
+   adam_core.coordinates.types
+   adam_core.coordinates.units
+   adam_core.coordinates.variants
