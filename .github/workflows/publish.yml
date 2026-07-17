@@ -78,6 +78,10 @@ jobs:
           test "$(jq -r .conclusion <<<"$RUN_JSON")" = success
           test "$(jq -r .head_sha <<<"$RUN_JSON")" = "$EXPECTED_SHA"
           test "$(jq -r .name <<<"$RUN_JSON")" = "Release candidate wheel matrix"
+          case "$(jq -r .event <<<"$RUN_JSON")" in
+            push|workflow_dispatch) ;;
+            *) echo "acceptance must be built from an exact push or workflow-dispatch checkout" >&2; exit 1 ;;
+          esac
 
       - name: Download exact acceptance artifacts
         uses: actions/download-artifact@v4

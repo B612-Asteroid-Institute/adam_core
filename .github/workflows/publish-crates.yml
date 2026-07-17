@@ -65,6 +65,7 @@ jobs:
           test "$(jq -r .conclusion <<<"$RUN_JSON")" = success
           test "$(jq -r .head_sha <<<"$RUN_JSON")" = "$EXPECTED_SHA"
           test "$(jq -r .name <<<"$RUN_JSON")" = "Rust crate release candidate"
+          test "$(jq -r .event <<<"$RUN_JSON")" = workflow_dispatch
       - uses: actions/download-artifact@v4
         with:
           run-id: ${{ inputs.candidate_run_id }}
