@@ -1,13 +1,11 @@
 name: Rust crate release candidate
 
 on:
+  # Exact publication provenance requires a candidate artifact whose run SHA
+  # equals the final release commit, even when that commit only adjusts release
+  # documentation or publication guards.
   push:
     branches: ["rust-migration-*"]
-    paths:
-      - "Cargo.toml"
-      - "Cargo.lock"
-      - "rust/**"
-      - ".github/workflows/rust-crate-*.yml"
   pull_request:
     paths:
       - "Cargo.toml"
