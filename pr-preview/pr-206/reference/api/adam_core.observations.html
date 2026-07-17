@@ -278,6 +278,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -324,6 +325,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -663,6 +665,197 @@ variable-length chunks.</p>
 </ul>
 </dd>
 </dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.observations.</span></span><span class="sig-name descname"><span class="pre">OpticalObs80</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v24.0.0)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/observations/obs80.html#OpticalObs80"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observations.OpticalObs80" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/tables.html#quivr.Table" title="(in quivr v0.7.6.dev5+g5e130d9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
+<p>Self-contained optical observations parsed from MPC 80-column rows.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.astrometric_catalog">
+<span class="sig-name descname"><span class="pre">astrometric_catalog</span></span><a class="headerlink" href="#adam_core.observations.OpticalObs80.astrometric_catalog" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.band">
+<span class="sig-name descname"><span class="pre">band</span></span><a class="headerlink" href="#adam_core.observations.OpticalObs80.band" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.dec_deg">
+<span class="sig-name descname"><span class="pre">dec_deg</span></span><a class="headerlink" href="#adam_core.observations.OpticalObs80.dec_deg" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.designation">
+<span class="sig-name descname"><span class="pre">designation</span></span><a class="headerlink" href="#adam_core.observations.OpticalObs80.designation" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.discovery">
+<span class="sig-name descname"><span class="pre">discovery</span></span><a class="headerlink" href="#adam_core.observations.OpticalObs80.discovery" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing booleans.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.mag">
+<span class="sig-name descname"><span class="pre">mag</span></span><a class="headerlink" href="#adam_core.observations.OpticalObs80.mag" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.note1">
+<span class="sig-name descname"><span class="pre">note1</span></span><a class="headerlink" href="#adam_core.observations.OpticalObs80.note1" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.note2">
+<span class="sig-name descname"><span class="pre">note2</span></span><a class="headerlink" href="#adam_core.observations.OpticalObs80.note2" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.observatory_code">
+<span class="sig-name descname"><span class="pre">observatory_code</span></span><a class="headerlink" href="#adam_core.observations.OpticalObs80.observatory_code" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.ra_deg">
+<span class="sig-name descname"><span class="pre">ra_deg</span></span><a class="headerlink" href="#adam_core.observations.OpticalObs80.ra_deg" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.raw_line">
+<span class="sig-name descname"><span class="pre">raw_line</span></span><a class="headerlink" href="#adam_core.observations.OpticalObs80.raw_line" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.reference">
+<span class="sig-name descname"><span class="pre">reference</span></span><a class="headerlink" href="#adam_core.observations.OpticalObs80.reference" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.schema">
+<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">raw_line:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">designation:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">discovery:</span> <span class="pre">bool</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">note1:</span> <span class="pre">large_string</span> <span class="pre">note2:</span> <span class="pre">large_string</span> <span class="pre">observatory_code:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span> <span class="pre">ra_deg:</span> <span class="pre">double</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">dec_deg:</span> <span class="pre">double</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">mag:</span> <span class="pre">double</span> <span class="pre">band:</span> <span class="pre">large_string</span> <span class="pre">astrometric_catalog:</span> <span class="pre">large_string</span> <span class="pre">reference:</span> <span class="pre">large_string</span></em><a class="headerlink" href="#adam_core.observations.OpticalObs80.schema" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.OpticalObs80.time">
+<span class="sig-name descname"><span class="pre">time</span></span><a class="headerlink" href="#adam_core.observations.OpticalObs80.time" title="Link to this definition">¶</a></dt>
+<dd><p>A column which represents an embedded quivr table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table_type</strong> – The type of the table to embed.</p></li>
+<li><p><strong>nullable</strong> – Whether the column can contain null values.</p></li>
+<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="adam_core.observations.ScoutObservations">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.observations.</span></span><span class="sig-name descname"><span class="pre">ScoutObservations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v24.0.0)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/observations/obs80.html#ScoutObservations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observations.ScoutObservations" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/tables.html#quivr.Table" title="(in quivr v0.7.6.dev5+g5e130d9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
+<p>One or more authoritative JPL Scout <code class="docutils literal notranslate"><span class="pre">file=mpc</span></code> snapshots.</p>
+<p>Snapshot metadata is repeated per observation so filtered/sliced tables
+retain their source hash, API signature, and ordering without side data.
+<code class="docutils literal notranslate"><span class="pre">declared_n_obs</span></code> is Scout’s summary metadata; membership is exclusively
+defined by <code class="docutils literal notranslate"><span class="pre">snapshot_observation_count</span></code> and the nested observations.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.ScoutObservations.declared_n_obs">
+<span class="sig-name descname"><span class="pre">declared_n_obs</span></span><a class="headerlink" href="#adam_core.observations.ScoutObservations.declared_n_obs" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit integers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.ScoutObservations.object_id">
+<span class="sig-name descname"><span class="pre">object_id</span></span><a class="headerlink" href="#adam_core.observations.ScoutObservations.object_id" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.ScoutObservations.observation">
+<span class="sig-name descname"><span class="pre">observation</span></span><a class="headerlink" href="#adam_core.observations.ScoutObservations.observation" title="Link to this definition">¶</a></dt>
+<dd><p>A column which represents an embedded quivr table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table_type</strong> – The type of the table to embed.</p></li>
+<li><p><strong>nullable</strong> – Whether the column can contain null values.</p></li>
+<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.ScoutObservations.observation_index">
+<span class="sig-name descname"><span class="pre">observation_index</span></span><a class="headerlink" href="#adam_core.observations.ScoutObservations.observation_index" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit integers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.ScoutObservations.schema">
+<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">object_id:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">solution_date_utc:</span> <span class="pre">large_string</span> <span class="pre">declared_n_obs:</span> <span class="pre">int64</span> <span class="pre">snapshot_sha256:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">snapshot_observation_count:</span> <span class="pre">int64</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">signature_version:</span> <span class="pre">large_string</span> <span class="pre">signature_source:</span> <span class="pre">large_string</span> <span class="pre">observation_index:</span> <span class="pre">int64</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">observation:</span> <span class="pre">struct&lt;raw_line:</span> <span class="pre">large_string,</span> <span class="pre">designation:</span> <span class="pre">large_string,</span> <span class="pre">discovery:</span> <span class="pre">bool,</span> <span class="pre">note1:</span> <span class="pre">large_string,</span> <span class="pre">note</span> <span class="pre">(...</span> <span class="pre">215</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">raw_line:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">designation:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">discovery:</span> <span class="pre">bool</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">note1:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">note2:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">observatory_code:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">ra_deg:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">dec_deg:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">9,</span> <span class="pre">mag:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">10,</span> <span class="pre">band:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">11,</span> <span class="pre">astrometric_catalog:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">12,</span> <span class="pre">reference:</span> <span class="pre">large_string</span></em><a class="headerlink" href="#adam_core.observations.ScoutObservations.schema" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.ScoutObservations.signature_source">
+<span class="sig-name descname"><span class="pre">signature_source</span></span><a class="headerlink" href="#adam_core.observations.ScoutObservations.signature_source" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.ScoutObservations.signature_version">
+<span class="sig-name descname"><span class="pre">signature_version</span></span><a class="headerlink" href="#adam_core.observations.ScoutObservations.signature_version" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.ScoutObservations.snapshot_observation_count">
+<span class="sig-name descname"><span class="pre">snapshot_observation_count</span></span><a class="headerlink" href="#adam_core.observations.ScoutObservations.snapshot_observation_count" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit integers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.ScoutObservations.snapshot_sha256">
+<span class="sig-name descname"><span class="pre">snapshot_sha256</span></span><a class="headerlink" href="#adam_core.observations.ScoutObservations.snapshot_sha256" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.observations.ScoutObservations.solution_date_utc">
+<span class="sig-name descname"><span class="pre">solution_date_utc</span></span><a class="headerlink" href="#adam_core.observations.ScoutObservations.solution_date_utc" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1115,6 +1308,44 @@ across the focal plane.</p>
 </li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="adam_core.observations.obs80.html">adam_core.observations.obs80 module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.Obs80ParseError"><code class="docutils literal notranslate"><span class="pre">Obs80ParseError</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80"><code class="docutils literal notranslate"><span class="pre">OpticalObs80</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.raw_line"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.raw_line</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.designation"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.designation</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.discovery"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.discovery</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.note1"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.note1</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.note2"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.note2</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.observatory_code"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.observatory_code</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.time"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.time</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.ra_deg"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.ra_deg</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.dec_deg"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.dec_deg</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.mag"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.mag</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.band"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.band</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.astrometric_catalog"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.astrometric_catalog</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.reference"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.reference</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.schema"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.schema</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.OpticalObs80.table"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.table</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.ScoutObservations"><code class="docutils literal notranslate"><span class="pre">ScoutObservations</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.ScoutObservations.object_id"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.object_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.ScoutObservations.solution_date_utc"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.solution_date_utc</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.ScoutObservations.declared_n_obs"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.declared_n_obs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.ScoutObservations.snapshot_sha256"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.snapshot_sha256</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.ScoutObservations.snapshot_observation_count"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.snapshot_observation_count</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.ScoutObservations.signature_version"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.signature_version</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.ScoutObservations.signature_source"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.signature_source</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.ScoutObservations.observation_index"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.observation_index</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.ScoutObservations.observation"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.observation</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.ScoutObservations.schema"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.schema</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.ScoutObservations.table"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.table</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.parse_optical_obs80"><code class="docutils literal notranslate"><span class="pre">parse_optical_obs80()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.observations.obs80.html#adam_core.observations.obs80.parse_optical_obs80_file"><code class="docutils literal notranslate"><span class="pre">parse_optical_obs80_file()</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="adam_core.observations.photometry.html">adam_core.observations.photometry module</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.observations.photometry.html#adam_core.observations.photometry.Photometry"><code class="docutils literal notranslate"><span class="pre">Photometry</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.photometry.html#adam_core.observations.photometry.Photometry.time"><code class="docutils literal notranslate"><span class="pre">Photometry.time</span></code></a></li>
@@ -1207,7 +1438,7 @@ across the focal plane.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-15</div>
+              Last updated on 2026-07-17</div>
           </div>
           <div class="right-details">
             
@@ -1268,6 +1499,36 @@ across the focal plane.</p>
 <li><a class="reference internal" href="#adam_core.observations.PointSourceDetections.time"><code class="docutils literal notranslate"><span class="pre">PointSourceDetections.time</span></code></a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80"><code class="docutils literal notranslate"><span class="pre">OpticalObs80</span></code></a><ul>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.astrometric_catalog"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.astrometric_catalog</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.band"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.band</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.dec_deg"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.dec_deg</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.designation"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.designation</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.discovery"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.discovery</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.mag"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.mag</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.note1"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.note1</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.note2"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.note2</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.observatory_code"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.observatory_code</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.ra_deg"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.ra_deg</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.raw_line"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.raw_line</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.reference"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.reference</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.schema"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.schema</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.OpticalObs80.time"><code class="docutils literal notranslate"><span class="pre">OpticalObs80.time</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#adam_core.observations.ScoutObservations"><code class="docutils literal notranslate"><span class="pre">ScoutObservations</span></code></a><ul>
+<li><a class="reference internal" href="#adam_core.observations.ScoutObservations.declared_n_obs"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.declared_n_obs</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.ScoutObservations.object_id"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.object_id</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.ScoutObservations.observation"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.observation</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.ScoutObservations.observation_index"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.observation_index</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.ScoutObservations.schema"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.schema</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.ScoutObservations.signature_source"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.signature_source</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.ScoutObservations.signature_version"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.signature_version</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.ScoutObservations.snapshot_observation_count"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.snapshot_observation_count</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.ScoutObservations.snapshot_sha256"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.snapshot_sha256</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.ScoutObservations.solution_date_utc"><code class="docutils literal notranslate"><span class="pre">ScoutObservations.solution_date_utc</span></code></a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#adam_core.observations.Photometry"><code class="docutils literal notranslate"><span class="pre">Photometry</span></code></a><ul>
 <li><a class="reference internal" href="#adam_core.observations.Photometry.filter"><code class="docutils literal notranslate"><span class="pre">Photometry.filter</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.observations.Photometry.mag"><code class="docutils literal notranslate"><span class="pre">Photometry.mag</span></code></a></li>
@@ -1324,7 +1585,7 @@ across the focal plane.</p>
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=59bfbeb0"></script>
+</div><script src="../../_static/documentation_options.js?v=55085c2a"></script>
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

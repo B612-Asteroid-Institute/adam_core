@@ -279,6 +279,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -325,6 +326,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -451,18 +453,29 @@ explicit uncertainty handling.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_assist</span><span class="w"> </span><span class="kn">import</span> <span class="n">ASSISTPropagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observers</span><span class="w"> </span><span class="kn">import</span> <span class="n">Observers</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observations</span><span class="w"> </span><span class="kn">import</span> <span class="n">ScoutObservations</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span><span class="p">,</span> <span class="n">VariantOrbits</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query.scout</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_scout_objects</span><span class="p">,</span> <span class="n">query_scout</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.query.scout</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">get_scout_objects</span><span class="p">,</span>
+    <span class="n">query_scout</span><span class="p">,</span>
+    <span class="n">query_scout_observations</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 
 <span class="c1"># 1) Select candidate(s) from Scout&#39;s current NEOCP list.</span>
 <span class="n">scout_objects</span> <span class="o">=</span> <span class="n">get_scout_objects</span><span class="p">()</span>
-<span class="n">object_of_interest</span> <span class="o">=</span> <span class="n">scout_objects</span><span class="p">[</span><span class="mi">10</span><span class="p">]</span>
+<span class="n">object_id</span> <span class="o">=</span> <span class="n">scout_objects</span><span class="o">.</span><span class="n">objectName</span><span class="p">[</span><span class="mi">10</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
 
-<span class="c1"># 2) Fetch Scout posterior samples (usually ~1000 variants per object).</span>
-<span class="n">samples</span><span class="p">:</span> <span class="n">VariantOrbits</span> <span class="o">=</span> <span class="n">query_scout</span><span class="p">(</span><span class="n">object_of_interest</span><span class="o">.</span><span class="n">objectName</span><span class="p">)</span>
+<span class="c1"># 2) Capture the exact fitted-observation snapshot used by Scout.</span>
+<span class="n">observations</span><span class="p">:</span> <span class="n">ScoutObservations</span> <span class="o">=</span> <span class="n">query_scout_observations</span><span class="p">(</span><span class="n">object_id</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">observations</span><span class="o">.</span><span class="n">snapshot_sha256</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">())</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">observations</span><span class="o">.</span><span class="n">observation</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_iso8601</span><span class="p">())</span>
 
-<span class="c1"># 3) Define exposure times and observer geometry.</span>
+<span class="c1"># 3) Fetch Scout posterior samples (usually ~1000 variants per object).</span>
+<span class="c1"># query_scout accepts an array-like collection of designations.</span>
+<span class="n">samples</span><span class="p">:</span> <span class="n">VariantOrbits</span> <span class="o">=</span> <span class="n">query_scout</span><span class="p">([</span><span class="n">object_id</span><span class="p">])</span>
+
+<span class="c1"># 4) Define exposure times and observer geometry.</span>
 <span class="n">times</span><span class="p">:</span> <span class="n">Timestamp</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_iso8601</span><span class="p">(</span>
     <span class="p">[</span>
         <span class="s2">&quot;2025-02-23T00:00:00Z&quot;</span><span class="p">,</span>
@@ -474,7 +487,7 @@ explicit uncertainty handling.</p>
 <span class="n">observers</span><span class="p">:</span> <span class="n">Observers</span> <span class="o">=</span> <span class="n">Observers</span><span class="o">.</span><span class="n">from_code</span><span class="p">(</span><span class="s2">&quot;T08&quot;</span><span class="p">,</span> <span class="n">times</span><span class="p">)</span>
 <span class="n">propagator</span> <span class="o">=</span> <span class="n">ASSISTPropagator</span><span class="p">()</span>
 
-<span class="c1"># 4A) Fast operational path: collapse variants and propagate covariance.</span>
+<span class="c1"># 5A) Fast operational path: collapse variants and propagate covariance.</span>
 <span class="n">collapsed_orbits</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">=</span> <span class="n">samples</span><span class="o">.</span><span class="n">collapse_by_object_id</span><span class="p">()</span>
 <span class="n">collapsed_ephemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span>
     <span class="n">collapsed_orbits</span><span class="p">,</span>
@@ -484,14 +497,14 @@ explicit uncertainty handling.</p>
     <span class="n">max_processes</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="c1"># 4B) High-fidelity path: propagate each variant directly.</span>
+<span class="c1"># 5B) High-fidelity path: propagate each variant directly.</span>
 <span class="n">sample_ephemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span>
     <span class="n">samples</span><span class="p">,</span>
     <span class="n">observers</span><span class="p">,</span>
     <span class="n">max_processes</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="c1"># 5) Derive per-time on-sky envelopes for pointing decisions.</span>
+<span class="c1"># 6) Derive per-time on-sky envelopes for pointing decisions.</span>
 <span class="k">for</span> <span class="n">t</span> <span class="ow">in</span> <span class="n">sample_ephemeris</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">unique</span><span class="p">():</span>
     <span class="n">at_t</span> <span class="o">=</span> <span class="n">sample_ephemeris</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">sample_ephemeris</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">equals</span><span class="p">(</span><span class="n">t</span><span class="p">))</span>
     <span class="nb">print</span><span class="p">(</span>
@@ -505,6 +518,81 @@ explicit uncertainty handling.</p>
     <span class="p">)</span>
 </pre></div>
 </div>
+</section>
+<section id="authoritative-scout-observation-snapshots">
+<h2>Authoritative Scout Observation Snapshots<a class="headerlink" href="#authoritative-scout-observation-snapshots" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">query_scout_observations()</span></code> requests Scout’s <code class="docutils literal notranslate"><span class="pre">file=mpc</span></code> representation
+for each designation and returns a typed <code class="docutils literal notranslate"><span class="pre">ScoutObservations</span></code> table. The nested
+<code class="docutils literal notranslate"><span class="pre">observation</span></code> column contains <code class="docutils literal notranslate"><span class="pre">OpticalObs80</span></code> rows with UTC timestamps,
+RA/Dec in degrees, observatory codes, the original 80-column records, and
+nullable photometric and reference fields.</p>
+<p>The returned provenance is deliberately repeated on every observation so that
+filtering or slicing a table does not detach rows from their source snapshot:</p>
+<ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">snapshot_sha256</span></code> identifies the exact <code class="docutils literal notranslate"><span class="pre">fileMPC</span></code> text;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">solution_date_utc</span></code> records Scout’s <code class="docutils literal notranslate"><span class="pre">lastRun</span></code> value;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">signature_version</span></code> and <code class="docutils literal notranslate"><span class="pre">signature_source</span></code> record the API signature;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">snapshot_observation_count</span></code> records the parsed file membership; and</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">observation_index</span></code> preserves Scout’s file order within the snapshot.</p></li>
+</ul>
+<p>Scout’s <code class="docutils literal notranslate"><span class="pre">fileMPC</span></code> rows, in their returned order, are authoritative for
+snapshot membership. <code class="docutils literal notranslate"><span class="pre">declared_n_obs</span></code> preserves the separate <code class="docutils literal notranslate"><span class="pre">nObs</span></code> summary
+value, but it does not add or remove observations when that value differs from
+the file. Signature version <code class="docutils literal notranslate"><span class="pre">1.3</span></code> is required; missing or unsupported
+signatures fail the request rather than silently changing the interpretation.
+Multiple requested designations are concatenated in request order.</p>
+</section>
+<section id="strict-mpc-80-column-parsing">
+<h2>Strict MPC 80-Column Parsing<a class="headerlink" href="#strict-mpc-80-column-parsing" title="Link to this heading">¶</a></h2>
+<p>You can use the same parser for an MPC-format optical file obtained elsewhere:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observations</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpticalObs80</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.observations.obs80</span><span class="w"> </span><span class="kn">import</span> <span class="n">parse_optical_obs80_file</span>
+
+<span class="n">mpc_text</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;     A11EpSe*0C2026 07 08.17725719 41 24.185-30 19 19.42&quot;</span>
+    <span class="s2">&quot;         19.35oVNEOCPW68</span><span class="se">\n</span><span class="s2">&quot;</span>
+<span class="p">)</span>
+<span class="n">optical</span><span class="p">:</span> <span class="n">OpticalObs80</span> <span class="o">=</span> <span class="n">parse_optical_obs80_file</span><span class="p">(</span><span class="n">mpc_text</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">optical</span><span class="o">.</span><span class="n">designation</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">())</span>       <span class="c1"># A11EpSe</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">optical</span><span class="o">.</span><span class="n">observatory_code</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">())</span>  <span class="c1"># W68</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">optical</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_iso8601</span><span class="p">()[</span><span class="mi">0</span><span class="p">])</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">optical</span><span class="o">.</span><span class="n">ra_deg</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">(),</span> <span class="n">optical</span><span class="o">.</span><span class="n">dec_deg</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">())</span>
+</pre></div>
+</div>
+<p>The default <code class="docutils literal notranslate"><span class="pre">strict=True</span></code> is intentional. Every nonblank row must be a valid,
+self-contained optical astrometry record; malformed rows and unsupported
+radar, satellite, or roving-observer companion-line records raise
+<code class="docutils literal notranslate"><span class="pre">Obs80ParseError</span></code> with the file line number. The parser reads the full
+12-column designation field, including numbered designations such as
+<code class="docutils literal notranslate"><span class="pre">00001</span></code> and packed/provisional values. Use <code class="docutils literal notranslate"><span class="pre">strict=False</span></code> only when a
+best-effort generic file import is explicitly acceptable. Scout ingestion
+always uses strict parsing so it never exposes a partial fitted observation
+set.</p>
+</section>
+<section id="live-neocp-semantics-and-recovery">
+<h2>Live NEOCP Semantics and Recovery<a class="headerlink" href="#live-neocp-semantics-and-recovery" title="Link to this heading">¶</a></h2>
+<p>Scout is a live service, not a durable NEOCP catalog. A designation returned by
+<code class="docutils literal notranslate"><span class="pre">get_scout_objects()</span></code> can be updated, replaced, or disappear before the next
+request. Transport errors, HTTP 429 responses, and server errors receive
+bounded retries. An exhausted transient failure raises
+<code class="docutils literal notranslate"><span class="pre">ScoutServiceUnavailableError</span></code> with <code class="docutils literal notranslate"><span class="pre">http_status=503</span></code> and
+<code class="docutils literal notranslate"><span class="pre">retryable=True</span></code>; a valid error payload for a vanished designation raises
+<code class="docutils literal notranslate"><span class="pre">ScoutObjectNotFoundError</span></code> with <code class="docutils literal notranslate"><span class="pre">http_status=404</span></code>. A malformed response, an
+empty or invalid <code class="docutils literal notranslate"><span class="pre">fileMPC</span></code> value, a designation mismatch, or an unsupported
+signature fails closed as <code class="docutils literal notranslate"><span class="pre">ScoutResponseError</span></code>. Each structured exception
+also carries the requested <code class="docutils literal notranslate"><span class="pre">object_id</span></code> and any upstream HTTP status.</p>
+<p>For operational ingestion, treat such a failure as a reason to refresh the
+active-object list and reconcile the candidate’s lifecycle. Do not substitute
+<code class="docutils literal notranslate"><span class="pre">nObs</span></code> for file membership or retain a partially parsed snapshot. Persist the
+snapshot table (especially its hash and solution date) alongside downstream
+products so a later live response cannot silently rewrite their provenance.</p>
+<p><code class="docutils literal notranslate"><span class="pre">query_scout_observations()</span></code> and <code class="docutils literal notranslate"><span class="pre">query_scout()</span></code> serve different products:
+the former returns the observations fitted by Scout, while the latter returns
+Scout’s sampled orbit variants. They are separate live HTTP requests and are
+not an atomic service snapshot. Capture their retrieval times and provenance
+when a workflow requires both, and do not infer orbit-sample membership from
+the observation count.</p>
 </section>
 <section id="implementation-choices">
 <h2>Implementation Choices<a class="headerlink" href="#implementation-choices" title="Link to this heading">¶</a></h2>
@@ -537,6 +625,7 @@ candidates and need a defensible uncertainty-aware pointing recommendation.</p>
 <h2>Related Reference<a class="headerlink" href="#related-reference" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="../reference/api/adam_core.orbits.html"><span class="doc">adam_core.orbits package</span></a></p></li>
+<li><p><a class="reference internal" href="../reference/api/adam_core.observations.html"><span class="doc">adam_core.observations package</span></a></p></li>
 <li><p><a class="reference internal" href="../reference/api/adam_core.observers.html"><span class="doc">adam_core.observers package</span></a></p></li>
 <li><p><a class="reference internal" href="../reference/api/adam_core.propagator.html"><span class="doc">adam_core.propagator package</span></a></p></li>
 <li><p><a class="reference internal" href="../cookbook/variant_sampling_and_collapse.html"><span class="doc">Variant Sampling and Collapse</span></a></p></li>
@@ -579,7 +668,7 @@ candidates and need a defensible uncertainty-aware pointing recommendation.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-15</div>
+              Last updated on 2026-07-17</div>
           </div>
           <div class="right-details">
             
@@ -604,6 +693,9 @@ candidates and need a defensible uncertainty-aware pointing recommendation.</p>
 <li><a class="reference internal" href="#goal">Goal</a></li>
 <li><a class="reference internal" href="#operational-prerequisites">Operational Prerequisites</a></li>
 <li><a class="reference internal" href="#canonical-end-to-end-pattern">Canonical End-to-End Pattern</a></li>
+<li><a class="reference internal" href="#authoritative-scout-observation-snapshots">Authoritative Scout Observation Snapshots</a></li>
+<li><a class="reference internal" href="#strict-mpc-80-column-parsing">Strict MPC 80-Column Parsing</a></li>
+<li><a class="reference internal" href="#live-neocp-semantics-and-recovery">Live NEOCP Semantics and Recovery</a></li>
 <li><a class="reference internal" href="#implementation-choices">Implementation Choices</a></li>
 <li><a class="reference internal" href="#what-you-get-back">What You Get Back</a></li>
 <li><a class="reference internal" href="#when-to-use">When To Use</a></li>
@@ -619,7 +711,7 @@ candidates and need a defensible uncertainty-aware pointing recommendation.</p>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=59bfbeb0"></script>
+</div><script src="../_static/documentation_options.js?v=55085c2a"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
