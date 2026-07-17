@@ -1,6 +1,13 @@
 name: Rust crate release candidate
 
 on:
+  push:
+    branches: ["rust-migration-*"]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust/**"
+      - ".github/workflows/rust-crate-*.yml"
   pull_request:
     paths:
       - "Cargo.toml"
