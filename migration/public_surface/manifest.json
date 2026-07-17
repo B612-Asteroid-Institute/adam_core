@@ -11649,7 +11649,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/trajectory.py",
-      "line": 63,
+      "line": 68,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11677,7 +11677,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/trajectory.py",
-      "line": 54,
+      "line": 59,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11705,7 +11705,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/trajectory.py",
-      "line": 72,
+      "line": 77,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11733,7 +11733,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/trajectory.py",
-      "line": 81,
+      "line": 86,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11761,7 +11761,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/trajectory.py",
-      "line": 103,
+      "line": 108,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11789,7 +11789,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/trajectory.py",
-      "line": 90,
+      "line": 95,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
