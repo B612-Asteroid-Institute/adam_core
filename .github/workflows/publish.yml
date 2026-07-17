@@ -118,6 +118,10 @@ jobs:
               "macosx_11_0_arm64",
               "macosx_10_12_x86_64",
           }
+          allowed_platform_aliases = {
+              "manylinux2014_x86_64",
+              "manylinux2014_aarch64",
+          }
           combinations = set()
           for wheel in wheels:
               name, version, _, tags = parse_wheel_filename(wheel.name)
@@ -134,8 +138,23 @@ jobs:
                   raise SystemExit(f"{wheel.name}: bad metadata name {metadata['Name']}")
               if Version(metadata["Version"]) != expected_version:
                   raise SystemExit(f"{wheel.name}: bad metadata version {metadata['Version']}")
-              for tag in tags:
-                  combinations.add((tag.interpreter, tag.platform))
+              interpreters = {tag.interpreter for tag in tags}
+              abis = {tag.abi for tag in tags}
+              platforms = {tag.platform for tag in tags}
+              if len(interpreters) != 1 or abis != interpreters:
+                  raise SystemExit(
+                      f"{wheel.name}: unexpected interpreter/ABI tags {sorted(map(str, tags))}"
+                  )
+              canonical_platforms = platforms & expected_platforms
+              if len(canonical_platforms) != 1:
+                  raise SystemExit(
+                      f"{wheel.name}: expected one canonical platform tag, got {sorted(platforms)}"
+                  )
+              if not platforms <= expected_platforms | allowed_platform_aliases:
+                  raise SystemExit(
+                      f"{wheel.name}: unexpected platform aliases {sorted(platforms)}"
+                  )
+              combinations.add((interpreters.pop(), canonical_platforms.pop()))
           expected = {
               (python, platform)
               for python in expected_python
