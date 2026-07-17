@@ -22,6 +22,7 @@ concurrency:
 env:
   ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref || 'rust-migration-assist' }}
   PIP_ONLY_BINARY: ":all:"
+  PYTHON_PREVIEW_VERSION: "0.5.6rc1"
 
 jobs:
   artifact-acceptance:
@@ -140,8 +141,10 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
+          import email
           import fnmatch
           import os
+          import zipfile
           from pathlib import Path
 
           wheelhouse = Path(os.environ["RUNNER_TEMP"]) / "acceptance" / "wheelhouse"
@@ -149,6 +152,16 @@ jobs:
           assist = list(wheelhouse.glob("adam_assist-*.whl"))
           if len(core) != 1 or len(assist) != 1:
               raise SystemExit(f"expected one wheel per package; got {core=} {assist=}")
+          expected_version = os.environ["PYTHON_PREVIEW_VERSION"]
+          with zipfile.ZipFile(core[0]) as archive:
+              metadata_paths = [n for n in archive.namelist() if n.endswith(".dist-info/METADATA")]
+              if len(metadata_paths) != 1:
+                  raise SystemExit(f"unexpected METADATA files: {metadata_paths}")
+              metadata = email.message_from_bytes(archive.read(metadata_paths[0]))
+          if metadata["Name"] != "adam_core" or metadata["Version"] != expected_version:
+              raise SystemExit(
+                  f"adam-core preview metadata mismatch: {metadata['Name']} {metadata['Version']}"
+              )
           pattern = "*${{ matrix.platform.wheel_tag }}.whl"
           invalid = [
               path.name

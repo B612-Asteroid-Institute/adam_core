@@ -13,20 +13,23 @@ import json
 import os
 import struct
 import subprocess
+import tarfile
 import time
+import tomllib
 import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Any
 
 PUBLICATION_ORDER = (
-    "adam_core_rs_kernel_data",
     "adam_core_rs_autodiff",
+    "adam_core_rs_orbit_determination",
     "adam_core_rs_coords",
     "adam_core_rs_spice",
-    "adam_core_rs_orbit_determination",
+    "adam_core_rs_kernel_data",
     "adam_core",
 )
+PUBLIC_CRATES = set(PUBLICATION_ORDER)
 
 
 def cargo_packages(repo: Path) -> dict[str, dict[str, Any]]:
@@ -104,6 +107,60 @@ def publish_body(metadata: dict[str, Any], archive: bytes) -> bytes:
     )
 
 
+def archive_identity(path: Path) -> tuple[str, str]:
+    """Read package identity from the exact normalized manifest in a .crate."""
+    with tarfile.open(path, mode="r:gz") as archive:
+        manifests = [
+            member
+            for member in archive.getmembers()
+            if member.name.endswith("/Cargo.toml")
+        ]
+        if len(manifests) != 1:
+            raise ValueError(f"{path.name} has {len(manifests)} root Cargo.toml files")
+        source = archive.extractfile(manifests[0])
+        if source is None:
+            raise ValueError(f"could not read Cargo.toml from {path.name}")
+        manifest = tomllib.loads(source.read().decode())
+    package = manifest.get("package", {})
+    name = package.get("name")
+    version = package.get("version")
+    if not isinstance(name, str) or not isinstance(version, str):
+        raise ValueError(f"{path.name} archive manifest has no package identity")
+    return name, version
+
+
+def validate_preview_packages(
+    packages: dict[str, dict[str, Any]], expected_version: str | None
+) -> None:
+    versions = {name: packages[name]["version"] for name in PUBLICATION_ORDER}
+    if expected_version is not None:
+        mismatched = {
+            name: version
+            for name, version in versions.items()
+            if version != expected_version
+        }
+        if mismatched:
+            raise ValueError(
+                f"crate versions do not match {expected_version}: {mismatched}"
+            )
+    if any("-" not in version for version in versions.values()):
+        raise ValueError(f"all publication versions must be prereleases: {versions}")
+
+    for package_name in PUBLICATION_ORDER:
+        package = packages[package_name]
+        for dependency in package["dependencies"]:
+            dependency_name = dependency["name"]
+            if dependency_name not in PUBLIC_CRATES:
+                continue
+            dependency_version = versions[dependency_name]
+            expected_requirement = f"={dependency_version}"
+            if dependency["req"] != expected_requirement:
+                raise ValueError(
+                    f"{package_name}->{dependency_name} must use "
+                    f"{expected_requirement}, got {dependency['req']}"
+                )
+
+
 def request_json(request: urllib.request.Request, timeout: float = 60.0) -> Any:
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -136,14 +193,22 @@ def main() -> None:
     parser.add_argument("--archives", type=Path, required=True)
     parser.add_argument("--registry-api", default="https://crates.io")
     parser.add_argument("--token-env", default="CARGO_REGISTRY_TOKEN")
+    parser.add_argument("--expected-version")
     parser.add_argument("--execute", action="store_true")
     args = parser.parse_args()
 
     packages = cargo_packages(args.repo.resolve())
+    validate_preview_packages(packages, args.expected_version)
     prepared = []
     for name in PUBLICATION_ORDER:
         package = packages[name]
         archive_path = args.archives / f"{name}-{package['version']}.crate"
+        archive_name, archive_version = archive_identity(archive_path)
+        if (archive_name, archive_version) != (name, package["version"]):
+            raise ValueError(
+                f"archive identity mismatch for {archive_path.name}: "
+                f"{archive_name} {archive_version}"
+            )
         archive = archive_path.read_bytes()
         metadata = publish_metadata(package)
         body = publish_body(metadata, archive)

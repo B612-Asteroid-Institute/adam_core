@@ -1,4 +1,4 @@
-name: Publish tested adam-core wheels
+name: Publish tested adam-core preview wheels
 
 on:
   workflow_dispatch:
@@ -6,6 +6,11 @@ on:
       acceptance_run_id:
         description: Successful Release candidate wheel matrix run ID for this exact commit
         required: true
+        type: string
+      expected_version:
+        description: Exact PEP 440 release-candidate version
+        required: true
+        default: 0.5.6rc1
         type: string
       repository:
         description: Destination index
@@ -15,15 +20,22 @@ on:
         options:
           - testpypi
           - pypi
+      confirmation:
+        description: Type "publish adam-core <version> from <sha> to <repository>"
+        required: true
+        type: string
 
 permissions:
   contents: read
   actions: read
   id-token: write
 
+env:
+  RUST_PREVIEW_VERSION: "0.1.0-rc.1"
+
 jobs:
   collect-tested-artifacts:
-    name: Collect and verify already-tested wheels
+    name: Collect and verify already-tested preview wheels
     runs-on: ubuntu-latest
     steps:
       - name: Checkout release commit
@@ -37,6 +49,23 @@ jobs:
       - name: Install wheel filename parser
         run: |
           python -m pip install --only-binary=:all: packaging
+
+      - name: Verify exact RC tag and irreversible-action confirmation
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+          EXPECTED_SHA: ${{ github.sha }}
+          DESTINATION: ${{ inputs.repository }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/tags/v$EXPECTED_VERSION"
+          test "$CONFIRMATION" = "publish adam-core $EXPECTED_VERSION from $EXPECTED_SHA to $DESTINATION"
+
+      - name: Verify source prerelease versions and exact Rust pins
+        run: |
+          python migration/scripts/verify_preview_versions.py \
+            --python-version "${{ inputs.expected_version }}" \
+            --rust-version "$RUST_PREVIEW_VERSION"
 
       - name: Verify acceptance run provenance and success
         env:
@@ -58,17 +87,26 @@ jobs:
           pattern: wheel-acceptance-*
           path: acceptance-artifacts
 
-      - name: Aggregate adam-core wheels without rebuilding
+      - name: Aggregate and verify adam-core wheels without rebuilding
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
         run: |
           set -euo pipefail
           mkdir dist
           find acceptance-artifacts -type f -name 'adam_core-*.whl' -exec cp '{}' dist/ ';'
           test "$(find dist -maxdepth 1 -name 'adam_core-*.whl' | wc -l | tr -d ' ')" = 12
           python - <<'PY'
+          import email
+          import os
+          import zipfile
           from pathlib import Path
-          from packaging.utils import parse_wheel_filename
+          from packaging.utils import canonicalize_name, parse_wheel_filename
+          from packaging.version import Version
 
           wheels = sorted(Path("dist").glob("*.whl"))
+          expected_version = Version(os.environ["EXPECTED_VERSION"])
+          if expected_version.pre is None or expected_version.pre[0] != "rc":
+              raise SystemExit(f"only release candidates may be published: {expected_version}")
           expected_python = {"cp311", "cp312", "cp313"}
           expected_platforms = {
               "manylinux_2_17_x86_64",
@@ -78,9 +116,20 @@ jobs:
           }
           combinations = set()
           for wheel in wheels:
-              name, _, _, tags = parse_wheel_filename(wheel.name)
-              if name != "adam-core":
-                  raise SystemExit(f"unexpected package in dist: {wheel}")
+              name, version, _, tags = parse_wheel_filename(wheel.name)
+              if canonicalize_name(name) != "adam-core" or version != expected_version:
+                  raise SystemExit(f"unexpected wheel identity: {wheel.name}")
+              with zipfile.ZipFile(wheel) as archive:
+                  metadata_paths = [
+                      path for path in archive.namelist() if path.endswith(".dist-info/METADATA")
+                  ]
+                  if len(metadata_paths) != 1:
+                      raise SystemExit(f"{wheel.name}: unexpected METADATA files {metadata_paths}")
+                  metadata = email.message_from_bytes(archive.read(metadata_paths[0]))
+              if canonicalize_name(metadata["Name"]) != "adam-core":
+                  raise SystemExit(f"{wheel.name}: bad metadata name {metadata['Name']}")
+              if Version(metadata["Version"]) != expected_version:
+                  raise SystemExit(f"{wheel.name}: bad metadata version {metadata['Version']}")
               for tag in tags:
                   combinations.add((tag.interpreter, tag.platform))
           expected = {
@@ -88,31 +137,33 @@ jobs:
               for python in expected_python
               for platform in expected_platforms
           }
-          missing = expected - combinations
-          if missing:
-              raise SystemExit(f"missing supported wheel combinations: {sorted(missing)}")
+          if combinations != expected:
+              raise SystemExit(
+                  f"wheel matrix mismatch: missing={sorted(expected - combinations)} "
+                  f"extra={sorted(combinations - expected)}"
+              )
           PY
           sha256sum dist/*.whl | sort | tee dist/SHA256SUMS
 
       - name: Upload verified publication set
         uses: actions/upload-artifact@v4
         with:
-          name: adam-core-tested-publication-set
+          name: adam-core-${{ inputs.expected_version }}-tested-publication-set
           path: dist/
           if-no-files-found: error
 
   publish-testpypi:
-    name: Publish exact wheels to TestPyPI
+    name: Publish exact preview wheels to TestPyPI
     if: inputs.repository == 'testpypi'
     needs: collect-tested-artifacts
     runs-on: ubuntu-latest
     environment:
-      name: testpypi
+      name: testpypi-preview
       url: https://test.pypi.org/p/adam-core
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: adam-core-tested-publication-set
+          name: adam-core-${{ inputs.expected_version }}-tested-publication-set
           path: dist
       - name: Remove checksum manifest from upload directory
         run: rm dist/SHA256SUMS
@@ -121,17 +172,17 @@ jobs:
           repository-url: https://test.pypi.org/legacy/
 
   publish-pypi:
-    name: Publish exact wheels to PyPI
+    name: Publish exact preview wheels to PyPI
     if: inputs.repository == 'pypi'
     needs: collect-tested-artifacts
     runs-on: ubuntu-latest
     environment:
-      name: pypi
+      name: pypi-preview
       url: https://pypi.org/p/adam-core
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: adam-core-tested-publication-set
+          name: adam-core-${{ inputs.expected_version }}-tested-publication-set
           path: dist
       - name: Remove checksum manifest from upload directory
         run: rm dist/SHA256SUMS

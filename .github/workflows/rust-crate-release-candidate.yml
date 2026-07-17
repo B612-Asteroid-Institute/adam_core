@@ -12,12 +12,21 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHON_PREVIEW_VERSION: "0.5.6rc1"
+  RUST_PREVIEW_VERSION: "0.1.0-rc.1"
+
 jobs:
   package-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
+      - name: Verify prerelease versions and exact internal pins
+        run: |
+          python migration/scripts/verify_preview_versions.py \
+            --python-version "$PYTHON_PREVIEW_VERSION" \
+            --rust-version "$RUST_PREVIEW_VERSION"
       - name: Test publishable workspace
         run: |
           set -euo pipefail
@@ -39,11 +48,11 @@ jobs:
           adam_core_rs_spice = { path = "rust/adam_core_rs_spice" }
           EOF
           for crate in \
-            adam_core_rs_kernel_data \
             adam_core_rs_autodiff \
+            adam_core_rs_orbit_determination \
             adam_core_rs_coords \
             adam_core_rs_spice \
-            adam_core_rs_orbit_determination \
+            adam_core_rs_kernel_data \
             adam_core
           do
             cargo package -p "$crate"
@@ -54,6 +63,9 @@ jobs:
           cp target/package/*.crate crate-dist/
           test "$(find crate-dist -name '*.crate' | wc -l | tr -d ' ')" = 6
           sha256sum crate-dist/*.crate | sort | tee crate-dist/SHA256SUMS
+          python migration/scripts/publish_crate_archives.py \
+            --archives crate-dist \
+            --expected-version "$RUST_PREVIEW_VERSION"
       - name: Upload exact crate publication set
         uses: actions/upload-artifact@v4
         with:
