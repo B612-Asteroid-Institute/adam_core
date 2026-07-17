@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "oracle_commit": "9b756803ab3afbe11e33df9e57d30a28e7976b92",
-  "current_git_head": "e18833a0e486ca2080b2993ba15373099e780887",
+  "current_git_head": "cb9a7b4542def9cdc5902fe5d371b24daeace07a",
   "surface": [
     "parse_optical_obs80",
     "parse_optical_obs80_file",
@@ -33,141 +33,141 @@
   },
   "python_control_timings": {
     "oracle_seconds": {
-      "obs80_file_seconds": 0.047565207816660404,
-      "trajectory_validate_seconds": 0.00035679154098033905,
-      "trajectory_segment_seconds": 0.0003520417958498001,
-      "scout_observations_processing_seconds": 0.0011310828849673271,
-      "scout_orbits_processing_seconds": 0.0015589995309710503
+      "obs80_file_seconds": 0.04763474967330694,
+      "trajectory_validate_seconds": 0.0003427919000387192,
+      "trajectory_segment_seconds": 0.0003438331186771393,
+      "scout_observations_processing_seconds": 0.0010840417817234993,
+      "scout_orbits_processing_seconds": 0.0014177924022078514
     },
     "current_seconds": {
-      "obs80_file_seconds": 0.0003800848498940468,
-      "trajectory_validate_seconds": 5.924981087446213e-05,
-      "trajectory_segment_seconds": 0.00013195723295211792,
-      "scout_observations_processing_seconds": 0.0002398751676082611,
-      "scout_orbits_processing_seconds": 0.00014841556549072266
+      "obs80_file_seconds": 0.0003704996779561043,
+      "trajectory_validate_seconds": 5.658343434333801e-05,
+      "trajectory_segment_seconds": 0.00012966711074113846,
+      "scout_observations_processing_seconds": 0.00023404229432344437,
+      "scout_orbits_processing_seconds": 0.00014362484216690063
     },
     "speedup": {
-      "obs80_file_seconds": 125.14365629127226,
-      "trajectory_validate_seconds": 6.021817381599837,
-      "trajectory_segment_seconds": 2.667847665292756,
-      "scout_observations_processing_seconds": 4.715297945365036,
-      "scout_orbits_processing_seconds": 10.504285893574297
+      "obs80_file_seconds": 128.56893678312608,
+      "trajectory_validate_seconds": 6.05816709460794,
+      "trajectory_segment_seconds": 2.6516602144668138,
+      "scout_observations_processing_seconds": 4.631820008674856,
+      "scout_orbits_processing_seconds": 9.8714984178036
     }
   },
   "native_rust_instant_timings": {
     "obs80_seconds": [
       [
-        0.000245833,
-        0.000240542,
-        0.000239333,
-        0.000238625,
-        0.000239
+        0.000253625,
+        0.000247042,
+        0.000246542,
+        0.000250041,
+        0.000245917
       ],
       [
-        0.000238,
-        0.000237833,
-        0.000238458,
-        0.000237958,
-        0.000238166
+        0.000246833,
+        0.000245125,
+        0.000245458,
+        0.000244708,
+        0.000245208
       ],
       [
-        0.0002415,
-        0.000238625,
-        0.000238167,
-        0.000237375,
-        0.000237791
+        0.000245375,
+        0.000249583,
+        0.000245792,
+        0.000245041,
+        0.000245458
       ]
     ],
     "scout_observations_seconds": [
       [
-        1.9292e-05,
-        1.8583e-05,
-        1.8416e-05,
-        1.9e-05,
-        1.7958e-05
-      ],
-      [
-        1.8125e-05,
-        1.7708e-05,
-        1.7667e-05,
+        1.9541e-05,
         1.775e-05,
-        1.7333e-05
+        1.7333e-05,
+        1.7458e-05,
+        1.7166e-05
       ],
       [
-        1.7334e-05,
-        1.7209e-05,
-        1.7209e-05,
-        1.7125e-05,
-        1.7125e-05
+        1.7084e-05,
+        1.7083e-05,
+        1.7e-05,
+        1.7042e-05,
+        1.6875e-05
+      ],
+      [
+        1.6833e-05,
+        1.7e-05,
+        1.6916e-05,
+        1.6875e-05,
+        1.7041e-05
       ]
     ],
     "scout_orbits_seconds": [
       [
-        1.5583e-05,
-        1.3708e-05,
-        1.3125e-05,
-        1.2584e-05,
-        1.2542e-05
+        1.6083e-05,
+        1.4e-05,
+        1.3458e-05,
+        1.3e-05,
+        1.2834e-05
       ],
       [
-        1.25e-05,
-        1.2583e-05,
-        1.2417e-05,
-        1.2458e-05,
-        1.2375e-05
+        1.2667e-05,
+        1.2709e-05,
+        1.2709e-05,
+        1.2875e-05,
+        1.275e-05
       ],
       [
-        1.2292e-05,
-        1.225e-05,
-        1.2292e-05,
-        1.2333e-05,
-        1.2458e-05
+        1.2792e-05,
+        1.2833e-05,
+        1.275e-05,
+        1.2708e-05,
+        6.3958e-05
       ]
     ],
     "trajectory_validate_seconds": [
       [
-        7.916e-06,
-        7.75e-06,
-        8.25e-06,
-        9.167e-06,
-        1.025e-05
+        9.083e-06,
+        8.875e-06,
+        8.791e-06,
+        8.792e-06,
+        8.792e-06
       ],
       [
-        9.333e-06,
-        9.417e-06,
-        9.416e-06,
-        9.25e-06,
-        9.417e-06
+        8.708e-06,
+        8.75e-06,
+        8.667e-06,
+        8.667e-06,
+        8.75e-06
       ],
       [
-        9.292e-06,
-        9.333e-06,
-        9.458e-06,
-        9.375e-06,
-        9.458e-06
+        8.708e-06,
+        8.709e-06,
+        8.709e-06,
+        8.75e-06,
+        8.708e-06
       ]
     ],
     "trajectory_segment_seconds": [
       [
         1.542e-06,
         1.542e-06,
-        1.542e-06,
-        1.542e-06,
-        1.5e-06
-      ],
-      [
-        1.542e-06,
-        1.541e-06,
-        1.542e-06,
         1.5e-06,
-        1.5e-06
+        1.5e-06,
+        1.458e-06
       ],
       [
         1.5e-06,
         1.5e-06,
         1.5e-06,
+        1.458e-06,
+        1.583e-06
+      ],
+      [
+        1.417e-06,
         1.5e-06,
-        1.5e-06
+        1.5e-06,
+        1.5e-06,
+        1.458e-06
       ]
     ]
   },

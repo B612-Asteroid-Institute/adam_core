@@ -204,8 +204,8 @@ Oracle: `9b756803ab3afbe11e33df9e57d30a28e7976b92`. Overall status: **PASSED**. 
 
 | Operation | upstream Python p50 | current facade p50 | speedup | native Rust-Instant p50 |
 |---|---:|---:|---:|---:|
-| Obs80 file parse (200 rows) | 47.57ms | 380.1µs | 125.14x | 238.5µs |
-| Trajectory validate (256 segments) | 356.8µs | 59.2µs | 6.02x | 9.3µs |
-| Trajectory segment lookup (256 segments) | 352.0µs | 132.0µs | 2.67x | 1.5µs |
-| Scout observation response processing | 1.13ms | 239.9µs | 4.72x | 17.7µs |
-| Scout orbit response processing | 1.56ms | 148.4µs | 10.50x | 12.5µs |
+| Obs80 file parse (200 rows) | 47.63ms | 370.5µs | 128.57x | 245.8µs |
+| Trajectory validate (256 segments) | 342.8µs | 56.6µs | 6.06x | 8.8µs |
+| Trajectory segment lookup (256 segments) | 343.8µs | 129.7µs | 2.65x | 1.5µs |
+| Scout observation response processing | 1.08ms | 234.0µs | 4.63x | 17.0µs |
+| Scout orbit response processing | 1.42ms | 143.6µs | 9.87x | 12.8µs |
