@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -11,7 +12,6 @@ import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 import requests
-from astroquery.jplsbdb import SBDB
 
 from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.covariances import CoordinateCovariances, sigmas_to_covariances
@@ -26,6 +26,29 @@ _SBDB_API_URL = "https://ssd-api.jpl.nasa.gov/sbdb.api"
 _SBDB_API_FAIR_USE_MAX_CONCURRENT_REQUESTS = 1
 
 _thread_local = threading.local()
+
+
+class _SBDBCompatibilityShim:
+    """Patch target for legacy tests/callers without importing Astroquery.
+
+    The ordinary public path is Rust HTTP. Historical users that patched
+    ``adam_core.orbits.query.sbdb.SBDB.query`` can still supply processed
+    payloads; the default sentinel is never called.
+    """
+
+    @staticmethod
+    def clear_cache() -> None:
+        return None
+
+    @staticmethod
+    def query(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("legacy SBDB.query compatibility hook was not patched")
+
+
+_sbdb_compatibility = _SBDBCompatibilityShim
+globals()["SBDB"] = _sbdb_compatibility
+_DEFAULT_SBDB_QUERY = _sbdb_compatibility.query
 
 
 def _get_requests_session() -> requests.Session:
@@ -123,9 +146,9 @@ def _get_sbdb_elements(obj_ids: List[str]) -> List[OrderedDict]:
         List of dictionaries containing orbital elements and other object properties.
     """
     results = []
-    SBDB.clear_cache()  # Yikes!
+    _sbdb_compatibility.clear_cache()  # Yikes!
     for obj_id in obj_ids:
-        result = SBDB.query(
+        result = _sbdb_compatibility.query(
             obj_id,
             covariance="mat",
             id_type="search",
@@ -273,8 +296,24 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     ------
     NotFoundError: If any of the queries object IDs are not found.
     """
-    results = _get_sbdb_elements(ids)
-    return _orbits_from_sbdb_results(ids, results)
+    if _sbdb_compatibility.query is not _DEFAULT_SBDB_QUERY:
+        return _orbits_from_sbdb_results(ids, _get_sbdb_elements(ids))
+
+    from adam_core import _rust_native
+
+    from ..._rust.arrow import table_from_record_batch
+    from ...utils.http import _raise_compatible_http_error
+
+    object_ids = [str(value) for value in ids]
+    try:
+        batch = _rust_native.query_sbdb_arrow(object_ids, False, 60.0, 5, False, False)
+    except RuntimeError as error:
+        _raise_compatible_http_error(error)
+    except ValueError as error:
+        if str(error).startswith("__NOT_FOUND__:"):
+            raise NotFoundError("object {} was not found", str(error).split(":", 1)[1])
+        raise
+    return table_from_record_batch(Orbits, batch)
 
 
 def _sbdb_api_get_json(
@@ -337,6 +376,9 @@ def _sbdb_api_get_json(
         time.sleep(sleep_s)
 
     raise RuntimeError(f"SBDB query failed after {max_attempts} attempts: {last_err}")
+
+
+_DEFAULT_SBDB_API_GET_JSON = _sbdb_api_get_json
 
 
 def _sbdb_float(value: Any) -> float:
@@ -489,105 +531,29 @@ def _orbits_from_sbdb_payloads(
     """
     Convert raw SBDB JSON payloads into an `Orbits` table.
 
-    This mirrors the behavior of the legacy `query_sbdb` implementation:
-    - Prefer covariance-provided elements/epoch when present.
-    - Use covariance matrix when available; otherwise build a diagonal covariance from sigmas.
+    The deterministic payload normalization (element selection, covariance
+    matrix/label handling, SBDB->ADAM covariance ordering, and physical
+    parameter extraction) is Rust-backed behind this canonical helper; Python
+    remains the thin table-construction facade.
     """
+    from adam_core import _rust_native as _rn
+
     if len(ids) != len(payloads):
         raise ValueError("ids and payloads must have the same length.")
-
-    expected_labels = ["e", "q", "tp", "node", "peri", "i"]
-
-    orbit_ids: list[str] = []
-    object_ids: list[str] = []
-    phys_rows: list[tuple[float | None, float | None, float | None, float | None]] = []
-
-    coords_cometary = np.zeros((len(payloads), 6), dtype=np.float64)
-    covariances_sbdb = np.zeros((len(payloads), 6, 6), dtype=np.float64)
-    times_jd = np.zeros((len(payloads)), dtype=np.float64)
-
-    for i, (obj_id, payload) in enumerate(zip(ids, payloads)):
+    for obj_id, payload in zip(ids, payloads):
         if "object" not in payload:
             raise NotFoundError("object {} was not found", obj_id)
-        if "orbit" not in payload:
-            raise ValueError(f"SBDB payload for {obj_id!r} missing 'orbit'.")
 
-        obj = payload["object"] or {}
-        orbit_ids.append(f"{i:05d}")
-        object_ids.append(str(obj.get("fullname")))
-
-        orbit = payload["orbit"] or {}
-        elements_list = orbit.get("elements")
-        epoch_jd = _sbdb_float(orbit.get("epoch"))
-
-        cov = orbit.get("covariance")
-        cov_matrix: np.ndarray | None = None
-        if isinstance(cov, dict) and cov.get("data") is not None:
-            labels = cov.get("labels")
-            if isinstance(labels, list):
-                labels6 = [str(x) for x in labels[:6]]
-                if labels6 != expected_labels:
-                    raise ValueError(
-                        f"Expected covariance matrix labels to be {expected_labels} "
-                        f"in the first 6 entries, got {labels6}."
-                    )
-
-            data = np.asarray(cov["data"], dtype=np.float64)
-            if data.ndim != 2 or data.shape[0] < 6 or data.shape[1] < 6:
-                raise ValueError("Expected SBDB covariance matrix to be at least 6x6.")
-            cov_matrix = data[:6, :6]
-
-            # If covariance provides elements, prefer them (and the covariance epoch).
-            if "elements" in cov and cov["elements"] is not None:
-                elements_list = cov["elements"]
-                if cov.get("epoch") is not None:
-                    epoch_jd = _sbdb_float(cov.get("epoch"))
-
-        if elements_list is None:
-            raise ValueError(f"SBDB payload for {obj_id!r} missing orbit elements.")
-
-        elements_by_name = _sbdb_elements_map(elements_list)
-
-        if cov_matrix is None:
-            # Fallback: build a diagonal covariance from per-element sigmas.
-            sigmas = np.array(
-                [
-                    [
-                        _sbdb_element_sigma(elements_by_name, "e"),
-                        _sbdb_element_sigma(elements_by_name, "q"),
-                        _sbdb_element_sigma(elements_by_name, "tp"),
-                        _sbdb_element_sigma(elements_by_name, "om"),
-                        _sbdb_element_sigma(elements_by_name, "w"),
-                        _sbdb_element_sigma(elements_by_name, "i"),
-                    ]
-                ],
-                dtype=np.float64,
-            )
-            cov_matrix = sigmas_to_covariances(sigmas)[0]
-
-        covariances_sbdb[i, :, :] = cov_matrix
-
-        times_jd[i] = epoch_jd
-
-        q = _sbdb_element_value(elements_by_name, "q")
-        e = _sbdb_element_value(elements_by_name, "e")
-        inc = _sbdb_element_value(elements_by_name, "i")
-        om = _sbdb_element_value(elements_by_name, "om")
-        w = _sbdb_element_value(elements_by_name, "w")
-        tp_jd = _sbdb_element_value(elements_by_name, "tp")
-        tp_mjd = Timestamp.from_jd([tp_jd], scale="tdb").mjd()[0].as_py()
-
-        coords_cometary[i, 0] = q
-        coords_cometary[i, 1] = e
-        coords_cometary[i, 2] = inc
-        coords_cometary[i, 3] = om
-        coords_cometary[i, 4] = w
-        coords_cometary[i, 5] = tp_mjd
-
-        phys_rows.append(_sbdb_phys_par_from_payload(payload))
-
-    covariances_cometary = _convert_SBDB_covariances(covariances_sbdb)
-    times = Timestamp.from_jd(times_jd, scale="tdb")
+    normalized = json.loads(
+        _rn.query_sbdb_normalize_payloads(json.dumps(ids), json.dumps(payloads))
+    )
+    coords_cometary = np.asarray(normalized["coords_cometary"], dtype=np.float64)
+    covariances_cometary = np.asarray(
+        normalized["covariances_cometary"], dtype=np.float64
+    ).reshape(len(payloads), 6, 6)
+    times = Timestamp.from_jd(
+        pa.array(normalized["times_jd"], type=pa.float64()), scale="tdb"
+    )
     origin = Origin.from_kwargs(code=["SUN" for _ in range(len(times))])
 
     coordinates = CometaryCoordinates.from_kwargs(
@@ -603,10 +569,16 @@ def _orbits_from_sbdb_payloads(
         frame="ecliptic",
     )
 
-    physical_parameters = _physical_parameters_from_sbdb(phys_rows)
+    phys = normalized["physical_parameters"]
+    physical_parameters = PhysicalParameters.from_kwargs(
+        H_v=np.asarray(phys["H_v"], dtype=np.float64),
+        H_v_sigma=np.asarray(phys["H_v_sigma"], dtype=np.float64),
+        G=np.asarray(phys["G"], dtype=np.float64),
+        G_sigma=np.asarray(phys["G_sigma"], dtype=np.float64),
+    )
     return Orbits.from_kwargs(
-        orbit_id=np.array(orbit_ids, dtype="object"),
-        object_id=np.array(object_ids, dtype="object"),
+        orbit_id=np.array(normalized["orbit_id"], dtype="object"),
+        object_id=np.array(normalized["object_id"], dtype="object"),
         coordinates=coordinates.to_cartesian(),
         physical_parameters=physical_parameters,
     )
@@ -694,43 +666,68 @@ def query_sbdb_new(
         If True, set the returned `Orbits.orbit_id` values to the input IDs (after any missing
         filtering). This is useful when callers need to map rows back to the requested identifiers.
     """
-    # Normalize ids into a list of strings while preserving the caller's order.
+    from adam_core import _rust_native
+
+    from ..._rust.arrow import table_from_record_batch
+    from ...utils.http import _raise_compatible_http_error
+
     if isinstance(ids, (str, bytes)):
         obj_ids = [str(ids)]
     else:
         obj_ids = [str(x) for x in ids]
-
-    payloads = _get_sbdb_payloads_new(
-        obj_ids,
-        max_concurrent_requests=max_concurrent_requests,
-        timeout_s=timeout_s,
-        max_attempts=max_attempts,
-    )
-    if allow_missing:
-        kept_ids: list[str] = []
-        kept_payloads: list[dict[str, Any]] = []
-        for obj_id, payload in zip(obj_ids, payloads):
-            if "object" not in payload:
-                continue
-            kept_ids.append(obj_id)
-            kept_payloads.append(payload)
-
-        if not kept_ids:
-            return Orbits.empty()
-
-        orbits = _orbits_from_sbdb_payloads(kept_ids, kept_payloads)
+    if max_concurrent_requests <= 0:
+        raise ValueError("max_concurrent_requests must be > 0")
+    if _sbdb_api_get_json is not _DEFAULT_SBDB_API_GET_JSON:
+        payloads = _get_sbdb_payloads_new(
+            obj_ids,
+            max_concurrent_requests=max_concurrent_requests,
+            timeout_s=timeout_s,
+            max_attempts=max_attempts,
+        )
+        if allow_missing:
+            kept = [
+                (obj_id, payload)
+                for obj_id, payload in zip(obj_ids, payloads)
+                if "object" in payload
+            ]
+            if not kept:
+                return Orbits.empty()
+            kept_ids, kept_payloads = map(list, zip(*kept))
+            orbits = _orbits_from_sbdb_payloads(kept_ids, kept_payloads)
+            if orbit_id_from_input:
+                orbits = orbits.set_column(
+                    "orbit_id", pa.array(kept_ids, type=pa.large_string())
+                )
+            return orbits
+        orbits = _orbits_from_sbdb_payloads(obj_ids, payloads)
         if orbit_id_from_input:
             orbits = orbits.set_column(
-                "orbit_id", pa.array(kept_ids, type=pa.large_string())
+                "orbit_id", pa.array(obj_ids, type=pa.large_string())
             )
         return orbits
-
-    orbits = _orbits_from_sbdb_payloads(obj_ids, payloads)
-    if orbit_id_from_input:
-        orbits = orbits.set_column(
-            "orbit_id", pa.array(obj_ids, type=pa.large_string())
+    if max_concurrent_requests > 1:
+        logger.warning(
+            "query_sbdb_new is configured with max_concurrent_requests=%s. "
+            "JPL's SSD/CNEOS API fair use policy requests only one in-flight request at a time; "
+            "Rust will execute these requests sequentially.",
+            max_concurrent_requests,
         )
-    return orbits
+    try:
+        batch = _rust_native.query_sbdb_arrow(
+            obj_ids,
+            True,
+            float(timeout_s),
+            int(max_attempts),
+            bool(allow_missing),
+            bool(orbit_id_from_input),
+        )
+    except RuntimeError as error:
+        _raise_compatible_http_error(error)
+    except ValueError as error:
+        if str(error).startswith("__NOT_FOUND__:"):
+            raise NotFoundError("object {} was not found", str(error).split(":", 1)[1])
+        raise
+    return table_from_record_batch(Orbits, batch)
 
 
 class NotFoundError(Exception):

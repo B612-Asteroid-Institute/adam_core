@@ -310,6 +310,22 @@ def test_mix_integrals_match_linear_combination():
     assert np.allclose(ints_mba, ints_mba_mix, rtol=0, atol=1e-9)
 
 
+def test_bandpass_loaders_have_rust_owned_timing():
+    from adam_core import _rust_native
+    from adam_core.photometry.bandpasses.api import _data_dir_str
+
+    for filename in (
+        "bandpass_curves.parquet",
+        "observatory_band_map.parquet",
+        "asteroid_templates.parquet",
+        "template_bandpass_integrals.parquet",
+    ):
+        samples = _rust_native.benchmark_bandpasses_load_table(
+            _data_dir_str(), filename, 1, 1, 0
+        )
+        assert samples[0][0] > 0.0
+
+
 def test_bandpass_delta_mag_matches_integral_ratio():
     dm = bandpass_delta_mag("C", "V", "LSST_r")
     ints = get_integrals("C", np.asarray(["V", "LSST_r"], dtype=object))

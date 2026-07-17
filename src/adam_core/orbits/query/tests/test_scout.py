@@ -1,13 +1,22 @@
 """Tests for the scout module."""
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 import requests
 
+from adam_core import _rust_native
+from adam_core._rust.arrow import table_from_record_batch
+from adam_core.observations.obs80 import ScoutObservations
+from adam_core.orbits.variants import VariantOrbits
+
 from ..scout import (
     ScoutObjectNotFoundError,
+    ScoutObjectSummary,
     ScoutOrbit,
     ScoutResponseError,
     ScoutServiceUnavailableError,
@@ -16,6 +25,8 @@ from ..scout import (
     query_scout_observations,
     scout_orbits_to_variant_orbits,
 )
+
+SCOUT_DATA = Path(__file__).parent / "testdata" / "scout"
 
 
 def test_scout_request_retries_transient_failure() -> None:
@@ -83,6 +94,19 @@ def test_query_scout_accepts_scalar_object_id() -> None:
     assert len(variants) == 1
     assert variants.object_id.to_pylist() == ["A11EpSe"]
     assert calls[0][1]["params"] == {"tdes": "A11EpSe", "orbits": "1"}
+    np.testing.assert_allclose(
+        variants.coordinates.values[0],
+        [
+            0.3814075769793518,
+            -0.990884410762772,
+            0.0019868502438316893,
+            0.014258742327653812,
+            0.010562800146262947,
+            -0.005110445147902333,
+        ],
+        rtol=0.0,
+        atol=2e-15,
+    )
 
 
 def test_query_scout_maps_error_payload_to_structured_not_found() -> None:
@@ -275,3 +299,105 @@ def test_scout_orbits_to_variant_orbits():
     np.testing.assert_array_equal(
         variant_orbits.coordinates.time.jd(), pc.cast(scout_orbits.epoch, pa.float64())
     )
+
+
+def test_recorded_scout_summary_and_orbits_are_rust_owned():
+    summary_payload = (SCOUT_DATA / "summary.json").read_text()
+    summary = table_from_record_batch(
+        ScoutObjectSummary,
+        _rust_native.get_scout_objects_arrow(summary_payload),
+    )
+    assert len(summary) > 0
+    object_id = summary.objectName[0].as_py()
+
+    variants = table_from_record_batch(
+        VariantOrbits,
+        _rust_native.query_scout_arrow(
+            [object_id], [(SCOUT_DATA / "orbits.json").read_text()]
+        ),
+    )
+    assert len(variants) == 1000
+    assert set(variants.object_id.to_pylist()) == {object_id}
+    assert np.all(np.isfinite(variants.coordinates.values))
+
+
+def _recorded_scout_observations_payload() -> str:
+    lines = [
+        "     A11EpSe*0C2026 07 08.17725719 41 24.185-30 19 19.42         19.35oVNEOCPW68",
+        "     A11EpSe KC2026 07 14.53636 19 37 22.30 -29 16 44.5          19.0 GVNEOCPE23",
+    ]
+    return json.dumps(
+        {
+            "objectName": "A11EpSe",
+            "nObs": 1,
+            "lastRun": "2026-07-14 13:33",
+            "signature": {"version": "1.3", "source": "NASA/JPL Scout API"},
+            "fileMPC": "\n".join(lines) + "\n",
+        }
+    )
+
+
+def test_default_public_scout_paths_are_one_native_crossing(monkeypatch):
+    orbit_payload = _orbit_payload()
+    orbit_payload["orbits"]["fields"] = list(ScoutOrbit.schema.names)
+    orbit_batch = _rust_native.query_scout_arrow(
+        ["A11EpSe"], [json.dumps(orbit_payload)]
+    )
+    observation_batch = _rust_native.query_scout_observations_arrow(
+        ["A11EpSe"], [_recorded_scout_observations_payload()]
+    )
+    calls = []
+
+    def query_orbits(*args):
+        calls.append(("orbits", args))
+        return orbit_batch
+
+    def query_observations(*args):
+        calls.append(("observations", args))
+        return observation_batch
+
+    monkeypatch.setattr(_rust_native, "query_scout_arrow", query_orbits)
+    monkeypatch.setattr(
+        _rust_native, "query_scout_observations_arrow", query_observations
+    )
+
+    variants = query_scout("A11EpSe")
+    observations = query_scout_observations("A11EpSe")
+    assert len(variants) == 1
+    assert len(observations) == 2
+    assert [kind for kind, _ in calls] == ["orbits", "observations"]
+    assert calls[0][1][0] == ["A11EpSe"]
+    assert calls[1][1][0] == ["A11EpSe"]
+
+
+def test_recorded_scout_observations_are_rust_owned():
+    observations = table_from_record_batch(
+        ScoutObservations,
+        _rust_native.query_scout_observations_arrow(
+            ["A11EpSe"], [_recorded_scout_observations_payload()]
+        ),
+    )
+    assert len(observations) == 2
+    assert observations.observation.designation.to_pylist() == [
+        "A11EpSe",
+        "A11EpSe",
+    ]
+    assert observations.snapshot_observation_count.to_pylist() == [2, 2]
+    assert observations.observation.time.scale == "utc"
+
+
+def test_scout_products_have_rust_owned_timing():
+    for kind, payload in [
+        (
+            "neocc",
+            (Path(__file__).parent / "testdata" / "neocc" / "2024YR4.ke1").read_text(),
+        ),
+        ("scout-summary", (SCOUT_DATA / "summary.json").read_text()),
+        ("scout", (SCOUT_DATA / "orbits.json").read_text()),
+        ("scout-observations", _recorded_scout_observations_payload()),
+    ]:
+        samples = np.asarray(
+            _rust_native.benchmark_query_client_processing(kind, [payload], 2, 2, 1)
+        )
+        assert samples.shape == (2, 2)
+        assert np.all(samples > 0.0)

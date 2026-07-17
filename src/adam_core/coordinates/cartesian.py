@@ -78,14 +78,18 @@ class CartesianCoordinates(qv.Table):
         """
         Magnitude of the position vector.
         """
-        return np.linalg.norm(self.r, axis=1)
+        from adam_core import _rust_native
+
+        return np.asarray(_rust_native.row_norm3_numpy(self.r), dtype=np.float64)
 
     @property
     def r_hat(self) -> npt.NDArray[np.float64]:
         """
         Unit vector in the direction of the position vector.
         """
-        return self.r / self.r_mag[:, None]
+        from adam_core import _rust_native
+
+        return np.asarray(_rust_native.row_unit3_numpy(self.r), dtype=np.float64)
 
     @property
     def v(self) -> npt.NDArray[np.float64]:
@@ -99,14 +103,18 @@ class CartesianCoordinates(qv.Table):
         """
         Magnitude of the velocity vector.
         """
-        return np.linalg.norm(self.v, axis=1)
+        from adam_core import _rust_native
+
+        return np.asarray(_rust_native.row_norm3_numpy(self.v), dtype=np.float64)
 
     @property
     def v_hat(self) -> npt.NDArray[np.float64]:
         """
         Unit vector in the direction of the velocity vector.
         """
-        return self.v / self.v_mag[:, None]
+        from adam_core import _rust_native
+
+        return np.asarray(_rust_native.row_unit3_numpy(self.v), dtype=np.float64)
 
     @property
     def sigma_x(self) -> npt.NDArray[np.float64]:
@@ -162,7 +170,14 @@ class CartesianCoordinates(qv.Table):
         """
         1-sigma uncertainty in the position.
         """
-        return np.sqrt(np.sum(self.covariance.sigmas[:, 0:3] ** 2, axis=1))
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.covariance_sigma_block_norm_numpy(
+                self.covariance.to_matrix(), 0, 3
+            ),
+            dtype=np.float64,
+        )
 
     @property
     def sigma_v(self) -> npt.NDArray[np.float64]:
@@ -176,21 +191,36 @@ class CartesianCoordinates(qv.Table):
         """
         1-sigma uncertainty in the velocity vector.
         """
-        return np.sqrt(np.sum(self.covariance.sigmas[:, 3:6] ** 2, axis=1))
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.covariance_sigma_block_norm_numpy(
+                self.covariance.to_matrix(), 3, 3
+            ),
+            dtype=np.float64,
+        )
 
     @property
     def h(self) -> npt.NDArray[np.float64]:
         """
         Specific angular momentum vector.
         """
-        return np.cross(self.r, self.v)
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.row_cross3_numpy(self.r, self.v), dtype=np.float64
+        )
 
     @property
     def h_mag(self) -> npt.NDArray[np.float64]:
         """
         Magnitude of the specific angular momentum vector.
         """
-        return np.linalg.norm(self.h, axis=1)
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.cartesian_h_mag_numpy(self.values), dtype=np.float64
+        )
 
     @property
     def values_km(self) -> npt.NDArray[np.float64]:
@@ -225,34 +255,18 @@ class CartesianCoordinates(qv.Table):
         """
         3x3 rotation matrix to RIC (radial, in-track, cross-track)
         """
-        radial = self.r
-        r_mag = self.r_mag
-        cross_track = self.h
-        h_mag = self.h_mag
+        from adam_core import _rust_native
 
-        # If radius or velocity is 0, return identity by setting r to X and cross_track to Z
-        h_mask = h_mag < SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE
-        radial[h_mask, :] = np.array([1, 0, 0])
-        r_mag[h_mask] = 1
-        radial /= r_mag[:, None]
-        cross_track[h_mask, :] = np.array([0, 0, 1])
-        h_mag[h_mask] = 1
-        cross_track /= h_mag[:, None]
-
-        # in_track should be in the direction of v
-        in_track = np.cross(cross_track, radial)
-        return np.stack((radial, in_track, cross_track), axis=1)
+        return np.asarray(_rust_native.ric3_matrix_numpy(self.values), dtype=np.float64)
 
     @property
     def ric6_matrix(self) -> npt.NDArray[np.float]:
         """
         Nx6x6 rotation matrix to RIC (radial, in-track, cross-track)
         """
-        rot3 = self.ric3_matrix
-        rotation = np.zeros((len(self), 6, 6))
-        rotation[:, :3, :3] = rot3
-        rotation[:, 3:6, 3:6] = rot3
-        return rotation
+        from adam_core import _rust_native
+
+        return np.asarray(_rust_native.ric6_matrix_numpy(self.values), dtype=np.float64)
 
     def covariance_km(self) -> npt.NDArray[np.float64]:
         """
@@ -290,25 +304,31 @@ class CartesianCoordinates(qv.Table):
         -------
             Rotated Cartesian coordinates and their covariances.
         """
-        # Extract coordinate values into a masked array and mask NaNss
-        masked_coords = np.ma.masked_array(self.values, fill_value=np.nan)
-        masked_coords.mask = np.isnan(masked_coords.data)
+        from .._rust.api import rotate_cartesian_time_varying_numpy
 
-        # Rotate coordinates
-        coords_rotated = np.ma.dot(masked_coords, rotation_matrix.T, strict=False)
-
-        # Extract covariances
-        masked_covariances = np.ma.masked_array(
-            self.covariance.to_matrix(), fill_value=0.0
+        n = len(self)
+        cov_matrix = self.covariance.to_matrix()
+        cov_flat = np.ascontiguousarray(cov_matrix.reshape(n, 36))
+        # Single shared rotation matrix applied to all rows; time_index
+        # is a zero-vector pointing into a length-1 matrix table. The Rust
+        # kernel handles the NaN policy for covariance (fill NaN with 0,
+        # rotate, restore NaN) and propagates coord NaN via IEEE.
+        rust_result = rotate_cartesian_time_varying_numpy(
+            self.values,
+            np.zeros(n, dtype=np.int64),
+            rotation_matrix.reshape(1, 6, 6),
+            cov_flat,
         )
-        masked_covariances.mask = np.isnan(masked_covariances.data)
 
-        # Rotate covariances
-        covariances_rotated = (
-            rotation_matrix @ masked_covariances.filled() @ rotation_matrix.T
+        coords_rotated, cov_flat_rotated = rust_result
+        if cov_flat_rotated is None:
+            raise RuntimeError(
+                "rotate_cartesian_time_varying_numpy returned no covariance output "
+                "despite covariance input"
+            )
+        covariances_rotated = np.asarray(cov_flat_rotated, dtype=np.float64).reshape(
+            n, 6, 6
         )
-        # Reset the mask to the original mask
-        covariances_rotated[masked_covariances.mask] = np.nan
 
         # Check if any covariance elements are near zero, if so set them to zero
         near_zero = len(
@@ -368,12 +388,16 @@ class CartesianCoordinates(qv.Table):
         else:
             raise ValueError(f"Expected vector to have shape (6,) or ({N}, 6).")
 
-        # Extract coordinate values into a masked array and mask NaNss
-        masked_coords = np.ma.masked_array(self.values, fill_value=np.nan)
-        masked_coords.mask = np.isnan(masked_coords.data)
+        # IEEE addition preserves the legacy masked-NaN policy: NaN
+        # coordinates stay NaN after translation.
+        from adam_core import _rust_native
 
-        # Translate coordinates
-        coords_translated = (masked_coords + vector_).filled()
+        coords_translated = np.asarray(
+            _rust_native.translate_cartesian_numpy(
+                self.values, np.ascontiguousarray(vector_, dtype=np.float64)
+            ),
+            dtype=np.float64,
+        )
 
         coords = self.from_kwargs(
             x=coords_translated[:, 0],

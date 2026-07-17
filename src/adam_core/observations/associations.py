@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Iterator
 
-import pyarrow.compute as pc
 import quivr as qv
 
 from .detections import PointSourceDetections
@@ -27,21 +26,16 @@ class Associations(qv.Table):
         associations : Iterator[`~adam_core.observations.associations.Associations`]
             Associations grouped by object ID.
         """
-        # Gather unique exposure IDs
-        object_ids = self.object_id.unique()
-        sorted = self.table.sort_by("object_id")
+        from adam_core import _rust_native
 
-        # Return non-null object IDs first
-        for object_id in pc.drop_null(object_ids):
-            mask = pc.equal(sorted.column("object_id"), object_id)
-            table = sorted.filter(mask)
-            yield Associations.from_pyarrow(table)
+        from .arrow_bridge import observations_from_ipc, observations_to_ipc
 
-        # If there are any null object IDs, return them last
-        if object_ids.null_count > 0:
-            mask = pc.is_null(sorted.column("object_id"))
-            table = sorted.filter(mask)
-            yield Associations.from_pyarrow(table)
+        # One Rust crossing owns the grouping: non-null object IDs in
+        # first-appearance order, then any null group last.
+        for raw in _rust_native.association_object_groups_ipc(
+            observations_to_ipc(self)
+        ):
+            yield observations_from_ipc(raw, Associations)
 
     def link_to_detections(
         self, detections: PointSourceDetections

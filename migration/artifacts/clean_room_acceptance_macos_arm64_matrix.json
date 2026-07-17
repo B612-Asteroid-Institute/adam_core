@@ -1,0 +1,186 @@
+{
+  "adam_assist_commit": "618e6888c8ab2dabd17778eb58980341a554442c",
+  "adam_core_commit": "c57c81264548726d8769962187cbf5e4dcf1322f",
+  "entries": [
+    {
+      "implementation": "CPython",
+      "kernel_cache_policy": {
+        "cache_files": [],
+        "installed_package_paths_used": true,
+        "seconds": 5.900021642446518e-05,
+        "status": "passed"
+      },
+      "optional_distributions_absent": [
+        "astropy",
+        "astroquery",
+        "healpy",
+        "timezonefinder",
+        "h3"
+      ],
+      "optional_modules_loaded": [],
+      "pip_check": "No broken requirements found.",
+      "platform": "macOS-14.8.4-arm64-arm-64bit",
+      "python_version": "3.11.6",
+      "report": "migration/artifacts/clean_room_acceptance_macos_arm64_py311.json",
+      "stage_seconds": {
+        "imports_and_provenance": 0.5152953751385212,
+        "kernel_cache_policy": 5.900021642446518e-05,
+        "live_orbit_fetch": 0.3499853750690818,
+        "observer_ephemeris": 0.00571016687899828,
+        "optional_dependency_layering": 0.572086458094418,
+        "public_propagation": 0.0127251660451293,
+        "same_epoch_batch": 0.0018987497314810753
+      },
+      "status": "passed",
+      "total_smoke_seconds": 1.4577602911740541,
+      "wheels": {
+        "adam_assist": {
+          "bytes": 1047852,
+          "filename": "adam_assist-0.4.0-cp311-cp311-macosx_11_0_arm64.whl",
+          "name": "adam-assist",
+          "native_members": [
+            "adam_assist/_native.cpython-311-darwin.so"
+          ],
+          "path": "/private/tmp/adam-clean-no-astropy-py311/wheelhouse/adam_assist-0.4.0-cp311-cp311-macosx_11_0_arm64.whl",
+          "sha256": "af23a921758a007f2adaff8cd371dee7d295d5a9ab04b13919f30d8512b3c3ed",
+          "version": "0.4.0"
+        },
+        "adam_core": {
+          "bytes": 13678097,
+          "filename": "adam_core-0.5.6-cp311-cp311-macosx_11_0_arm64.whl",
+          "name": "adam_core",
+          "native_members": [
+            "adam_core/_rust_native.cpython-311-darwin.so"
+          ],
+          "path": "/private/tmp/adam-clean-no-astropy-py311/wheelhouse/adam_core-0.5.6-cp311-cp311-macosx_11_0_arm64.whl",
+          "sha256": "1ea8c39a86d669dfd4ca9006e29fe7b08e3fc388a79ee26d2825f8fb856828ef",
+          "version": "0.5.6"
+        }
+      }
+    },
+    {
+      "implementation": "CPython",
+      "kernel_cache_policy": {
+        "cache_files": [],
+        "installed_package_paths_used": true,
+        "seconds": 6.741750985383987e-05,
+        "status": "passed"
+      },
+      "optional_distributions_absent": [
+        "astropy",
+        "astroquery",
+        "healpy",
+        "timezonefinder",
+        "h3"
+      ],
+      "optional_modules_loaded": [],
+      "pip_check": "No broken requirements found.",
+      "platform": "macOS-14.8.4-arm64-arm-64bit",
+      "python_version": "3.12.7",
+      "report": "migration/artifacts/clean_room_acceptance_macos_arm64_py312.json",
+      "stage_seconds": {
+        "imports_and_provenance": 0.5265040406957269,
+        "kernel_cache_policy": 6.741750985383987e-05,
+        "live_orbit_fetch": 0.36232733353972435,
+        "observer_ephemeris": 0.006177582778036594,
+        "optional_dependency_layering": 0.4944016244262457,
+        "public_propagation": 0.013644416816532612,
+        "same_epoch_batch": 0.0022948747500777245
+      },
+      "status": "passed",
+      "total_smoke_seconds": 1.4054172905161977,
+      "wheels": {
+        "adam_assist": {
+          "bytes": 1045354,
+          "filename": "adam_assist-0.4.0-cp312-cp312-macosx_11_0_arm64.whl",
+          "name": "adam-assist",
+          "native_members": [
+            "adam_assist/_native.cpython-312-darwin.so"
+          ],
+          "path": "/private/tmp/adam-clean-no-astropy-py312/wheelhouse/adam_assist-0.4.0-cp312-cp312-macosx_11_0_arm64.whl",
+          "sha256": "32aff34f6860d5d4dd8dac3edd0e4d22ef8c01d35939ad5978fd71ae97710680",
+          "version": "0.4.0"
+        },
+        "adam_core": {
+          "bytes": 13662733,
+          "filename": "adam_core-0.5.6-cp312-cp312-macosx_11_0_arm64.whl",
+          "name": "adam_core",
+          "native_members": [
+            "adam_core/_rust_native.cpython-312-darwin.so"
+          ],
+          "path": "/private/tmp/adam-clean-no-astropy-py312/wheelhouse/adam_core-0.5.6-cp312-cp312-macosx_11_0_arm64.whl",
+          "sha256": "ff8a6586142cdde833c504dc377db5b9822abaf820a23ce28b0fb25e13aa9c73",
+          "version": "0.5.6"
+        }
+      }
+    },
+    {
+      "implementation": "CPython",
+      "kernel_cache_policy": {
+        "cache_files": [],
+        "installed_package_paths_used": true,
+        "seconds": 8.849985897541046e-05,
+        "status": "passed"
+      },
+      "optional_distributions_absent": [
+        "astropy",
+        "astroquery",
+        "healpy",
+        "timezonefinder",
+        "h3"
+      ],
+      "optional_modules_loaded": [],
+      "pip_check": "No broken requirements found.",
+      "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+      "python_version": "3.13.3",
+      "report": "migration/artifacts/clean_room_acceptance_macos_arm64_py313.json",
+      "stage_seconds": {
+        "imports_and_provenance": 0.5238740425556898,
+        "kernel_cache_policy": 8.849985897541046e-05,
+        "live_orbit_fetch": 0.3238128749653697,
+        "observer_ephemeris": 0.005431166850030422,
+        "optional_dependency_layering": 0.45015920884907246,
+        "public_propagation": 0.013678750023245811,
+        "same_epoch_batch": 0.002274041064083576
+      },
+      "status": "passed",
+      "total_smoke_seconds": 1.3193185841664672,
+      "wheels": {
+        "adam_assist": {
+          "bytes": 1045147,
+          "filename": "adam_assist-0.4.0-cp313-cp313-macosx_11_0_arm64.whl",
+          "name": "adam-assist",
+          "native_members": [
+            "adam_assist/_native.cpython-313-darwin.so"
+          ],
+          "path": "/private/tmp/adam-clean-no-astropy-py313/wheelhouse/adam_assist-0.4.0-cp313-cp313-macosx_11_0_arm64.whl",
+          "sha256": "76a6dd417dc07bb5a39f8afae297591de78b2603083291d07006d9f80250878f",
+          "version": "0.4.0"
+        },
+        "adam_core": {
+          "bytes": 13662207,
+          "filename": "adam_core-0.5.6-cp313-cp313-macosx_11_0_arm64.whl",
+          "name": "adam_core",
+          "native_members": [
+            "adam_core/_rust_native.cpython-313-darwin.so"
+          ],
+          "path": "/private/tmp/adam-clean-no-astropy-py313/wheelhouse/adam_core-0.5.6-cp313-cp313-macosx_11_0_arm64.whl",
+          "sha256": "9d42de298e3e75cbaf25b4b68b42a5a1759f50822cc9f9b5b9873a21a7201c90",
+          "version": "0.5.6"
+        }
+      }
+    }
+  ],
+  "install_policy": "source-isolated exact PEP 517 wheels; PIP_ONLY_BINARY=:all: runtime dependencies; pip check",
+  "kernel_policy": "ADAM_CORE_KERNEL_OFFLINE=1; empty isolated cache; no path overrides; installed-package discovery; no duplicated kernels",
+  "platform": "macOS arm64",
+  "provider_policy": "Astropy, Astroquery, Healpy, timezonefinder, and h3 absent and unloaded",
+  "python_versions": [
+    "3.11.6",
+    "3.12.7",
+    "3.13.3"
+  ],
+  "schema_version": 1,
+  "status": "passed",
+  "workflow_matrix": ".github/workflows/release-candidate-wheel-matrix.yml adds equivalent CPython 3.11-3.13 manylinux x86-64 and macOS arm64 PR jobs"
+}

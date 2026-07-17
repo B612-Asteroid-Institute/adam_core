@@ -5,10 +5,6 @@ import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 import quivr as qv
-from scipy.linalg import sqrtm
-from scipy.stats import multivariate_normal
-
-from .jacobian import calc_jacobian
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +26,14 @@ def sigmas_to_covariances(sigmas: np.ndarray) -> np.ndarray:
     covariances : `numpy.ndarray` (N, D, D)
         Covariance matrices for N coordinates in D dimensions.
     """
-    D = sigmas.shape[1]
-    identity = np.identity(D, dtype=sigmas.dtype)
-    covariances = np.einsum("kj,ji->kij", sigmas**2, identity, order="C")
-    return covariances
+    from adam_core import _rust_native
+
+    return np.asarray(
+        _rust_native.sigmas_to_covariances_numpy(
+            np.ascontiguousarray(sigmas, dtype=np.float64)
+        ),
+        dtype=np.float64,
+    )
 
 
 class CoordinateCovariances(qv.Table):
@@ -48,9 +48,42 @@ class CoordinateCovariances(qv.Table):
 
     @property
     def sigmas(self):
-        cov_diag = np.diagonal(self.to_matrix(), axis1=1, axis2=2)
-        sigmas = np.sqrt(cov_diag)
-        return sigmas
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.covariance_sigmas_numpy(self.to_matrix()), dtype=np.float64
+        )
+
+    def _fast_to_matrix(self) -> Optional[np.ndarray]:
+        """
+        Return (N, 6, 6) by reshaping the underlying flat buffer when the
+        LargeListArray has uniform stride-36 offsets and no nulls. Returns
+        None to signal the caller to use the slower stack-based fallback
+        when those invariants do not hold (ragged rows, arrow-level nulls,
+        or chunked arrays that fail to combine).
+        """
+        n = len(self)
+        arr = self.values
+        if hasattr(arr, "combine_chunks"):
+            arr = arr.combine_chunks()
+        if not hasattr(arr, "offsets") or not hasattr(arr, "values"):
+            return None
+        if arr.null_count != 0:
+            return None
+        offsets = np.asarray(arr.offsets)
+        if len(offsets) != n + 1 or offsets[0] != 0 or offsets[-1] != n * 36:
+            return None
+        if n > 0 and not np.array_equal(
+            np.diff(offsets), np.full(n, 36, dtype=offsets.dtype)
+        ):
+            return None
+        flat = arr.values.to_numpy(zero_copy_only=False)
+        if len(flat) != n * 36:
+            return None
+        # np.copy() so the caller owns a writable, arrow-independent buffer —
+        # matching the existing to_matrix contract (callers routinely mutate
+        # the result, e.g. near-zero cleanup in CartesianCoordinates.rotate).
+        return np.ascontiguousarray(flat).reshape(n, 6, 6).copy()
 
     def to_matrix(self) -> np.ndarray:
         """
@@ -61,6 +94,13 @@ class CoordinateCovariances(qv.Table):
         covariances : `numpy.ndarray` (N, 6, 6)
             Covariance matrices for N coordinates in 6 dimensions.
         """
+        # Fast path: LargeListArray with uniform stride-36 offsets and no nulls
+        # (the normal shape produced by `from_matrix`). Reshape the underlying
+        # flat buffer instead of stacking per-row pyarrow objects.
+        fast = self._fast_to_matrix()
+        if fast is not None:
+            return fast
+
         # return self.values.combine_chunks().to_numpy_ndarray()
         values = self.values.to_numpy(zero_copy_only=False)
 
@@ -177,7 +217,9 @@ class CoordinateCovariances(qv.Table):
         is_all_nan : bool
             True if all covariance matrix elements are NaN, False otherwise.
         """
-        return np.all(np.isnan(self.to_matrix()))
+        from adam_core import _rust_native
+
+        return _rust_native.covariance_is_all_nan_numpy(self.to_matrix())
 
 
 def make_positive_semidefinite(
@@ -258,6 +300,9 @@ def sample_covariance_random(
     # that something has gone wrong with the covariance. However, when the negative eigenvalues
     # are very close to zero, they can be flipped to positive without an issue. This is due to
     # the way the covariance matrix is calculated.
+    #
+    # Governance note: this validation intentionally remains a NumPy/LAPACK
+    # boundary (eigvals); the sampling itself is Rust-owned below.
     if np.any(np.linalg.eigvals(cov) < 0):
         if np.any(np.linalg.eigvals(cov) < -1 * semidef_tol):
             raise ValueError(
@@ -268,11 +313,22 @@ def sample_covariance_random(
                 "Covariance matrix is not positive semidefinite, but within tolerance, adjusting..."
             )
             cov = make_positive_semidefinite(cov)
-    normal = multivariate_normal(mean=mean, cov=cov, allow_singular=True, seed=seed)
-    samples = normal.rvs(num_samples)
-    W = np.full(num_samples, 1 / num_samples)
-    W_cov = np.full(num_samples, 1 / num_samples)
-    return samples, W, W_cov
+
+    # Rust-native RNG (decision 2026-07-03): statistically equivalent to, but
+    # not bit-identical with, the legacy scipy multivariate_normal sampler.
+    from adam_core import _rust_native
+
+    samples, W, W_cov = _rust_native.sample_covariance_random_numpy(
+        np.ascontiguousarray(mean, dtype=np.float64),
+        np.ascontiguousarray(cov, dtype=np.float64),
+        int(num_samples),
+        seed,
+    )
+    return (
+        np.asarray(samples, dtype=np.float64),
+        np.asarray(W, dtype=np.float64),
+        np.asarray(W_cov, dtype=np.float64),
+    )
 
 
 def sample_covariance_sigma_points(
@@ -315,53 +371,38 @@ def sample_covariance_sigma_points(
         Communications, and Control Symposium, 153-158.
         https://doi.org/10.1109/ASSPCC.2000.882463
     """
-    # Calculate the dimensionality of the distribution
-    D = mean.shape[0]
+    # Rust-owned sigma-point sampling: mean row first, then mean +/- rows of
+    # the symmetric square root of (D + lambda) * cov. The Rust Jacobi
+    # symmetric square root replaces scipy.linalg.sqrtm and reconstructs the
+    # input covariance within the same tolerances validated for
+    # VariantOrbits.create sigma-point parity.
+    from adam_core import _rust_native
 
-    # See equation 15 in Wan & Van Der Merwe (2000) [1]
-    N = 2 * D + 1
-    sigma_points = np.empty((N, D))
-    W = np.empty(N)
-    W_cov = np.empty(N)
-
-    # Calculate the scaling parameter lambda
-    lambd = alpha**2 * (D + kappa) - D
-
-    # First sigma point is the mean
-    sigma_points[0] = mean
-
-    # Beta is used to encode prior knowledge about the distribution.
-    # If the distribution is a well-constrained Gaussian, beta = 2 is optimal
-    # but lets set beta to 0 for now which has the effect of not weighting the mean state
-    # with 0 for the covariance matrix. This is generally better for more distributions.
-    # Calculate the weights for mean and the covariance matrix
-    # Weight are used to reconstruct the mean and covariance matrix from the sigma points
-    W[0] = lambd / (D + lambd)
-    W_cov[0] = W[0] + (1 - alpha**2 + beta)
-
-    # Take the matrix square root of the scaled covariance matrix.
-    # Sometimes you'll see this done with a Cholesky decomposition for speed
-    # but sqrtm is sufficiently optimized for this use case and typically provides
-    # better results
-    L = sqrtm((D + lambd) * cov)
-
-    # Calculate the remaining sigma points
-    for i in range(D):
-        offset = L[i]
-        sigma_points[i + 1] = mean + offset
-        sigma_points[i + 1 + D] = mean - offset
-
-    # The weights for the remaining sigma points are the same
-    # for the mean and the covariance matrix
-    W[1:] = 1 / (2 * (D + lambd))
-    W_cov[1:] = 1 / (2 * (D + lambd))
-
-    return sigma_points, W, W_cov
+    sigma_points, W, W_cov = _rust_native.sample_covariance_sigma_points_numpy(
+        np.ascontiguousarray(mean, dtype=np.float64),
+        np.ascontiguousarray(cov, dtype=np.float64),
+        float(alpha),
+        float(beta),
+        float(kappa),
+    )
+    return (
+        np.asarray(sigma_points, dtype=np.float64),
+        np.asarray(W, dtype=np.float64),
+        np.asarray(W_cov, dtype=np.float64),
+    )
 
 
 def weighted_mean(samples: np.ndarray, W: np.ndarray) -> np.ndarray:
     """
     Calculate the weighted mean of a set of samples.
+
+    NOTE: this dispatches to numpy `np.dot`, NOT a rust kernel. Apple
+    Accelerate / OpenBLAS GEMV is hand-tuned NEON/AVX SIMD and beats
+    every pure-rust loop we tried (faer, hand-rolled rayon, hand-rolled
+    serial — see journal 2026-04-27 perf measurements). Rust would need
+    sleef-vectorized FMA to compete; deferred until we add SIMD math
+    crate. The function exists as a vectored entry point but is BLAS
+    underneath.
 
     Parameters
     ----------
@@ -385,6 +426,10 @@ def weighted_covariance(
     """
     Calculate a covariance matrix from samples and their corresponding weights.
 
+    NOTE: this dispatches to numpy (BLAS GEMM), NOT rust — same reason
+    as `weighted_mean` above (BLAS hand-tuned SIMD wins until we add a
+    rust SIMD math crate).
+
     Parameters
     ----------
     mean : `~numpy.ndarray` (D)
@@ -401,13 +446,8 @@ def weighted_covariance(
     cov : `~numpy.ndarray` (D, D)
         Covariance matrix calculated from the samples and weights.
     """
-    # Calculate the covariance matrix from the sigma points and weights
-    # `~numpy.cov` does not support negative weights so we will calculate
-    # the covariance manually
-    # cov = np.cov(samples, aweights=W_cov, rowvar=False, bias=True)
     residual = samples - mean
-    cov = (W_cov * residual.T) @ residual
-    return cov
+    return (W_cov * residual.T) @ residual
 
 
 def transform_covariances_sampling(
@@ -447,35 +487,60 @@ def transform_covariances_sampling(
     return covariances_out
 
 
-def transform_covariances_jacobian(
-    coords: np.ndarray,
+def rust_covariance_transform(
+    coords_values: np.ndarray,
     covariances: np.ndarray,
-    _func: Callable,
-    **kwargs,
-) -> np.ndarray:
+    representation_in: str,
+    representation_out: str,
+    *,
+    t0: Optional[np.ndarray] = None,
+    mu: Optional[np.ndarray] = None,
+    a: Optional[float] = None,
+    f: Optional[float] = None,
+    frame_in: str = "ecliptic",
+    frame_out: Optional[str] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Transform covariance matrices by calculating the Jacobian of the transformation function
-    using `~jax.jacfwd`.
+    Run the Rust forward-mode autodiff covariance transform in a single batched
+    pass. Returns ``(coords_out [N, 6], cov_out [N, 6, 6])``.
 
-    Parameters
-    ----------
-    coords : `~numpy.ndarray` (N, D)
-        Coordinates that correspond to the input covariance matrices.
-    covariances : `~numpy.ndarray` (N, D, D)
-        Covariance matrices to transform via numerical differentiation.
-    _func : function
-        A function that takes a single coord (D) as input and return the transformed
-        coordinate (D). See for example: `thor.coordinates._cartesian_to_spherical`
-        or `thor.coordinates._cartesian_to_keplerian`.
-
-    Returns
-    -------
-    covariances_out : `~numpy.ndarray` (N, D, D)
-        Transformed covariance matrices.
+    The kernel evaluates every rep-in -> cartesian(frame_in) -> cartesian(frame_out)
+    -> rep-out function as ``Dual<6>`` and reads the propagated covariance as
+    ``J @ Sigma @ J^T``. NaN covariance rows pass NaN through (consistent with
+    the legacy policy).
     """
-    jacobian = calc_jacobian(coords, _func, **kwargs)
-    covariances = jacobian @ covariances @ np.transpose(jacobian, axes=(0, 2, 1))
-    return covariances
+    # Local import avoids a module-level cycle.
+    from .._rust.api import transform_coordinates_with_covariance_numpy
+
+    coords_values = np.ascontiguousarray(coords_values, dtype=np.float64)
+    if coords_values.ndim != 2 or coords_values.shape[1] != 6:
+        raise ValueError("coords_values must have shape (N, 6)")
+    n = coords_values.shape[0]
+    if covariances.shape != (n, 6, 6):
+        raise ValueError("covariances must have shape (N, 6, 6)")
+
+    cov_flat = np.ascontiguousarray(
+        np.asarray(covariances, dtype=np.float64).reshape(n, 36)
+    )
+    result = transform_coordinates_with_covariance_numpy(
+        coords_values,
+        cov_flat,
+        representation_in,
+        representation_out,
+        t0=t0,
+        mu=mu,
+        a=a,
+        f=f,
+        max_iter=100,
+        tol=1e-15,
+        frame_in=frame_in,
+        frame_out=frame_out,
+    )
+    coords_out, cov_flat_out = result
+    return (
+        np.asarray(coords_out, dtype=np.float64),
+        np.asarray(cov_flat_out, dtype=np.float64).reshape(n, 6, 6),
+    )
 
 
 def _upper_triangular_to_full(

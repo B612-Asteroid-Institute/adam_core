@@ -118,6 +118,92 @@ def fit_least_squares(
     else:
         observations_to_include = observations
 
+    # One-crossing Rust path (beads personal-cmy.7 / personal-dqk):
+    # propagators exposing the fused native ``fit_least_squares_evaluated``
+    # work unit (the Rust adam-assist backend) run the Gauss-Newton fit AND
+    # the final evaluate_orbits-style residual/statistics pass behind one
+    # crossing. Dispatched only when the caller has not requested
+    # scipy-specific optimizer tuning, so custom kwargs keep the legacy scipy
+    # path unchanged.
+    fused_fit = getattr(propagator, "fit_least_squares_evaluated", None)
+    if fused_fit is not None and set(kwargs) <= {"xtol", "ftol", "max_iterations"}:
+        ignore_mask = (
+            pc.is_in(observations.id, pa.array(ignore)).to_pylist()
+            if ignore is not None
+            else [False] * len(observations)
+        )
+        output = fused_fit(orbit, observations, ignore_mask, **kwargs)
+        state = np.asarray(output["state"], dtype=np.float64)
+        covariance_matrix = np.asarray(output["covariance"], dtype=np.float64)
+        converged = bool(output["converged"])
+        fitted_orbit = FittedOrbits.from_kwargs(
+            orbit_id=orbit.orbit_id,
+            object_id=orbit.object_id,
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=state[0:1],
+                y=state[1:2],
+                z=state[2:3],
+                vx=state[3:4],
+                vy=state[4:5],
+                vz=state[5:6],
+                time=orbit.coordinates.time,
+                covariance=CoordinateCovariances.from_matrix(
+                    covariance_matrix.reshape(1, 6, 6)
+                ),
+                origin=orbit.coordinates.origin,
+                frame=orbit.coordinates.frame,
+            ),
+            arc_length=[output["arc_length"]],
+            num_obs=[output["num_obs"]],
+            chi2=[output["chi2"]],
+            reduced_chi2=[output["reduced_chi2"]],
+            iterations=[output["iterations"]],
+            success=[converged],
+            status_code=[1 if converged else 0],
+        )
+        residuals = Residuals.from_kwargs(
+            values=np.asarray(output["residual_values"], dtype=np.float64).tolist(),
+            chi2=output["residual_chi2"],
+            dof=output["residual_dof"],
+            probability=output["residual_probability"],
+        )
+        outlier = np.asarray(output["outlier"], dtype=bool)
+        fitted_orbit_members = FittedOrbitMembers.from_kwargs(
+            orbit_id=np.full(
+                len(observations), orbit.orbit_id[0].as_py(), dtype="object"
+            ),
+            obs_id=observations.id,
+            residuals=residuals,
+            solution=~outlier,
+            outlier=outlier,
+        )
+        return fitted_orbit, fitted_orbit_members
+
+    # Composed native fallback (bead personal-cmy.7 / 13.1.4): older
+    # Rust-backed propagators exposing only the un-fused native fit keep the
+    # two-crossing fit + evaluate composition.
+    native_fit = getattr(propagator, "fit_least_squares", None)
+    if native_fit is not None and set(kwargs) <= {"xtol", "ftol", "max_iterations"}:
+        fitted, _chi2, iterations, converged = native_fit(
+            orbit, observations_to_include, **kwargs
+        )
+        fitted_orbit, fitted_orbit_members = evaluate_orbits(
+            fitted,
+            observations,
+            propagator,
+            parameters=6,
+            ignore=ignore,
+        )
+        fitted_orbit = (
+            fitted_orbit.set_column("iterations", [iterations])
+            .set_column("success", [converged])
+            .set_column("status_code", [1 if converged else 0])
+        )
+        fitted_orbit_members = fitted_orbit_members.set_column(
+            "solution", pc.invert(fitted_orbit_members.outlier)
+        )
+        return fitted_orbit, fitted_orbit_members
+
     parameters = 6
     # Extract epoch and state vector from orbit
     epoch = orbit.coordinates.time.mjd().to_numpy()

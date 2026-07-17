@@ -2,13 +2,39 @@ import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
-import spiceypy as sp
 
 from ...coordinates.origin import OriginCodes
 from ...time import Timestamp
 from ...utils.spice import get_perturber_state, get_spice_body_state
-from ..observers import OBSERVATORY_CODES, OBSERVATORY_PARALLAX_COEFFICIENTS, Observers
+from ...utils.spice_backend import NotCovered, get_backend
+from ..observers import (
+    E_EARTH,
+    OBSERVATORY_CODES,
+    OBSERVATORY_PARALLAX_COEFFICIENTS,
+    Observers,
+)
 from ..state import get_mpc_observer_state, get_observer_state
+
+
+def _has_geodetic_coordinates(code: str) -> bool:
+    parallax_coeffs = OBSERVATORY_PARALLAX_COEFFICIENTS.select("code", code)
+    if len(parallax_coeffs) == 0:
+        return False
+    row = parallax_coeffs.table.to_pylist()[0]
+    return not np.any(np.isnan([row["longitude"], row["cos_phi"], row["sin_phi"]]))
+
+
+def _valid_mpc_code(*, backend=None) -> str | None:
+    for code in sorted(OBSERVATORY_CODES):
+        if code == "500" or len(code) != 3 or not _has_geodetic_coordinates(code):
+            continue
+        if backend is None:
+            return code
+        try:
+            backend.bodn2c(code)
+        except NotCovered:
+            return code
+    return None
 
 
 @pytest.fixture
@@ -64,6 +90,12 @@ def test_Observers_from_codes_raises(codes_times) -> None:
         Observers.from_codes(codes[:3], times)
     with pytest.raises(ValueError, match="codes and times must have the same length."):
         Observers.from_codes(codes, times[:3])
+
+    with pytest.raises(
+        ValueError,
+        match="INVALID_CODE is not a valid MPC observatory code and was not found in SPICE kernels",
+    ):
+        Observers.from_codes(["INVALID_CODE"], times[:1])
 
 
 def test_get_mpc_observer_state_unique_epoch_scatter_matches_per_row() -> None:
@@ -139,6 +171,31 @@ def test_ObservatoryParallaxCoeffiecients_timezone() -> None:
     assert F51.timezone() == "Pacific/Honolulu"
 
 
+def test_ObservatoryParallaxCoefficients_timezone_validity_and_timing() -> None:
+    from zoneinfo import ZoneInfo
+
+    from adam_core import _rust_native as _rn
+
+    coefficients = OBSERVATORY_PARALLAX_COEFFICIENTS
+    timezone_names = coefficients.timezone()
+    assert len(timezone_names) == len(coefficients)
+    for timezone_name in timezone_names:
+        if timezone_name != "None":
+            ZoneInfo(timezone_name)
+
+    samples = _rn.benchmark_observatory_timezones_numpy(
+        coefficients.longitude.to_numpy(zero_copy_only=False),
+        coefficients.cos_phi.to_numpy(zero_copy_only=False),
+        coefficients.sin_phi.to_numpy(zero_copy_only=False),
+        float(E_EARTH**2),
+        1,
+        2,
+        1,
+    )
+    assert len(samples) == 2
+    assert all(sample[0] >= 0.0 for sample in samples)
+
+
 def test_origincode_observer():
     """Test getting observer state using an OriginCodes enum."""
     test_time = Timestamp.from_iso8601(["2022-01-01T00:00:00Z"])
@@ -179,14 +236,8 @@ def test_mpc_observatory_code():
     # Both should return identical results
     np.testing.assert_allclose(geocenter_state.values, earth_state.values, rtol=1e-10)
 
-    # Test a non-geocenter MPC code if available
-    non_geocenter_codes = [
-        code for code in OBSERVATORY_CODES if code != "500" and len(code) == 3
-    ]
-
-    if non_geocenter_codes:
-        # Use the first available MPC code
-        test_code = non_geocenter_codes[0]
+    test_code = _valid_mpc_code()
+    if test_code is not None:
 
         # Get state using the MPC code
         mpc_state = get_observer_state(
@@ -228,37 +279,23 @@ def test_invalid_code():
         )
 
 
-def test_mpc_vs_spice_precedence():
-    """Test that SPICE codes take precedence over MPC codes when both exist."""
+def test_mpc_vs_spice_precedence(tmp_path):
+    """Test that MPC observatory codes take precedence over a SPICE body
+    binding sharing the same name. We register a temporary text kernel
+    that aliases an unused MPC code to Mars, then verify the resolver
+    still returns the MPC location — not Mars."""
     test_time = Timestamp.from_iso8601(["2022-01-01T00:00:00Z"])
 
-    # For this test, we'll create a temporary SPICE kernel with a body name
-    # that matches an MPC observatory code
+    backend = get_backend()
 
-    # First, find an MPC code that we can use
-    test_mpc_code = None
-
-    for code in OBSERVATORY_CODES:
-        # Skip geocenter and spacecraft codes
-        if code == "500" or len(code) != 3:
-            continue
-
-        # Check if this code isn't already defined in SPICE
-        try:
-            sp.bodn2c(code)
-        except sp.SpiceyError:
-            test_mpc_code = code
-            break
-
+    # Pick a valid Earth-based MPC code not already in SPICE's body-name table.
+    test_mpc_code = _valid_mpc_code(backend=backend)
     if test_mpc_code is None:
         pytest.skip("Could not find a suitable MPC code for this test")
 
-    # Get the MPC observatory state first for comparison
     mpc_state = get_mpc_observer_state(
         test_mpc_code, test_time, frame="ecliptic", origin=OriginCodes.SUN
     )
-
-    # Now, get Mars state with direct SPICE call
     mars_state = get_spice_body_state(
         OriginCodes.MARS_BARYCENTER.value,
         test_time,
@@ -266,31 +303,24 @@ def test_mpc_vs_spice_precedence():
         origin=OriginCodes.SUN,
     )
 
-    # Create a temporary alias in SPICE that maps the MPC code to Mars ID
-    # This simulates having a SPICE object with the same name as an MPC code
-    sp.boddef(test_mpc_code, OriginCodes.MARS_BARYCENTER.value)
-
+    # Declare the alias via a text kernel — the runtime equivalent of
+    # spiceypy's boddef, but through the pure-Rust text-kernel parser.
+    alias_path = tmp_path / "mpc_alias.tk"
+    alias_path.write_text(
+        "\\begindata\n"
+        f"  NAIF_BODY_NAME += ( '{test_mpc_code}' )\n"
+        f"  NAIF_BODY_CODE += ( {OriginCodes.MARS_BARYCENTER.value} )\n"
+        "\\begintext\n"
+    )
+    backend.furnsh(str(alias_path))
     try:
-        # Now get the state again, it should still return MPC state
-        # as MPC codes take precedence over SPICE codes
         hybrid_state = get_observer_state(
             test_mpc_code, test_time, frame="ecliptic", origin=OriginCodes.SUN
         )
-
-        # The result should match Mars, not the MPC observatory
         np.testing.assert_allclose(hybrid_state.values, mpc_state.values, rtol=1e-10)
-
-        # And it should NOT match the MPC observatory
         with pytest.raises(AssertionError):
             np.testing.assert_allclose(
                 hybrid_state.values, mars_state.values, rtol=1e-10
             )
     finally:
-        # Clean up the temporary alias to avoid affecting other tests
-        try:
-            # Try to undefine the alias
-            sp.bodc2n(
-                OriginCodes.MARS_BARYCENTER.value
-            )  # This will raise an error, but we need to try something
-        except sp.SpiceyError:
-            pass  # Ignore, we just want to make sure we don't leave aliases
+        backend.unload(str(alias_path))

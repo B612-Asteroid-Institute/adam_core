@@ -33,14 +33,15 @@ in the expected tens-of-microseconds range (~14.6–21.8 µs for a sampled subse
 from __future__ import annotations
 
 import hashlib
-from typing import Callable
+from typing import TYPE_CHECKING
 
-import astropy.time
-import erfa
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
+
+if TYPE_CHECKING:
+    import astropy.time
 
 SCALES = {
     "tai",
@@ -59,11 +60,59 @@ _NANOS_IN_DAY = 86_400_000_000_000  # int, exact
 _NANOS_IN_DAY_F64 = float(_NANOS_IN_DAY)  # for pyarrow float division
 _TAI_TT_NS_CORRECTION = 32_184_000_000  # TT = TAI + 32.184s
 
-# ERFA converters used by `_leap_seconds_correction`:
-# They accept full-day and fractional-day JD arrays and return the converted pair.
-_ErfaDayFracConverter = Callable[
-    [np.ndarray, np.ndarray], tuple[np.ndarray, np.ndarray]
-]
+# Scales served by the Rust rescale backend (ut1 requires IERS tables and is
+# delegated to astropy; other scales are unsupported, matching legacy).
+_RUST_RESCALE_SCALES = {"tai", "tt", "utc", "tdb"}
+
+
+def _require_astropy_time():
+    """Load the explicit Astropy provider boundary only when requested."""
+    try:
+        import astropy.time
+    except ModuleNotFoundError as error:
+        raise ImportError(
+            "Astropy is required for Astropy Time conversion and UT1/IERS "
+            "rescaling; install adam-core[astropy]"
+        ) from error
+    return astropy.time
+
+
+def _int64_values(
+    values: pa.lib.Int64Array | pa.ChunkedArray | np.ndarray | int, length: int
+) -> np.ndarray:
+    """Normalize a scalar or array delta argument to a contiguous int64 array."""
+    if isinstance(values, pa.Scalar):
+        values = values.as_py()
+    if isinstance(values, (int, np.integer)):
+        return np.full(length, int(values), dtype=np.int64)
+    if isinstance(values, (pa.Array, pa.ChunkedArray)):
+        values = values.to_numpy(zero_copy_only=False)
+    return np.ascontiguousarray(values, dtype=np.int64)
+
+
+def _float64_values(
+    values: pa.lib.DoubleArray | pa.ChunkedArray | np.ndarray | float, length: int
+) -> np.ndarray:
+    """Normalize a scalar or array argument to a contiguous float64 array."""
+    if isinstance(values, pa.Scalar):
+        values = values.as_py()
+    if isinstance(values, (int, float, np.floating, np.integer)):
+        return np.full(length, float(values), dtype=np.float64)
+    if isinstance(values, (pa.Array, pa.ChunkedArray)):
+        values = values.to_numpy(zero_copy_only=False)
+    return np.ascontiguousarray(values, dtype=np.float64)
+
+
+def _has_nulls(*values) -> bool:
+    """True when any pyarrow argument carries nulls. The Rust fast paths
+    operate on dense arrays; null-carrying inputs take the retained pyarrow
+    expressions so legacy null propagation is preserved."""
+    for value in values:
+        if isinstance(value, (pa.Array, pa.ChunkedArray)) and value.null_count:
+            return True
+        if isinstance(value, pa.Scalar) and not value.is_valid:
+            return True
+    return False
 
 
 class Timestamp(qv.Table):
@@ -77,13 +126,25 @@ class Timestamp(qv.Table):
     nanos = qv.Int64Column()
 
     def micros(self) -> pa.Int64Array:
-        return pc.divide(self.nanos, 1_000)
+        return self._unit_floor(1_000)
 
     def millis(self) -> pa.Int64Array:
-        return pc.divide(self.nanos, 1_000_000)
+        return self._unit_floor(1_000_000)
 
     def seconds(self) -> pa.Int64Array:
-        return pc.divide(self.nanos, 1_000_000_000)
+        return self._unit_floor(1_000_000_000)
+
+    def _unit_floor(self, divisor: int) -> pa.Int64Array:
+        if _has_nulls(self.nanos):
+            return pc.divide(self.nanos, divisor)
+        from adam_core import _rust_native as _rn
+
+        return pa.array(
+            _rn.timestamp_unit_floor_numpy(
+                self.nanos.to_numpy(zero_copy_only=False), divisor
+            ),
+            type=pa.int64(),
+        )
 
     def key(self, *, scale: str | None = "tdb") -> np.ndarray:
         """
@@ -95,10 +156,18 @@ class Timestamp(qv.Table):
         if len(self) == 0:
             return np.empty(0, dtype=np.int64)
 
-        t = self if scale is None else self.rescale(scale)
-        days = t.days.to_numpy(zero_copy_only=False).astype(np.int64)
-        nanos = t.nanos.to_numpy(zero_copy_only=False).astype(np.int64)
-        return days * _NANOS_IN_DAY + nanos
+        from adam_core import _rust_native as _rn
+
+        # One Rust crossing owns the optional rescale plus key assembly.
+        return np.asarray(
+            _rn.timestamp_key_numpy(
+                self.days.to_numpy(zero_copy_only=False),
+                self.nanos.to_numpy(zero_copy_only=False),
+                self.scale,
+                scale,
+            ),
+            dtype=np.int64,
+        )
 
     def signature(self, *, scale: str | None = "tdb") -> tuple[int, int, int, int]:
         """
@@ -106,15 +175,18 @@ class Timestamp(qv.Table):
 
         The signature is (n, first_key, last_key, sum_mod) where keys are produced by `key()`.
         """
-        n = int(len(self))
-        if n == 0:
+        if len(self) == 0:
             return 0, 0, 0, 0
 
-        key = self.key(scale=scale)
-        first = int(key[0])
-        last = int(key[-1])
-        sum_mod = int(np.sum(key, dtype=np.int64) & np.int64(0x7FFF_FFFF_FFFF_FFFF))
-        return n, first, last, sum_mod
+        from adam_core import _rust_native as _rn
+
+        n, first, last, sum_mod = _rn.timestamp_signature_numpy(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+            self.scale,
+            scale,
+        )
+        return int(n), int(first), int(last), int(sum_mod)
 
     def cache_digest(self, *, scale: str | None = "tdb") -> int:
         """
@@ -131,15 +203,47 @@ class Timestamp(qv.Table):
         return int.from_bytes(digest, byteorder="little", signed=False)
 
     def mjd(self) -> pa.lib.DoubleArray:
-        return pc.add(self.days, self.fractional_days())
+        from adam_core import _rust_native as _rn
+
+        if _has_nulls(self.days, self.nanos):
+            return pc.add(self.days, self.fractional_days())
+        return pa.array(
+            _rn.timestamp_mjd(
+                self.days.to_numpy(zero_copy_only=False),
+                self.nanos.to_numpy(zero_copy_only=False),
+            ),
+            type=pa.float64(),
+        )
 
     def jd(self) -> pa.lib.DoubleArray:
-        return pc.add(self.mjd(), 2400000.5)
+        if _has_nulls(self.days, self.nanos):
+            return pc.add(self.mjd(), 2400000.5)
+        from adam_core import _rust_native as _rn
+
+        return pa.array(
+            _rn.timestamp_jd_numpy(
+                self.days.to_numpy(zero_copy_only=False),
+                self.nanos.to_numpy(zero_copy_only=False),
+            ),
+            type=pa.float64(),
+        )
 
     def et(self) -> pa.lib.DoubleArray:
         """
         Returns the times as ET seconds in a pyarrow array.
         """
+        if self.scale in _RUST_RESCALE_SCALES and not _has_nulls(self.days, self.nanos):
+            from adam_core import _rust_native as _rn
+
+            # Fused rescale-to-TDB plus ET conversion in one crossing.
+            return pa.array(
+                _rn.timestamp_et_numpy(
+                    self.days.to_numpy(zero_copy_only=False),
+                    self.nanos.to_numpy(zero_copy_only=False),
+                    self.scale,
+                ),
+                type=pa.float64(),
+            )
         tdb = self.rescale("tdb")
         mjd = tdb.mjd()
         return pc.multiply(pc.subtract(mjd, _J2000_TDB_MJD), _SECONDS_IN_DAY)
@@ -151,29 +255,51 @@ class Timestamp(qv.Table):
         return self.rescale("tdb").mjd().to_numpy(False)
 
     def to_iso8601(self) -> pa.lib.StringArray:
-        """
-        Returns the times as ISO 8601 strings in a pyarrow array.
-        """
-        if len(self) == 0:
-            return pa.array([], type=pa.string())
-        return pa.array(self.to_astropy().isot, type=pa.string())
+        """Return legacy millisecond-precision ISO 8601 strings."""
+        from adam_core import _rust_native as _rn
+
+        values = _rn.timestamp_to_iso8601_numpy(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+            self.scale,
+        )
+        return pa.array(values, type=pa.string())
 
     @classmethod
     def from_iso8601(
-        cls, iso: pa.lib.StringArray | list[str], scale="utc"
+        cls, iso: pa.lib.StringArray | list[str] | str, scale="utc"
     ) -> Timestamp:
-        """
-        Create a Timestamp from ISO 8601 strings (for example, '2020-01-02T14:15:16').
-        """
-        return cls.from_astropy(astropy.time.Time(iso, format="isot", scale=scale))
+        """Create a Timestamp from ISO 8601 strings in one Rust crossing."""
+        from adam_core import _rust_native as _rn
+
+        if isinstance(iso, str):
+            values = [iso]
+        elif isinstance(iso, (pa.Array, pa.ChunkedArray)):
+            values = iso.to_pylist()
+        else:
+            values = list(iso)
+        days, nanos = _rn.timestamp_from_iso8601_numpy(values, scale)
+        return cls.from_kwargs(days=days, nanos=nanos, scale=scale)
 
     @classmethod
     def from_mjd(cls, mjd: pa.lib.DoubleArray, scale: str = "tai") -> Timestamp:
-        days = pc.floor(mjd)
-        fractional_days = pc.subtract(mjd, days)
-        days = pc.cast(days, pa.int64())
-        nanos = pc.cast(
-            pc.round(pc.multiply(fractional_days, _NANOS_IN_DAY)), pa.int64()
+        from adam_core import _rust_native as _rn
+
+        if isinstance(mjd, (pa.Array, pa.ChunkedArray)) and mjd.null_count:
+            # Null-propagation compatibility path (legacy pyarrow kernels).
+            days = pc.floor(mjd)
+            fractional_days = pc.subtract(mjd, days)
+            days = pc.cast(days, pa.int64())
+            nanos = pc.cast(
+                pc.round(pc.multiply(fractional_days, _NANOS_IN_DAY)), pa.int64()
+            )
+            return cls.from_kwargs(days=days, nanos=nanos, scale=scale)
+        if isinstance(mjd, (pa.Array, pa.ChunkedArray)):
+            values = mjd.to_numpy(zero_copy_only=False)
+        else:
+            values = mjd
+        days, nanos = _rn.timestamp_from_mjd(
+            np.ascontiguousarray(values, dtype=np.float64)
         )
         return cls.from_kwargs(days=days, nanos=nanos, scale=scale)
 
@@ -193,13 +319,24 @@ class Timestamp(qv.Table):
         if precision == "ns":
             return self
         elif precision == "us":
-            nanos = pc.multiply(self.micros(), 1_000)
+            divisor = 1_000
         elif precision == "ms":
-            nanos = pc.multiply(self.millis(), 1_000_000)
+            divisor = 1_000_000
         elif precision == "s":
-            nanos = pc.multiply(self.seconds(), 1_000_000_000)
+            divisor = 1_000_000_000
         else:
             raise ValueError(f"Unsupported precision: {precision}")
+        if _has_nulls(self.nanos):
+            nanos = pc.multiply(pc.divide(self.nanos, divisor), divisor)
+        else:
+            from adam_core import _rust_native as _rn
+
+            nanos = pa.array(
+                _rn.timestamp_rounded_nanos_numpy(
+                    self.nanos.to_numpy(zero_copy_only=False), divisor
+                ),
+                type=pa.int64(),
+            )
         return self.set_column("nanos", nanos)
 
     def equals(self, other: Timestamp, precision: str = "ns") -> pa.BooleanArray:
@@ -213,18 +350,19 @@ class Timestamp(qv.Table):
     def equals_scalar(
         self, days: int, nanos: int, precision: str = "ns"
     ) -> pa.BooleanArray:
-        delta_days, delta_nanos = self.difference_scalar(days, nanos)
-        if precision == "ns":
-            max_deviation = 0
-        elif precision == "us":
-            max_deviation = 999
-        elif precision == "ms":
-            max_deviation = 999_999
-        elif precision == "s":
-            max_deviation = 999_999_999
-        else:
-            raise ValueError(f"Unsupported precision: {precision}")
-        return _duration_arrays_within_tolerance(delta_days, delta_nanos, max_deviation)
+        max_deviation = _precision_max_deviation(precision)
+        from adam_core import _rust_native as _rn
+
+        return pa.array(
+            _rn.timestamp_equals_numpy(
+                self.days.to_numpy(zero_copy_only=False),
+                self.nanos.to_numpy(zero_copy_only=False),
+                _int64_values(days, 1),
+                _int64_values(nanos, 1),
+                max_deviation,
+            ),
+            type=pa.bool_(),
+        )
 
     def equals_array(self, other: Timestamp, precision: str = "ns") -> pa.BooleanArray:
         """
@@ -238,18 +376,19 @@ class Timestamp(qv.Table):
         if len(self) != len(other):
             raise ValueError("Timestamps must have the same length")
 
-        delta_days, delta_nanos = self.difference(other)
-        if precision == "ns":
-            max_deviation = 0
-        elif precision == "us":
-            max_deviation = 999
-        elif precision == "ms":
-            max_deviation = 999_999
-        elif precision == "s":
-            max_deviation = 999_999_999
-        else:
-            raise ValueError(f"Unsupported precision: {precision}")
-        return _duration_arrays_within_tolerance(delta_days, delta_nanos, max_deviation)
+        max_deviation = _precision_max_deviation(precision)
+        from adam_core import _rust_native as _rn
+
+        return pa.array(
+            _rn.timestamp_equals_numpy(
+                self.days.to_numpy(zero_copy_only=False),
+                self.nanos.to_numpy(zero_copy_only=False),
+                other.days.to_numpy(zero_copy_only=False),
+                other.nanos.to_numpy(zero_copy_only=False),
+                max_deviation,
+            ),
+            type=pa.bool_(),
+        )
 
     def max(self) -> Timestamp:
         """
@@ -261,15 +400,14 @@ class Timestamp(qv.Table):
             The maximum time. If there are multiple maximum times,
             one of them is returned.
         """
-        # Compute the maximum day
-        max_day = pc.max(self.days)
-        days_mask = pc.equal(self.days, max_day)
+        from adam_core import _rust_native as _rn
 
-        # Compute the maximum nanos for the maximum day
-        max_nanos = pc.max(self.nanos.filter(days_mask))
-        nanos_mask = pc.equal(self.nanos, max_nanos)
-
-        return self.apply_mask(pc.and_(days_mask, nanos_mask))[0]
+        index = _rn.timestamp_extremum_index_numpy(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+            True,
+        )
+        return self[index : index + 1]
 
     def min(self) -> Timestamp:
         """
@@ -281,15 +419,14 @@ class Timestamp(qv.Table):
             The minimum time. If there are multiple minimum times,
             one of them is returned.
         """
-        # Compute the minimum day
-        min_day = pc.min(self.days)
-        days_mask = pc.equal(self.days, min_day)
+        from adam_core import _rust_native as _rn
 
-        # Compute the minimum nanos for the minimum day
-        min_nanos = pc.min(self.nanos.filter(days_mask))
-        nanos_mask = pc.equal(self.nanos, min_nanos)
-
-        return self.apply_mask(pc.and_(days_mask, nanos_mask))[0]
+        index = _rn.timestamp_extremum_index_numpy(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+            False,
+        )
+        return self[index : index + 1]
 
     @classmethod
     def from_astropy(cls, astropy_time: astropy.time.Time) -> Timestamp:
@@ -359,11 +496,10 @@ class Timestamp(qv.Table):
         )
 
     def to_astropy(self) -> astropy.time.Time:
-        """
-        Convert the timestamp to an astropy time.
-        """
+        """Convert to an Astropy Time through the optional provider boundary."""
+        astropy_time = _require_astropy_time()
         fractional_days = self.fractional_days()
-        return astropy.time.Time(
+        return astropy_time.Time(
             val=self.days,
             val2=fractional_days,
             format="mjd",
@@ -399,28 +535,16 @@ class Timestamp(qv.Table):
                 ).as_py():
                     raise ValueError("Nanoseconds out of range")
 
-        nanos = pc.add_checked(self.nanos, nanos)
-        overflows = pc.greater_equal(nanos, _NANOS_IN_DAY)
-        underflows = pc.less(nanos, 0)
+        from adam_core import _rust_native as _rn
 
-        mask = pa.StructArray.from_arrays(
-            [overflows, underflows], names=["overflows", "underflows"]
+        days_out, nanos_out = _rn.timestamp_add_nanos(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+            _int64_values(nanos, len(self)),
+            False,  # range validated above with legacy pyarrow semantics
         )
-        nanos = pc.case_when(
-            mask,
-            pc.subtract(nanos, _NANOS_IN_DAY),
-            pc.add(nanos, _NANOS_IN_DAY),
-            nanos,
-        )
-
-        days = pc.case_when(
-            mask,
-            pc.add(self.days, 1),
-            pc.subtract(self.days, 1),
-            self.days,
-        )
-        v1 = self.set_column("days", days)
-        v2 = v1.set_column("nanos", nanos)
+        v1 = self.set_column("days", pa.array(days_out))
+        v2 = v1.set_column("nanos", pa.array(nanos_out))
         return v2
 
     def add_seconds(
@@ -491,7 +615,14 @@ class Timestamp(qv.Table):
             subtract days.
 
         """
-        return self.set_column("days", pc.add(self.days, days))
+        from adam_core import _rust_native as _rn
+
+        days_out, _nanos_out = _rn.timestamp_add_days(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+            _int64_values(days, len(self)),
+        )
+        return self.set_column("days", pa.array(days_out))
 
     def add_fractional_days(
         self, fractional_days: pa.lib.DoubleArray | float
@@ -505,15 +636,16 @@ class Timestamp(qv.Table):
             or an array of the same length as the timestamp. Use
             negative values to subtract fractional days.
         """
-        day_part = pc.floor(fractional_days)
-        nano_part = pc.subtract(fractional_days, day_part)
+        from adam_core import _rust_native as _rn
 
-        days = pc.cast(day_part, pa.int64())
-        nanos = pc.cast(
-            pc.multiply(nano_part, _NANOS_IN_DAY),
-            options=pc.CastOptions(target_type=pa.int64(), allow_float_truncate=True),
+        days_out, nanos_out = _rn.timestamp_add_fractional_days(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+            _float64_values(fractional_days, len(self)),
         )
-        return self.add_days(days).add_nanos(nanos)
+        v1 = self.set_column("days", pa.array(days_out))
+        v2 = v1.set_column("nanos", pa.array(nanos_out))
+        return v2
 
     def difference_scalar(
         self, days: int, nanos: int
@@ -548,26 +680,15 @@ class Timestamp(qv.Table):
         [100, 86399999999900, 0]
 
         """
-        days1 = pc.subtract(self.days, days)
-        nanos1 = pc.subtract(self.nanos, nanos)
-        overflows = pc.greater_equal(nanos1, _NANOS_IN_DAY)
-        underflows = pc.less(nanos1, 0)
-        mask = pa.StructArray.from_arrays(
-            [overflows, underflows], names=["overflows", "underflows"]
+        from adam_core import _rust_native as _rn
+
+        days_out, nanos_out = _rn.timestamp_difference(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+            _int64_values(days, len(self)),
+            _int64_values(nanos, len(self)),
         )
-        nanos2 = pc.case_when(
-            mask,
-            pc.subtract(nanos1, _NANOS_IN_DAY),
-            pc.add(nanos1, _NANOS_IN_DAY),
-            nanos1,
-        )
-        days2 = pc.case_when(
-            mask,
-            pc.add(days1, 1),
-            pc.subtract(days1, 1),
-            days1,
-        )
-        return days2, nanos2
+        return pa.array(days_out), pa.array(nanos_out)
 
     def difference(self, other: Timestamp) -> tuple[pa.Int64Array, pa.Int64Array]:
         """
@@ -577,36 +698,28 @@ class Timestamp(qv.Table):
             raise ValueError(
                 "Cannot compute difference between timestamps with different scales"
             )
-        days1 = pc.subtract(self.days, other.days)
-        nanos1 = pc.subtract(self.nanos, other.nanos)
+        from adam_core import _rust_native as _rn
 
-        overflows = pc.greater_equal(nanos1, _NANOS_IN_DAY)
-        underflows = pc.less(nanos1, 0)
-        mask = pa.StructArray.from_arrays(
-            [overflows, underflows], names=["overflows", "underflows"]
+        days_out, nanos_out = _rn.timestamp_difference(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+            other.days.to_numpy(zero_copy_only=False),
+            other.nanos.to_numpy(zero_copy_only=False),
         )
-        nanos2 = pc.case_when(
-            mask,
-            pc.subtract(nanos1, _NANOS_IN_DAY),
-            pc.add(nanos1, _NANOS_IN_DAY),
-            nanos1,
-        )
-        days2 = pc.case_when(
-            mask,
-            pc.add(days1, 1),
-            pc.subtract(days1, 1),
-            days1,
-        )
-        return days2, nanos2
+        return pa.array(days_out), pa.array(nanos_out)
 
     def unique(self) -> Timestamp:
         """Return a new Timestamp table containing only the unique
         elements from self. Order is not necessarily preserved.
 
         """
-        uniqued = self.table.group_by(["days", "nanos"]).aggregate([])
-        uniqued = uniqued.replace_schema_metadata(self.table.schema.metadata)
-        return Timestamp.from_pyarrow(uniqued)
+        from adam_core import _rust_native as _rn
+
+        days, nanos = _rn.timestamp_unique_numpy(
+            self.days.to_numpy(zero_copy_only=False),
+            self.nanos.to_numpy(zero_copy_only=False),
+        )
+        return Timestamp.from_kwargs(days=days, nanos=nanos, scale=self.scale)
 
     def rescale_astropy(self, new_scale: str) -> Timestamp:
 
@@ -624,55 +737,6 @@ class Timestamp(qv.Table):
             return Timestamp.from_astropy(self.to_astropy().tdb)
         else:
             raise ValueError("Unknown scale: {}".format(new_scale))
-
-    def _tt_tdb_correction(
-        self, positive: bool, correction: np.ndarray | int
-    ) -> np.ndarray:
-        """Compute correction from TT to TDB in nanoseconds.
-
-        Correction in nanoseconds is used to bring the self value to TT from wherever it is.
-        Otherwise we can get a few nanoseconds difference in roundtrip.
-
-        If positive is False, add a minus sign to get TDB to TT correction.
-        Math from
-        gssc.esa.int/navipedia/index.php/Transformations_between_Time_Systems
-
-        Note that astropy/ERFA use a different algorithm that is based on
-        the location on Earth, but also seems to use a few approximations.
-        As a result the difference can be in some tens of microseconds.
-        """
-        # Going into numpy and then back is considerably faster than doing the
-        # same calculation using pyarrow. The result is the same if delta is
-        # rounded before astype. As written, delta is truncated, which may produce
-        # a 1ns difference.
-        days = self.days.to_numpy() - 51_545
-        fracs = (self.nanos.to_numpy() + correction) / _NANOS_IN_DAY + 0.5
-        centuries = (days + fracs) / 36_525
-        g = np.radians(35999.050 * centuries + 357.528)
-        delta = np.sin(g + 0.0167 * np.sin(g)) * 1658000
-        if not positive:
-            delta = -delta
-        return delta.astype(np.int64)
-
-    def _leap_seconds_correction(
-        self, converter: _ErfaDayFracConverter, correction: np.ndarray | int
-    ) -> np.ndarray:
-        """Compute leap seconds correction, returned in nanoseconds.
-
-        Correction in nanoseconds is used to bring self from wherever it is to TAI.
-        Converter is an ERFA method used to get the actual leap seconds. An alternative
-        would be to download and lookup the leap seconds tables ourselves, which is left
-        as an exercise for the future.
-        """
-        # ERFA methods take and return a pair of ndarrays for the full days and fractions of JD
-        old_days = self.days.to_numpy() + 2400000
-        old_frac = (self.nanos.to_numpy() + correction) / _NANOS_IN_DAY + 0.5
-        new_days, new_frac = converter(old_days, old_frac)
-        delta = ((new_days - old_days) + (new_frac - old_frac)) * _NANOS_IN_DAY
-        # Want nice round seconds, but in nanoseconds. Without rounding we occasionally
-        # get a stray nanosecond, which messes up roundtrip conversions.
-        delta = np.round(delta * 1e-9).astype(np.int64) * 1_000_000_000
-        return delta
 
     def rescale(self, new_scale: str) -> Timestamp:
         """
@@ -700,53 +764,21 @@ class Timestamp(qv.Table):
         if self.scale == "ut1" or new_scale == "ut1":
             return self.rescale_astropy(new_scale)
 
-        # Delta in nanoseconds
-        correction = None
-        if self.scale == "tt":
-            if new_scale == "tai":
-                correction = -_TAI_TT_NS_CORRECTION
-            elif new_scale == "utc":
-                correction = (
-                    self._leap_seconds_correction(erfa.taiutc, 0)
-                    - _TAI_TT_NS_CORRECTION
-                )
-            elif new_scale == "tdb":
-                correction = self._tt_tdb_correction(True, 0)
-        elif self.scale == "utc":
-            correction = self._leap_seconds_correction(erfa.utctai, 0)
-            if new_scale == "tt":
-                correction += _TAI_TT_NS_CORRECTION
-            elif new_scale == "tdb":
-                # We are effectively going UTC->TAI->TT->TDB with corrections here
-                correction += (
-                    self._tt_tdb_correction(True, correction + _TAI_TT_NS_CORRECTION)
-                    + _TAI_TT_NS_CORRECTION
-                )
-        elif self.scale == "tai":
-            if new_scale == "tt":
-                correction = _TAI_TT_NS_CORRECTION
-            elif new_scale == "tdb":
-                correction = (
-                    self._tt_tdb_correction(True, _TAI_TT_NS_CORRECTION)
-                    + _TAI_TT_NS_CORRECTION
-                )
-            elif new_scale == "tai":
-                correction = 0
-            elif new_scale == "utc":
-                correction = self._leap_seconds_correction(erfa.taiutc, 0)
-        elif self.scale == "tdb":
-            if new_scale == "tt":
-                correction = self._tt_tdb_correction(False, 0)
-            elif new_scale == "tai":
-                correction = self._tt_tdb_correction(False, 0) - _TAI_TT_NS_CORRECTION
-            elif new_scale == "utc":
-                correction = self._tt_tdb_correction(False, 0) - _TAI_TT_NS_CORRECTION
-                correction += self._leap_seconds_correction(erfa.taiutc, correction)
-        if correction is not None:
-            tmp = self.add_nanos(correction, check_range=False)
-            return Timestamp.from_kwargs(
-                days=tmp.days, nanos=tmp.nanos, scale=new_scale
+        # The tai/tt/utc/tdb conversions run in the Rust backend (bead
+        # personal-cmy.25), which ports the same ERFA leap-second and
+        # TT<->TDB correction policies; both sides are gated bit-exactly by
+        # the frozen fixture in
+        # migration/artifacts/time_scale_rescale_fixture_2026-05-15.json.
+        if self.scale in _RUST_RESCALE_SCALES and new_scale in _RUST_RESCALE_SCALES:
+            from adam_core import _rust_native as _rn
+
+            days, nanos = _rn.timestamp_rescale(
+                self.days.to_numpy(zero_copy_only=False),
+                self.nanos.to_numpy(zero_copy_only=False),
+                self.scale,
+                new_scale,
             )
+            return Timestamp.from_kwargs(days=days, nanos=nanos, scale=new_scale)
 
         raise ValueError(
             "Rescale from {} to {} is not supported".format(self.scale, new_scale)
@@ -781,6 +813,18 @@ class Timestamp(qv.Table):
         left_keys = {"days": rounded.days, "nanos": rounded.nanos}
         right_keys = {"days": other_rounded.days, "nanos": other_rounded.nanos}
         return qv.MultiKeyLinkage(self, other, left_keys, right_keys)
+
+
+def _precision_max_deviation(precision: str) -> int:
+    if precision == "ns":
+        return 0
+    if precision == "us":
+        return 999
+    if precision == "ms":
+        return 999_999
+    if precision == "s":
+        return 999_999_999
+    raise ValueError(f"Unsupported precision: {precision}")
 
 
 def _duration_arrays_within_tolerance(

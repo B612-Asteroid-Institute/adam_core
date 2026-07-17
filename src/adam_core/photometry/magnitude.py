@@ -1,35 +1,25 @@
 from typing import Union
 
-import jax
-import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 import pyarrow.compute as pc
-from jax import jit
 
+from .._rust.api import (
+    calculate_apparent_magnitude_v_and_phase_angle_numpy as rust_calculate_apparent_magnitude_v_and_phase_angle_numpy,
+)
+from .._rust.api import (
+    calculate_apparent_magnitude_v_numpy as rust_calculate_apparent_magnitude_v_numpy,
+)
+from .._rust.api import calculate_phase_angle_numpy as rust_calculate_phase_angle_numpy
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import OriginCodes
 from ..observations.exposures import Exposures
 from ..observers.observers import Observers
-from ..utils.chunking import process_in_chunks
-from .magnitude_common import (
-    JAX_CHUNK_SIZE,
-    BandpassComposition,
-    _hg_phase_correction_from_cos_jax,
-    assert_filter_ids_have_curves,
-)
-from .magnitude_common import bandpass_composition_key as _bandpass_composition_key
-from .magnitude_common import (
-    bandpass_delta_table_for_composition as _bandpass_delta_table_for_composition,
-)
-from .magnitude_common import (
-    bandpass_delta_table_for_composition_cached as _bandpass_delta_table_for_composition_cached,
-)
-from .magnitude_common import (
-    bandpass_delta_table_jax_for_composition_cached as _bandpass_delta_table_jax_for_composition_cached,
-)
-from .magnitude_common import bandpass_filter_id_table as _bandpass_filter_id_table
+from .bandpasses.api import _composition_args, _data_dir_str
+from .magnitude_common import BandpassComposition
+
+_DEFAULT_EXPOSURES_OBSERVERS = Exposures.observers
 
 
 def _validate_hg_geometry(
@@ -151,27 +141,8 @@ def calculate_phase_angle(
     observer_pos = np.asarray(observers.coordinates.r, dtype=np.float64)
     _validate_hg_geometry(object_pos=object_pos, observer_pos=observer_pos)
 
-    # -------------------------------------------------------------------------
-    # JAX compute: padded/chunked to a fixed shape to avoid recompiles.
-    # -------------------------------------------------------------------------
-    chunk_size = JAX_CHUNK_SIZE
-    padded_n = int(((n_obj + chunk_size - 1) // chunk_size) * chunk_size)
-    out = np.empty((padded_n,), dtype=np.float64)
-
-    chunks: list[jax.Array] = []
-    for obj_chunk, obs_chunk in zip(
-        process_in_chunks(object_pos, chunk_size),
-        process_in_chunks(observer_pos, chunk_size),
-    ):
-        chunks.append(_calculate_phase_angle_core_jax(obj_chunk, obs_chunk))
-
-    host_chunks = jax.device_get(chunks)
-    offset = 0
-    for alpha_chunk in host_chunks:
-        out[offset : offset + chunk_size] = alpha_chunk
-        offset += chunk_size
-
-    return out[:n_obj]
+    rust_out = rust_calculate_phase_angle_numpy(object_pos, observer_pos)
+    return np.ascontiguousarray(rust_out, dtype=np.float64)
 
 
 def convert_magnitude(
@@ -214,157 +185,21 @@ def convert_magnitude(
             "source_filter_id/target_filter_id must match magnitude length"
         )
 
-    # Contract: these are canonical vendored filter IDs (call find_suggested_filter_bands first).
-    assert_filter_ids_have_curves(src)
-    assert_filter_ids_have_curves(tgt)
+    from adam_core import _rust_native as _rn
 
-    filter_ids, filter_ids_arrow, _, _ = _bandpass_filter_id_table()
-    delta_table = _bandpass_delta_table_for_composition(composition)
-    if int(delta_table.shape[0]) != len(filter_ids):
-        raise ValueError("Bandpass delta table length mismatch.")
-
-    # Fast Arrow mapping: filter_id strings -> integer IDs.
-    src_arr = pa.array(src, type=pa.large_string())
-    tgt_arr = pa.array(tgt, type=pa.large_string())
-    src_ids_arr = pc.fill_null(pc.index_in(src_arr, value_set=filter_ids_arrow), -1)
-    tgt_ids_arr = pc.fill_null(pc.index_in(tgt_arr, value_set=filter_ids_arrow), -1)
-    src_ids = np.asarray(src_ids_arr.to_numpy(zero_copy_only=False), dtype=np.int32)
-    tgt_ids = np.asarray(tgt_ids_arr.to_numpy(zero_copy_only=False), dtype=np.int32)
-    if np.any(src_ids < 0) or np.any(tgt_ids < 0):
-        missing_src = np.unique(
-            np.asarray(src, dtype=object)[src_ids < 0].astype(str)
-        ).tolist()
-        missing_tgt = np.unique(
-            np.asarray(tgt, dtype=object)[tgt_ids < 0].astype(str)
-        ).tolist()
-        raise ValueError(
-            f"Unknown canonical filter_ids for bandpass conversion. "
-            f"missing source={missing_src}, missing target={missing_tgt}. "
-            "Run find_suggested_filter_bands() first to map observatory bands to canonical filter_ids."
-        )
-
-    delta_src = delta_table[src_ids]
-    delta_tgt = delta_table[tgt_ids]
-    return mags + (delta_tgt - delta_src)
-
-
-@jit
-def _calculate_apparent_magnitude_core_jax(
-    H_v: jnp.ndarray,
-    object_pos: jnp.ndarray,
-    observer_pos: jnp.ndarray,
-    G: jnp.ndarray,
-) -> jnp.ndarray:
-    """
-    JAX core computation for apparent magnitude in V-band.
-
-    Notes
-    -----
-    This function is intentionally "array-only" (no ADAM classes) to keep it
-    JIT-friendly. Use `calculate_apparent_magnitude_v` for the public API.
-    """
-    # Heliocentric distance r (AU)
-    # (manual norm is typically a bit leaner than jnp.linalg.norm for small fixed dims)
-    r = jnp.sqrt(jnp.sum(object_pos * object_pos, axis=1))
-
-    # Observer-to-object distance delta (AU)
-    delta_vec = object_pos - observer_pos
-    delta = jnp.sqrt(jnp.sum(delta_vec * delta_vec, axis=1))
-
-    # Phase angle
-    observer_sun_dist = jnp.sqrt(jnp.sum(observer_pos * observer_pos, axis=1))
-    numer = r**2 + delta**2 - observer_sun_dist**2
-    denom = 2.0 * r * delta
-    cos_phase = jnp.clip(numer / denom, -1.0, 1.0)
-    return (
-        H_v
-        + 5.0 * jnp.log10(r * delta)
-        + _hg_phase_correction_from_cos_jax(cos_phase, G)
+    template_id, mix = _composition_args(composition)
+    source = pc.fill_null(pa.array(src, type=pa.large_string()), "None")
+    target = pc.fill_null(pa.array(tgt, type=pa.large_string()), "None")
+    batch = pa.RecordBatch.from_arrays(
+        [pa.array(mags, type=pa.float64()), source, target],
+        names=["magnitude", "source_filter_id", "target_filter_id"],
     )
-
-
-@jit
-def _calculate_phase_angle_core_jax(
-    object_pos: jnp.ndarray,
-    observer_pos: jnp.ndarray,
-) -> jnp.ndarray:
-    """
-    JAX core computation for phase angle in degrees.
-
-    Notes
-    -----
-    This is intentionally array-only and expects paired rows (N, 3).
-    """
-    r = jnp.sqrt(jnp.sum(object_pos * object_pos, axis=1))
-    delta_vec = object_pos - observer_pos
-    delta = jnp.sqrt(jnp.sum(delta_vec * delta_vec, axis=1))
-    observer_sun_dist = jnp.sqrt(jnp.sum(observer_pos * observer_pos, axis=1))
-
-    numer = r * r + delta * delta - observer_sun_dist * observer_sun_dist
-    denom = 2.0 * r * delta
-    cos_alpha = jnp.clip(numer / denom, -1.0, 1.0)
-
-    # Stable conversion from cos(alpha) -> alpha without arccos().
-    y = jnp.sqrt(jnp.maximum(0.0, 1.0 - cos_alpha))
-    x = jnp.sqrt(jnp.maximum(0.0, 1.0 + cos_alpha))
-    alpha_rad = 2.0 * jnp.arctan2(y, x)
-    return alpha_rad * (180.0 / jnp.pi)
-
-
-@jit
-def _calculate_apparent_magnitude_and_phase_core_jax(
-    H_v: jnp.ndarray,
-    object_pos: jnp.ndarray,
-    observer_pos: jnp.ndarray,
-    G: jnp.ndarray,
-) -> tuple[jnp.ndarray, jnp.ndarray]:
-    """
-    JAX core computation for (apparent V magnitude, phase angle in degrees).
-    """
-    r = jnp.sqrt(jnp.sum(object_pos * object_pos, axis=1))
-    delta_vec = object_pos - observer_pos
-    delta = jnp.sqrt(jnp.sum(delta_vec * delta_vec, axis=1))
-    observer_sun_dist = jnp.sqrt(jnp.sum(observer_pos * observer_pos, axis=1))
-
-    numer = r * r + delta * delta - observer_sun_dist * observer_sun_dist
-    denom = 2.0 * r * delta
-    cos_phase = jnp.clip(numer / denom, -1.0, 1.0)
-
-    mags_v = (
-        H_v
-        + 5.0 * jnp.log10(r * delta)
-        + _hg_phase_correction_from_cos_jax(cos_phase, G)
+    return np.asarray(
+        _rn.bandpasses_convert_magnitude_arrow(
+            _data_dir_str(), batch, template_id, mix
+        ),
+        dtype=np.float64,
     )
-
-    # Phase angle in degrees.
-    y = jnp.sqrt(jnp.maximum(0.0, 1.0 - cos_phase))
-    x = jnp.sqrt(jnp.maximum(0.0, 1.0 + cos_phase))
-    alpha_rad = 2.0 * jnp.arctan2(y, x)
-    alpha_deg = alpha_rad * (180.0 / jnp.pi)
-    return mags_v, alpha_deg
-
-
-@jit
-def _predict_magnitudes_bandpass_core_jax(
-    H_v: jnp.ndarray,
-    object_pos: jnp.ndarray,
-    observer_pos: jnp.ndarray,
-    G: jnp.ndarray,
-    target_ids: jnp.ndarray,
-    delta_table: jnp.ndarray,
-) -> jnp.ndarray:
-    """
-    JAX core computation for per-exposure magnitudes (V-band geometry + bandpass conversion).
-
-    This fuses:
-    1) apparent V magnitude calculation (H-G system)
-    2) V -> target filter conversion via a per-filter delta magnitude table
-    """
-    mags_v = _calculate_apparent_magnitude_core_jax(
-        H_v=H_v, object_pos=object_pos, observer_pos=observer_pos, G=G
-    )
-    delta = delta_table[target_ids]
-    return mags_v + delta
 
 
 def calculate_apparent_magnitude_v(
@@ -410,36 +245,10 @@ def calculate_apparent_magnitude_v(
             f"G array length ({len(G_arr)}) must match H array length ({n})"
         )
 
-    # -------------------------------------------------------------------------
-    # JAX compute: padded/chunked to a fixed shape to avoid recompiles.
-    # -------------------------------------------------------------------------
-    chunk_size = JAX_CHUNK_SIZE
-    padded_n = int(((n + chunk_size - 1) // chunk_size) * chunk_size)
-    out = np.empty((padded_n,), dtype=np.float64)
-
-    chunks: list[jax.Array] = []
-    for H_chunk, obj_chunk, obs_chunk, G_chunk in zip(
-        process_in_chunks(H_v_arr, chunk_size),
-        process_in_chunks(object_pos, chunk_size),
-        process_in_chunks(observer_pos, chunk_size),
-        process_in_chunks(G_arr, chunk_size),
-    ):
-        chunks.append(
-            _calculate_apparent_magnitude_core_jax(
-                H_v=H_chunk,
-                object_pos=obj_chunk,
-                observer_pos=obs_chunk,
-                G=G_chunk,
-            )
-        )
-
-    host_chunks = jax.device_get(chunks)
-    offset = 0
-    for mags_v_chunk in host_chunks:
-        out[offset : offset + chunk_size] = mags_v_chunk
-        offset += chunk_size
-
-    return out[:n]
+    rust_out = rust_calculate_apparent_magnitude_v_numpy(
+        H_v_arr, object_pos, observer_pos, G_arr
+    )
+    return np.ascontiguousarray(rust_out, dtype=np.float64)
 
 
 def calculate_apparent_magnitude_v_and_phase_angle(
@@ -481,35 +290,14 @@ def calculate_apparent_magnitude_v_and_phase_angle(
             f"G array length ({len(G_arr)}) must match H array length ({n})"
         )
 
-    chunk_size = JAX_CHUNK_SIZE
-    padded_n = int(((n + chunk_size - 1) // chunk_size) * chunk_size)
-    out_mag = np.empty((padded_n,), dtype=np.float64)
-    out_alpha = np.empty((padded_n,), dtype=np.float64)
-
-    chunks: list[tuple[jax.Array, jax.Array]] = []
-    for H_chunk, obj_chunk, obs_chunk, G_chunk in zip(
-        process_in_chunks(H_v_arr, chunk_size),
-        process_in_chunks(object_pos, chunk_size),
-        process_in_chunks(observer_pos, chunk_size),
-        process_in_chunks(G_arr, chunk_size),
-    ):
-        chunks.append(
-            _calculate_apparent_magnitude_and_phase_core_jax(
-                H_v=H_chunk,
-                object_pos=obj_chunk,
-                observer_pos=obs_chunk,
-                G=G_chunk,
-            )
-        )
-
-    host_chunks = jax.device_get(chunks)
-    offset = 0
-    for mags_v_chunk, alpha_chunk in host_chunks:
-        out_mag[offset : offset + chunk_size] = mags_v_chunk
-        out_alpha[offset : offset + chunk_size] = alpha_chunk
-        offset += chunk_size
-
-    return out_mag[:n], out_alpha[:n]
+    rust_out = rust_calculate_apparent_magnitude_v_and_phase_angle_numpy(
+        H_v_arr, object_pos, observer_pos, G_arr
+    )
+    mag_r, alpha_r = rust_out
+    return (
+        np.ascontiguousarray(mag_r, dtype=np.float64),
+        np.ascontiguousarray(alpha_r, dtype=np.float64),
+    )
 
 
 def predict_magnitudes(
@@ -560,99 +348,74 @@ def predict_magnitudes(
             f"object_coords length ({len(object_coords)}) must match exposures length ({len(exposures)})"
         )
 
-    # Contract: exposures.filter and reference_filter are canonical vendored filter IDs
-    # (call find_suggested_filter_bands first to map observatory bands).
-    assert_filter_ids_have_curves(exposures.filter)
-    assert_filter_ids_have_curves([reference_filter])
-
-    observers = exposures.observers()
-
     n = len(object_coords)
     object_pos = np.asarray(object_coords.r, dtype=np.float64)
-    observer_pos = np.asarray(observers.coordinates.r, dtype=np.float64)
-    _validate_hg_geometry(object_pos=object_pos, observer_pos=observer_pos)
-
-    H_arr = np.asarray(H, dtype=np.float64)
-    if H_arr.ndim == 0:
-        H_arr = np.full(n, float(H_arr), dtype=np.float64)
-    elif len(H_arr) != n:
-        raise ValueError(
-            f"H array length ({len(H_arr)}) must match object_coords length ({n})"
-        )
-
-    G_arr = np.asarray(G, dtype=np.float64)
-    if G_arr.ndim == 0:
-        G_arr = np.full(n, float(G_arr), dtype=np.float64)
-    elif len(G_arr) != n:
-        raise ValueError(
-            f"G array length ({len(G_arr)}) must match object_coords length ({n})"
-        )
-
-    # -------------------------------------------------------------------------
-    # Bandpass conversion: build delta table and map exposures -> target IDs
-    # -------------------------------------------------------------------------
-    filter_ids, filter_ids_arrow, filter_to_id, v_id = _bandpass_filter_id_table()
-    comp_key = _bandpass_composition_key(composition)
-    delta_table = _bandpass_delta_table_for_composition_cached(comp_key)
-    if int(delta_table.shape[0]) != len(filter_ids):
-        raise ValueError("Bandpass delta table length mismatch.")
-
-    # Convert H into V-band absolute magnitude for internal V-centric calculation.
-    if reference_filter == "V":
-        H_v_arr = H_arr
-    else:
-        ref_id = filter_to_id.get(str(reference_filter))
-        if ref_id is None:
+    broadcast_error: Exception | None = None
+    try:
+        H_arr = np.asarray(H, dtype=np.float64)
+        if H_arr.ndim == 0:
+            H_arr = np.full(n, float(H_arr), dtype=np.float64)
+        elif len(H_arr) != n:
             raise ValueError(
-                f"Unknown reference_filter for bandpass conversion: {reference_filter}"
+                f"H array length ({len(H_arr)}) must match object_coords length ({n})"
             )
-        H_v_arr = H_arr - float(delta_table[int(ref_id)])
+    except Exception as error:
+        broadcast_error = error
+        H_arr = np.zeros(n, dtype=np.float64)
 
-    # Map canonical filter_id -> integer ID.
-    tgt_idx = pc.index_in(exposures.filter, value_set=filter_ids_arrow)
-    tgt_idx = pc.fill_null(tgt_idx, -1)
-    target_ids = np.asarray(tgt_idx.to_numpy(zero_copy_only=False), dtype=np.int32)
-    if np.any(target_ids < 0):
-        target_raw = exposures.filter.to_numpy(zero_copy_only=False)
-        missing = np.unique(
-            np.asarray(target_raw, dtype=object)[target_ids < 0].astype(str)
-        )
-        raise ValueError(
-            "Unknown canonical filter_ids for bandpass prediction: "
-            + missing.tolist().__repr__()
-        )
-
-    # -------------------------------------------------------------------------
-    # JAX compute: padded/chunked to a fixed shape to avoid recompiles.
-    # -------------------------------------------------------------------------
-    delta_table_jax = _bandpass_delta_table_jax_for_composition_cached(comp_key)
-    chunk_size = JAX_CHUNK_SIZE
-    padded_n = int(((n + chunk_size - 1) // chunk_size) * chunk_size)
-    out = np.empty((padded_n,), dtype=np.float64)
-
-    chunks: list[jax.Array] = []
-    for H_chunk, obj_chunk, obs_chunk, G_chunk, tgt_chunk in zip(
-        process_in_chunks(H_v_arr, chunk_size),
-        process_in_chunks(object_pos, chunk_size),
-        process_in_chunks(observer_pos, chunk_size),
-        process_in_chunks(G_arr, chunk_size),
-        process_in_chunks(target_ids, chunk_size),
-    ):
-        chunks.append(
-            _predict_magnitudes_bandpass_core_jax(
-                H_v=H_chunk,
-                object_pos=obj_chunk,
-                observer_pos=obs_chunk,
-                G=G_chunk,
-                target_ids=tgt_chunk,
-                delta_table=delta_table_jax,
+    try:
+        G_arr = np.asarray(G, dtype=np.float64)
+        if G_arr.ndim == 0:
+            G_arr = np.full(n, float(G_arr), dtype=np.float64)
+        elif len(G_arr) != n:
+            raise ValueError(
+                f"G array length ({len(G_arr)}) must match object_coords length ({n})"
             )
+    except Exception as error:
+        if broadcast_error is None:
+            broadcast_error = error
+        G_arr = np.full(n, 0.15, dtype=np.float64)
+
+    from adam_core import _rust_native
+
+    template_id, mix = _composition_args(composition)
+    observer_method = exposures.observers
+    if getattr(observer_method, "__func__", None) is _DEFAULT_EXPOSURES_OBSERVERS:
+        from .._rust.arrow import ensure_spice_backend
+
+        ensure_spice_backend()
+        rust_out = _rust_native.predict_magnitudes_complete_numpy(
+            _data_dir_str(),
+            np.ascontiguousarray(H_arr, dtype=np.float64),
+            np.ascontiguousarray(object_pos, dtype=np.float64),
+            np.ascontiguousarray(G_arr, dtype=np.float64),
+            [str(value) for value in exposures.filter.to_pylist()],
+            [str(value) for value in exposures.observatory_code.to_pylist()],
+            exposures.start_time.days.to_pylist(),
+            exposures.start_time.nanos.to_pylist(),
+            exposures.duration.to_pylist(),
+            exposures.start_time.scale,
+            str(reference_filter),
+            template_id,
+            mix,
         )
+    else:
+        from .magnitude_common import assert_filter_ids_have_curves
 
-    host_chunks = jax.device_get(chunks)
-    offset = 0
-    for mags_out_chunk in host_chunks:
-        out[offset : offset + chunk_size] = mags_out_chunk
-        offset += chunk_size
-
-    return out[:n]
+        assert_filter_ids_have_curves(exposures.filter)
+        assert_filter_ids_have_curves([reference_filter])
+        observers = observer_method()
+        rust_out = _rust_native.predict_magnitudes_fused_numpy(
+            _data_dir_str(),
+            np.ascontiguousarray(H_arr, dtype=np.float64),
+            np.ascontiguousarray(object_pos, dtype=np.float64),
+            np.ascontiguousarray(np.asarray(observers.coordinates.r, dtype=np.float64)),
+            np.ascontiguousarray(G_arr, dtype=np.float64),
+            [str(value) for value in exposures.filter.to_pylist()],
+            str(reference_filter),
+            template_id,
+            mix,
+        )
+    if broadcast_error is not None:
+        raise broadcast_error
+    return np.ascontiguousarray(rust_out, dtype=np.float64)

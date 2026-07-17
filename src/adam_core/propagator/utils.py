@@ -1,9 +1,6 @@
 from typing import Union
 
-import pyarrow.compute as pc
-import quivr as qv
-
-from ..coordinates import OriginCodes, transform_coordinates
+from ..coordinates import CartesianCoordinates
 from ..time import Timestamp
 from .types import EphemerisType, OrbitType
 
@@ -25,24 +22,21 @@ def ensure_input_origin_and_frame(
     """
     Ensure the input origin and frame of the results are the same as the input.
     """
-    final_results = None
-    unique_origins = inputs.coordinates.origin.code.unique()
-    for origin_code in unique_origins:
-        origin_orbits = inputs.select("coordinates.origin.code", origin_code)
-        result_origin = results.apply_mask(
-            pc.is_in(results.orbit_id, origin_orbits.orbit_id)
-        )
-        partial_results = result_origin.set_column(
-            "coordinates",
-            transform_coordinates(
-                result_origin.coordinates,
-                origin_out=OriginCodes[origin_code.as_py()],
-                frame_out=inputs.coordinates.frame,
-            ),
-        )
-        if final_results is None:
-            final_results = partial_results
-        else:
-            final_results = qv.concatenate([final_results, partial_results])
+    from adam_core import _rust_native
 
-    return final_results
+    from .._rust.arrow import ensure_spice_backend, table_from_record_batch
+    from ..coordinates.transform import _coordinate_record_batch
+
+    ensure_spice_backend()
+    output = _rust_native.ensure_input_origin_and_frame_arrow(
+        _coordinate_record_batch(results.coordinates, "cartesian"),
+        inputs.orbit_id.to_pylist(),
+        inputs.coordinates.origin.code.to_pylist(),
+        results.orbit_id.to_pylist(),
+        inputs.coordinates.frame,
+    )
+    if output is None:
+        return None
+    coordinate_batch, rows = output
+    coordinates = table_from_record_batch(CartesianCoordinates, coordinate_batch)
+    return results.take(rows).set_column("coordinates", coordinates)

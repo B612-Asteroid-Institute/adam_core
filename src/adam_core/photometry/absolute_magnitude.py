@@ -12,9 +12,10 @@ from ..coordinates.cartesian import CartesianCoordinates
 from ..observations.detections import PointSourceDetections
 from ..observations.exposures import Exposures
 from ..orbits.physical_parameters import PhysicalParameters
-from .bandpasses.api import map_to_canonical_filter_bands
-from .magnitude import predict_magnitudes
+from .bandpasses.api import _composition_args, _data_dir_str
 from .magnitude_common import BandpassComposition
+
+_DEFAULT_EXPOSURES_OBSERVERS = Exposures.observers
 
 
 class GroupedPhysicalParameters(qv.Table):
@@ -28,59 +29,71 @@ def _as_float64_nan(a: pa.Array | pa.ChunkedArray) -> npt.NDArray[np.float64]:
     return np.asarray(a.to_numpy(zero_copy_only=False), dtype=np.float64)
 
 
-def _mad_sigma(x: npt.NDArray[np.float64]) -> float:
-    # Robust scale estimate: 1.4826 * MAD for Gaussian-consistent sigma.
-    med = float(np.nanmedian(x))
-    mad = float(np.nanmedian(np.abs(x - med)))
-    return 1.4826 * mad
-
-
-def _fit_absolute_magnitude_rows(
+def _run_absolute_magnitude_fit(
+    detections: PointSourceDetections,
+    exposures: Exposures,
+    object_coords: CartesianCoordinates,
     *,
-    h_rows: npt.NDArray[np.float64],
-    sigma_rows: npt.NDArray[np.float64],
-) -> tuple[float, float | None, float | None, float | None, int]:
-    """
-    Fit H statistics for one grouped set of rows.
+    composition: BandpassComposition,
+    G: float,
+    strict_band_mapping: bool,
+    object_ids: list[str | None] | None,
+):
+    from adam_core import _rust_native
 
-    Returns
-    -------
-    (H_hat, H_sigma, sigma_eff, chi2_red, n_used)
-    """
-    n_used = int(h_rows.size)
-    if n_used <= 0:
-        raise ValueError("h_rows must be non-empty")
+    template_id, mix = _composition_args(composition)
+    common = (
+        _data_dir_str(),
+        np.ascontiguousarray(_as_float64_nan(detections.mag)),
+        np.ascontiguousarray(_as_float64_nan(detections.mag_sigma)),
+        np.ascontiguousarray(np.asarray(object_coords.r, dtype=np.float64)),
+    )
+    observer_method = exposures.observers
+    if getattr(observer_method, "__func__", None) is _DEFAULT_EXPOSURES_OBSERVERS:
+        from .._rust.arrow import ensure_spice_backend
 
-    have_all_sigma = bool(np.all(np.isfinite(sigma_rows)))
-    if have_all_sigma:
-        w = 1.0 / np.square(sigma_rows)
-        wsum = float(np.sum(w))
-        if not np.isfinite(wsum) or wsum <= 0.0:
-            raise ValueError("invalid weights derived from mag_sigma")
-        H_hat = float(np.sum(w * h_rows) / wsum)
-    else:
-        H_hat = float(np.mean(h_rows))
+        ensure_spice_backend()
+        return _rust_native.fit_absolute_magnitude_complete_numpy(
+            *common,
+            detections.exposure_id.to_pylist(),
+            [str(value) for value in exposures.id.to_pylist()],
+            [str(value) for value in exposures.observatory_code.to_pylist()],
+            [str(value) for value in exposures.filter.to_pylist()],
+            exposures.start_time.days.to_pylist(),
+            exposures.start_time.nanos.to_pylist(),
+            exposures.duration.to_pylist(),
+            exposures.start_time.scale,
+            float(G),
+            bool(strict_band_mapping),
+            template_id,
+            mix,
+            object_ids,
+        )
 
-    resid = h_rows - H_hat
-    sigma_eff = None
-    if n_used >= 2:
-        s = _mad_sigma(resid)
-        if np.isfinite(s):
-            sigma_eff = float(s)
-
-    chi2_red = None
-    H_sigma = None
-    if have_all_sigma and n_used >= 2:
-        w = 1.0 / np.square(sigma_rows)
-        chi2 = float(np.sum(w * np.square(resid)))
-        chi2_red = chi2 / float(n_used - 1)
-        H_sigma = float(np.sqrt(1.0 / np.sum(w)))
-        if np.isfinite(chi2_red) and chi2_red > 1.0:
-            H_sigma = float(H_sigma * np.sqrt(chi2_red))
-    elif sigma_eff is not None and n_used >= 2:
-        H_sigma = float(sigma_eff / np.sqrt(float(n_used)))
-
-    return H_hat, H_sigma, sigma_eff, chi2_red, n_used
+    if pc.any(pc.is_null(detections.exposure_id)).as_py():
+        raise ValueError("detections.exposure_id must be non-null to link to exposures")
+    idx = pc.fill_null(pc.index_in(detections.exposure_id, value_set=exposures.id), -1)
+    idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
+    if np.any(idx_np < 0):
+        missing = np.unique(
+            np.asarray(
+                detections.exposure_id.to_numpy(zero_copy_only=False), dtype=object
+            )[idx_np < 0].astype(str)
+        ).tolist()
+        raise ValueError(f"detections reference unknown exposure_id(s): {missing}")
+    exposures_aligned = exposures.take(pa.array(idx_np, type=pa.int32()))
+    observers = exposures_aligned.observers()
+    return _rust_native.fit_absolute_magnitude_facade_numpy(
+        *common,
+        np.ascontiguousarray(np.asarray(observers.coordinates.r, dtype=np.float64)),
+        [str(value) for value in exposures_aligned.observatory_code.to_pylist()],
+        [str(value) for value in exposures_aligned.filter.to_pylist()],
+        float(G),
+        bool(strict_band_mapping),
+        template_id,
+        mix,
+        object_ids,
+    )
 
 
 def estimate_absolute_magnitude_v_from_detections(
@@ -132,61 +145,24 @@ def estimate_absolute_magnitude_v_from_detections(
             f"object_coords length ({len(object_coords)}) must match detections length ({n_det})"
         )
 
-    # ---------------------------------------------------------------------
-    # Align exposures to detections order (vectorized join by exposure_id).
-    # ---------------------------------------------------------------------
-    if pc.any(pc.is_null(detections.exposure_id)).as_py():
-        raise ValueError("detections.exposure_id must be non-null to link to exposures")
-
-    idx = pc.fill_null(pc.index_in(detections.exposure_id, value_set=exposures.id), -1)
-    idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
-    if np.any(idx_np < 0):
-        missing = np.unique(
-            np.asarray(
-                detections.exposure_id.to_numpy(zero_copy_only=False), dtype=object
-            )[idx_np < 0].astype(str)
-        ).tolist()
-        raise ValueError(f"detections reference unknown exposure_id(s): {missing}")
-
-    exposures_aligned = exposures.take(pa.array(idx_np, type=pa.int32()))
-
-    # Resolve (observatory_code, band/filter) -> canonical vendored filter_id.
-    canonical = map_to_canonical_filter_bands(
-        exposures_aligned.observatory_code,
-        exposures_aligned.filter,
-        allow_fallback_filters=not strict_band_mapping,
-    )
-    exposures_canon = exposures_aligned.set_column(
-        "filter", pa.array(canonical.tolist(), type=pa.large_string())
-    )
-
-    # ---------------------------------------------------------------------
-    # Forward model once at H=0 to get per-row offset, then solve H.
-    # ---------------------------------------------------------------------
-    m0 = predict_magnitudes(
-        H=0.0,
-        object_coords=object_coords,
-        exposures=exposures_canon,
-        G=G,
-        reference_filter="V",
+    fit_result = _run_absolute_magnitude_fit(
+        detections,
+        exposures,
+        object_coords,
         composition=composition,
+        G=G,
+        strict_band_mapping=strict_band_mapping,
+        object_ids=None,
     )
+    if isinstance(fit_result, pa.RecordBatch):
+        from .._rust.arrow import table_from_record_batch
 
-    mag = _as_float64_nan(detections.mag)
-    valid = np.isfinite(mag) & np.isfinite(m0)
-    n_used = int(np.count_nonzero(valid))
-    if n_used == 0:
-        raise ValueError(
-            "no valid rows: need finite detections.mag and forward-model magnitudes"
-        )
-
-    H_i = mag[valid] - np.asarray(m0, dtype=np.float64)[valid]
-    mag_sigma = _as_float64_nan(detections.mag_sigma)
-    sigma_used = mag_sigma[valid]
-    H_hat, H_sigma, sigma_eff, chi2_red, _ = _fit_absolute_magnitude_rows(
-        h_rows=np.asarray(H_i, dtype=np.float64),
-        sigma_rows=np.asarray(sigma_used, dtype=np.float64),
-    )
+        return table_from_record_batch(PhysicalParameters, fit_result)
+    _, h_values, h_sigma_values, sigma_eff_values, chi2_values, _ = fit_result
+    H_hat = h_values[0]
+    H_sigma = h_sigma_values[0]
+    sigma_eff = sigma_eff_values[0]
+    chi2_red = chi2_values[0]
 
     # Represent this as a 1-row PhysicalParameters table so callers can directly attach
     # to `Orbits.physical_parameters`.
@@ -257,87 +233,20 @@ def estimate_absolute_magnitude_v_from_detections_grouped(
             f"object_ids length ({ids_np.size}) must match detections length ({n_det})"
         )
 
-    if pc.any(pc.is_null(detections.exposure_id)).as_py():
-        raise ValueError("detections.exposure_id must be non-null to link to exposures")
-    idx = pc.fill_null(pc.index_in(detections.exposure_id, value_set=exposures.id), -1)
-    idx_np = np.asarray(idx.to_numpy(zero_copy_only=False), dtype=np.int32)
-    if np.any(idx_np < 0):
-        missing = np.unique(
-            np.asarray(
-                detections.exposure_id.to_numpy(zero_copy_only=False), dtype=object
-            )[idx_np < 0].astype(str)
-        ).tolist()
-        raise ValueError(f"detections reference unknown exposure_id(s): {missing}")
-    exposures_aligned = exposures.take(pa.array(idx_np, type=pa.int32()))
-    canonical = map_to_canonical_filter_bands(
-        exposures_aligned.observatory_code,
-        exposures_aligned.filter,
-        allow_fallback_filters=not strict_band_mapping,
+    fit_result = _run_absolute_magnitude_fit(
+        detections,
+        exposures,
+        object_coords,
+        composition=composition,
+        G=G,
+        strict_band_mapping=strict_band_mapping,
+        object_ids=ids_arr.to_pylist(),
     )
-    exposures_canon = exposures_aligned.set_column(
-        "filter", pa.array(canonical.tolist(), type=pa.large_string())
-    )
+    if isinstance(fit_result, pa.RecordBatch):
+        from .._rust.arrow import table_from_record_batch
 
-    m0 = np.asarray(
-        predict_magnitudes(
-            H=0.0,
-            object_coords=object_coords,
-            exposures=exposures_canon,
-            G=G,
-            reference_filter="V",
-            composition=composition,
-        ),
-        dtype=np.float64,
-    )
-    mag = _as_float64_nan(detections.mag)
-    mag_sigma = _as_float64_nan(detections.mag_sigma)
-    valid = np.isfinite(mag) & np.isfinite(m0)
-    valid = valid & np.asarray([x is not None for x in ids_np], dtype=bool)
-    if not np.any(valid):
-        return GroupedPhysicalParameters.from_kwargs(
-            object_id=[],
-            physical_parameters=PhysicalParameters.empty(),
-            n_fit_detections=[],
-        )
-
-    ids_v = ids_np[valid].astype(str)
-    h_v = (mag - m0)[valid]
-    sig_v = mag_sigma[valid]
-
-    order = np.argsort(ids_v, kind="mergesort")
-    ids_v = ids_v[order]
-    h_v = h_v[order]
-    sig_v = sig_v[order]
-
-    out_id: list[str] = []
-    out_H: list[float] = []
-    out_H_sigma: list[float | None] = []
-    out_sigma_eff: list[float | None] = []
-    out_chi2_red: list[float | None] = []
-    out_n: list[int] = []
-
-    i0 = 0
-    n = int(ids_v.size)
-    while i0 < n:
-        oid = str(ids_v[i0])
-        i1 = i0 + 1
-        while i1 < n and str(ids_v[i1]) == oid:
-            i1 += 1
-        try:
-            H_hat, H_sig, sigma_eff, chi2_red, n_used = _fit_absolute_magnitude_rows(
-                h_rows=np.asarray(h_v[i0:i1], dtype=np.float64),
-                sigma_rows=np.asarray(sig_v[i0:i1], dtype=np.float64),
-            )
-        except Exception:
-            i0 = i1
-            continue
-        out_id.append(oid)
-        out_H.append(float(H_hat))
-        out_H_sigma.append(None if H_sig is None else float(H_sig))
-        out_sigma_eff.append(None if sigma_eff is None else float(sigma_eff))
-        out_chi2_red.append(None if chi2_red is None else float(chi2_red))
-        out_n.append(int(n_used))
-        i0 = i1
+        return table_from_record_batch(GroupedPhysicalParameters, fit_result)
+    out_id, out_H, out_H_sigma, out_sigma_eff, out_chi2_red, out_n = fit_result
 
     physical_parameters = PhysicalParameters.from_kwargs(
         H_v=out_H,

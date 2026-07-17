@@ -1,0 +1,1040 @@
+{
+  "fixture_schema_version": 1,
+  "fixture_id": "assist_public_semantics_fixture_2026-05-20",
+  "acceptance_target": "adam_assist.ASSISTPropagator public semantics",
+  "packages": {
+    "adam-assist": "0.3.9",
+    "assist": "1.2.3",
+    "rebound": "4.6.0",
+    "adam-core": "0.5.7.dev6+g4c1fbc4c"
+  },
+  "kernels": [
+    {
+      "label": "naif_de440",
+      "file_name": "de440.bsp",
+      "size_bytes": 119799808,
+      "sha256": "a4ce9bf9b3282becc9f4b2ac3cebe03a2ae7599981aabd7265fd8482fff7c4b5"
+    },
+    {
+      "label": "jpl_small_bodies_de441_n16",
+      "file_name": "sb441-n16.bsp",
+      "size_bytes": 645727232,
+      "sha256": "919d612ce3c72a78fc7158f9120156542d0f21e6b8b052e4c1339c759747fd90"
+    }
+  ],
+  "semantics_contract": [
+    "Inputs are transformed internally to SSB/equatorial/TDB for Python ASSIST.",
+    "propagate_orbits restores the caller-facing input origin and frame.",
+    "propagate_orbits restores the caller-requested output time scale.",
+    "Output row order is sorted by orbit_id, variant_id when present, then time.",
+    "generate_ephemeris emits topocentric equatorial spherical coordinates in UTC.",
+    "generate_ephemeris coordinate origins are observer codes and aberrated states are SSB/ecliptic Cartesian."
+  ],
+  "propagation_cases": [
+    {
+      "case_id": "sun_ecliptic_tdb_input_tdb_targets",
+      "description": "Baseline heliocentric ecliptic Cartesian input. Output must preserve input SUN/ecliptic origin/frame and requested TDB target scale.",
+      "operation": "propagate_orbits",
+      "options": {
+        "covariance": false,
+        "max_processes": 1,
+        "chunk_size": 1
+      },
+      "input_orbits": {
+        "table_type": "Orbits",
+        "orbit_id": [
+          "fixture-a",
+          "fixture-b"
+        ],
+        "object_id": [
+          "fixture-a",
+          "fixture-b"
+        ],
+        "coordinates": {
+          "representation": "cartesian",
+          "frame": "ecliptic",
+          "origin_codes": [
+            "SUN",
+            "SUN"
+          ],
+          "time": {
+            "scale": "tdb",
+            "days": [
+              60000,
+              60000
+            ],
+            "nanos": [
+              0,
+              21600000000000
+            ],
+            "mjd": [
+              60000.0,
+              60000.25
+            ]
+          },
+          "values": [
+            [
+              1.05,
+              0.02,
+              0.01,
+              -0.0005,
+              0.0165,
+              0.0002
+            ],
+            [
+              1.35,
+              -0.08,
+              0.03,
+              0.001,
+              0.014,
+              -0.0001
+            ]
+          ]
+        }
+      },
+      "target_times": {
+        "scale": "tdb",
+        "days": [
+          60002,
+          60001
+        ],
+        "nanos": [
+          0,
+          0
+        ],
+        "mjd": [
+          60002.0,
+          60001.0
+        ]
+      },
+      "output_orbits": {
+        "table_type": "Orbits",
+        "orbit_id": [
+          "fixture-a",
+          "fixture-a",
+          "fixture-b",
+          "fixture-b"
+        ],
+        "object_id": [
+          "fixture-a",
+          "fixture-a",
+          "fixture-b",
+          "fixture-b"
+        ],
+        "coordinates": {
+          "representation": "cartesian",
+          "frame": "ecliptic",
+          "origin_codes": [
+            "SUN",
+            "SUN",
+            "SUN",
+            "SUN"
+          ],
+          "time": {
+            "scale": "tdb",
+            "days": [
+              60001,
+              60002,
+              60001,
+              60002
+            ],
+            "nanos": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "mjd": [
+              60001.0,
+              60002.0,
+              60001.0,
+              60002.0
+            ]
+          },
+          "values": [
+            [
+              1.049365893412995,
+              0.03649674382106716,
+              0.010198713905090482,
+              -0.0007682101848247997,
+              0.016492784452081355,
+              0.00019741911639788807
+            ],
+            [
+              1.0484635959275075,
+              0.05298416208347111,
+              0.010394820935608996,
+              -0.0010363714736852624,
+              0.016481348467470857,
+              0.00019478634159237127
+            ],
+            [
+              1.3507046054787784,
+              -0.06949742685967585,
+              0.029923992074726666,
+              0.0008789428538291758,
+              0.014006704473521467,
+              -0.00010268654475488635
+            ],
+            [
+              1.3515028260738275,
+              -0.055486846673711815,
+              0.029819519282035814,
+              0.0007174912677209385,
+              0.014014176438737055,
+              -0.00010625676538919357
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "ssb_equatorial_tdb_input_tdb_targets",
+      "description": "Python ASSISTPropagator accepts SSB/equatorial input and preserves that public output origin/frame after internal ASSIST normalization.",
+      "operation": "propagate_orbits",
+      "options": {
+        "covariance": false,
+        "max_processes": 1,
+        "chunk_size": 1
+      },
+      "input_orbits": {
+        "table_type": "Orbits",
+        "orbit_id": [
+          "fixture-a",
+          "fixture-b"
+        ],
+        "object_id": [
+          "fixture-a",
+          "fixture-b"
+        ],
+        "coordinates": {
+          "representation": "cartesian",
+          "frame": "equatorial",
+          "origin_codes": [
+            "SOLAR_SYSTEM_BARYCENTER",
+            "SOLAR_SYSTEM_BARYCENTER"
+          ],
+          "time": {
+            "scale": "tdb",
+            "days": [
+              60000,
+              60000
+            ],
+            "nanos": [
+              0,
+              21600000000000
+            ],
+            "mjd": [
+              60000.0,
+              60000.25
+            ]
+          },
+          "values": [
+            [
+              1.0410158778858585,
+              0.013924552538892049,
+              0.017168050698683907,
+              -0.0004983708090207031,
+              0.015050795530643667,
+              0.006743342634934724
+            ],
+            [
+              1.3410162855557668,
+              -0.08578122242808314,
+              -0.004260892823603875,
+              0.001001632167994609,
+              0.012876424515800745,
+              0.005473655463486117
+            ]
+          ]
+        }
+      },
+      "target_times": {
+        "scale": "tdb",
+        "days": [
+          60002,
+          60001
+        ],
+        "nanos": [
+          0,
+          0
+        ],
+        "mjd": [
+          60002.0,
+          60001.0
+        ]
+      },
+      "output_orbits": {
+        "table_type": "Orbits",
+        "orbit_id": [
+          "fixture-a",
+          "fixture-a",
+          "fixture-b",
+          "fixture-b"
+        ],
+        "object_id": [
+          "fixture-a",
+          "fixture-a",
+          "fixture-b",
+          "fixture-b"
+        ],
+        "coordinates": {
+          "representation": "cartesian",
+          "frame": "equatorial",
+          "origin_codes": [
+            "SOLAR_SYSTEM_BARYCENTER",
+            "SOLAR_SYSTEM_BARYCENTER",
+            "SOLAR_SYSTEM_BARYCENTER",
+            "SOLAR_SYSTEM_BARYCENTER"
+          ],
+          "time": {
+            "scale": "tdb",
+            "days": [
+              60001,
+              60002,
+              60001,
+              60002
+            ],
+            "nanos": [
+              0,
+              0,
+              0,
+              0
+            ],
+            "mjd": [
+              60001.0,
+              60002.0,
+              60001.0,
+              60002.0
+            ]
+          },
+          "values": [
+            [
+              1.0403834064409427,
+              0.02897287415281337,
+              0.02390891880632355,
+              -0.0007665690963031119,
+              0.01504520599553647,
+              0.006738105893100128
+            ],
+            [
+              1.0394827559810293,
+              0.044013680686380854,
+              0.030643687018033782,
+              -0.0010347185157596709,
+              0.015035764952824106,
+              0.006731142761138952
+            ],
+            [
+              1.341722118506726,
+              -0.07612114118095129,
+              -0.00015555206245821069,
+              0.0008805839423508637,
+              0.012883647386710854,
+              0.00547385850897622
+            ],
+            [
+              1.3425219861273494,
+              -0.06323322536596063,
+              0.005318209947487358,
+              0.0007191442256465301,
+              0.012891926943330046,
+              0.005473556437789292
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "sun_ecliptic_utc_input_utc_targets",
+      "description": "Python ASSISTPropagator accepts non-TDB public times by rescaling internally to TDB and restoring requested UTC output times.",
+      "operation": "propagate_orbits",
+      "options": {
+        "covariance": false,
+        "max_processes": 1,
+        "chunk_size": 1
+      },
+      "input_orbits": {
+        "table_type": "Orbits",
+        "orbit_id": [
+          "fixture-a",
+          "fixture-b"
+        ],
+        "object_id": [
+          "fixture-a",
+          "fixture-b"
+        ],
+        "coordinates": {
+          "representation": "cartesian",
+          "frame": "ecliptic",
+          "origin_codes": [
+            "SUN",
+            "SUN"
+          ],
+          "time": {
+            "scale": "utc",
+            "days": [
+              59999,
+              60000
+            ],
+            "nanos": [
+              86330814693166,
+              21530814688744
+            ],
+            "mjd": [
+              59999.999199244136,
+              60000.249199244085
+            ]
+          },
+          "values": [
+            [
+              1.05,
+              0.02,
+              0.01,
+              -0.0005,
+              0.0165,
+              0.0002
+            ],
+            [
+              1.35,
+              -0.08,
+              0.03,
+              0.001,
+              0.014,
+              -0.0001
+            ]
+          ]
+        }
+      },
+      "target_times": {
+        "scale": "utc",
+        "days": [
+          60002,
+          60001
+        ],
+        "nanos": [
+          0,
+          0
+        ],
+        "mjd": [
+          60002.0,
+          60001.0
+        ]
+      },
+      "output_orbits": {
+        "table_type": "Orbits",
+        "orbit_id": [
+          "fixture-a",
+          "fixture-a",
+          "fixture-b",
+          "fixture-b"
+        ],
+        "object_id": [
+          "fixture-a",
+          "fixture-a",
+          "fixture-b",
+          "fixture-b"
+        ],
+        "coordinates": {
+          "representation": "cartesian",
+          "frame": "ecliptic",
+          "origin_codes": [
+            "SUN",
+            "SUN",
+            "SUN",
+            "SUN"
+          ],
+          "time": {
+            "scale": "utc",
+            "days": [
+              60001,
+              60002,
+              60001,
+              60002
+            ],
+            "nanos": [
+              17512,
+              380,
+              17512,
+              380
+            ],
+            "mjd": [
+              60001.000000000204,
+              60002.00000000001,
+              60001.000000000204,
+              60002.00000000001
+            ]
+          },
+          "values": [
+            [
+              1.0493652781778864,
+              0.0365099505186686,
+              0.01019887198885034,
+              -0.0007684249444863821,
+              0.016492776983394915,
+              0.00019741702887375936
+            ],
+            [
+              1.0484627659605905,
+              0.05299735962228268,
+              0.010394976911141364,
+              -0.001036586169364955,
+              0.016481337618295965,
+              0.00019478421273490034
+            ],
+            [
+              1.3507053092460262,
+              -0.06948621090055543,
+              0.029923909846685096,
+              0.000878813588329109,
+              0.014006711127575401,
+              -0.0001026894090734698
+            ],
+            [
+              1.3515034005576918,
+              -0.05547562473190596,
+              0.02981943419512206,
+              0.0007173619682638313,
+              0.014014181750116886,
+              -0.00010625961877622567
+            ]
+          ]
+        }
+      }
+    },
+    {
+      "case_id": "variant_metadata_tdb_targets",
+      "description": "VariantOrbits preserve variant_id, weights, weights_cov, row order, and public output origin/frame/time semantics.",
+      "operation": "propagate_orbits",
+      "options": {
+        "covariance": false,
+        "max_processes": 1,
+        "chunk_size": 1
+      },
+      "input_orbits": {
+        "table_type": "VariantOrbits",
+        "orbit_id": [
+          "fixture-a",
+          "fixture-a"
+        ],
+        "object_id": [
+          "fixture-a",
+          "fixture-a"
+        ],
+        "coordinates": {
+          "representation": "cartesian",
+          "frame": "ecliptic",
+          "origin_codes": [
+            "SUN",
+            "SUN"
+          ],
+          "time": {
+            "scale": "tdb",
+            "days": [
+              60000,
+              60000
+            ],
+            "nanos": [
+              0,
+              0
+            ],
+            "mjd": [
+              60000.0,
+              60000.0
+            ]
+          },
+          "values": [
+            [
+              1.05,
+              0.02,
+              0.01,
+              -0.0005,
+              0.0165,
+              0.0002
+            ],
+            [
+              1.051,
+              0.021,
+              0.011,
+              -0.0004,
+              0.0164,
+              0.00021
+            ]
+          ]
+        },
+        "variant_id": [
+          "v0",
+          "v1"
+        ],
+        "weights": [
+          0.25,
+          0.75
+        ],
+        "weights_cov": [
+          0.5,
+          0.5
+        ]
+      },
+      "target_times": {
+        "scale": "tdb",
+        "days": [
+          60000,
+          60001
+        ],
+        "nanos": [
+          43200000000000,
+          0
+        ],
+        "mjd": [
+          60000.5,
+          60001.0
+        ]
+      },
+      "output_orbits": {
+        "table_type": "VariantOrbits",
+        "orbit_id": [
+          "fixture-a",
+          "fixture-a",
+          "fixture-a",
+          "fixture-a"
+        ],
+        "object_id": [
+          "fixture-a",
+          "fixture-a",
+          "fixture-a",
+          "fixture-a"
+        ],
+        "coordinates": {
+          "representation": "cartesian",
+          "frame": "ecliptic",
+          "origin_codes": [
+            "SUN",
+            "SUN",
+            "SUN",
+            "SUN"
+          ],
+          "time": {
+            "scale": "tdb",
+            "days": [
+              60000,
+              60001,
+              60000,
+              60001
+            ],
+            "nanos": [
+              43200000000000,
+              0,
+              43200000000000,
+              0
+            ],
+            "mjd": [
+              60000.5,
+              60001.0,
+              60000.5,
+              60001.0
+            ]
+          },
+          "values": [
+            [
+              1.0497164731407254,
+              0.028249273846547757,
+              0.01009967956439935,
+              -0.0006341073342295007,
+              0.016496919618966755,
+              0.000198716078541716
+            ],
+            [
+              1.0493658934129952,
+              0.03649674382106283,
+              0.010198713905090426,
+              -0.0007682101848247295,
+              0.016492784452081355,
+              0.00019741911639788878
+            ],
+            [
+              1.0507665409578002,
+              0.029199244712352277,
+              0.011104648629881652,
+              -0.0005338335340419261,
+              0.01639680475452787,
+              0.00020859227378349434
+            ],
+            [
+              1.0504661697181057,
+              0.0373966306572741,
+              0.01120859003431054,
+              -0.0006676475551072171,
+              0.01639256492686884,
+              0.00020717111074765136
+            ]
+          ]
+        },
+        "variant_id": [
+          "v0",
+          "v0",
+          "v1",
+          "v1"
+        ],
+        "weights": [
+          0.25,
+          0.25,
+          0.75,
+          0.75
+        ],
+        "weights_cov": [
+          0.5,
+          0.5,
+          0.5,
+          0.5
+        ]
+      }
+    }
+  ],
+  "ephemeris_cases": [
+    {
+      "case_id": "ephemeris_mixed_observers_utc_output",
+      "description": "Default EphemerisMixin semantics over Python ASSISTPropagator: sorted observer epochs/codes, topocentric equatorial spherical output, UTC output times, observer-code origins, light-time, aberrated SSB/ecliptic Cartesian states, and optional phase angle without H/G magnitudes.",
+      "operation": "generate_ephemeris",
+      "options": {
+        "covariance": false,
+        "max_processes": 1,
+        "chunk_size": 1,
+        "predict_magnitudes": false,
+        "predict_phase_angle": true
+      },
+      "input_orbits": {
+        "table_type": "Orbits",
+        "orbit_id": [
+          "fixture-a",
+          "fixture-b"
+        ],
+        "object_id": [
+          "fixture-a",
+          "fixture-b"
+        ],
+        "coordinates": {
+          "representation": "cartesian",
+          "frame": "ecliptic",
+          "origin_codes": [
+            "SUN",
+            "SUN"
+          ],
+          "time": {
+            "scale": "tdb",
+            "days": [
+              60000,
+              60000
+            ],
+            "nanos": [
+              0,
+              21600000000000
+            ],
+            "mjd": [
+              60000.0,
+              60000.25
+            ]
+          },
+          "values": [
+            [
+              1.05,
+              0.02,
+              0.01,
+              -0.0005,
+              0.0165,
+              0.0002
+            ],
+            [
+              1.35,
+              -0.08,
+              0.03,
+              0.001,
+              0.014,
+              -0.0001
+            ]
+          ]
+        }
+      },
+      "observers": {
+        "code": [
+          "500",
+          "X05",
+          "500"
+        ],
+        "coordinates": {
+          "representation": "cartesian",
+          "frame": "ecliptic",
+          "origin_codes": [
+            "SUN",
+            "SUN",
+            "SUN"
+          ],
+          "time": {
+            "scale": "utc",
+            "days": [
+              60001,
+              60000,
+              60001
+            ],
+            "nanos": [
+              0,
+              43200000000000,
+              43200000000000
+            ],
+            "mjd": [
+              60001.0,
+              60000.5,
+              60001.5
+            ]
+          },
+          "values": [
+            [
+              -0.9098724218067425,
+              0.3900113217999995,
+              -1.6097604332640786e-05,
+              -0.007052758458645156,
+              -0.015883036797410197,
+              2.491259107379343e-07
+            ],
+            [
+              -0.9063151300227836,
+              0.3978958753883664,
+              -2.1213556642435428e-05,
+              -0.006960727565962542,
+              -0.015845855042053023,
+              9.340977476157233e-06
+            ],
+            [
+              -0.9133639484270897,
+              0.3820551974305759,
+              -1.5966879226007934e-05,
+              -0.006913280492837836,
+              -0.015941248115084277,
+              2.7496896165141775e-07
+            ]
+          ]
+        }
+      },
+      "output_ephemeris": {
+        "table_type": "Ephemeris",
+        "orbit_id": [
+          "fixture-a",
+          "fixture-a",
+          "fixture-a",
+          "fixture-b",
+          "fixture-b",
+          "fixture-b"
+        ],
+        "object_id": [
+          "fixture-a",
+          "fixture-a",
+          "fixture-a",
+          "fixture-b",
+          "fixture-b",
+          "fixture-b"
+        ],
+        "coordinates": {
+          "representation": "spherical",
+          "frame": "equatorial",
+          "origin_codes": [
+            "X05",
+            "500",
+            "500",
+            "X05",
+            "500",
+            "500"
+          ],
+          "time": {
+            "scale": "utc",
+            "days": [
+              60000,
+              60001,
+              60001,
+              60000,
+              60001,
+              60001
+            ],
+            "nanos": [
+              43200000000000,
+              0,
+              43200000000000,
+              43200000000000,
+              0,
+              43200000000000
+            ],
+            "mjd": [
+              60000.5,
+              60001.0,
+              60001.5,
+              60000.5,
+              60001.0,
+              60001.5
+            ]
+          },
+          "values": [
+            [
+              1.9907178217776218,
+              350.04464688489946,
+              -3.9699336713992124,
+              0.000211790605766407,
+              0.8726535341343592,
+              0.37660788927764827
+            ],
+            [
+              1.9909415881219936,
+              350.4800304421685,
+              -3.781908812743876,
+              0.00043680325308102417,
+              0.8726655779401279,
+              0.37747555004306993
+            ],
+            [
+              1.9911585908524876,
+              350.91625276066895,
+              -3.5930703493497695,
+              0.0004313025983744929,
+              0.8722297090549476,
+              0.37787590552858213
+            ],
+            [
+              2.3061063042941408,
+              348.78695656133766,
+              -4.009601656956057,
+              0.0016083426928700842,
+              0.7084792778868706,
+              0.2959915040497304
+            ],
+            [
+              2.307025027822637,
+              349.14044146528784,
+              -3.8618687538807395,
+              0.001817015674194447,
+              0.708597918228685,
+              0.29664623554571995
+            ],
+            [
+              2.307928138004071,
+              349.49463806698714,
+              -3.7134820553618484,
+              0.0017954491424668124,
+              0.7081971709877869,
+              0.2969015796566546
+            ]
+          ]
+        },
+        "aberrated_coordinates": {
+          "representation": "cartesian",
+          "frame": "ecliptic",
+          "origin_codes": [
+            "SOLAR_SYSTEM_BARYCENTER",
+            "SOLAR_SYSTEM_BARYCENTER",
+            "SOLAR_SYSTEM_BARYCENTER",
+            "SOLAR_SYSTEM_BARYCENTER",
+            "SOLAR_SYSTEM_BARYCENTER",
+            "SOLAR_SYSTEM_BARYCENTER"
+          ],
+          "time": {
+            "scale": "utc",
+            "days": [
+              60000,
+              60000,
+              60001,
+              60000,
+              60000,
+              60001
+            ],
+            "nanos": [
+              42206622269660,
+              85406510640700,
+              42206402346683,
+              42049241908117,
+              85248783492198,
+              42048332827280
+            ],
+            "mjd": [
+              60000.48850257257,
+              60000.98850128056,
+              60001.48850002716,
+              60000.4866810406,
+              60000.986675734865,
+              60001.48667051883
+            ]
+          },
+          "values": [
+            [
+              1.0407399168055336,
+              0.027673082960807227,
+              0.01031007969385779,
+              -0.0006295496642847945,
+              0.0164881822162676,
+              0.00019877818792917587
+            ],
+            [
+              1.0403915915140816,
+              0.03591616858372247,
+              0.010409144156592911,
+              -0.000763646393463387,
+              0.0164840723509676,
+              0.0001974813439815685
+            ],
+            [
+              1.0399762206831558,
+              0.04415693584337196,
+              0.010507556956097654,
+              -0.0008977310931486822,
+              0.01647890738381239,
+              0.0001961715257365755
+            ],
+            [
+              1.341249604012019,
+              -0.07707470103991475,
+              0.03018867651587675,
+              0.0009633353592459645,
+              0.013993406614615842,
+              -0.0001008170982508618
+            ],
+            [
+              1.3417110776551031,
+              -0.07007695868160055,
+              0.030137820112665057,
+              0.0008826343361080625,
+              0.01399778420830979,
+              -0.00010260752935412252
+            ],
+            [
+              1.3421321981100462,
+              -0.06307713121087058,
+              0.030086069336956997,
+              0.0008019209480415223,
+              0.014001742569938738,
+              -0.00010439458503088412
+            ]
+          ]
+        },
+        "light_time": [
+          0.011497427272394981,
+          0.01149871963901886,
+          0.011499972942266798,
+          0.013318959234693232,
+          0.013324265339273583,
+          0.013329481268681763
+        ],
+        "alpha": [
+          12.240697468122104,
+          12.217819034683783,
+          12.193844090033375,
+          8.64112530005662,
+          8.556159519047553,
+          8.470189838079952
+        ],
+        "predicted_magnitude_v": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ]
+      }
+    }
+  ]
+}

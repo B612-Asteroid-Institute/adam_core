@@ -1,4 +1,3 @@
-import healpy as hp
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
@@ -121,8 +120,19 @@ class SourceCatalog(qv.Table):
             seeing=self.exposure_seeing,
             depth_5sigma=self.exposure_depth_5sigma,
         )
-        exposures = exposures.drop_duplicates(subset=["id"])
-        return exposures
+        from adam_core import _rust_native
+
+        from .arrow_bridge import observations_from_ipc, observations_to_ipc
+
+        # One Rust crossing owns the keep-first dedupe by exposure ID; the
+        # projected table above is validated by from_kwargs first, exactly
+        # like the legacy pre-dedupe validation.
+        return observations_from_ipc(
+            _rust_native.exposures_drop_duplicate_ids_ipc(
+                observations_to_ipc(exposures)
+            ),
+            Exposures,
+        )
 
     def associations(self) -> Associations:
         """
@@ -165,23 +175,16 @@ class SourceCatalog(qv.Table):
         coordinates : SphericalCoordinates
             The astrometry in the source catalog.
         """
-        covariance_matrix = np.empty((len(self), 6, 6))
-        covariance_matrix.fill(np.nan)
+        from adam_core import _rust_native
 
-        # Convert uncertainties from arcseconds to degrees
-        ra_sigma = self.ra_sigma.to_numpy(zero_copy_only=False) / 3600.0
-        dec_sigma = self.dec_sigma.to_numpy(zero_copy_only=False) / 3600.0
-        radec_corr = self.radec_corr.to_numpy(zero_copy_only=False)
-
-        # Calculate the covariance matrix in units of degrees^2
-        cov_ra = ra_sigma**2
-        cov_dec = dec_sigma**2
-        cov_radec = radec_corr * ra_sigma * dec_sigma
-
-        covariance_matrix[:, 1, 1] = cov_ra
-        covariance_matrix[:, 2, 2] = cov_dec
-        covariance_matrix[:, 1, 2] = cov_radec
-        covariance_matrix[:, 2, 1] = cov_radec
+        # One Rust crossing owns the arcsecond->degree conversion and the
+        # NaN-filled (N, 6, 6) covariance assembly in legacy IEEE order;
+        # nulls arrive as NaN exactly like the legacy to_numpy conversion.
+        covariance_matrix = _rust_native.radec_covariance_matrices_numpy(
+            self.ra_sigma.to_numpy(zero_copy_only=False),
+            self.dec_sigma.to_numpy(zero_copy_only=False),
+            self.radec_corr.to_numpy(zero_copy_only=False),
+        )
 
         return SphericalCoordinates.from_kwargs(
             rho=None,
@@ -212,6 +215,36 @@ class SourceCatalog(qv.Table):
             The observers in the source catalog.
         """
         if exposure_midpoint:
+            exposure_start_nulls = self.table.column("exposure_start_time").null_count
+            if self.exposure_duration.null_count == 0 and exposure_start_nulls == 0:
+                # Fused single crossing: Rust owns the half-even midpoint
+                # arithmetic, code grouping, and observer-state dispatch.
+                # Coverage failures (space-based / unknown codes) fall back
+                # to the legacy composition below, which retains its own
+                # per-code fallback inside Observers.from_codes.
+                from .._rust.arrow import ensure_spice_backend, table_from_record_batch
+
+                catalog_table = self.table.combine_chunks()
+                time_table = self.exposure_start_time.table.combine_chunks()
+                batch = pa.RecordBatch.from_arrays(
+                    [
+                        catalog_table.column("observatory_code").chunk(0),
+                        time_table.column("days").chunk(0),
+                        time_table.column("nanos").chunk(0),
+                        catalog_table.column("exposure_duration").chunk(0),
+                    ],
+                    names=["code", "days", "nanos", "duration"],
+                )
+                try:
+                    result = (
+                        ensure_spice_backend().observer_states_from_exposures_arrow(
+                            batch, self.exposure_start_time.scale, "ecliptic", "SUN"
+                        )
+                    )
+                except (RuntimeError, ValueError):
+                    pass
+                else:
+                    return table_from_record_batch(Observers, result)
             half_exposure = pc.cast(
                 pc.round(
                     pc.multiply(pc.divide(self.exposure_duration, 2.0), 1e9),
@@ -245,10 +278,11 @@ class SourceCatalog(qv.Table):
         healpixels : np.ndarray
             The healpixels for the source catalog.
         """
-        return hp.ang2pix(
-            nside,
+        from adam_core import _rust_native
+
+        return _rust_native.detections_healpixels_numpy(
             self.ra.to_numpy(zero_copy_only=False),
             self.dec.to_numpy(zero_copy_only=False),
-            lonlat=True,
-            nest=nest,
+            nside,
+            nest,
         )

@@ -1,0 +1,185 @@
+name: Release candidate wheel matrix
+
+on:
+  push:
+    branches: ["rust-migration-*"]
+  pull_request:
+    branches: [main, "v*"]
+  workflow_dispatch:
+    inputs:
+      adam_assist_ref:
+        description: adam-assist revision to test with this adam-core revision
+        required: true
+        default: rust-migration-assist
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-candidate-wheel-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref || 'rust-migration-assist' }}
+  PIP_ONLY_BINARY: ":all:"
+  PYTHON_PREVIEW_VERSION: "0.5.6rc1"
+
+jobs:
+  artifact-acceptance:
+    name: ${{ matrix.platform.name }} / CPython ${{ matrix.python-version }}
+    runs-on: ${{ matrix.platform.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+        platform:
+          - name: manylinux-x86_64
+            runner: ubuntu-latest
+            system: Linux-x86_64
+            family: manylinux
+            target: x86_64
+            wheel_tag: manylinux*x86_64
+          - name: manylinux-aarch64
+            runner: ubuntu-24.04-arm
+            system: Linux-aarch64
+            family: manylinux
+            target: aarch64
+            wheel_tag: manylinux*aarch64
+          - name: macos-arm64
+            runner: macos-14
+            system: Darwin-arm64
+            family: native
+            wheel_tag: macosx*arm64
+          - name: macos-x86_64
+            runner: macos-15-intel
+            system: Darwin-x86_64
+            family: native
+            wheel_tag: macosx*x86_64
+    steps:
+      - name: Checkout adam-core candidate
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout adam-assist candidate
+        uses: actions/checkout@v4
+        with:
+          repository: B612-Asteroid-Institute/adam-assist
+          ref: ${{ env.ADAM_ASSIST_REF }}
+          path: adam-assist
+          fetch-depth: 0
+
+      - name: Set up CPython
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Verify runner architecture
+        shell: bash
+        run: |
+          python - <<'PY'
+          import platform
+          expected = "${{ matrix.platform.system }}"
+          actual = f"{platform.system()}-{platform.machine()}"
+          if actual != expected:
+              raise SystemExit(f"runner architecture mismatch: {actual} != {expected}")
+          PY
+
+      - name: Build adam-core manylinux wheel
+        if: matrix.platform.family == 'manylinux'
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.platform.target }}
+          manylinux: "2_17"
+          working-directory: .
+          args: --release -i python${{ matrix.python-version }} --out wheelhouse
+
+      - name: Build adam-assist manylinux wheel
+        if: matrix.platform.family == 'manylinux'
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.platform.target }}
+          manylinux: "2_17"
+          working-directory: adam-assist
+          args: --release -i python${{ matrix.python-version }} --out ../wheelhouse
+
+      - name: Run exact clean-room acceptance with prebuilt manylinux wheels
+        if: matrix.platform.family == 'manylinux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python migration/scripts/run_clean_room_artifact_acceptance.py \
+            --prebuilt-wheelhouse "$GITHUB_WORKSPACE/wheelhouse" \
+            --adam-core-repo "$GITHUB_WORKSPACE" \
+            --adam-core-ref HEAD \
+            --adam-assist-repo "$GITHUB_WORKSPACE/adam-assist" \
+            --adam-assist-ref HEAD \
+            --workspace "$RUNNER_TEMP/acceptance" \
+            --report "$RUNNER_TEMP/acceptance-report.json" \
+            --python "$(command -v python)"
+
+      - name: Build and run exact clean-room acceptance on native platform
+        if: matrix.platform.family == 'native'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python migration/scripts/run_clean_room_artifact_acceptance.py \
+            --adam-core-repo "$GITHUB_WORKSPACE" \
+            --adam-core-ref HEAD \
+            --adam-assist-repo "$GITHUB_WORKSPACE/adam-assist" \
+            --adam-assist-ref HEAD \
+            --workspace "$RUNNER_TEMP/acceptance" \
+            --report "$RUNNER_TEMP/acceptance-report.json" \
+            --python "$(command -v python)"
+
+      - name: Verify platform wheel count and tags
+        shell: bash
+        run: |
+          python - <<'PY'
+          import email
+          import fnmatch
+          import os
+          import zipfile
+          from pathlib import Path
+
+          wheelhouse = Path(os.environ["RUNNER_TEMP"]) / "acceptance" / "wheelhouse"
+          core = list(wheelhouse.glob("adam_core-*.whl"))
+          assist = list(wheelhouse.glob("adam_assist-*.whl"))
+          if len(core) != 1 or len(assist) != 1:
+              raise SystemExit(f"expected one wheel per package; got {core=} {assist=}")
+          expected_version = os.environ["PYTHON_PREVIEW_VERSION"]
+          with zipfile.ZipFile(core[0]) as archive:
+              metadata_paths = [n for n in archive.namelist() if n.endswith(".dist-info/METADATA")]
+              if len(metadata_paths) != 1:
+                  raise SystemExit(f"unexpected METADATA files: {metadata_paths}")
+              metadata = email.message_from_bytes(archive.read(metadata_paths[0]))
+          if metadata["Name"] != "adam_core" or metadata["Version"] != expected_version:
+              raise SystemExit(
+                  f"adam-core preview metadata mismatch: {metadata['Name']} {metadata['Version']}"
+              )
+          pattern = "*${{ matrix.platform.wheel_tag }}.whl"
+          invalid = [
+              path.name
+              for path in core + assist
+              if not fnmatch.fnmatch(path.name, pattern)
+          ]
+          if invalid:
+              raise SystemExit(f"wheel tag mismatch for {pattern}: {invalid}")
+          PY
+
+      - name: Upload wheel acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-acceptance-${{ matrix.platform.name }}-py${{ matrix.python-version }}
+          path: |
+            ${{ runner.temp }}/acceptance-report.json
+            ${{ runner.temp }}/acceptance/invocation/smoke-report.json
+            ${{ runner.temp }}/acceptance/wheelhouse/*.whl
+            ${{ runner.temp }}/acceptance/logs/*.log
+          if-no-files-found: error

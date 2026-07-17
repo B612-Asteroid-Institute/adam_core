@@ -1,11 +1,10 @@
+import warnings
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
-import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
 
-from ..coordinates.residuals import Residuals, calculate_reduced_chi2
+from ..coordinates.residuals import Residuals
 from ..coordinates.spherical import SphericalCoordinates
 from ..observers.observers import Observers
 from ..orbits.orbits import Orbits
@@ -71,67 +70,76 @@ def evaluate_orbits(
 
     assert len(orbits) == len(orbits.orbit_id.unique())
 
-    # Compute ephemeris and residuals
+    # Propagation remains an explicit provider boundary. The generated product
+    # then enters one Rust crossing for order validation, residuals, masks,
+    # orbit statistics, arc length, and member indexing.
     ephemeris = propagator.generate_ephemeris(
         orbits,
         observations.observers,
         max_processes=1,
     )
-
-    # Sort the orbits by ID (the ephemeris is already sorted by
-    # orbit ID, time, and origin)
     orbits = orbits.sort_by(["orbit_id"])
 
-    # Stack the observations into a single table and compute the residuals with respect
-    # to the predicted coordinates
-    observations_stacked = qv.concatenate([observations for _ in range(num_orbits)])
-    residuals = Residuals.calculate(
-        observations_stacked.coordinates, ephemeris.coordinates
+    observed = observations.coordinates
+    predicted = ephemeris.coordinates
+    from adam_core import _rust_native
+
+    (
+        residual_values,
+        residual_chi2,
+        residual_dof,
+        residual_probability,
+        chi2,
+        reduced_chi2,
+        arc_length,
+        num_obs,
+        observation_indices,
+        member_outliers,
+        had_off_diagonal_nan,
+    ) = _rust_native.evaluate_orbits_numpy(
+        orbits.orbit_id.to_pylist(),
+        ephemeris.orbit_id.to_pylist(),
+        observations.id.to_pylist(),
+        observed.origin.code.to_pylist(),
+        predicted.origin.code.to_pylist(),
+        observed.frame,
+        predicted.frame,
+        np.ascontiguousarray(observed.values, dtype=np.float64),
+        np.ascontiguousarray(predicted.values, dtype=np.float64),
+        np.ascontiguousarray(observed.covariance.to_matrix(), dtype=np.float64),
+        np.ascontiguousarray(predicted.covariance.to_matrix(), dtype=np.float64),
+        np.ascontiguousarray(observed.time.days.to_numpy(), dtype=np.int64),
+        np.ascontiguousarray(observed.time.nanos.to_numpy(), dtype=np.int64),
+        [] if ignore is None else ignore,
+        parameters,
     )
+    if had_off_diagonal_nan:
+        warnings.warn(
+            "Covariance matrix has NaNs on the off-diagonal (these will be assumed to be 0.0).",
+            UserWarning,
+        )
 
-    # If outliers are provided, we need to mask them out of the observations
-    # before we compute the chi2, reduced chi2, and arc length values.
-    if ignore is not None:
-        mask = pc.invert(pc.is_in(observations.id, pa.array(ignore)))
-        observations_to_include = observations.apply_mask(mask)
-    else:
-        mask = pa.repeat(True, len(observations))
-        observations_to_include = observations
-
-    # Compute number of observations
-    num_obs = len(observations_to_include)
-
-    # Compute chi2 and reduced chi2 for each orbit
-    chi2 = np.empty(num_orbits, dtype=np.float64)
-    reduced_chi2 = np.empty(num_orbits, dtype=np.float64)
-    for i, orbit_id in enumerate(orbits.orbit_id):
-        orbit_mask = pc.equal(ephemeris.orbit_id, orbit_id)
-        residuals_to_include = residuals.apply_mask(orbit_mask).apply_mask(mask)
-        chi2[i] = pc.sum(residuals_to_include.chi2).as_py()
-        reduced_chi2[i] = calculate_reduced_chi2(residuals_to_include, parameters)
-
-    # Compute arc length for the orbits (will be the same for all orbits)
-    arc_length = (
-        observations_to_include.coordinates.time.max().mjd()[0].as_py()
-        - observations_to_include.coordinates.time.min().mjd()[0].as_py()
+    residuals = Residuals.from_kwargs(
+        values=residual_values.tolist(),
+        chi2=residual_chi2,
+        dof=residual_dof,
+        probability=residual_probability,
     )
-
-    # Now we create a fitted orbit and fitted orbit members from the solution orbit
-    # and residuals. We also need to compute the chi2 and reduced chi2 values.
     fitted_orbit = FittedOrbits.from_kwargs(
         orbit_id=orbits.orbit_id,
         object_id=orbits.object_id,
         coordinates=orbits.coordinates,
-        arc_length=pa.repeat(arc_length, num_orbits),
-        num_obs=pa.repeat(num_obs, num_orbits),
+        arc_length=arc_length,
+        num_obs=num_obs,
         chi2=chi2,
         reduced_chi2=reduced_chi2,
     )
     fitted_orbit_members = FittedOrbitMembers.from_kwargs(
         orbit_id=ephemeris.orbit_id,
-        obs_id=observations_stacked.id,
+        obs_id=observations.id.take(observation_indices),
         residuals=residuals,
-        outlier=pa.concat_arrays([pc.invert(mask) for i in range(num_orbits)]),
+        outlier=member_outliers,
     )
 
+    assert len(fitted_orbit) == num_orbits
     return fitted_orbit, fitted_orbit_members

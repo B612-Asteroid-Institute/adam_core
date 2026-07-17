@@ -9,6 +9,10 @@ import numpy.testing as npt
 import pytest
 from astroquery.jplsbdb import SBDB
 
+from adam_core import _rust_native
+from adam_core._rust.arrow import table_from_record_batch
+from adam_core.orbits import Orbits
+
 from ..sbdb import (
     NotFoundError,
     _convert_SBDB_covariances,
@@ -111,7 +115,7 @@ def _load_sbdb_fixture_payload(response_file: str) -> dict:
         return json.load(f)
 
 
-def _assert_orbits_equivalent(a, b) -> None:
+def _assert_orbits_equivalent(a, b, *, covariance_atol: float = 0.0) -> None:
     assert len(a) == len(b)
     assert a.orbit_id.to_pylist() == b.orbit_id.to_pylist()
     assert a.object_id.to_pylist() == b.object_id.to_pylist()
@@ -142,7 +146,7 @@ def _assert_orbits_equivalent(a, b) -> None:
         a.coordinates.covariance.to_matrix(),
         b.coordinates.covariance.to_matrix(),
         rtol=0.0,
-        atol=0.0,
+        atol=covariance_atol,
         equal_nan=True,
     )
 
@@ -386,6 +390,32 @@ def test_query_sbdb_new_physical_parameters_missing_phys_par_fills_nan() -> None
     assert orbits.physical_parameters is not None
     assert np.isnan(orbits.physical_parameters.H_v[0].as_py())
     assert np.isnan(orbits.physical_parameters.G[0].as_py())
+
+
+def test_recorded_sbdb_complete_rust_product_matches_payload_facade() -> None:
+    ids = ["Ceres", "2001VB", "54509"]
+    payloads = [_load_sbdb_fixture_payload(f"{object_id}.json") for object_id in ids]
+    expected = _orbits_from_sbdb_payloads(ids, payloads)
+    batch = _rust_native.query_sbdb_arrow(
+        ids,
+        True,
+        60.0,
+        1,
+        False,
+        False,
+        [json.dumps(payload) for payload in payloads],
+    )
+    actual = table_from_record_batch(Orbits, batch)
+    _assert_orbits_equivalent(actual, expected, covariance_atol=3e-28)
+
+
+def test_sbdb_complete_product_has_rust_owned_timing() -> None:
+    payload = json.dumps(_load_sbdb_fixture_payload("Ceres.json"))
+    samples = np.asarray(
+        _rust_native.benchmark_query_client_processing("sbdb", [payload], 2, 2, 1)
+    )
+    assert samples.shape == (2, 2)
+    assert np.all(samples > 0.0)
 
 
 def test_real_sbdb_payloads_parse_without_error() -> None:

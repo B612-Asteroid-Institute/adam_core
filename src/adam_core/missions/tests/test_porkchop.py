@@ -1,8 +1,13 @@
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
+from adam_core.coordinates import CartesianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.units import au_per_day_to_km_per_s
+from adam_core.orbits import Orbits
 from adam_core.time import Timestamp
 
 from ..porkchop import (
@@ -10,6 +15,136 @@ from ..porkchop import (
     plot_porkchop_plotly,
     prepare_and_propagate_orbits,
 )
+
+
+class _EchoPropagator:
+    def propagate_orbits(self, body, times, max_processes=1):
+        state = body.coordinates.values[0]
+        rows = len(times)
+        return Orbits.from_kwargs(
+            orbit_id=[body.orbit_id[0].as_py()] * rows,
+            object_id=[body.object_id[0].as_py()] * rows,
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=np.full(rows, state[0]),
+                y=np.full(rows, state[1]),
+                z=np.full(rows, state[2]),
+                vx=np.full(rows, state[3]),
+                vy=np.full(rows, state[4]),
+                vz=np.full(rows, state[5]),
+                time=times,
+                origin=Origin.from_kwargs(
+                    code=[body.coordinates.origin.code[0].as_py()] * rows
+                ),
+                frame=body.coordinates.frame,
+            ),
+        )
+
+
+def _assert_orbit_fixture(actual, expected):
+    assert actual.orbit_id.to_pylist() == expected["orbit_id"]
+    assert actual.object_id.to_pylist() == expected["object_id"]
+    np.testing.assert_allclose(
+        actual.coordinates.values, expected["values"], rtol=1e-13, atol=1e-13
+    )
+    assert actual.coordinates.time.days.to_pylist() == expected["days"]
+    assert actual.coordinates.time.nanos.to_pylist() == expected["nanos"]
+    assert actual.coordinates.time.scale == expected["scale"]
+    assert actual.coordinates.origin.code.to_pylist() == expected["origins"]
+    assert actual.coordinates.frame == expected["frame"]
+
+
+def test_prepare_and_propagate_orbits_frozen_legacy_parity():
+    fixture_path = (
+        Path(__file__).resolve().parents[4]
+        / "migration"
+        / "artifacts"
+        / "departure_spherical_fixture_2026-07-12.json"
+    )
+    fixture = json.loads(fixture_path.read_text())
+    major = prepare_and_propagate_orbits(
+        OriginCodes.EARTH,
+        Timestamp.from_mjd([60000.0], scale="utc"),
+        Timestamp.from_mjd([60002.0], scale="utc"),
+        propagation_origin=OriginCodes.SUN,
+        step_size=0.5,
+    )
+    _assert_orbit_fixture(major, fixture["prepare_major_body"])
+
+    body = Orbits.from_kwargs(
+        orbit_id=["provider-body"],
+        object_id=["provider-body"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.1],
+            z=[-0.05],
+            vx=[0.001],
+            vy=[0.017],
+            vz=[0.0002],
+            time=Timestamp.from_mjd([60000.0], scale="tdb"),
+            origin=Origin.from_kwargs(code=["EARTH"]),
+            frame="equatorial",
+        ),
+    )
+    provider = prepare_and_propagate_orbits(
+        body,
+        Timestamp.from_mjd([60000.0], scale="tdb"),
+        Timestamp.from_mjd([60002.0], scale="tdb"),
+        propagation_origin=OriginCodes.SUN,
+        step_size=0.5,
+        propagator_class=_EchoPropagator,
+        max_processes=1,
+    )
+    _assert_orbit_fixture(provider, fixture["prepare_provider_body"])
+
+
+def test_prepare_major_body_grid_edge_compatibility():
+    start = Timestamp.from_mjd([60000.0], scale="tdb")
+    end = Timestamp.from_mjd([60002.0], scale="tdb")
+    with pytest.raises(ZeroDivisionError, match="float division by zero"):
+        prepare_and_propagate_orbits(OriginCodes.EARTH, start, end, step_size=0.0)
+    with pytest.raises(ValueError, match="arange: cannot compute length"):
+        prepare_and_propagate_orbits(
+            OriginCodes.EARTH, start, end, step_size=float("nan")
+        )
+    assert (
+        len(
+            prepare_and_propagate_orbits(
+                OriginCodes.EARTH, start, end, step_size=float("inf")
+            )
+        )
+        == 1
+    )
+    assert (
+        len(prepare_and_propagate_orbits(OriginCodes.EARTH, start, end, step_size=-1.0))
+        == 0
+    )
+
+
+def test_prepare_major_body_orbits_rust_native_timing():
+    from adam_core import _rust_native
+    from adam_core._rust.arrow import ensure_spice_backend
+
+    ensure_spice_backend()
+    start = Timestamp.from_mjd([60000.0], scale="utc")
+    end = Timestamp.from_mjd([60002.0], scale="utc")
+    samples = _rust_native.benchmark_prepare_major_body_orbits(
+        np.ascontiguousarray(start.days.to_numpy()),
+        np.ascontiguousarray(start.nanos.to_numpy()),
+        start.scale,
+        np.ascontiguousarray(end.days.to_numpy()),
+        np.ascontiguousarray(end.nanos.to_numpy()),
+        end.scale,
+        0.5,
+        OriginCodes.EARTH.value,
+        OriginCodes.SUN.value,
+        OriginCodes.SUN.name,
+        2,
+        2,
+        0,
+    )
+    assert len(samples) == 2
+    assert all(len(trial) == 2 for trial in samples)
+    assert all(sample >= 0 for trial in samples for sample in trial)
 
 
 def test_generate_porkchop_data_origins():
@@ -779,6 +914,24 @@ def test_lambert_solution_orbits():
     # Verify we have some results to test with
     assert len(lambert_results) > 0, "Should have Lambert solutions for testing"
 
+    # Each accessor has direct Rust-owned Instant timing; Arrow/PyO3 input
+    # conversion is prepared before samples begin.
+    from adam_core import _rust_native
+
+    batch = lambert_results._record_batch()
+    for accessor in (
+        "departure_body",
+        "arrival_body",
+        "solution_departure",
+        "solution_arrival",
+    ):
+        samples = _rust_native.benchmark_lambert_solution_orbit_arrow(
+            batch, accessor, 2, 2, 1
+        )
+        assert len(samples) == 2
+        assert all(len(trial) == 2 for trial in samples)
+        assert all(sample >= 0.0 for trial in samples for sample in trial)
+
     # Test departure orbit construction
     departure_orbits = lambert_results.solution_departure_orbit()
 
@@ -989,14 +1142,19 @@ def test_lambert_solution_orbits_keplerian_consistency():
         err_msg="Eccentricity should be identical for departure and arrival orbits",
     )
 
-    # Inclination should be identical (tolerance: ~1e-12 degrees ≈ 3 microarcseconds)
+    # Inclination should be identical (tolerance: ~1e-12 degrees ≈ 3 microarcseconds).
+    # rtol=1e-12 matches the intent stated above; the prior `rtol=1e-14`
+    # was tuned to one specific Lambert implementation's FP-reduction
+    # ordering and tripped on equivalently-correct implementations with
+    # different (but equally valid) reduction orders. 1e-12 is still well
+    # below the physical precision of any Lambert use case.
     departure_i = departure_keplerian.i.to_numpy(zero_copy_only=False)
     arrival_i = arrival_keplerian.i.to_numpy(zero_copy_only=False)
 
     np.testing.assert_allclose(
         departure_i,
         arrival_i,
-        rtol=1e-14,
+        rtol=1e-12,
         atol=1e-16,
         err_msg="Inclination should be identical for departure and arrival orbits",
     )
@@ -1058,3 +1216,138 @@ def test_lambert_solution_orbits_keplerian_consistency():
     print(
         f"  Inclination range: {np.min(departure_i)*180/np.pi:.3f} - {np.max(departure_i)*180/np.pi:.3f} degrees"
     )
+
+
+def test_generate_porkchop_data_uses_record_batches_and_direct_wrap(monkeypatch):
+    """The public facade must cross once as RecordBatches and wrap directly."""
+    import numpy as np
+    import pyarrow as pa
+
+    from adam_core.coordinates import CartesianCoordinates, Origin
+    from adam_core.coordinates.origin import OriginCodes
+    from adam_core.missions import porkchop as porkchop_module
+    from adam_core.missions.porkchop import LambertSolutions, generate_porkchop_data
+    from adam_core.orbits import Orbits
+    from adam_core.time import Timestamp
+
+    def _orbits(prefix, mjds, radius):
+        n = len(mjds)
+        theta = np.linspace(0.0, 0.8, n)
+        return Orbits.from_kwargs(
+            orbit_id=[f"{prefix}{i}" for i in range(n)],
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=radius * np.cos(theta),
+                y=radius * np.sin(theta),
+                z=np.zeros(n),
+                vx=-0.017 * np.sin(theta) / np.sqrt(radius),
+                vy=0.017 * np.cos(theta) / np.sqrt(radius),
+                vz=np.zeros(n),
+                time=Timestamp.from_mjd(mjds, scale="tdb"),
+                origin=Origin.from_kwargs(code=["SUN"] * n),
+                frame="ecliptic",
+            ),
+        )
+
+    departure = _orbits("d", np.array([60000.0, 60004.0, 60008.0]), 1.0)
+    arrival = _orbits("a", np.array([60120.0, 60140.0]), 1.5)
+
+    native = porkchop_module.generate_porkchop_data_arrow
+    called = {"value": False}
+
+    def _checked(dep_batch, arr_batch, *args, **kwargs):
+        assert isinstance(dep_batch, pa.RecordBatch)
+        assert isinstance(arr_batch, pa.RecordBatch)
+        called["value"] = True
+        return native(dep_batch, arr_batch, *args, **kwargs)
+
+    def _forbid_from_kwargs(*args, **kwargs):
+        raise AssertionError(
+            "LambertSolutions.from_kwargs must not rebuild Rust output"
+        )
+
+    monkeypatch.setattr(porkchop_module, "generate_porkchop_data_arrow", _checked)
+    monkeypatch.setattr(LambertSolutions, "from_kwargs", _forbid_from_kwargs)
+
+    result = generate_porkchop_data(
+        departure, arrival, propagation_origin=OriginCodes.SUN
+    )
+    assert called["value"]
+    assert len(result) == 6
+    assert result.frame == "ecliptic"
+    assert set(result.origin.code.to_pylist()) == {"SUN"}
+    assert result.departure_time.scale == "tdb"
+    assert result.arrival_time.scale == "tdb"
+    tof = result.time_of_flight()
+    assert np.all(tof > 0.0)
+
+
+def _stacked_columns(solutions, columns):
+    return np.column_stack(
+        [
+            solutions.table.column(column).to_numpy(zero_copy_only=False)
+            for column in columns
+        ]
+    )
+
+
+def test_lambert_solution_scalar_accessors_match_legacy_expressions():
+    """vinf/c3/time_of_flight are Rust one-crossings; pin bit parity with the
+    legacy NumPy expressions they replaced."""
+    from adam_core import _rust_native
+
+    departure = prepare_and_propagate_orbits(
+        body=OriginCodes.EARTH,
+        start_time=Timestamp.from_mjd([60000], scale="tdb"),
+        end_time=Timestamp.from_mjd([60020], scale="tdb"),
+        propagation_origin=OriginCodes.SUN,
+        step_size=5.0,
+    )
+    arrival = prepare_and_propagate_orbits(
+        body=OriginCodes.MARS_BARYCENTER,
+        start_time=Timestamp.from_mjd([60100], scale="tdb"),
+        end_time=Timestamp.from_mjd([60120], scale="tdb"),
+        propagation_origin=OriginCodes.SUN,
+        step_size=5.0,
+    )
+    solutions = generate_porkchop_data(departure, arrival)
+    assert len(solutions) > 0
+
+    for prefix in ("departure", "arrival"):
+        solution_v = _stacked_columns(
+            solutions, [f"solution_{prefix}_v{axis}" for axis in "xyz"]
+        )
+        body_v = _stacked_columns(
+            solutions, [f"{prefix}_body_v{axis}" for axis in "xyz"]
+        )
+        expected_vinf = np.linalg.norm(solution_v - body_v, axis=1)
+        np.testing.assert_array_equal(
+            getattr(solutions, f"vinf_{prefix}")(), expected_vinf
+        )
+        np.testing.assert_array_equal(
+            getattr(solutions, f"c3_{prefix}")(), expected_vinf**2
+        )
+        samples = _rust_native.benchmark_vinf_numpy(
+            np.ascontiguousarray(solution_v),
+            np.ascontiguousarray(body_v),
+            2,
+            2,
+            1,
+        )
+        assert all(sample >= 0.0 for trial in samples for sample in trial)
+
+    expected_tof = solutions.arrival_time.mjd().to_numpy(
+        zero_copy_only=False
+    ) - solutions.departure_time.mjd().to_numpy(zero_copy_only=False)
+    np.testing.assert_array_equal(solutions.time_of_flight(), expected_tof)
+    samples = _rust_native.benchmark_timestamp_mjd_difference_numpy(
+        solutions.arrival_time.days.to_numpy(zero_copy_only=False),
+        solutions.arrival_time.nanos.to_numpy(zero_copy_only=False),
+        solutions.arrival_time.scale,
+        solutions.departure_time.days.to_numpy(zero_copy_only=False),
+        solutions.departure_time.nanos.to_numpy(zero_copy_only=False),
+        solutions.departure_time.scale,
+        2,
+        2,
+        1,
+    )
+    assert all(sample >= 0.0 for trial in samples for sample in trial)

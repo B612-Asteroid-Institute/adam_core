@@ -29,6 +29,22 @@ def test_convert_magnitude_matches_integral_ratio():
     )
     assert np.allclose(out, expected, rtol=0.0, atol=1e-12)
 
+    from adam_core import _rust_native
+    from adam_core.photometry.bandpasses.api import _data_dir_str
+
+    samples = _rust_native.benchmark_bandpasses_convert_magnitude(
+        _data_dir_str(),
+        m_v,
+        ["V", "V"],
+        ["DECam_g", "DECam_g"],
+        "C",
+        None,
+        2,
+        2,
+        1,
+    )
+    assert all(sample > 0.0 for trial in samples for sample in trial)
+
 
 def test_convert_magnitude_mix_weights_match_named_template():
     m_v = np.asarray([20.0], dtype=float)

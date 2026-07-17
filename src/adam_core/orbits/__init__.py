@@ -4,7 +4,7 @@
 from .ephemeris import Ephemeris
 from .orbits import Orbits
 from .trajectory import Trajectory
-from .variants import VariantOrbits
+from .variants import VariantEphemeris, VariantOrbits
 
 __all__ = [
     "Ephemeris",

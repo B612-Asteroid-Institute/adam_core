@@ -6,6 +6,7 @@ import quivr as qv
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.spherical import SphericalCoordinates
 from ..observers.observers import Observers
+from ..time import Timestamp
 
 
 class Ephemeris(qv.Table):
@@ -54,43 +55,48 @@ class Ephemeris(qv.Table):
         ]`
             Linkage between ephemerides and observers.
         """
+        from adam_core import _rust_native
+
+        from ..coordinates.transform import _coordinate_record_batch
+        from .arrow_bridge import observers_to_record_batch
+
+        # One Rust crossing owns the adam-core-owned semantics: observer time
+        # rescaling, precision rounding, and the expected unique-observer count.
+        (
+            left_days,
+            left_nanos,
+            right_days,
+            right_nanos,
+            observer_days,
+            observer_nanos,
+            expected_length,
+        ) = _rust_native.prepare_ephemeris_observer_linkage_arrow(
+            _coordinate_record_batch(self.coordinates, "spherical"),
+            observers_to_record_batch(observers),
+            precision,
+        )
         if self.coordinates.time.scale != observers.coordinates.time.scale:
             observers = observers.set_column(
                 "coordinates.time",
-                observers.coordinates.time.rescale(self.coordinates.time.scale),
+                Timestamp.from_kwargs(
+                    days=observer_days,
+                    nanos=observer_nanos,
+                    scale=self.coordinates.time.scale,
+                ),
             )
 
-        rounded = self.coordinates.time.rounded(precision)
-        observers_rounded = observers.coordinates.time.rounded(precision)
-
         left_keys = {
-            "days": rounded.days,
-            "nanos": rounded.nanos,
+            "days": pa.array(left_days, type=pa.int64()),
+            "nanos": pa.array(left_nanos, type=pa.int64()),
             "observatory_code": self.coordinates.origin.code,
         }
         right_keys = {
-            "days": observers_rounded.days,
-            "nanos": observers_rounded.nanos,
+            "days": pa.array(right_days, type=pa.int64()),
+            "nanos": pa.array(right_nanos, type=pa.int64()),
             "observatory_code": observers.code,
         }
         linkage = qv.MultiKeyLinkage(self, observers, left_keys, right_keys)
 
-        # Check to make sure we have the correct number of linkages by calculating the number
-        # of unique observers in the table and checking to see if that matches the number of
-        # unique keys in the linkage
-        observers_table = pa.table(
-            [
-                observers.code,
-                observers.coordinates.time.days,
-                observers.coordinates.time.nanos,
-            ],
-            names=["observatory_code", "days", "nanos"],
-        )
-        unique_observers = observers_table.group_by(
-            ["observatory_code", "days", "nanos"]
-        ).aggregate([])
-
-        expected_length = len(unique_observers)
         actual_length = len(linkage.all_unique_values)
         if expected_length != actual_length:
             warnings.warn(

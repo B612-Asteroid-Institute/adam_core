@@ -7,14 +7,19 @@ from typing import Literal, Union
 
 import numpy as np
 import pyarrow as pa
-import spiceypy as sp
 
 from ..constants import Constants as c
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..time import Timestamp
-from ..utils.bounded_lru import bounded_lru_get, bounded_lru_put
-from ..utils.spice import get_perturber_state, get_spice_body_state, setup_SPICE
+from ..utils.bounded_lru import _bounded_lru_get, _bounded_lru_put
+from ..utils.spice import (
+    _query_pxform_itrf93_batch,
+    get_perturber_state,
+    get_spice_body_state,
+    setup_SPICE,
+)
+from ..utils.spice_backend import NotCovered, get_backend
 from .observers import OBSERVATORY_CODES, OBSERVATORY_PARALLAX_COEFFICIENTS
 
 R_EARTH_EQUATORIAL = c.R_EARTH_EQUATORIAL
@@ -42,7 +47,7 @@ _OBSERVER_STATE_CACHE: "OrderedDict[_ObserverStateCacheKey, CartesianCoordinates
 
 
 def _observer_cache_get(key: _ObserverStateCacheKey) -> CartesianCoordinates | None:
-    return bounded_lru_get(
+    return _bounded_lru_get(
         _OBSERVER_STATE_CACHE, key, maxsize=_OBSERVER_STATE_CACHE_MAXSIZE
     )
 
@@ -50,7 +55,7 @@ def _observer_cache_get(key: _ObserverStateCacheKey) -> CartesianCoordinates | N
 def _observer_cache_put(
     key: _ObserverStateCacheKey, coords: CartesianCoordinates
 ) -> None:
-    bounded_lru_put(
+    _bounded_lru_put(
         _OBSERVER_STATE_CACHE, key, coords, maxsize=_OBSERVER_STATE_CACHE_MAXSIZE
     )
 
@@ -136,6 +141,83 @@ def get_mpc_observer_state(
     if cached is not None:
         return cached
 
+    # If the code is 500 (geocenter) in a non-Earth-fixed frame, the Earth
+    # state is the observer state (legacy fast path, one Rust crossing).
+    if code == "500" and frame != "itrf93":
+        return get_perturber_state(OriginCodes.EARTH, times, frame=frame, origin=origin)
+
+    # One Rust crossing owns the ground-site lookup, Earth state, ITRF93
+    # rotation (or Earth-fixed constant offset), epoch dedup, and unit
+    # conversion. The legacy Python composition is retained below only for
+    # requests the Rust backend rejects.
+    try:
+        states = _rust_backend_observer_states(code, times, frame, origin)
+    except Exception:
+        states = None
+    if states is None:
+        states = _legacy_mpc_observer_state(
+            code,
+            times,
+            frame,
+            origin,
+            frame_spice,
+            o_hat_ITRF93,
+            o_vec_ITRF93,
+        )
+
+    _observer_cache_put(cache_key, states)
+    return states
+
+
+def _rust_backend_observer_states(
+    code: str,
+    times: Timestamp,
+    frame: str,
+    origin: OriginCodes,
+) -> CartesianCoordinates | None:
+    """One-crossing ground-observer states from the Rust backend."""
+    from ..utils.spice import setup_mpc_obscodes
+    from ..utils.spice_backend import get_backend
+
+    setup_mpc_obscodes()
+    backend = get_backend()
+    time_table = times.table.combine_chunks()
+    states = backend.observer_states_from_codes(
+        [str(code)],
+        np.zeros(len(times), dtype=np.int64),
+        times.scale,
+        time_table.column("days").chunk(0).to_numpy(zero_copy_only=False),
+        time_table.column("nanos").chunk(0).to_numpy(zero_copy_only=False),
+        frame,
+        origin.name,
+    )
+    states = np.asarray(states, dtype=np.float64)
+    return CartesianCoordinates.from_kwargs(
+        time=times,
+        x=states[:, 0],
+        y=states[:, 1],
+        z=states[:, 2],
+        vx=states[:, 3],
+        vy=states[:, 4],
+        vz=states[:, 5],
+        frame=frame,
+        origin=Origin.from_kwargs(
+            code=pa.array(pa.repeat(origin.name, len(times)), type=pa.large_string())
+        ),
+    )
+
+
+def _legacy_mpc_observer_state(
+    code: str,
+    times: Timestamp,
+    frame: str,
+    origin: OriginCodes,
+    frame_spice: str,
+    o_hat_ITRF93: np.ndarray,
+    o_vec_ITRF93: np.ndarray,
+) -> CartesianCoordinates:
+    """Legacy Python composition, retained for requests the Rust backend
+    rejects (kept byte-compatible with the historical implementation)."""
     # If ITRF93 frame is requested, we can directly use the ITRF93 values
     if frame == "itrf93":
         # For ITRF93, which is Earth-fixed, position is constant but velocity comes from Earth's rotation
@@ -154,7 +236,7 @@ def get_mpc_observer_state(
             r_obs += earth_state.r
             v_obs += earth_state.v
 
-        observer_states = CartesianCoordinates.from_kwargs(
+        return CartesianCoordinates.from_kwargs(
             time=times,
             x=r_obs[:, 0],
             y=r_obs[:, 1],
@@ -170,9 +252,6 @@ def get_mpc_observer_state(
             ),
         )
 
-        _observer_cache_put(cache_key, observer_states)
-        return observer_states
-
     # For other frames, continue with existing implementation
     # Grab Earth state vector (this function handles duplicate times)
     state = get_perturber_state(OriginCodes.EARTH, times, frame=frame, origin=origin)
@@ -181,40 +260,27 @@ def get_mpc_observer_state(
     if code == "500":
         return state
 
-    # If not then we need to add a topocentric correction
+    # If not then we need to add a topocentric correction.
     # Warning! Converting times to ET will incur a loss of precision.
-    epochs_et = times.et()
-    epochs_et_np = epochs_et.to_numpy(zero_copy_only=False).astype(np.float64)
+    epochs_et_np = times.et().to_numpy(zero_copy_only=False).astype(np.float64)
+    unique_ets, inv = np.unique(epochs_et_np, return_inverse=True)
 
-    # Compute one rotation matrix per unique epoch, then scatter the rotated
-    # offsets back to rows via inverse indices. A previous implementation
-    # re-scanned the full epoch array for every unique epoch (O(N * U)),
-    # which turned quadratic for the mostly-unique time arrays that large
-    # ephemeris workloads pass in.
-    unique_epochs_et, inverse_indices = np.unique(epochs_et_np, return_inverse=True)
-
-    # Grab rotation matrices from ITRF93 to the requested frame.
-    # The ITRF93 high accuracy Earth rotation model takes into account:
-    # Precession:  1976 IAU model from Lieske.
-    # Nutation:  1980 IAU model, with IERS corrections due to Herring et al.
-    # True sidereal time using accurate values of TAI-UT1
-    # Polar motion
-    rotation_matrices = np.empty((unique_epochs_et.shape[0], 3, 3), dtype=np.float64)
-    for i in range(unique_epochs_et.shape[0]):
-        rotation_matrices[i] = sp.pxform(
-            "ITRF93", frame_spice, float(unique_epochs_et[i])
-        )
-
-    # Velocity of the observatory due to Earth's rotation, in ITRF93.
     rotation_direction = np.cross(o_hat_ITRF93, Z_AXIS)
-    v_vec_ITRF93 = -OMEGA_EARTH * R_EARTH_EQUATORIAL * rotation_direction
+    v_offset_ITRF93 = -OMEGA_EARTH * R_EARTH_EQUATORIAL * rotation_direction
 
-    # Add the rotated offsets to the Earth state vectors (thank you numpy
-    # broadcasting).
-    r_obs = state.r + (rotation_matrices @ o_vec_ITRF93)[inverse_indices]
-    v_obs = state.v + (rotation_matrices @ v_vec_ITRF93)[inverse_indices]
+    # ITRF93 high-accuracy Earth rotation: precession (IAU-1976), nutation
+    # (IAU-1980 with IERS corrections), true sidereal time, polar motion.
+    unique_rot = _query_pxform_itrf93_batch(frame_spice, unique_ets)
 
-    observer_states = CartesianCoordinates.from_kwargs(
+    rot = unique_rot[inv]  # shape (N, 3, 3)
+    # rot @ vec broadcasts to (N, 3) with BLAS-compatible FP ordering, so it
+    # matches a per-epoch `M @ v` loop bit-for-bit.
+    r_offsets = rot @ o_vec_ITRF93
+    v_offsets = rot @ v_offset_ITRF93
+    r_obs = state.r + r_offsets
+    v_obs = state.v + v_offsets
+
+    return CartesianCoordinates.from_kwargs(
         time=times,
         x=r_obs[:, 0],
         y=r_obs[:, 1],
@@ -227,9 +293,6 @@ def get_mpc_observer_state(
             code=pa.array(pa.repeat(origin.name, len(times)), type=pa.large_string())
         ),
     )
-
-    _observer_cache_put(cache_key, observer_states)
-    return observer_states
 
 
 def get_observer_state(
@@ -287,11 +350,10 @@ def get_observer_state(
 
     # Try to retrieve the body ID from SPICE, could be a custom SPICE kernel NAIF code
     try:
-        body_id = sp.bodn2c(code)
-    except sp.SpiceyError:
+        body_id = get_backend().bodn2c(code)
+    except (NotCovered, RuntimeError):
         err = f"{code} is not a valid MPC observatory code and was not found in SPICE kernels."
         raise ValueError(err)
-    else:
-        return get_spice_body_state(
-            body_id=body_id, times=times, frame=frame, origin=origin
-        )
+    return get_spice_body_state(
+        body_id=body_id, times=times, frame=frame, origin=origin
+    )

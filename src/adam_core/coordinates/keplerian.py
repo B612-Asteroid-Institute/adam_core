@@ -5,7 +5,10 @@ import quivr as qv
 
 from ..time import Timestamp
 from . import cartesian, cometary, spherical
-from .covariances import CoordinateCovariances, transform_covariances_jacobian
+from .covariances import (
+    CoordinateCovariances,
+    rust_covariance_transform,
+)
 from .origin import Origin
 
 __all__ = [
@@ -77,9 +80,14 @@ class KeplerianCoordinates(qv.Table):
         """
         Periapsis distance.
         """
-        from ..dynamics.kepler import calc_periapsis_distance
+        from adam_core import _rust_native
 
-        return np.array(calc_periapsis_distance(self.a.to_numpy(), self.e.to_numpy()))
+        return np.asarray(
+            _rust_native.calc_periapsis_distance_numpy(
+                self.a.to_numpy(), self.e.to_numpy()
+            ),
+            dtype=np.float64,
+        )
 
     @q.setter
     def q(self, value):
@@ -102,9 +110,14 @@ class KeplerianCoordinates(qv.Table):
         """
         Apoapsis distance.
         """
-        from ..dynamics.kepler import calc_apoapsis_distance
+        from adam_core import _rust_native
 
-        return np.array(calc_apoapsis_distance(self.a.to_numpy(), self.e.to_numpy()))
+        return np.asarray(
+            _rust_native.calc_apoapsis_distance_numpy(
+                self.a.to_numpy(), self.e.to_numpy()
+            ),
+            dtype=np.float64,
+        )
 
     @Q.setter
     def Q(self, value):
@@ -127,9 +140,14 @@ class KeplerianCoordinates(qv.Table):
         """
         Semi-latus rectum.
         """
-        from ..dynamics.kepler import calc_semi_latus_rectum
+        from adam_core import _rust_native
 
-        return np.array(calc_semi_latus_rectum(self.a.to_numpy(), self.e.to_numpy()))
+        return np.asarray(
+            _rust_native.calc_semi_latus_rectum_numpy(
+                self.a.to_numpy(), self.e.to_numpy()
+            ),
+            dtype=np.float64,
+        )
 
     @p.setter
     def p(self, value):
@@ -152,9 +170,14 @@ class KeplerianCoordinates(qv.Table):
         """
         Period.
         """
-        from ..dynamics.kepler import calc_period
+        from adam_core import _rust_native
 
-        return np.array(calc_period(self.a.to_numpy(), self.origin.mu()))
+        return np.asarray(
+            _rust_native.period_from_origin_numpy(
+                self.a.to_numpy(), self.origin.code.to_pylist()
+            ),
+            dtype=np.float64,
+        )
 
     @P.setter
     def P(self, value):
@@ -177,10 +200,13 @@ class KeplerianCoordinates(qv.Table):
         """
         Mean motion in degrees.
         """
-        from ..dynamics.kepler import calc_mean_motion
+        from adam_core import _rust_native
 
-        return np.degrees(
-            np.array(calc_mean_motion(self.a.to_numpy(), self.origin.mu()))
+        return np.asarray(
+            _rust_native.mean_motion_degrees_from_origin_numpy(
+                self.a.to_numpy(), self.origin.code.to_pylist()
+            ),
+            dtype=np.float64,
         )
 
     @n.setter
@@ -200,32 +226,27 @@ class KeplerianCoordinates(qv.Table):
         raise ValueError(err)
 
     def to_cartesian(self) -> cartesian.CartesianCoordinates:
-        from .transform import _keplerian_to_cartesian_a, keplerian_to_cartesian
+        from .transform import keplerian_to_cartesian
 
         # Extract gravitational parameter from origin
         mu = self.origin.mu()
 
-        coords_cartesian = keplerian_to_cartesian(
-            self.values,
-            mu=mu,
-            max_iter=1000,
-            tol=1e-15,
-        )
-        coords_cartesian = np.array(coords_cartesian)
-
         if not self.covariance.is_all_nan():
             covariances_keplerian = self.covariance.to_matrix()
-            covariances_cartesian = transform_covariances_jacobian(
+            rust_result = rust_covariance_transform(
                 self.values,
                 covariances_keplerian,
-                _keplerian_to_cartesian_a,
-                in_axes=(0, 0, None, None),
-                out_axes=0,
-                mu=mu,
-                max_iter=1000,
-                tol=1e-15,
+                "keplerian",
+                "cartesian",
+                mu=np.ascontiguousarray(np.asarray(mu, dtype=np.float64)),
+                frame_in=self.frame,
+                frame_out=self.frame,
             )
+            coords_cartesian, covariances_cartesian = rust_result
         else:
+            coords_cartesian = np.array(
+                keplerian_to_cartesian(self.values, mu=mu, max_iter=1000, tol=1e-15)
+            )
             covariances_cartesian = np.empty(
                 (len(coords_cartesian), 6, 6), dtype=np.float64
             )
@@ -249,30 +270,33 @@ class KeplerianCoordinates(qv.Table):
 
     @classmethod
     def from_cartesian(cls, cartesian: cartesian.CartesianCoordinates):
-        from .transform import _cartesian_to_keplerian6, cartesian_to_keplerian
+        from .transform import cartesian_to_keplerian
 
         # Extract gravitational parameter from origin
         mu = cartesian.origin.mu()
-
-        coords_keplerian = cartesian_to_keplerian(
-            cartesian.values,
-            cartesian.time.to_numpy(),
-            mu=mu,
-        )
-        coords_keplerian = np.array(coords_keplerian)
+        t0_np = cartesian.time.to_numpy()
 
         if not cartesian.covariance.is_all_nan():
             cartesian_covariances = cartesian.covariance.to_matrix()
-            covariances_keplerian = transform_covariances_jacobian(
+            rust_result = rust_covariance_transform(
                 cartesian.values,
                 cartesian_covariances,
-                _cartesian_to_keplerian6,
-                in_axes=(0, 0, 0),
-                out_axes=0,
-                t0=cartesian.time.to_numpy(),
-                mu=mu,
+                "cartesian",
+                "keplerian",
+                t0=np.ascontiguousarray(np.asarray(t0_np, dtype=np.float64)),
+                mu=np.ascontiguousarray(np.asarray(mu, dtype=np.float64)),
+                frame_in=cartesian.frame,
+                frame_out=cartesian.frame,
             )
+            rust_coords, covariances_keplerian = rust_result
+            # The 6-col generic returns (a, e, i, raan, ap, M).
+            a_col, e_col, i_col, raan_col, ap_col, m_col = 0, 1, 2, 3, 4, 5
+            coords_keplerian = rust_coords
         else:
+            coords_keplerian = np.array(
+                cartesian_to_keplerian(cartesian.values, t0_np, mu=mu)
+            )
+            a_col, e_col, i_col, raan_col, ap_col, m_col = 0, 4, 5, 6, 7, 8
             covariances_keplerian = np.empty(
                 (len(coords_keplerian), 6, 6), dtype=np.float64
             )
@@ -280,12 +304,12 @@ class KeplerianCoordinates(qv.Table):
 
         covariances_keplerian = CoordinateCovariances.from_matrix(covariances_keplerian)
         coords = cls.from_kwargs(
-            a=coords_keplerian[:, 0],
-            e=coords_keplerian[:, 4],
-            i=coords_keplerian[:, 5],
-            raan=coords_keplerian[:, 6],
-            ap=coords_keplerian[:, 7],
-            M=coords_keplerian[:, 8],
+            a=coords_keplerian[:, a_col],
+            e=coords_keplerian[:, e_col],
+            i=coords_keplerian[:, i_col],
+            raan=coords_keplerian[:, raan_col],
+            ap=coords_keplerian[:, ap_col],
+            M=coords_keplerian[:, m_col],
             time=cartesian.time,
             covariance=covariances_keplerian,
             origin=cartesian.origin,
@@ -294,19 +318,35 @@ class KeplerianCoordinates(qv.Table):
         return coords
 
     def to_cometary(self) -> cometary.CometaryCoordinates:
-        return cometary.CometaryCoordinates.from_cartesian(self.to_cartesian())
+        from ._conversion import convert_representation
+
+        return convert_representation(
+            self, "keplerian", "cometary", cometary.CometaryCoordinates
+        )
 
     @classmethod
     def from_cometary(
         cls, cometary_coordinates: cometary.CometaryCoordinates
     ) -> KeplerianCoordinates:
-        return cls.from_cartesian(cometary_coordinates.to_cartesian())
+        from ._conversion import convert_representation
+
+        return convert_representation(
+            cometary_coordinates, "cometary", "keplerian", cls
+        )
 
     def to_spherical(self) -> spherical.SphericalCoordinates:
-        return spherical.SphericalCoordinates.from_cartesian(self.to_cartesian())
+        from ._conversion import convert_representation
+
+        return convert_representation(
+            self, "keplerian", "spherical", spherical.SphericalCoordinates
+        )
 
     @classmethod
     def from_spherical(
         cls, spherical_coordinates: spherical.SphericalCoordinates
     ) -> KeplerianCoordinates:
-        return cls.from_cartesian(spherical_coordinates.to_cartesian())
+        from ._conversion import convert_representation
+
+        return convert_representation(
+            spherical_coordinates, "spherical", "keplerian", cls
+        )

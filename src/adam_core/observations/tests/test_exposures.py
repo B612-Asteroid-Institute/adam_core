@@ -2,6 +2,8 @@ import os
 import pathlib
 
 import numpy as np
+import pyarrow as pa
+import pytest
 import quivr as qv
 
 from ...coordinates.cartesian import CartesianCoordinates
@@ -28,6 +30,36 @@ def test_exposure_midpoints():
     assert midpoints == Timestamp.from_iso8601(
         ["2000-01-01T00:00:30", "2000-01-02T00:00:15"]
     )
+    groups = list(exp.group_by_observatory_code())
+    assert len(groups) == 1
+    # Legacy yielded pyarrow large_string scalars from unique(); preserved.
+    assert isinstance(groups[0][0], pa.Scalar)
+    assert groups[0][0].as_py() == "I41"
+    assert groups[0][1].id.to_pylist() == ["e1", "e2"]
+
+    from adam_core import _rust_native
+    from adam_core.observations.arrow_bridge import observations_to_ipc
+
+    raw = observations_to_ipc(exp)
+    group_samples = _rust_native.benchmark_exposure_groups_ipc(raw, 2, 2, 1)
+    midpoint_samples = _rust_native.benchmark_exposure_midpoint_ipc(raw, 2, 2, 1)
+    assert all(sample > 0.0 for trial in group_samples for sample in trial)
+    assert all(sample > 0.0 for trial in midpoint_samples for sample in trial)
+
+
+def test_exposure_observers_unknown_code_falls_back_to_legacy_error():
+    # Codes the Rust ground-site table cannot serve must fall back to the
+    # legacy per-code assembly, which raises the exact legacy error for
+    # unknown observatory codes.
+    exp = Exposures.from_kwargs(
+        id=["e1"],
+        start_time=Timestamp.from_iso8601(["2000-01-01T00:00:00"]),
+        duration=[30],
+        filter=["g"],
+        observatory_code=["ZZ9"],
+    )
+    with pytest.raises(ValueError, match="ZZ9 is not a valid MPC observatory code"):
+        exp.observers()
 
 
 def test_exposure_states():
@@ -76,6 +108,29 @@ def test_exposure_states():
     )
 
     obs = exp.observers()
+
+    import pyarrow as pa
+
+    from adam_core._rust.arrow import ensure_spice_backend
+
+    time_table = exp.start_time.table.combine_chunks()
+    exposure_table = exp.table.combine_chunks()
+    batch = pa.RecordBatch.from_arrays(
+        [
+            exposure_table.column("observatory_code").chunk(0),
+            time_table.column("days").chunk(0),
+            time_table.column("nanos").chunk(0),
+            exposure_table.column("duration").chunk(0),
+        ],
+        names=["code", "days", "nanos", "duration"],
+    )
+    samples = (
+        ensure_spice_backend().benchmark_observer_states_from_exposures_arrow_rust(
+            batch, exp.start_time.scale, "ecliptic", "SUN", 2, 2, 1
+        )
+    )
+    assert all(sample > 0.0 for trial in samples for sample in trial)
+
     codes = obs.code
 
     assert codes.to_pylist() == ["W84", "I41", "W84", "I41", "W84"]

@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from typing import List, Literal, Optional, Set
 
 import numpy as np
+import pyarrow as pa
 import pyarrow.compute as pc
-import spiceypy as sp
 from naif_de440 import de440
 from naif_earth_itrf93 import earth_itrf93
 from naif_eop_high_prec import eop_high_prec
@@ -17,7 +17,8 @@ from ..constants import KM_P_AU, S_P_DAY
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.origin import Origin, OriginCodes
 from ..time import Timestamp
-from .bounded_lru import bounded_lru_get, bounded_lru_put
+from .bounded_lru import _bounded_lru_get, _bounded_lru_put
+from .spice_backend import get_backend
 
 DEFAULT_KERNELS = [
     leapseconds,
@@ -28,8 +29,6 @@ DEFAULT_KERNELS = [
     earth_itrf93,
 ]
 
-# Global state for tracking custom kernels
-_REGISTERED_KERNELS: Set[str] = set()
 
 J2000_TDB_JD = 2451545.0
 
@@ -47,12 +46,44 @@ _SPKEZ_CACHE_MAXSIZE = int(os.environ.get("ADAM_CORE_SPKEZ_CACHE_MAXSIZE", "2000
 _SPKEZ_CACHE: "OrderedDict[_SpkezCacheKey, np.ndarray]" = OrderedDict()
 
 
+# Backward-compatible shims: existing callers and tests monkeypatch these
+# names directly, so keep them as thin delegates onto the active backend
+# rather than inlining get_backend() at every call site.
+
+
+def _query_pxform_itrf93_batch(frame_spice: str, ets: np.ndarray) -> np.ndarray:
+    """Batched 3×3 rotation ITRF93 → inertial. Returns shape `(N, 3, 3)`."""
+    ets = np.ascontiguousarray(ets, dtype=np.float64)
+    return get_backend().pxform_batch("ITRF93", frame_spice, ets)
+
+
+def _query_sxform_itrf93_batch(
+    frame_from: str, frame_to: str, ets: np.ndarray
+) -> np.ndarray:
+    """Batched 6×6 state transform across ITRF93 ↔ inertial. Shape `(N, 6, 6)`."""
+    ets = np.ascontiguousarray(ets, dtype=np.float64)
+    return get_backend().sxform_batch(frame_from, frame_to, ets)
+
+
+def _query_states_km_kms_batch(
+    reader, target: int, center: int, frame_spice: str, ets: np.ndarray
+) -> np.ndarray:
+    """Batched (N, 6) state query in km / km-s.
+
+    The ``reader`` positional argument is retained for backward
+    compatibility but ignored — the active backend owns its own readers
+    and routes Rust-first, CSPICE-fallback under the covers.
+    """
+    ets = np.ascontiguousarray(ets, dtype=np.float64)
+    return get_backend().spkez_batch(int(target), int(center), frame_spice, ets)
+
+
 def _spkez_cache_get(key: _SpkezCacheKey) -> np.ndarray | None:
-    return bounded_lru_get(_SPKEZ_CACHE, key, maxsize=_SPKEZ_CACHE_MAXSIZE)
+    return _bounded_lru_get(_SPKEZ_CACHE, key, maxsize=_SPKEZ_CACHE_MAXSIZE)
 
 
 def _spkez_cache_put(key: _SpkezCacheKey, state_au_aud: np.ndarray) -> None:
-    bounded_lru_put(_SPKEZ_CACHE, key, state_au_aud, maxsize=_SPKEZ_CACHE_MAXSIZE)
+    _bounded_lru_put(_SPKEZ_CACHE, key, state_au_aud, maxsize=_SPKEZ_CACHE_MAXSIZE)
 
 
 def clear_spkez_cache() -> None:
@@ -61,7 +92,11 @@ def clear_spkez_cache() -> None:
 
     This is primarily intended for testing and benchmarking.
     """
+    # Both the retained legacy Python cache and the Rust-side cache behind
+    # the fused get_perturber_state crossing are semantic result caches;
+    # clear them together.
     _SPKEZ_CACHE.clear()
+    get_backend().clear_spkez_state_cache()
 
 
 def _jd_tdb_to_et(jd_tdb: np.ndarray) -> np.ndarray:
@@ -117,15 +152,37 @@ def setup_SPICE(kernels: Optional[List[str]] = None, force: bool = False):
     if kernels is None:
         kernels = DEFAULT_KERNELS
 
-    process_id = os.getpid()
-    env_var = f"ADAM_CORE_SPICE_INITIALIZED_{process_id}"
-    if env_var in os.environ and not force:
-        return
-
+    # The process-global Rust backend is the single source of truth for what
+    # is loaded, and ``furnsh`` is idempotent by path (Rust dedups), so simply
+    # furnsh-ing each kernel is a cheap no-op when already loaded and a real
+    # load into a freshly cleared/rebuilt backend otherwise. This self-heals
+    # after any backend reset (a test calling ``clear``) with no separate
+    # Python-side bookkeeping to desync (personal-cmy.23). ``force`` is
+    # retained for API compatibility; furnsh idempotency makes it a no-op.
+    del force
+    backend = get_backend()
     for kernel in kernels:
-        register_spice_kernel(kernel)
-    os.environ[env_var] = "True"
+        backend.furnsh(kernel)
     return
+
+
+def setup_mpc_obscodes(force: bool = False) -> None:
+    """Ensure the MPC observatory parallax table is loaded into the
+    process-global Rust backend (the canonical obscodes loader).
+
+    Idempotent and keyed on the backend's actual loaded-site count (not a
+    Python-side flag), so it reloads correctly after a backend ``clear``. The
+    obscodes ship as JSON in the ``mpc_obscodes`` data package. Both
+    ``Observers.from_codes`` and the Rust-native origin translation (for
+    observatory-code origins) rely on this.
+    """
+    backend = get_backend()
+    if not force and backend.mpc_obscodes_loaded() > 0:
+        return
+    from mpc_obscodes import mpc_obscodes
+
+    with open(mpc_obscodes) as obscodes_file:
+        backend.load_mpc_obscodes(obscodes_file.read())
 
 
 def get_perturber_state(
@@ -154,13 +211,7 @@ def get_perturber_state(
         The state vectors of the perturber in the desired frame
         and measured from the desired origin.
     """
-    if frame == "ecliptic":
-        frame_spice = "ECLIPJ2000"
-    elif frame == "equatorial":
-        frame_spice = "J2000"
-    elif frame == "itrf93":
-        frame_spice = "ITRF93"
-    else:
+    if frame not in ("ecliptic", "equatorial", "itrf93"):
         err = "frame should be one of {'equatorial', 'ecliptic', 'itrf93'}"
         raise ValueError(err)
 
@@ -170,6 +221,65 @@ def get_perturber_state(
     N = int(len(times))
     if N == 0:
         return CartesianCoordinates.empty()
+
+    # One fused Rust crossing owns the TDB rescale, epoch dedup, bounded
+    # forward/reverse state cache, batched SPK lookup, unit conversion, and
+    # nested table assembly (bead personal-cmy.37.4.9). Coverage failures
+    # fall back to the retained legacy composition, which reproduces the
+    # exact legacy NotCovered/ValueError behavior from the same readers.
+    from .._rust.arrow import table_from_record_batch
+
+    try:
+        result = _rust_backend_perturber_states(perturber, times, frame, origin)
+    except (RuntimeError, ValueError):
+        return _get_perturber_state_legacy(perturber, times, frame, origin)
+    return table_from_record_batch(CartesianCoordinates, result)
+
+
+def _rust_backend_perturber_states(
+    perturber: OriginCodes,
+    times: Timestamp,
+    frame: str,
+    origin: OriginCodes,
+):
+    """Single fused crossing behind ``get_perturber_state`` (module-level so
+    tests can force the legacy fallback by monkeypatching it to raise)."""
+    time_table = times.table.combine_chunks()
+    batch = pa.RecordBatch.from_arrays(
+        [
+            time_table.column("days").chunk(0),
+            time_table.column("nanos").chunk(0),
+        ],
+        names=["days", "nanos"],
+    )
+    return get_backend().perturber_states_arrow(
+        batch,
+        times.scale,
+        int(perturber.value),
+        int(origin.value),
+        origin.name,
+        frame,
+        _SPKEZ_CACHE_MAXSIZE,
+    )
+
+
+def _get_perturber_state_legacy(
+    perturber: OriginCodes,
+    times: Timestamp,
+    frame: Literal["ecliptic", "equatorial", "itrf93"] = "ecliptic",
+    origin: OriginCodes = OriginCodes.SUN,
+) -> CartesianCoordinates:
+    """Retained legacy composition (Python epoch cache + batched backend
+    query); used when the fused Rust crossing reports a failure and by tests
+    that exercise the Python cache internals directly."""
+    if frame == "ecliptic":
+        frame_spice = "ECLIPJ2000"
+    elif frame == "equatorial":
+        frame_spice = "J2000"
+    else:
+        frame_spice = "ITRF93"
+
+    N = int(len(times))
 
     # Build stable time keys in TDB using integer (days,nanos).
     times_tdb = times.rescale("tdb")
@@ -184,6 +294,10 @@ def get_perturber_state(
     epochs_et = times_tdb.et().to_numpy(zero_copy_only=False).astype(np.float64)
     uniq_states = np.empty((uniq_keys.shape[0], 6), dtype=np.float64)
 
+    # First pass: cache probe for every unique epoch; collect misses for a
+    # single batched query.
+    cache_hit = np.zeros(uniq_keys.shape[0], dtype=bool)
+    miss_idx: list[int] = []
     for i_u in range(int(uniq_keys.shape[0])):
         i0 = int(rep_idx[i_u])
         key = _SpkezCacheKey(
@@ -196,9 +310,9 @@ def get_perturber_state(
         cached = _spkez_cache_get(key)
         if cached is not None:
             uniq_states[i_u, :] = cached
+            cache_hit[i_u] = True
             continue
 
-        # Invert from cached reverse pair if present (exact negation).
         rev_key = _SpkezCacheKey(
             target=int(origin.value),
             observer=int(perturber.value),
@@ -211,21 +325,53 @@ def get_perturber_state(
             s = -cached_rev
             uniq_states[i_u, :] = s
             _spkez_cache_put(key, s)
+            cache_hit[i_u] = True
             continue
 
-        state_km_kms, _lt = sp.spkez(
-            perturber.value,
-            float(epochs_et[i0]),
+        miss_idx.append(i_u)
+
+    if miss_idx:
+        miss_i0 = rep_idx[np.asarray(miss_idx, dtype=np.int64)]
+        miss_ets = epochs_et[miss_i0]
+        batched = _query_states_km_kms_batch(
+            None,
+            int(perturber.value),
+            int(origin.value),
             frame_spice,
-            "NONE",
-            origin.value,
+            miss_ets,
         )
-        s = np.asarray(state_km_kms, dtype=np.float64) / KM_P_AU
-        s[3:] *= S_P_DAY
-        uniq_states[i_u, :] = s
-        _spkez_cache_put(key, s)
-        # Also populate reverse pair to avoid redundant SPICE calls later.
-        _spkez_cache_put(rev_key, -s)
+        scale = np.array(
+            [
+                KM_P_AU,
+                KM_P_AU,
+                KM_P_AU,
+                KM_P_AU / S_P_DAY,
+                KM_P_AU / S_P_DAY,
+                KM_P_AU / S_P_DAY,
+            ],
+            dtype=np.float64,
+        )
+        miss_states = batched / scale
+        for local_i, i_u in enumerate(miss_idx):
+            i0 = int(rep_idx[i_u])
+            s = miss_states[local_i]
+            uniq_states[i_u, :] = s
+            key = _SpkezCacheKey(
+                target=int(perturber.value),
+                observer=int(origin.value),
+                frame=str(frame_spice),
+                days=int(days[i0]),
+                nanos=int(nanos[i0]),
+            )
+            rev_key = _SpkezCacheKey(
+                target=int(origin.value),
+                observer=int(perturber.value),
+                frame=str(frame_spice),
+                days=int(days[i0]),
+                nanos=int(nanos[i0]),
+            )
+            _spkez_cache_put(key, s)
+            _spkez_cache_put(rev_key, -s)
 
     states = uniq_states[inv]
 
@@ -251,7 +397,7 @@ def list_registered_kernels() -> Set[str]:
     kernels : set[str]
         Set of kernel file paths that are currently registered
     """
-    return _REGISTERED_KERNELS.copy()
+    return set(get_backend().registered_kernels())
 
 
 def register_spice_kernel(kernel_path: str) -> None:
@@ -263,9 +409,9 @@ def register_spice_kernel(kernel_path: str) -> None:
     kernel_path : str
         Path to the SPICE kernel file
     """
-    if kernel_path not in _REGISTERED_KERNELS:
-        sp.furnsh(kernel_path)
-        _REGISTERED_KERNELS.add(kernel_path)
+    # furnsh is idempotent by path in the Rust backend, so no Python-side
+    # dedup is needed; the global backend's kernel list is the registry.
+    get_backend().furnsh(kernel_path)
 
 
 def unregister_spice_kernel(kernel_path: str) -> None:
@@ -277,9 +423,9 @@ def unregister_spice_kernel(kernel_path: str) -> None:
     kernel_path : str
         Path to the SPICE kernel file
     """
-    if kernel_path in _REGISTERED_KERNELS:
-        sp.unload(kernel_path)
-        _REGISTERED_KERNELS.remove(kernel_path)
+    # unload is a no-op in the Rust backend when the path is not loaded, so
+    # no Python-side membership check is needed.
+    get_backend().unload(kernel_path)
 
 
 def get_spice_body_state(
@@ -313,17 +459,61 @@ def get_spice_body_state(
         If the body ID is not found in any loaded kernel or if state data
         cannot be retrieved for the requested times
     """
-    if frame == "ecliptic":
-        frame_spice = "ECLIPJ2000"
-    elif frame == "equatorial":
-        frame_spice = "J2000"
-    elif frame == "itrf93":
-        frame_spice = "ITRF93"
-    else:
+    if frame not in ("ecliptic", "equatorial", "itrf93"):
         raise ValueError("frame should be one of {'equatorial', 'ecliptic', 'itrf93'}")
 
     # Make sure SPICE is ready
     setup_SPICE()
+
+    # One fused Rust crossing owns ET conversion, the batched SPK lookup,
+    # the legacy unit-conversion order, and nested table assembly (bead
+    # personal-cmy.37.4.9). Failures fall back to the retained legacy
+    # composition, which reproduces the exact legacy wrapped ValueError from
+    # the same readers.
+    from .._rust.arrow import table_from_record_batch
+
+    try:
+        result = _rust_backend_spice_body_states(body_id, times, frame, origin)
+    except (RuntimeError, ValueError):
+        return _get_spice_body_state_legacy(body_id, times, frame, origin)
+    return table_from_record_batch(CartesianCoordinates, result)
+
+
+def _rust_backend_spice_body_states(
+    body_id: int,
+    times: Timestamp,
+    frame: str,
+    origin: OriginCodes,
+):
+    """Single fused crossing behind ``get_spice_body_state`` (module-level so
+    tests can force the legacy fallback by monkeypatching it to raise)."""
+    time_table = times.table.combine_chunks()
+    batch = pa.RecordBatch.from_arrays(
+        [
+            time_table.column("days").chunk(0),
+            time_table.column("nanos").chunk(0),
+        ],
+        names=["days", "nanos"],
+    )
+    return get_backend().spice_body_states_arrow(
+        batch, times.scale, int(body_id), origin.name, frame
+    )
+
+
+def _get_spice_body_state_legacy(
+    body_id: int,
+    times: Timestamp,
+    frame: Literal["ecliptic", "equatorial", "itrf93"] = "ecliptic",
+    origin: OriginCodes = OriginCodes.SUN,
+) -> CartesianCoordinates:
+    """Retained legacy composition; used when the fused Rust crossing
+    reports a failure so the public error contract stays byte-identical."""
+    if frame == "ecliptic":
+        frame_spice = "ECLIPJ2000"
+    elif frame == "equatorial":
+        frame_spice = "J2000"
+    else:
+        frame_spice = "ITRF93"
 
     # Convert epochs to ET in TDB
     epochs_et = times.et()
@@ -331,17 +521,20 @@ def get_spice_body_state(
     N = len(times)
     states = np.empty((N, 6), dtype=np.float64)
 
+    # One batched query per unique epoch set — the active backend routes
+    # Rust-first for J2000/ECLIPJ2000 and falls back to CSPICE for ITRF93
+    # or any body the Rust DE440 reader does not cover.
+    unique_ets_np = unique_epochs_et.to_numpy(zero_copy_only=False).astype(np.float64)
+    try:
+        unique_states_km = _query_states_km_kms_batch(
+            None, int(body_id), int(origin.value), frame_spice, unique_ets_np
+        )
+    except Exception as e:
+        raise ValueError(f"Could not get state data for body ID {body_id}: {str(e)}")
+
     for i, epoch in enumerate(unique_epochs_et):
         mask = pc.equal(epochs_et, epoch).to_numpy(False)
-        try:
-            state, lt = sp.spkez(
-                body_id, epoch.as_py(), frame_spice, "NONE", origin.value
-            )
-            states[mask, :] = state
-        except sp.SpiceyError as e:
-            raise ValueError(
-                f"Could not get state data for body ID {body_id} at time {epoch}: {str(e)}"
-            )
+        states[mask, :] = unique_states_km[i]
 
     # Convert units (vectorized operations)
     states = states / KM_P_AU

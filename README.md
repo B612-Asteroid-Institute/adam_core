@@ -1,6 +1,6 @@
 # adam_core: ADAM Core Utilities
 #### A Python package by the Asteroid Institute, a program of the B612 Foundation
-[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue)](https://img.shields.io/badge/Python-3.9%2B-blue)
+[![Python 3.11-3.13](https://img.shields.io/badge/Python-3.11--3.13-blue)](https://img.shields.io/badge/Python-3.9%2B-blue)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)  
 [![pip - Build, Lint, Test, and Coverage](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/pip-build-lint-test-coverage.yml/badge.svg)](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/pip-build-lint-test-coverage.yml)
 
@@ -13,6 +13,30 @@ ADAM Core is available on PyPI
 ```bash
 pip install adam_core
 ```
+
+Astropy, Astroquery, Healpy, and plotting libraries are explicit optional
+providers rather than default runtime dependencies. Install only the bridge
+you need:
+
+```bash
+pip install "adam_core[astropy]"      # Astropy Time and UT1/IERS bridges
+pip install "adam_core[legacy-sbdb]"  # Astroquery compatibility workflows
+pip install "adam_core[healpix]"      # Healpy-backed public helpers
+pip install "adam_core[jax]"          # Historical explicit JAX bridge
+pip install "adam_core[plots]"        # Plotting and date-axis formatting
+```
+
+Native wheels support CPython 3.11-3.13 on manylinux 2.17+ x86-64/AArch64 and
+macOS Apple silicon/Intel. Windows is deferred because the required
+``libassist-sys 1.2.1`` acceptance stack depends on upstream ASSIST's POSIX
+memory mapping; musllinux is also unsupported. Python installs reuse kernel
+data from the active environment; pure-Rust consumers use override ->
+installed-Python -> cache -> checksummed wheel resolution, with
+``ADAM_CORE_KERNEL_OFFLINE=1`` disabling downloads.
+
+ASSIST propagation is provided by the separate ``adam-assist`` distribution as
+``adam_assist.ASSISTPropagator``. ``adam-assist`` owns the orchestration layer
+and consumes ``libassist-sys`` and ``librebound-sys`` directly.
 
 ## Usage
 

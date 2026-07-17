@@ -1,16 +1,30 @@
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import Tuple
 
-import jax.numpy as jnp
 import numpy as np
-from jax import config, jit, lax
+import numpy.typing as npt
 
+from .._rust.api import calc_chi_numpy as _rust_calc_chi_numpy
 from ..constants import Constants as c
-from .stumpff import calc_stumpff
-
-config.update("jax_enable_x64", True)
+from ._rust_compat import (
+    ScalarOrArray,
+    as_rows,
+    broadcast_to_rows,
+    require_rust,
+)
 
 MU = c.MU
+CHI_TYPES = Tuple[
+    ScalarOrArray,
+    ScalarOrArray,
+    ScalarOrArray,
+    ScalarOrArray,
+    ScalarOrArray,
+    ScalarOrArray,
+    ScalarOrArray,
+]
 
 
 @dataclass(frozen=True)
@@ -24,126 +38,47 @@ class ChiDiagnostics:
     finite: bool
 
 
-@jit
+def _is_scalar_like(values: npt.ArrayLike) -> bool:
+    return np.asarray(values, dtype=np.float64).ndim == 0
+
+
+def _restore_chi_rows(rows: np.ndarray, *, scalar: bool) -> CHI_TYPES:
+    if scalar:
+        return tuple(np.float64(rows[0, i]) for i in range(7))  # type: ignore[return-value]
+    return tuple(
+        np.ascontiguousarray(rows[:, i], dtype=np.float64) for i in range(7)
+    )  # type: ignore[return-value]
+
+
 def calc_chi(
-    r: jnp.ndarray,
-    v: jnp.ndarray,
-    dt: float,
-    mu: float = MU,
+    r: npt.ArrayLike,
+    v: npt.ArrayLike,
+    dt: npt.ArrayLike,
+    mu: npt.ArrayLike = MU,
     max_iter: int = 100,
-    tol: float = 1e-16,
-) -> Tuple[
-    np.float64, np.float64, np.float64, np.float64, np.float64, np.float64, np.float64
-]:
+    tol: float = 1e-15,
+) -> CHI_TYPES:
     """
-    Calculate universal anomaly chi using Newton-Raphson.
+    Calculate universal anomaly chi and the first six Stumpff coefficients.
 
-    Parameters
-    ----------
-    r : `~jax.numpy.ndarray` (3)
-        Position vector in au.
-    v : `~jax.numpy.ndarray` (3)
-        Velocity vector in au per day.
-    dt : float
-        Time from epoch to which calculate chi in units of decimal days.
-    mu : float
-        Gravitational parameter (GM) of the attracting body in units of
-        au**3 / d**2.
-    max_iter : int
-        Maximum number of iterations over which to converge. If number of iterations is
-        exceeded, will return the value of the universal anomaly at the last iteration.
-    tol : float
-        Numerical tolerance to which to compute chi using the Newtown-Raphson
-        method.
-
-    Returns
-    -------
-    chi : float
-        Universal anomaly.
-    c0, c1, c2, c3, c4, c5 : 6 x float
-        First six Stumpff functions.
-
-    References
-    ----------
-    [1] Curtis, H. D. (2014). Orbital Mechanics for Engineering Students. 3rd ed.,
-        Elsevier Ltd. ISBN-13: 978-0080977478
+    This compatibility API is backed by ``adam_core_rs_coords::calc_chi``.
+    For single-orbit, many-time propagation workloads, prefer the production
+    propagation path, which can use the warm-started arc kernel.
     """
-    v_mag = jnp.linalg.norm(v)
-    r_mag = jnp.linalg.norm(r)
-    rv_mag = jnp.dot(r, v) / r_mag
-    sqrt_mu = jnp.sqrt(mu)
+    r_rows, r_single = as_rows(r, name="r", width=3)
+    v_rows, v_single = as_rows(v, name="v", width=3)
+    if v_rows.shape[0] != r_rows.shape[0]:
+        raise ValueError("v must have the same row count as r")
 
-    # Equations 3.48 and 3.50 in Curtis (2014) [1]
-    alpha = -(v_mag**2) / mu + 2 / r_mag
-
-    # Equation 3.66 in Curtis (2014) [1]
-    chi = sqrt_mu * jnp.abs(alpha) * dt
-
-    ratio = 1e15
-    iterations = 0
-    # Define parameters array (arguments that will be changing as
-    # the while loop iterates):
-    # chi, c0, c1, c2, c3, c4, c5, ratio, iterations
-    p = [chi, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, ratio, iterations]
-
-    # Define while loop body function
-    @jit
-    def _chi_newton_raphson(p):
-
-        chi = p[0]
-        ratio = p[-2]
-        iterations = p[-1]
-
-        chi2 = chi**2
-        psi = alpha * chi2
-        c0, c1, c2, c3, c4, c5 = calc_stumpff(psi)
-
-        # Newton-Raphson
-        # Equation 3.65 in Curtis (2014) [1]
-        f = (
-            r_mag * rv_mag / sqrt_mu * chi2 * c2
-            + (1 - alpha * r_mag) * chi**3 * c3
-            + r_mag * chi
-            - sqrt_mu * dt
-        )
-        fp = (
-            r_mag * rv_mag / sqrt_mu * chi * (1 - alpha * chi2 * c3)
-            + (1 - alpha * r_mag) * chi2 * c2
-            + r_mag
-        )
-
-        ratio = f / fp
-        chi -= ratio
-        iterations += 1
-
-        p[0] = chi
-        p[1] = c0
-        p[2] = c1
-        p[3] = c2
-        p[4] = c3
-        p[5] = c4
-        p[6] = c5
-        p[7] = ratio
-        p[8] = iterations
-        return p
-
-    # Define while loop condition function
-    @jit
-    def _while_condition(p):
-        ratio = p[-2]
-        iterations = p[-1]
-        return (jnp.abs(ratio) > tol) & (iterations <= max_iter)
-
-    p = lax.while_loop(_while_condition, _chi_newton_raphson, p)
-    chi = p[0]
-    c0 = p[1]
-    c1 = p[2]
-    c2 = p[3]
-    c3 = p[4]
-    c4 = p[5]
-    c5 = p[6]
-
-    return chi, c0, c1, c2, c3, c4, c5
+    n = r_rows.shape[0]
+    dts = broadcast_to_rows(dt, n, name="dt")
+    mus = broadcast_to_rows(mu, n, name="mu")
+    rows = require_rust(
+        _rust_calc_chi_numpy(r_rows, v_rows, dts, mus, max_iter=max_iter, tol=tol),
+        "dynamics.calc_chi",
+    )
+    scalar = r_single and v_single and _is_scalar_like(dt) and _is_scalar_like(mu)
+    return _restore_chi_rows(rows, scalar=scalar)
 
 
 def calc_chi_diagnostics(
@@ -152,11 +87,9 @@ def calc_chi_diagnostics(
     dt: float,
     mu: float = MU,
     max_iter: int = 100,
-    tol: float = 1e-16,
+    tol: float = 1e-15,
 ) -> ChiDiagnostics:
-    """
-    Host-side chi diagnostics helper for fail-fast error reporting.
-    """
+    """Host-side chi diagnostics helper for fail-fast error reporting."""
     r_arr = np.asarray(r, dtype=np.float64)
     v_arr = np.asarray(v, dtype=np.float64)
     r_norm = float(np.linalg.norm(r_arr))

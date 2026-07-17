@@ -1,5 +1,6 @@
 import numpy as np
 
+from adam_core._rust import calc_gibbs_numpy
 from adam_core.constants import Constants as c
 
 __all__ = ["calcGibbs"]
@@ -8,7 +9,7 @@ MU = c.MU
 
 
 def calcGibbs(r1, r2, r3):
-    """
+    r"""
     Calculates the velocity vector at the location of the second position vector (r2) using the
     Gibbs method.
 
@@ -43,22 +44,11 @@ def calcGibbs(r1, r2, r3):
     v2 : `~numpy.ndarray` (3)
         Velocity of object at position r2 at time t2 in units of AU per day.
     """
-    r1_mag = np.linalg.norm(r1)
-    r2_mag = np.linalg.norm(r2)
-    r3_mag = np.linalg.norm(r3)
-    Z12 = np.cross(r1, r2)
-    Z23 = np.cross(r2, r3)
-    Z31 = np.cross(r3, r1)
+    r1_np = np.ascontiguousarray(np.asarray(r1, dtype=np.float64))
+    r2_np = np.ascontiguousarray(np.asarray(r2, dtype=np.float64))
+    r3_np = np.ascontiguousarray(np.asarray(r3, dtype=np.float64))
+    if r1_np.shape != (3,) or r2_np.shape != (3,) or r3_np.shape != (3,):
+        raise ValueError("r1, r2, and r3 must each have shape (3,)")
 
-    # coplanarity = np.arcsin(np.dot(Z23, r1) / (np.linalg.norm(Z23) * r1_mag))
-
-    N = r1_mag * Z23 + r2_mag * Z31 + r3_mag * Z12
-    N_mag = np.linalg.norm(N)
-    D = Z12 + Z23 + Z31
-    D_mag = np.linalg.norm(D)
-    S = (r2_mag - r3_mag) * r1 + (r3_mag - r1_mag) * r2 + (r1_mag - r2_mag) * r3
-    # S_mag = np.linalg.norm(S)
-    B = np.cross(D, r2)
-    Lg = np.sqrt(MU / N_mag / D_mag)
-    v2 = Lg / r2_mag * B + Lg * S
-    return v2
+    rust_out = calc_gibbs_numpy(r1_np, r2_np, r3_np, MU)
+    return rust_out

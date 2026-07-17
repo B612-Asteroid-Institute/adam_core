@@ -225,6 +225,99 @@ def test_SourceCatalog_observers(source_catalog: SourceCatalog) -> None:
     ).as_py()
 
 
+def test_SourceCatalog_observers_fused_matches_legacy_composition(
+    source_catalog: SourceCatalog,
+) -> None:
+    # The fused Rust midpoint+observer crossing must produce exactly the
+    # legacy composition Observers.from_codes(codes, start + duration/2).
+    import pyarrow as pa
+
+    from ...observers.observers import Observers
+
+    fused = source_catalog.observers(exposure_midpoint=True)
+    half_exposure = pc.cast(
+        pc.round(pc.multiply(pc.divide(source_catalog.exposure_duration, 2.0), 1e9)),
+        pa.int64(),
+    )
+    legacy = Observers.from_codes(
+        source_catalog.observatory_code,
+        source_catalog.exposure_start_time.add_nanos(half_exposure),
+    )
+    assert fused.flattened_table().equals(legacy.flattened_table())
+
+
+def test_SourceCatalog_observers_null_duration_uses_legacy_path() -> None:
+    # Null durations must bypass the fused Rust path (which cannot represent
+    # them) and produce exactly the legacy composition's outcome.
+    import pyarrow as pa
+
+    from ...observers.observers import Observers
+
+    catalog = SourceCatalog.from_kwargs(
+        id=["obs_01", "obs_02"],
+        exposure_id=["exp_01", "exp_02"],
+        time=Timestamp.from_kwargs(days=[59001, 59002], nanos=[0, 0], scale="utc"),
+        ra=[1, 2],
+        dec=[-1, -2],
+        observatory_code=["X05", "I41"],
+        exposure_start_time=Timestamp.from_kwargs(
+            days=[59001, 59002], nanos=[0, 0], scale="utc"
+        ),
+        exposure_duration=[30, None],
+        catalog_id=["Rubin", "Rubin"],
+    )
+
+    def legacy_composition():
+        half_exposure = pc.cast(
+            pc.round(pc.multiply(pc.divide(catalog.exposure_duration, 2.0), 1e9)),
+            pa.int64(),
+        )
+        return Observers.from_codes(
+            catalog.observatory_code,
+            catalog.exposure_start_time.add_nanos(half_exposure),
+        )
+
+    try:
+        expected = legacy_composition()
+    except Exception as exc:
+        with pytest.raises(type(exc)):
+            catalog.observers(exposure_midpoint=True)
+    else:
+        actual = catalog.observers(exposure_midpoint=True)
+        assert actual.flattened_table().equals(expected.flattened_table())
+
+
+def test_SourceCatalog_kernel_native_timing(source_catalog: SourceCatalog) -> None:
+    from adam_core import _rust_native
+
+    from ..arrow_bridge import observations_to_ipc
+
+    exposures = Exposures.from_kwargs(
+        id=source_catalog.exposure_id,
+        start_time=source_catalog.exposure_start_time,
+        duration=source_catalog.exposure_duration,
+        filter=source_catalog.filter,
+        observatory_code=source_catalog.observatory_code,
+        seeing=source_catalog.exposure_seeing,
+        depth_5sigma=source_catalog.exposure_depth_5sigma,
+    )
+    lanes = [
+        _rust_native.benchmark_exposures_drop_duplicate_ids_ipc(
+            observations_to_ipc(exposures), 2, 2, 1
+        ),
+        _rust_native.benchmark_radec_covariance_matrices_numpy(
+            source_catalog.ra_sigma.to_numpy(zero_copy_only=False),
+            source_catalog.dec_sigma.to_numpy(zero_copy_only=False),
+            source_catalog.radec_corr.to_numpy(zero_copy_only=False),
+            2,
+            2,
+            1,
+        ),
+    ]
+    for samples in lanes:
+        assert all(sample > 0.0 for trial in samples for sample in trial)
+
+
 def test_SourceCatalog_healpixels(source_catalog: SourceCatalog) -> None:
     # Test the healpixels method of the SourceCatalog class
     # returns the healpixels for each observation

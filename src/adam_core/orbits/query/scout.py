@@ -1,27 +1,25 @@
 import hashlib
+import json
 import logging
 import time
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Callable, Iterable
+from typing import Any, NoReturn, cast
 
 import numpy.typing as npt
 import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
-import requests
+import requests  # type: ignore[import-untyped]
 
-from ...coordinates.cometary import CometaryCoordinates
-from ...coordinates.origin import Origin
 from ...observations.obs80 import (
     Obs80ParseError,
     ScoutObservations,
     parse_optical_obs80_file,
 )
-from ...time import Timestamp
 from ..variants import VariantOrbits
 
 logger = logging.getLogger(__name__)
 _SCOUT_API_URL = "https://ssd-api.jpl.nasa.gov/scout.api"
+_DEFAULT_HTTP_GET = requests.get
 
 
 class ScoutQueryError(RuntimeError):
@@ -64,13 +62,38 @@ class ScoutResponseError(ScoutQueryError):
     error_type = "invalid_response"
 
 
+def _raise_native_scout_error(error: ValueError) -> NoReturn:
+    marker = "__SCOUT_ERROR__:"
+    message = str(error)
+    if marker not in message:
+        raise error
+    payload = json.loads(message.split(marker, 1)[1])
+    kind = payload.get("kind")
+    exception_type = {
+        "not_found": ScoutObjectNotFoundError,
+        "service_unavailable": ScoutServiceUnavailableError,
+        "response": ScoutResponseError,
+    }.get(kind, ScoutQueryError)
+    raise exception_type(
+        str(payload.get("message", message)),
+        object_id=payload.get("object_id"),
+        upstream_status=payload.get("upstream_status"),
+    ) from error
+
+
+def _normalized_object_ids(ids: npt.ArrayLike) -> list[str]:
+    if isinstance(ids, str):
+        return [ids]
+    return [str(value) for value in cast(Iterable[Any], ids)]
+
+
 def _request_scout_json(
     *,
     params: dict[str, Any] | None = None,
     timeout_s: float = 30.0,
     max_attempts: int = 3,
     retry_delay_s: float = 0.5,
-    http_get: Callable[..., Any] = requests.get,
+    http_get: Callable[..., Any] = _DEFAULT_HTTP_GET,
 ) -> Any:
     """Fetch Scout JSON with bounded retries for transient HTTP failures."""
     attempts = max(1, int(max_attempts))
@@ -251,10 +274,16 @@ def get_scout_objects() -> ScoutObjectSummary:
     scout_objects : `~adam_core.orbits.query.scout.ScoutObjectSummary`
         Table containing the summary of all objects.
     """
-    data = _request_scout_json()
-    data = data["data"]
-    table = pa.Table.from_pylist(data, schema=ScoutObjectSummary.schema)
-    return ScoutObjectSummary.from_pyarrow(table)
+    from adam_core import _rust_native  # type: ignore[attr-defined]
+
+    from ..._rust.arrow import table_from_record_batch
+    from ...utils.http import _raise_compatible_http_error
+
+    try:
+        batch = _rust_native.get_scout_objects_arrow()
+    except RuntimeError as error:
+        _raise_compatible_http_error(error)
+    return table_from_record_batch(ScoutObjectSummary, batch)
 
 
 class ScoutOrbit(qv.Table):
@@ -316,30 +345,17 @@ def scout_orbits_to_variant_orbits(
     variant_orbits : `~adam_core.orbits.VariantOrbits`
         Table containing the variant orbits
     """
-    cometary_coords = CometaryCoordinates.from_kwargs(
-        q=pc.cast(scout_orbits.qr, pa.float64()),
-        e=pc.cast(scout_orbits.ec, pa.float64()),
-        i=pc.cast(scout_orbits.inc, pa.float64()),
-        raan=pc.cast(scout_orbits.om, pa.float64()),
-        ap=pc.cast(scout_orbits.w, pa.float64()),
-        tp=pc.subtract(pc.cast(scout_orbits.tp, pa.float64()), 2400000.5),
-        time=Timestamp.from_jd(pc.cast(scout_orbits.epoch, pa.float64())),
-        origin=Origin.from_kwargs(code=pa.repeat("SUN", len(scout_orbits))),
-        frame="ecliptic",
+    if len(scout_orbits) == 0:
+        return VariantOrbits.empty()
+
+    from adam_core import _rust_native  # type: ignore[attr-defined]
+
+    from ..._rust.arrow import table_from_record_batch
+
+    batch = _rust_native.scout_orbits_to_variants_arrow(
+        str(object_id), scout_orbits.table.combine_chunks().to_batches()[0]
     )
-
-    cartesian_coords = cometary_coords.to_cartesian()
-
-    unique_orbit_ids = pc.cast(scout_orbits.idx, pa.large_string())
-
-    variants = VariantOrbits.from_kwargs(
-        coordinates=cartesian_coords,
-        orbit_id=unique_orbit_ids,
-        variant_id=unique_orbit_ids,
-        object_id=pa.repeat(object_id, len(scout_orbits)),
-    )
-
-    return variants
+    return table_from_record_batch(VariantOrbits, batch)
 
 
 def query_scout_observations(
@@ -348,7 +364,7 @@ def query_scout_observations(
     timeout_s: float = 30.0,
     max_attempts: int = 3,
     retry_delay_s: float = 0.5,
-    http_get: Callable[..., Any] = requests.get,
+    http_get: Callable[..., Any] = _DEFAULT_HTTP_GET,
 ) -> ScoutObservations:
     """Query authoritative fitted observations from JPL Scout.
 
@@ -356,7 +372,39 @@ def query_scout_observations(
     ``nObs`` is retained as metadata but is not used to add/remove records: in
     live Scout data it can differ from the file row count.
     """
-    object_ids = [ids] if isinstance(ids, str) else list(ids)
+    object_ids = _normalized_object_ids(ids)
+    if http_get is _DEFAULT_HTTP_GET:
+        from adam_core import _rust_native  # type: ignore[attr-defined]
+
+        from ..._rust.arrow import table_from_record_batch
+
+        try:
+            batch = _rust_native.query_scout_observations_arrow(
+                object_ids,
+                None,
+                float(timeout_s),
+                max(1, int(max_attempts)),
+                float(retry_delay_s),
+            )
+        except ValueError as error:
+            _raise_native_scout_error(error)
+        snapshots_table = table_from_record_batch(ScoutObservations, batch)
+        warned: set[str] = set()
+        for row in range(len(snapshots_table)):
+            object_id = snapshots_table.object_id[row].as_py()
+            declared = snapshots_table.declared_n_obs[row].as_py()
+            count = snapshots_table.snapshot_observation_count[row].as_py()
+            if declared is not None and declared != count and object_id not in warned:
+                logger.warning(
+                    "Scout nObs differs from file=mpc membership for %s: "
+                    "nObs=%d file=%d; file=mpc remains authoritative",
+                    object_id,
+                    declared,
+                    count,
+                )
+                warned.add(object_id)
+        return snapshots_table
+
     snapshots: list[ScoutObservations] = []
     for object_id_value in object_ids:
         object_id = str(object_id_value)
@@ -443,7 +491,7 @@ def query_scout(
     timeout_s: float = 30.0,
     max_attempts: int = 3,
     retry_delay_s: float = 0.5,
-    http_get: Callable[..., Any] = requests.get,
+    http_get: Callable[..., Any] = _DEFAULT_HTTP_GET,
 ) -> VariantOrbits:
     """
     Query the Scout API for a list of objects by id
@@ -464,7 +512,24 @@ def query_scout(
     orbits : `~adam_core.orbits.VariantOrbits`
         Table containing the orbits of the objects
     """
-    object_ids = [ids] if isinstance(ids, str) else list(ids)
+    object_ids = _normalized_object_ids(ids)
+    if http_get is _DEFAULT_HTTP_GET:
+        from adam_core import _rust_native  # type: ignore[attr-defined]
+
+        from ..._rust.arrow import table_from_record_batch
+
+        try:
+            batch = _rust_native.query_scout_arrow(
+                object_ids,
+                None,
+                float(timeout_s),
+                max(1, int(max_attempts)),
+                float(retry_delay_s),
+            )
+        except ValueError as error:
+            _raise_native_scout_error(error)
+        return table_from_record_batch(VariantOrbits, batch)
+
     variant_orbits = VariantOrbits.empty()
     for object_id_value in object_ids:
         object_id = str(object_id_value)

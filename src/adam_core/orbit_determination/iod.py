@@ -1,27 +1,26 @@
 import logging
-import multiprocessing as mp
 import time
-from itertools import combinations
-from typing import Literal, Optional, Tuple, Type, Union
+import uuid
+from typing import Literal, Optional, Tuple, Type
 
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
-import ray
 
+from ..coordinates import CartesianCoordinates
+from ..coordinates.origin import Origin
 from ..coordinates.residuals import Residuals
 from ..propagator import Propagator
-from ..ray_cluster import initialize_use_ray
-from ..utils.iter import _iterate_chunk_indices, _iterate_chunks
+from ..time import Timestamp
+from ..utils.iter import _iterate_chunks
 from . import (
     FittedOrbitMembers,
     FittedOrbits,
     OrbitDeterminationObservations,
     drop_duplicate_orbits,
 )
-from .gauss import gaussIOD
+from .gauss import MU, C, gaussIOD
 from .outliers import calculate_max_outliers
 
 logger = logging.getLogger(__name__)
@@ -58,38 +57,22 @@ def sort_by_id_and_time(
     members : qv.AnyTable
         Sorted linkage members.
     """
-    # Grab the linkage ID column from the linkages table and add an index column
-    linkage_table = linkages.table.select([linkage_column])
-    linkage_table = linkage_table.add_column(
-        0, "index", pa.array(np.arange(0, len(linkage_table)))
+    from adam_core import _rust_native
+
+    # One Rust crossing owns the observation-time join and the stable
+    # (linkage id, observation time) ordering.
+    time_table = observations.coordinates.time.table.combine_chunks()
+    linkage_order, member_order = _rust_native.sort_linkages_by_id_and_time_numpy(
+        linkages.table.column(linkage_column).to_pylist(),
+        members.table.column(linkage_column).to_pylist(),
+        members.table.column("obs_id").to_pylist(),
+        observations.id.to_pylist(),
+        time_table.column("days").chunk(0).to_numpy(zero_copy_only=False),
+        time_table.column("nanos").chunk(0).to_numpy(zero_copy_only=False),
     )
 
-    # Grab the linkage ID and observation ID columns from the linkage members table and add an index column
-    members_table = members.table.select([linkage_column, "obs_id"])
-    members_table = members_table.add_column(
-        0, "index", pa.array(np.arange(0, len(members_table)))
-    )
-
-    # Grab the observation ID, observation time columns and join with the linkage members table on the observation ID
-    observation_times = observations.flattened_table().select(
-        ["id", "coordinates.time.days", "coordinates.time.nanos"]
-    )
-    member_times = members_table.join(
-        observation_times, keys=["obs_id"], right_keys=["id"]
-    )
-
-    # Sort the reduced linkages table by linkage ID and the linkage member times table by linkage ID and observation time
-    linkage_table = linkage_table.sort_by([(linkage_column, "ascending")])
-    member_times = member_times.sort_by(
-        [
-            (linkage_column, "ascending"),
-            ("coordinates.time.days", "ascending"),
-            ("coordinates.time.nanos", "ascending"),
-        ]
-    )
-
-    linkages = linkages.take(linkage_table["index"])
-    members = members.take(member_times["index"])
+    linkages = linkages.take(pa.array(linkage_order, type=pa.int64()))
+    members = members.take(pa.array(member_order, type=pa.int64()))
 
     if linkages.fragmented():
         linkages = qv.defragment(linkages)
@@ -130,64 +113,108 @@ def select_observations(
     if len(obs_ids) < 3:
         return np.array([])
 
-    indexes = np.arange(0, len(obs_ids))
     times = observations.coordinates.time.mjd().to_numpy(zero_copy_only=False)
 
-    if method == "first+middle+last":
-        selected_times = np.percentile(times, [0, 50, 100], interpolation="nearest")
-        selected_index = np.intersect1d(times, selected_times, return_indices=True)[1]
-        selected_index = np.array([selected_index])
+    from adam_core import _rust_native
 
-    elif method == "thirds":
-        selected_times = np.percentile(
-            times, [1 / 6 * 100, 50, 5 / 6 * 100], interpolation="nearest"
-        )
-        selected_index = np.intersect1d(times, selected_times, return_indices=True)[1]
-        selected_index = np.array([selected_index])
-
-    elif method == "combinations":
-        # Make all possible combinations of 3 observations
-        selected_index = np.array(
-            [np.array(index) for index in combinations(indexes, 3)]
-        )
-
-        # Calculate arc length
-        arc_length = times[selected_index][:, 2] - times[selected_index][:, 0]
-
-        # Calculate distance of second observation from middle point (last + first) / 2
-        time_from_mid = np.abs(
-            (times[selected_index][:, 2] + times[selected_index][:, 0]) / 2
-            - times[selected_index][:, 1]
-        )
-
-        # Sort by descending arc length and ascending time from midpoint
-        sort = np.lexsort((time_from_mid, -arc_length))
-        selected_index = selected_index[sort]
-
-    else:
-        raise ValueError("method should be one of {'first+middle+last', 'thirds'}")
-
-    # Make sure each returned combination of observation ids have at least 3 unique
-    # times
-    keep = []
-    for i, comb in enumerate(times[selected_index]):
-        if len(np.unique(comb)) == 3:
-            keep.append(i)
-    keep = np.array(keep)
+    # One Rust crossing owns percentile/combination selection, arc-length and
+    # midpoint ordering, and the unique-time filter; the legacy ValueError
+    # message for unknown methods is preserved by the kernel.
+    selected_index = np.asarray(
+        _rust_native.select_observation_triplets_numpy(
+            np.ascontiguousarray(times, dtype=np.float64), method
+        ),
+        dtype=np.int64,
+    )
 
     # Return an empty array if no observations satisfy the criteria
-    if len(keep) == 0:
+    if selected_index.shape[0] == 0:
         return np.array([])
-    else:
-        selected_index = selected_index[keep, :]
 
     return obs_ids[selected_index]
 
 
+def _tables_from_native_iod(output: dict) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    """Wrap one fused Rust IOD batch product without further computation."""
+    orbit_ids = list(output["orbit_ids"])
+    if not orbit_ids:
+        return FittedOrbits.empty(), FittedOrbitMembers.empty()
+    states = np.asarray(output["states"], dtype=np.float64)
+    epochs = Timestamp.from_mjd(
+        np.asarray(output["epoch_mjd"], dtype=np.float64), scale="utc"
+    )
+    orbits = FittedOrbits.from_kwargs(
+        orbit_id=orbit_ids,
+        object_id=[None] * len(orbit_ids),
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=states[:, 0],
+            y=states[:, 1],
+            z=states[:, 2],
+            vx=states[:, 3],
+            vy=states[:, 4],
+            vz=states[:, 5],
+            time=epochs,
+            origin=Origin.from_kwargs(code=["SUN"] * len(orbit_ids)),
+            frame="ecliptic",
+        ),
+        arc_length=output["arc_length"],
+        num_obs=output["num_obs"],
+        chi2=output["chi2"],
+        reduced_chi2=output["reduced_chi2"],
+    )
+    residuals = Residuals.from_kwargs(
+        values=np.asarray(output["residual_values"], dtype=np.float64).tolist(),
+        chi2=output["residual_chi2"],
+        dof=output["residual_dof"],
+        probability=output["residual_probability"],
+    )
+    members = FittedOrbitMembers.from_kwargs(
+        orbit_id=output["member_orbit_ids"],
+        obs_id=output["member_obs_ids"],
+        residuals=residuals,
+        solution=output["solution"],
+        outlier=output["outlier"],
+    )
+    return orbits, members
+
+
+def _native_initial_orbit_determination(
+    prop: Propagator,
+    observations: OrbitDeterminationObservations,
+    linkage_ids: list[str],
+    member_linkage_ids: list[str],
+    member_obs_ids: list[str],
+    *,
+    min_obs: int,
+    min_arc_length: float,
+    contamination_percentage: float,
+    rchi2_threshold: float,
+    observation_selection_method: str,
+    light_time: bool,
+    chunk_size: int,
+) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    output = prop.initial_orbit_determination(
+        observations,
+        linkage_ids,
+        member_linkage_ids,
+        member_obs_ids,
+        min_obs=min_obs,
+        min_arc_length=min_arc_length,
+        contamination_percentage=contamination_percentage,
+        rchi2_threshold=rchi2_threshold,
+        observation_selection_method=observation_selection_method,
+        light_time=light_time,
+        chunk_size=chunk_size,
+        mu=MU,
+        speed_of_light=C,
+    )
+    return _tables_from_native_iod(output)
+
+
 def iod_worker(
     linkage_ids: npt.NDArray[np.str_],
-    observations: Union[OrbitDeterminationObservations, ray.ObjectRef],
-    linkage_members: Union[FittedOrbitMembers, ray.ObjectRef],
+    observations: OrbitDeterminationObservations,
+    linkage_members: FittedOrbitMembers,
     propagator: Type[Propagator],
     min_obs: int = 6,
     min_arc_length: float = 1.0,
@@ -202,18 +229,31 @@ def iod_worker(
     propagator_kwargs: dict = {},
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
 
-    iod_orbits = FittedOrbits.empty()
-    iod_orbit_members = FittedOrbitMembers.empty()
+    # Pre-compute linkage_id -> linkage_member rows and obs_id -> observation row
+    # so each per-linkage lookup is O(1) rather than O(N_members)/O(N_observations).
+    lm_linkage_ids = linkage_members.column(linkage_id_col).to_numpy(
+        zero_copy_only=False
+    )
+    lm_obs_ids = linkage_members.obs_id.to_numpy(zero_copy_only=False)
+    lm_rows_by_linkage: dict = {}
+    for i, lid in enumerate(lm_linkage_ids):
+        lm_rows_by_linkage.setdefault(lid, []).append(i)
+
+    observations_id_arr = observations.id.to_numpy(zero_copy_only=False)
+    obs_idx_by_id = {oid: i for i, oid in enumerate(observations_id_arr)}
+
+    iod_orbits_list: list[FittedOrbits] = []
+    iod_orbit_members_list: list[FittedOrbitMembers] = []
     for linkage_id in linkage_ids:
         time_start = time.time()
         logger.debug(f"Finding initial orbit for linkage {linkage_id}...")
 
-        obs_ids = linkage_members.apply_mask(
-            pc.equal(linkage_members.column(linkage_id_col), linkage_id)
-        ).obs_id
-        observations_linkage = observations.apply_mask(
-            pc.is_in(observations.id, obs_ids)
+        lm_rows = lm_rows_by_linkage.get(linkage_id, [])
+        obs_row_idx = np.fromiter(
+            (obs_idx_by_id[o] for o in lm_obs_ids[lm_rows] if o in obs_idx_by_id),
+            dtype=np.int64,
         )
+        observations_linkage = observations.take(obs_row_idx)
 
         # Sort observations by time
         observations_linkage = observations_linkage.sort_by(
@@ -247,58 +287,18 @@ def iod_worker(
         duration = time_end - time_start
         logger.debug(f"IOD for linkage {linkage_id} completed in {duration:.3f}s.")
 
-        iod_orbits = qv.concatenate([iod_orbits, iod_orbit])
-        if iod_orbits.fragmented():
-            iod_orbits = qv.defragment(iod_orbits)
+        iod_orbits_list.append(iod_orbit)
+        iod_orbit_members_list.append(iod_orbit_orbit_members)
 
-        iod_orbit_members = qv.concatenate([iod_orbit_members, iod_orbit_orbit_members])
-        if iod_orbit_members.fragmented():
-            iod_orbit_members = qv.defragment(iod_orbit_members)
-
-    return iod_orbits, iod_orbit_members
-
-
-@ray.remote
-def iod_worker_remote(
-    linkage_ids: Union[npt.NDArray[np.str_], ray.ObjectRef],
-    linkage_members_indices: Tuple[int, int],
-    observations: Union[OrbitDeterminationObservations, ray.ObjectRef],
-    linkage_members: Union[FittedOrbitMembers, ray.ObjectRef],
-    propagator: Type[Propagator],
-    min_obs: int = 6,
-    min_arc_length: float = 1.0,
-    contamination_percentage: float = 0.0,
-    rchi2_threshold: float = 200,
-    observation_selection_method: Literal[
-        "combinations", "first+middle+last", "thirds"
-    ] = "combinations",
-    linkage_id_col: str = "cluster_id",
-    iterate: bool = False,
-    light_time: bool = True,
-    propagator_kwargs: dict = {},
-) -> Tuple[FittedOrbits, FittedOrbitMembers]:
-    # Select linkage ids from linkage_members_indices
-    linkage_id_chunk = linkage_ids[
-        linkage_members_indices[0] : linkage_members_indices[1]
-    ]
-    return iod_worker(
-        linkage_id_chunk,
-        observations,
-        linkage_members,
-        min_obs=min_obs,
-        min_arc_length=min_arc_length,
-        contamination_percentage=contamination_percentage,
-        rchi2_threshold=rchi2_threshold,
-        observation_selection_method=observation_selection_method,
-        linkage_id_col=linkage_id_col,
-        iterate=iterate,
-        light_time=light_time,
-        propagator=propagator,
-        propagator_kwargs=propagator_kwargs,
+    iod_orbits = (
+        qv.concatenate(iod_orbits_list) if iod_orbits_list else FittedOrbits.empty()
     )
-
-
-iod_worker_remote.options(num_returns=1, num_cpus=1)
+    iod_orbit_members = (
+        qv.concatenate(iod_orbit_members_list)
+        if iod_orbit_members_list
+        else FittedOrbitMembers.empty()
+    )
+    return iod_orbits, iod_orbit_members
 
 
 def iod(
@@ -381,6 +381,26 @@ def iod(
     """
     # Initialize the propagator
     prop = propagator(**propagator_kwargs)
+
+    # One native crossing owns the complete preliminary-IOD decision loop on
+    # providers exposing the fused work unit. UUID creation remains Python-
+    # owned; the native batch uses it as the synthetic linkage/final orbit id.
+    if hasattr(prop, "initial_orbit_determination"):
+        orbit_id = uuid.uuid4().hex
+        return _native_initial_orbit_determination(
+            prop,
+            observations,
+            [orbit_id],
+            [orbit_id] * len(observations),
+            observations.id.to_pylist(),
+            min_obs=min_obs,
+            min_arc_length=min_arc_length,
+            contamination_percentage=contamination_percentage,
+            rchi2_threshold=rchi2_threshold,
+            observation_selection_method=observation_selection_method,
+            light_time=light_time,
+            chunk_size=1,
+        )
 
     processable = True
     if len(observations) == 0:
@@ -573,8 +593,8 @@ def iod(
 
 
 def initial_orbit_determination(
-    observations: Union[OrbitDeterminationObservations, ray.ObjectRef],
-    linkage_members: Union[FittedOrbitMembers, ray.ObjectRef],
+    observations: OrbitDeterminationObservations,
+    linkage_members: FittedOrbitMembers,
     propagator: Type[Propagator],
     min_obs: int = 6,
     min_arc_length: float = 1.0,
@@ -596,127 +616,68 @@ def initial_orbit_determination(
     time_start = time.perf_counter()
     logger.info("Running initial orbit determination...")
 
-    if isinstance(linkage_members, ray.ObjectRef):
-        linkage_members_ref = linkage_members
-        linkage_members = ray.get(linkage_members)
-        logger.info("Retrieved linkage members from the object store.")
-    else:
-        linkage_members_ref = None
+    # The supported native provider owns the entire multi-linkage workflow in
+    # one crossing; chunk_size is consumed by Rust and max_processes is kept
+    # only for signature compatibility (native execution replaces Ray).
+    native_prop = propagator(**propagator_kwargs)
+    if hasattr(native_prop, "initial_orbit_determination"):
+        if len(observations) == 0 or len(linkage_members) == 0:
+            return FittedOrbits.empty(), FittedOrbitMembers.empty()
+        linkage_ids = linkage_members.column(linkage_id_col).unique().to_pylist()
+        return _native_initial_orbit_determination(
+            native_prop,
+            observations,
+            linkage_ids,
+            linkage_members.column(linkage_id_col).to_pylist(),
+            linkage_members.obs_id.to_pylist(),
+            min_obs=min_obs,
+            min_arc_length=min_arc_length,
+            contamination_percentage=contamination_percentage,
+            rchi2_threshold=rchi2_threshold,
+            observation_selection_method=observation_selection_method,
+            light_time=light_time,
+            chunk_size=chunk_size,
+        )
 
-    if isinstance(observations, ray.ObjectRef):
-        observations_ref = observations
-        observations = ray.get(observations)
-        logger.info("Retrieved observations from the object store.")
-    else:
-        observations_ref = None
-
-    iod_orbits = FittedOrbits.empty()
-    iod_orbit_members = FittedOrbitMembers.empty()
+    iod_orbits_chunks: list[FittedOrbits] = []
+    iod_orbit_members_chunks: list[FittedOrbitMembers] = []
     if len(observations) > 0 and len(linkage_members) > 0:
         # Extract linkage IDs
         linkage_ids = linkage_members.column(linkage_id_col).unique()
 
-        if max_processes is None:
-            max_processes = mp.cpu_count()
+        # `max_processes` remains accepted for signature compatibility.
+        # Native providers returned above; non-native providers use the
+        # deterministic serial fallback instead of Python/Ray distribution.
+        del max_processes
+        for linkage_id_chunk in _iterate_chunks(linkage_ids, chunk_size):
+            iod_orbits_chunk, iod_orbit_members_chunk = iod_worker(
+                linkage_id_chunk,
+                observations,
+                linkage_members,
+                min_obs=min_obs,
+                min_arc_length=min_arc_length,
+                contamination_percentage=contamination_percentage,
+                rchi2_threshold=rchi2_threshold,
+                observation_selection_method=observation_selection_method,
+                iterate=iterate,
+                light_time=light_time,
+                linkage_id_col=linkage_id_col,
+                propagator=propagator,
+                propagator_kwargs=propagator_kwargs,
+            )
+            iod_orbits_chunks.append(iod_orbits_chunk)
+            iod_orbit_members_chunks.append(iod_orbit_members_chunk)
 
-        use_ray = initialize_use_ray(num_cpus=max_processes)
-        if use_ray:
-            refs_to_free = []
-
-            linkage_ids_ref = ray.put(linkage_ids)
-            refs_to_free.append(linkage_ids_ref)
-            logger.info("Placed linkage IDs in the object store.")
-
-            if linkage_members_ref is None:
-                linkage_members_ref = ray.put(linkage_members)
-                refs_to_free.append(linkage_members_ref)
-                logger.info("Placed linkage members in the object store.")
-
-            if observations_ref is None:
-                observations_ref = ray.put(observations)
-                refs_to_free.append(observations_ref)
-                logger.info("Placed observations in the object store.")
-
-            futures = []
-            for linkage_id_chunk_indices in _iterate_chunk_indices(
-                linkage_ids, chunk_size
-            ):
-                futures.append(
-                    iod_worker_remote.remote(
-                        linkage_ids_ref,
-                        linkage_id_chunk_indices,
-                        observations_ref,
-                        linkage_members_ref,
-                        min_obs=min_obs,
-                        min_arc_length=min_arc_length,
-                        contamination_percentage=contamination_percentage,
-                        rchi2_threshold=rchi2_threshold,
-                        observation_selection_method=observation_selection_method,
-                        iterate=iterate,
-                        light_time=light_time,
-                        linkage_id_col=linkage_id_col,
-                        propagator=propagator,
-                        propagator_kwargs=propagator_kwargs,
-                    )
-                )
-
-                if len(futures) >= max_processes * 1.5:
-                    finished, futures = ray.wait(futures, num_returns=1)
-                    result = ray.get(finished[0])
-                    iod_orbits_chunk, iod_orbit_members_chunk = result
-                    iod_orbits = qv.concatenate([iod_orbits, iod_orbits_chunk])
-                    iod_orbit_members = qv.concatenate(
-                        [iod_orbit_members, iod_orbit_members_chunk]
-                    )
-                    if iod_orbits.fragmented():
-                        iod_orbits = qv.defragment(iod_orbits)
-                    if iod_orbit_members.fragmented():
-                        iod_orbit_members = qv.defragment(iod_orbit_members)
-
-            while futures:
-                finished, futures = ray.wait(futures, num_returns=1)
-                result = ray.get(finished[0])
-                iod_orbits_chunk, iod_orbit_members_chunk = result
-                iod_orbits = qv.concatenate([iod_orbits, iod_orbits_chunk])
-                iod_orbit_members = qv.concatenate(
-                    [iod_orbit_members, iod_orbit_members_chunk]
-                )
-                if iod_orbits.fragmented():
-                    iod_orbits = qv.defragment(iod_orbits)
-                if iod_orbit_members.fragmented():
-                    iod_orbit_members = qv.defragment(iod_orbit_members)
-
-            if len(refs_to_free) > 0:
-                ray.internal.free(refs_to_free)
-                logger.info(
-                    f"Removed {len(refs_to_free)} references from the object store."
-                )
-
-        else:
-            for linkage_id_chunk in _iterate_chunks(linkage_ids, chunk_size):
-                iod_orbits_chunk, iod_orbit_members_chunk = iod_worker(
-                    linkage_id_chunk,
-                    observations,
-                    linkage_members,
-                    min_obs=min_obs,
-                    min_arc_length=min_arc_length,
-                    contamination_percentage=contamination_percentage,
-                    rchi2_threshold=rchi2_threshold,
-                    observation_selection_method=observation_selection_method,
-                    iterate=iterate,
-                    light_time=light_time,
-                    linkage_id_col=linkage_id_col,
-                    propagator=propagator,
-                    propagator_kwargs=propagator_kwargs,
-                )
-                iod_orbits = qv.concatenate([iod_orbits, iod_orbits_chunk])
-                iod_orbit_members = qv.concatenate(
-                    [iod_orbit_members, iod_orbit_members_chunk]
-                )
-                if iod_orbits.fragmented():
-                    iod_orbits = qv.defragment(iod_orbits)
-                if iod_orbit_members.fragmented():
-                    iod_orbit_members = qv.defragment(iod_orbit_members)
+        iod_orbits = (
+            qv.concatenate(iod_orbits_chunks)
+            if iod_orbits_chunks
+            else FittedOrbits.empty()
+        )
+        iod_orbit_members = (
+            qv.concatenate(iod_orbit_members_chunks)
+            if iod_orbit_members_chunks
+            else FittedOrbitMembers.empty()
+        )
 
         time_start_drop = time.time()
         logger.info("Removing duplicate initial orbits...")

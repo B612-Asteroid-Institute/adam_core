@@ -1,29 +1,44 @@
 import logging
-import multiprocessing as mp
 import warnings
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
-import plotly.graph_objects as go
+import pyarrow as pa
 import quivr as qv
-import ray
-from astropy.time import Time
 
-from adam_core.coordinates import CartesianCoordinates, transform_coordinates
+from adam_core._rust import generate_porkchop_data_arrow
+from adam_core.coordinates import CartesianCoordinates
 from adam_core.coordinates.origin import Origin, OriginCodes
 from adam_core.coordinates.spherical import SphericalCoordinates
 from adam_core.coordinates.units import au_per_day_to_km_per_s
-from adam_core.dynamics.lambert import calculate_c3, solve_lambert
+from adam_core.dynamics.lambert import calculate_c3
 from adam_core.orbits import Orbits
 from adam_core.propagator import Propagator
-from adam_core.ray_cluster import initialize_use_ray
 from adam_core.time import Timestamp
-from adam_core.utils import get_perturber_state
-from adam_core.utils.iter import _iterate_chunk_indices
 from adam_core.utils.plots.logos import AsteroidInstituteLogoLight, get_logo_base64
 
 logger = logging.getLogger(__name__)
+
+
+_TIME_SORT_COLUMNS = ["coordinates.time.days", "coordinates.time.nanos"]
+
+
+def _timestamp_is_non_decreasing(time: Timestamp) -> bool:
+    if len(time) < 2:
+        return True
+
+    days = np.asarray(time.days.to_numpy(zero_copy_only=False), dtype=np.int64)
+    nanos = np.asarray(time.nanos.to_numpy(zero_copy_only=False), dtype=np.int64)
+    increasing_day = days[1:] > days[:-1]
+    same_day_increasing_nanos = (days[1:] == days[:-1]) & (nanos[1:] >= nanos[:-1])
+    return bool(np.all(increasing_day | same_day_increasing_nanos))
+
+
+def _sort_orbits_by_time_if_needed(orbits: Orbits) -> Orbits:
+    if _timestamp_is_non_decreasing(orbits.coordinates.time):
+        return orbits
+    return orbits.sort_by(_TIME_SORT_COLUMNS)
 
 
 def generate_saturated_colorscale(
@@ -235,86 +250,44 @@ class LambertSolutions(qv.Table):
     origin = Origin.as_column()
 
     def departure_body_orbit(self) -> Orbits:
-        """
-        Return the departure body orbit.
-        """
-        return Orbits.from_kwargs(
-            orbit_id=self.departure_body_id,
-            coordinates=CartesianCoordinates.from_kwargs(
-                time=self.departure_time,
-                x=self.departure_body_x,
-                y=self.departure_body_y,
-                z=self.departure_body_z,
-                vx=self.departure_body_vx,
-                vy=self.departure_body_vy,
-                vz=self.departure_body_vz,
-                origin=self.origin,
-                frame=self.frame,
-            ),
-        )
+        """Return the departure body orbit."""
+        return self._orbit_accessor("departure_body")
 
     def arrival_body_orbit(self) -> Orbits:
-        """
-        Return the arrival body orbit.
-        """
-        return Orbits.from_kwargs(
-            orbit_id=self.arrival_body_id,
-            coordinates=CartesianCoordinates.from_kwargs(
-                time=self.arrival_time,
-                x=self.arrival_body_x,
-                y=self.arrival_body_y,
-                z=self.arrival_body_z,
-                vx=self.arrival_body_vx,
-                vy=self.arrival_body_vy,
-                vz=self.arrival_body_vz,
-                origin=self.origin,
-                frame=self.frame,
-            ),
-        )
+        """Return the arrival body orbit."""
+        return self._orbit_accessor("arrival_body")
 
     def solution_departure_orbit(self) -> Orbits:
-        """
-        Return the solution departure orbit.
-        """
-        solution_departure_orbit_id = [
-            f"solution_departure_orbit_{i}"
-            for i in range(len(self.solution_departure_vx))
-        ]
-        return Orbits.from_kwargs(
-            orbit_id=solution_departure_orbit_id,
-            coordinates=CartesianCoordinates.from_kwargs(
-                time=self.departure_time,
-                x=self.departure_body_x,
-                y=self.departure_body_y,
-                z=self.departure_body_z,
-                vx=self.solution_departure_vx,
-                vy=self.solution_departure_vy,
-                vz=self.solution_departure_vz,
-                origin=self.origin,
-                frame=self.frame,
-            ),
-        )
+        """Return the solution departure orbit."""
+        return self._orbit_accessor("solution_departure")
 
     def solution_arrival_orbit(self) -> Orbits:
-        """
-        Return the solution arrival orbit.
-        """
-        solution_arrival_orbit_id = [
-            f"solution_arrival_orbit_{i}" for i in range(len(self.solution_arrival_vx))
-        ]
-        return Orbits.from_kwargs(
-            orbit_id=solution_arrival_orbit_id,
-            coordinates=CartesianCoordinates.from_kwargs(
-                time=self.arrival_time,
-                x=self.arrival_body_x,
-                y=self.arrival_body_y,
-                z=self.arrival_body_z,
-                vx=self.solution_arrival_vx,
-                vy=self.solution_arrival_vy,
-                vz=self.solution_arrival_vz,
-                origin=self.origin,
-                frame=self.frame,
-            ),
+        """Return the solution arrival orbit."""
+        return self._orbit_accessor("solution_arrival")
+
+    def _record_batch(self) -> pa.RecordBatch:
+        """Prepare the canonical Arrow input; conversion stays outside timing."""
+        metadata = dict(self.table.schema.metadata or {})
+        metadata.update(
+            {
+                b"adam_core_frame": self.frame.encode(),
+                b"adam_core_departure_time_scale": self.departure_time.scale.encode(),
+                b"adam_core_arrival_time_scale": self.arrival_time.scale.encode(),
+            }
+        )
+        table = self.table.combine_chunks().replace_schema_metadata(metadata)
+        return pa.RecordBatch.from_arrays(
+            [column.chunk(0) for column in table.columns], schema=table.schema
+        )
+
+    def _orbit_accessor(self, accessor: str) -> Orbits:
+        """One Arrow crossing for the four orbit-producing accessors."""
+        from adam_core import _rust_native
+        from adam_core._rust.arrow import table_from_record_batch
+
+        return table_from_record_batch(
+            Orbits,
+            _rust_native.lambert_solution_orbit_arrow(self._record_batch(), accessor),
         )
 
     def c3_departure(self) -> npt.NDArray[np.float64]:
@@ -363,53 +336,100 @@ class LambertSolutions(qv.Table):
         """
         Return the v infinity in au/d.
         """
-        return np.linalg.norm(
-            np.array(
-                self.table.select(
-                    [
-                        "solution_departure_vx",
-                        "solution_departure_vy",
-                        "solution_departure_vz",
-                    ]
-                )
-            )
-            - np.array(
-                self.table.select(
-                    ["departure_body_vx", "departure_body_vy", "departure_body_vz"]
-                )
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.vinf_numpy(
+                np.ascontiguousarray(
+                    np.array(
+                        self.table.select(
+                            [
+                                "solution_departure_vx",
+                                "solution_departure_vy",
+                                "solution_departure_vz",
+                            ]
+                        )
+                    ),
+                    dtype=np.float64,
+                ),
+                np.ascontiguousarray(
+                    np.array(
+                        self.table.select(
+                            [
+                                "departure_body_vx",
+                                "departure_body_vy",
+                                "departure_body_vz",
+                            ]
+                        )
+                    ),
+                    dtype=np.float64,
+                ),
             ),
-            axis=1,
+            dtype=np.float64,
         )
 
     def vinf_arrival(self) -> npt.NDArray[np.float64]:
         """
         Return the v infinity in au/d.
         """
-        return np.linalg.norm(
-            np.array(
-                self.table.select(
-                    [
-                        "solution_arrival_vx",
-                        "solution_arrival_vy",
-                        "solution_arrival_vz",
-                    ]
-                )
-            )
-            - np.array(
-                self.table.select(
-                    ["arrival_body_vx", "arrival_body_vy", "arrival_body_vz"]
-                )
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.vinf_numpy(
+                np.ascontiguousarray(
+                    np.array(
+                        self.table.select(
+                            [
+                                "solution_arrival_vx",
+                                "solution_arrival_vy",
+                                "solution_arrival_vz",
+                            ]
+                        )
+                    ),
+                    dtype=np.float64,
+                ),
+                np.ascontiguousarray(
+                    np.array(
+                        self.table.select(
+                            ["arrival_body_vx", "arrival_body_vy", "arrival_body_vz"]
+                        )
+                    ),
+                    dtype=np.float64,
+                ),
             ),
-            axis=1,
+            dtype=np.float64,
         )
 
     def time_of_flight(self) -> npt.NDArray[np.float64]:
         """
         Return the time of flight in days.
         """
-        return self.arrival_time.mjd().to_numpy(
-            zero_copy_only=False
-        ) - self.departure_time.mjd().to_numpy(zero_copy_only=False)
+        from adam_core import _rust_native
+
+        # One Rust crossing computes arrival.mjd() - departure.mjd().
+        return np.asarray(
+            _rust_native.timestamp_mjd_difference_numpy(
+                np.ascontiguousarray(
+                    self.arrival_time.days.to_numpy(zero_copy_only=False),
+                    dtype=np.int64,
+                ),
+                np.ascontiguousarray(
+                    self.arrival_time.nanos.to_numpy(zero_copy_only=False),
+                    dtype=np.int64,
+                ),
+                self.arrival_time.scale,
+                np.ascontiguousarray(
+                    self.departure_time.days.to_numpy(zero_copy_only=False),
+                    dtype=np.int64,
+                ),
+                np.ascontiguousarray(
+                    self.departure_time.nanos.to_numpy(zero_copy_only=False),
+                    dtype=np.int64,
+                ),
+                self.departure_time.scale,
+            ),
+            dtype=np.float64,
+        )
 
 
 def departure_spherical_coordinates(
@@ -449,94 +469,30 @@ def departure_spherical_coordinates(
     ), "All arrays must have the same length"
     assert len(vx) > 0, "At least one departure vector is required"
 
-    # Create unit direction vectors from the velocity vectors
-    # Normalize the velocity vectors to get direction only
-    velocity_magnitude = np.sqrt(vx**2 + vy**2 + vz**2)
-    direction_x = vx / velocity_magnitude
-    direction_y = vy / velocity_magnitude
-    direction_z = vz / velocity_magnitude
+    # Preserve NumPy's legacy divide-by-zero warning for undefined zero
+    # directions; normalization itself remains one Rust crossing.
+    if np.any((vx == 0.0) & (vy == 0.0) & (vz == 0.0)):
+        import warnings
 
-    # Create CartesianCoordinates with the direction as position (on unit sphere)
-    # and zero velocity since we only care about the direction
-    direction_coords = CartesianCoordinates.from_kwargs(
-        time=times,
-        x=direction_x,  # Unit vector pointing in velocity direction
-        y=direction_y,
-        z=direction_z,
-        vx=np.zeros_like(vx),  # No velocity needed for direction
-        vy=np.zeros_like(vy),
-        vz=np.zeros_like(vz),
-        # From our departing origin.
-        origin=Origin.from_OriginCodes(departure_origin, size=len(vx)),
-        frame=frame,
+        warnings.warn(
+            "invalid value encountered in divide", RuntimeWarning, stacklevel=2
+        )
+
+    from adam_core import _rust_native
+    from adam_core._rust.arrow import ensure_spice_backend, table_from_record_batch
+
+    ensure_spice_backend()
+    result = _rust_native.departure_spherical_coordinates_arrow(
+        departure_origin.name,
+        np.ascontiguousarray(times.days.to_numpy(), dtype=np.int64),
+        np.ascontiguousarray(times.nanos.to_numpy(), dtype=np.int64),
+        times.scale,
+        frame,
+        np.ascontiguousarray(vx, dtype=np.float64),
+        np.ascontiguousarray(vy, dtype=np.float64),
+        np.ascontiguousarray(vz, dtype=np.float64),
     )
-
-    # Transform direction to equatorial frame for proper RA/Dec coordinates
-    # These are inertial celestial coordinates, suitable for any departure origin
-    spherical = transform_coordinates(
-        direction_coords,
-        SphericalCoordinates,
-        frame_out="equatorial",
-        origin_out=departure_origin,
-    )
-    return spherical
-
-
-def lambert_worker(
-    departure_orbits: Orbits,
-    arrival_orbits: Orbits,
-    propagation_origin: OriginCodes,
-    prograde: bool = True,
-    max_iter: int = 35,
-    tol: float = 1e-10,
-) -> LambertSolutions:
-    # Extract coordinates from orbits
-    departure_coordinates = departure_orbits.coordinates
-    arrival_coordinates = arrival_orbits.coordinates
-
-    r1 = departure_coordinates.r
-    r2 = arrival_coordinates.r
-    tof = arrival_coordinates.time.mjd().to_numpy(
-        zero_copy_only=False
-    ) - departure_coordinates.time.mjd().to_numpy(zero_copy_only=False)
-
-    origins = Origin.from_OriginCodes(propagation_origin, size=len(r1))
-    mu = origins.mu()[0]
-    v1, v2 = solve_lambert(r1, r2, tof, mu, prograde, max_iter, tol)
-
-    # Use actual orbit IDs from the Orbits objects
-    departure_body_ids = departure_orbits.orbit_id.to_pylist()
-    arrival_body_ids = arrival_orbits.orbit_id.to_pylist()
-
-    return LambertSolutions.from_kwargs(
-        departure_body_id=departure_body_ids,
-        departure_time=departure_coordinates.time,
-        departure_body_x=departure_coordinates.x,
-        departure_body_y=departure_coordinates.y,
-        departure_body_z=departure_coordinates.z,
-        departure_body_vx=departure_coordinates.vx,
-        departure_body_vy=departure_coordinates.vy,
-        departure_body_vz=departure_coordinates.vz,
-        arrival_body_id=arrival_body_ids,
-        arrival_time=arrival_coordinates.time,
-        arrival_body_x=arrival_coordinates.x,
-        arrival_body_y=arrival_coordinates.y,
-        arrival_body_z=arrival_coordinates.z,
-        arrival_body_vx=arrival_coordinates.vx,
-        arrival_body_vy=arrival_coordinates.vy,
-        arrival_body_vz=arrival_coordinates.vz,
-        solution_departure_vx=v1[:, 0],
-        solution_departure_vy=v1[:, 1],
-        solution_departure_vz=v1[:, 2],
-        solution_arrival_vx=v2[:, 0],
-        solution_arrival_vy=v2[:, 1],
-        solution_arrival_vz=v2[:, 2],
-        frame=departure_coordinates.frame,
-        origin=origins,
-    )
-
-
-lambert_worker_remote = ray.remote(lambert_worker)
+    return table_from_record_batch(SphericalCoordinates, result)
 
 
 def prepare_and_propagate_orbits(
@@ -573,40 +529,52 @@ def prepare_and_propagate_orbits(
     Orbits
         The propagated orbits over the specified time range.
     """
-    # if body is an Orbit, ensure its origin is the propagation_origin
+    from adam_core import _rust_native
+    from adam_core._rust.arrow import ensure_spice_backend, table_from_record_batch
+
+    ensure_spice_backend()
     if isinstance(body, Orbits):
+        # Orbit normalization and target-grid construction are one Rust
+        # crossing. Actual propagation remains the explicit provider boundary.
+        from adam_core.coordinates.transform import _coordinate_record_batch
+
+        coordinate_batch, days, nanos = _rust_native.prepare_orbit_propagation_arrow(
+            _coordinate_record_batch(body.coordinates, "cartesian"),
+            np.ascontiguousarray(start_time.days.to_numpy(), dtype=np.int64),
+            np.ascontiguousarray(start_time.nanos.to_numpy(), dtype=np.int64),
+            start_time.scale,
+            np.ascontiguousarray(end_time.days.to_numpy(), dtype=np.int64),
+            np.ascontiguousarray(end_time.nanos.to_numpy(), dtype=np.int64),
+            end_time.scale,
+            step_size,
+            propagation_origin.name,
+        )
         body = body.set_column(
             "coordinates",
-            transform_coordinates(
-                body.coordinates,
-                representation_out=CartesianCoordinates,
-                frame_out="ecliptic",
-                origin_out=propagation_origin,
-            ),
+            table_from_record_batch(CartesianCoordinates, coordinate_batch),
         )
-
-    times = Timestamp.from_mjd(
-        np.arange(
-            start_time.rescale("tdb").mjd()[0].as_py(),
-            end_time.rescale("tdb").mjd()[0].as_py(),
-            step_size,
-        ),
-        scale="tdb",
-    )
-
-    # get orbits for the body at specified times
-    if isinstance(body, Orbits):
+        times = Timestamp.from_kwargs(days=days, nanos=nanos, scale="tdb")
         propagator = propagator_class()
         orbits = propagator.propagate_orbits(body, times, max_processes=max_processes)
     else:
-        # For major bodies, create an Orbits object with the body's origin code as the orbit_id
-        coordinates = get_perturber_state(
-            body, times, frame="ecliptic", origin=propagation_origin
+        # Major-body preparation is one Rust crossing: input-scale conversion,
+        # arange-compatible TDB grid construction, cached SPICE state lookup,
+        # unit conversion, and coordinate batch assembly.
+        coordinate_batch = _rust_native.prepare_major_body_orbits_arrow(
+            np.ascontiguousarray(start_time.days.to_numpy(), dtype=np.int64),
+            np.ascontiguousarray(start_time.nanos.to_numpy(), dtype=np.int64),
+            start_time.scale,
+            np.ascontiguousarray(end_time.days.to_numpy(), dtype=np.int64),
+            np.ascontiguousarray(end_time.nanos.to_numpy(), dtype=np.int64),
+            end_time.scale,
+            step_size,
+            body.value,
+            propagation_origin.value,
+            propagation_origin.name,
         )
-        # Create orbit IDs based on the body name and time index
-        orbit_ids = np.repeat(body.name, len(coordinates))
+        coordinates = table_from_record_batch(CartesianCoordinates, coordinate_batch)
         orbits = Orbits.from_kwargs(
-            orbit_id=orbit_ids,
+            orbit_id=np.repeat(body.name, len(coordinates)),
             coordinates=coordinates,
         )
 
@@ -626,121 +594,54 @@ def generate_porkchop_data(
     Generate data for a porkchop plot by solving Lambert's problem for a grid of
     departure and arrival times.
 
-    Parameters
-    ----------
-    departure_orbits : Orbits
-        The departure orbits.
-    arrival_orbits : Orbits
-        The arrival orbits.
-    propagation_origin : OriginCodes
-        The origin of the propagation.
-    prograde : bool, optional
-        If True, assume prograde motion. If False, assume retrograde motion.
-    max_iter : int, optional
-        The maximum number of iterations for Lambert's solver.
-    tol : float, optional
-        The numerical tolerance for Lambert's solver.
-    max_processes : Optional[int], optional
-        The maximum number of processes to use.
-    max_processes : Optional[int], optional
-        The maximum number of processes to use.
+    Implementation: one Arrow crossing. Rust decodes both Orbits
+    RecordBatches, sorts each side chronologically, validates the shared
+    frame/origin contract, runs meshgrid + time-order filter + rayon-batched
+    Lambert, and returns the finished LambertSolutions RecordBatch.
 
-
-    Returns
-    -------
-    porkchop_data : LambertOutput
-        The porkchop data.
+    `max_processes` is accepted for API compatibility; the Rust kernel
+    auto-detects available cores via rayon's default thread pool.
     """
+    del max_processes  # API compat — rayon auto-detects
+
+    from adam_core.orbits.arrow_bridge import orbits_to_record_batch
 
     assert (
         departure_orbits.coordinates.frame == arrival_orbits.coordinates.frame
     ), "Departure and arrival frames must be the same"
     assert len(departure_orbits.coordinates.origin.code.unique()) == 1
     assert len(arrival_orbits.coordinates.origin.code.unique()) == 1
-
     assert (
         departure_orbits.coordinates.origin.code[0]
         == arrival_orbits.coordinates.origin.code[0]
     ), "Departure and arrival origins must be the same"
 
-    # First let's make sure departure and arrival orbits are time-ordered
-    departure_orbits = departure_orbits.sort_by(
-        ["coordinates.time.days", "coordinates.time.nanos"]
-    )
-    arrival_orbits = arrival_orbits.sort_by(
-        ["coordinates.time.days", "coordinates.time.nanos"]
-    )
-
-    # Get the actual times for comparison
-    dep_times_mjd = departure_orbits.coordinates.time.mjd().to_numpy(
-        zero_copy_only=False
-    )
-    arr_times_mjd = arrival_orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False)
-
-    # Create meshgrids of indices and times
-    dep_indices, arr_indices = np.meshgrid(
-        np.arange(len(departure_orbits)), np.arange(len(arrival_orbits))
-    )
-    dep_time_grid, arr_time_grid = np.meshgrid(dep_times_mjd, arr_times_mjd)
-
-    # Filter to ensure departure time is before arrival time
-    # Use actual time comparison instead of index comparison
-    valid_indices = arr_time_grid > dep_time_grid
-
-    # Apply the mask to flatten only valid combinations
-    dep_indices_flat = dep_indices[valid_indices].flatten()
-    arr_indices_flat = arr_indices[valid_indices].flatten()
-
-    stacked_departure_orbits = departure_orbits.take(dep_indices_flat)
-    stacked_arrival_orbits = arrival_orbits.take(arr_indices_flat)
-
-    # If no valid combinations exist, return empty results
-    if len(stacked_departure_orbits) == 0:
+    if len(departure_orbits) == 0 or len(arrival_orbits) == 0:
         return LambertSolutions.empty()
 
-    if max_processes is None:
-        max_processes = mp.cpu_count()
-
-    use_ray = initialize_use_ray(max_processes)
-
-    lambert_results = LambertSolutions.empty()
-    if use_ray:
-        futures = []
-        for start, end in _iterate_chunk_indices(
-            stacked_departure_orbits, chunk_size=100
-        ):
-            futures.append(
-                lambert_worker_remote.remote(
-                    stacked_departure_orbits[start:end],
-                    stacked_arrival_orbits[start:end],
-                    propagation_origin,
-                    prograde,
-                    max_iter,
-                    tol,
-                )
-            )
-
-            if len(futures) > 1.5 * max_processes:
-                finished, futures = ray.wait(futures, num_returns=1)
-                result = ray.get(finished[0])
-                lambert_results = qv.concatenate([lambert_results, result])
-
-        while futures:
-            finished, futures = ray.wait(futures, num_returns=1)
-            result = ray.get(finished[0])
-            lambert_results = qv.concatenate([lambert_results, result])
-
-    else:
-        lambert_results = lambert_worker(
-            stacked_departure_orbits,
-            stacked_arrival_orbits,
-            propagation_origin,
-            prograde,
-            max_iter,
-            tol,
-        )
-
-    return lambert_results
+    result = generate_porkchop_data_arrow(
+        orbits_to_record_batch(departure_orbits),
+        orbits_to_record_batch(arrival_orbits),
+        propagation_origin.name,
+        prograde,
+        max_iter,
+        tol,
+    )
+    if result.num_rows == 0:
+        return LambertSolutions.empty()
+    metadata = dict(result.schema.metadata or {})
+    table = pa.Table.from_batches([result]).replace_schema_metadata(
+        {
+            b"frame": metadata.get(b"adam_core_frame", b"unspecified"),
+            b"departure_time.scale": metadata.get(
+                b"adam_core_departure_time_scale", b"tdb"
+            ),
+            b"arrival_time.scale": metadata.get(
+                b"adam_core_arrival_time_scale", b"tdb"
+            ),
+        }
+    )
+    return LambertSolutions.from_pyarrow(table)
 
 
 def plot_porkchop_plotly(
@@ -810,6 +711,17 @@ def plot_porkchop_plotly(
     fig : plotly.graph_objects.Figure
         The Plotly figure object.
     """
+    # Plotting libraries and Astropy date formatting are explicit provider
+    # boundaries rather than normal computation/runtime dependencies.
+    try:
+        import plotly.graph_objects as go
+        from astropy.time import Time
+    except ModuleNotFoundError as error:
+        raise ImportError(
+            "Plotly and Astropy are required for porkchop plotting; "
+            "install adam-core[plots]"
+        ) from error
+
     # --- Extract basic raw data ---
     c3_departure_au_d2 = porkchop_data.c3_departure()  # C3 departure in (AU/day)^2
     vinf_arrival_au_day = porkchop_data.vinf_arrival()  # V∞ arrival in AU/day

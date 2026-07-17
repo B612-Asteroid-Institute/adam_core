@@ -2,8 +2,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-import spiceypy as sp
-from naif_leapseconds import leapseconds
 
 from ...coordinates.origin import OriginCodes
 from ...time import Timestamp
@@ -18,6 +16,7 @@ from ..spice import (
     setup_SPICE,
     unregister_spice_kernel,
 )
+from ..spice_backend import get_backend
 
 # JWST SPICE kernel paths
 JWST_KERNEL_DIR = Path(__file__).parent / "data" / "spice"
@@ -83,8 +82,8 @@ def test_unregister_nonexistent_kernel():
 
 def test_jwst_kernel_loading(jwst_kernel):
     """Test loading and using the JWST SPICE kernel."""
-    # Verify JWST is available in SPICE
-    jwst_id = sp.bodn2c("JWST")
+    # Verify JWST is available in the backend
+    jwst_id = get_backend().bodn2c("JWST")
     assert jwst_id == -170
 
     # Create test times within the kernel range
@@ -105,7 +104,7 @@ def test_jwst_kernel_loading(jwst_kernel):
 
 def test_jwst_kernel_time_range(jwst_kernel):
     """Test JWST kernel behavior at different times."""
-    jwst_id = sp.bodn2c("JWST")
+    jwst_id = get_backend().bodn2c("JWST")
 
     # Test times within range
     mid_time = Timestamp.from_iso8601("2022-01-01T00:00:00Z")
@@ -136,8 +135,8 @@ def test_jwst_kernel_time_range(jwst_kernel):
 
 def test_jwst_kernel_cleanup(jwst_kernel):
     """Test that JWST kernel is properly cleaned up."""
-    # Verify JWST is available in SPICE
-    jwst_id = sp.bodn2c("JWST")
+    backend = get_backend()
+    jwst_id = backend.bodn2c("JWST")
     assert jwst_id == -170
 
     # Save a reference time
@@ -159,21 +158,37 @@ def test_jwst_kernel_cleanup(jwst_kernel):
 
 
 def test__jd_tdb_to_et():
-    # Test that _jd_tdb_to_et returns the same values as SPICE's str2et
-    sp.furnsh(leapseconds)
-
+    # TDB → ET is pure arithmetic: `ET = (JD_TDB - 2451545.0) * 86400`.
+    # This is the closed-form identity both CSpice and adam-core use; no
+    # kernel required. Verifying the closed-form directly removes the
+    # last spiceypy dependency in this file.
     times = Timestamp.from_mjd(np.arange(40000, 70000, 5), scale="tdb")
     jd_tdb = times.jd().to_numpy()
 
     et_actual = _jd_tdb_to_et(jd_tdb)
-    et_expected = np.array([sp.str2et(f"JD {i:.16f} TDB") for i in jd_tdb])
+    et_expected = (jd_tdb - 2451545.0) * 86400.0
 
     np.testing.assert_equal(et_actual, et_expected)
 
 
+def _force_legacy_perturber_path(monkeypatch):
+    """Route get_perturber_state onto the retained legacy composition so the
+    Python cache internals under test are actually exercised (the fused Rust
+    crossing has its own Rust-side cache)."""
+    from .. import spice as spice_mod
+
+    def _raise(*args, **kwargs):
+        raise RuntimeError("forced legacy path for cache test")
+
+    monkeypatch.setattr(spice_mod, "_rust_backend_perturber_states", _raise)
+
+
 def test_get_perturber_state_spkez_cache(monkeypatch):
+    from .. import spice as spice_mod
+
     clear_spkez_cache()
     setup_SPICE(force=True)
+    _force_legacy_perturber_path(monkeypatch)
 
     # Use a time grid with duplicates to ensure both in-call uniquing and cross-call caching.
     t = Timestamp.from_mjd(
@@ -181,13 +196,13 @@ def test_get_perturber_state_spkez_cache(monkeypatch):
     )
 
     calls = {"n": 0}
-    spkez_orig = sp.spkez
+    orig_query = spice_mod._query_states_km_kms_batch
 
-    def _spkez_counted(*args, **kwargs):
+    def _query_counted(*args, **kwargs):
         calls["n"] += 1
-        return spkez_orig(*args, **kwargs)
+        return orig_query(*args, **kwargs)
 
-    monkeypatch.setattr(sp, "spkez", _spkez_counted)
+    monkeypatch.setattr(spice_mod, "_query_states_km_kms_batch", _query_counted)
 
     _ = get_perturber_state(
         OriginCodes.SUN, t, frame="ecliptic", origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER
@@ -203,19 +218,22 @@ def test_get_perturber_state_spkez_cache(monkeypatch):
 
 
 def test_get_perturber_state_reverse_pair_cache(monkeypatch):
+    from .. import spice as spice_mod
+
     clear_spkez_cache()
     setup_SPICE(force=True)
+    _force_legacy_perturber_path(monkeypatch)
 
     t = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60001.0]), scale="tdb")
 
     calls = {"n": 0}
-    spkez_orig = sp.spkez
+    orig_query = spice_mod._query_states_km_kms_batch
 
-    def _spkez_counted(*args, **kwargs):
+    def _query_counted(*args, **kwargs):
         calls["n"] += 1
-        return spkez_orig(*args, **kwargs)
+        return orig_query(*args, **kwargs)
 
-    monkeypatch.setattr(sp, "spkez", _spkez_counted)
+    monkeypatch.setattr(spice_mod, "_query_states_km_kms_batch", _query_counted)
 
     sun_wrt_ssb = get_perturber_state(
         OriginCodes.SUN, t, frame="ecliptic", origin=OriginCodes.SOLAR_SYSTEM_BARYCENTER
@@ -229,3 +247,93 @@ def test_get_perturber_state_reverse_pair_cache(monkeypatch):
     ).values
     assert int(calls["n"]) == n_first
     np.testing.assert_allclose(ssb_wrt_sun, -sun_wrt_ssb, rtol=0.0, atol=0.0)
+
+
+def test_get_perturber_state_fused_matches_legacy(monkeypatch):
+    # The fused Rust crossing must reproduce the retained legacy composition
+    # bit-for-bit: same TDB rescale, ET arithmetic, readers, and unit order.
+    from .. import spice as spice_mod
+
+    setup_SPICE(force=True)
+    times_by_scale = [
+        Timestamp.from_mjd(np.array([60000.0, 60000.0, 60000.5, 60001.0]), scale="tdb"),
+        Timestamp.from_mjd(np.array([60000.0, 60001.25]), scale="utc"),
+    ]
+    cases = [
+        (OriginCodes.SUN, OriginCodes.SOLAR_SYSTEM_BARYCENTER),
+        (OriginCodes.EARTH, OriginCodes.SUN),
+    ]
+    for t in times_by_scale:
+        for frame in ("ecliptic", "equatorial"):
+            for target, origin in cases:
+                clear_spkez_cache()
+                fused = get_perturber_state(target, t, frame=frame, origin=origin)
+                clear_spkez_cache()
+                with monkeypatch.context() as ctx:
+
+                    def _raise(*args, **kwargs):
+                        raise RuntimeError("forced legacy")
+
+                    ctx.setattr(spice_mod, "_rust_backend_perturber_states", _raise)
+                    legacy = get_perturber_state(target, t, frame=frame, origin=origin)
+                np.testing.assert_array_equal(fused.values, legacy.values)
+                assert fused.frame == legacy.frame
+                assert fused.origin.code.to_pylist() == legacy.origin.code.to_pylist()
+                assert fused.time.days.to_pylist() == legacy.time.days.to_pylist()
+                assert fused.time.nanos.to_pylist() == legacy.time.nanos.to_pylist()
+                assert fused.time.scale == legacy.time.scale
+
+
+def test_get_spice_body_state_fused_matches_legacy(monkeypatch):
+    from .. import spice as spice_mod
+
+    setup_SPICE(force=True)
+    t = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60001.0]), scale="tdb")
+    for frame in ("ecliptic", "equatorial"):
+        fused = get_spice_body_state(399, t, frame=frame, origin=OriginCodes.SUN)
+        with monkeypatch.context() as ctx:
+
+            def _raise(*args, **kwargs):
+                raise RuntimeError("forced legacy")
+
+            ctx.setattr(spice_mod, "_rust_backend_spice_body_states", _raise)
+            legacy = get_spice_body_state(399, t, frame=frame, origin=OriginCodes.SUN)
+        np.testing.assert_array_equal(fused.values, legacy.values)
+        assert fused.frame == legacy.frame
+        assert fused.origin.code.to_pylist() == legacy.origin.code.to_pylist()
+
+    # Unknown body preserves the exact legacy wrapped ValueError.
+    with pytest.raises(ValueError, match="Could not get state data for body ID"):
+        get_spice_body_state(-987654, t)
+
+
+def test_perturber_and_body_state_native_timing():
+    import pyarrow as pa
+
+    from ..spice import get_backend
+
+    setup_SPICE(force=True)
+    t = Timestamp.from_mjd(np.array([60000.0, 60000.5, 60001.0]), scale="tdb")
+    time_table = t.table.combine_chunks()
+    batch = pa.RecordBatch.from_arrays(
+        [time_table.column("days").chunk(0), time_table.column("nanos").chunk(0)],
+        names=["days", "nanos"],
+    )
+    backend = get_backend()
+    perturber_samples = backend.benchmark_perturber_states_arrow_rust(
+        batch,
+        "tdb",
+        int(OriginCodes.SUN.value),
+        int(OriginCodes.SOLAR_SYSTEM_BARYCENTER.value),
+        "SOLAR_SYSTEM_BARYCENTER",
+        "ecliptic",
+        200_000,
+        2,
+        2,
+        1,
+    )
+    body_samples = backend.benchmark_spice_body_states_arrow_rust(
+        batch, "tdb", 399, "SUN", "ecliptic", 2, 2, 1
+    )
+    assert all(s > 0.0 for trial in perturber_samples for s in trial)
+    assert all(s > 0.0 for trial in body_samples for s in trial)

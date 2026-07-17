@@ -3,18 +3,14 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import TypeAlias, Union
 
-import jax
-import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 
 from .bandpasses.api import assert_filter_ids_have_curves  # noqa: F401
+from .bandpasses.api import _composition_args, _data_dir_str
 from .bandpasses.api import compute_mix_integrals as _compute_bandpass_mix_integrals
 from .bandpasses.api import get_integrals as _get_bandpass_integrals
-from .bandpasses.api import load_bandpass_curves as _load_bandpass_curves
-
-JAX_CHUNK_SIZE = 8192
 
 BandpassComposition: TypeAlias = Union[str, tuple[float, float]]
 
@@ -44,22 +40,6 @@ def hg_phase_correction(
     return -2.5 * np.log10(phase)
 
 
-def _hg_phase_correction_from_cos_jax(
-    cos_phase: jnp.ndarray,
-    G: jnp.ndarray,
-) -> jnp.ndarray:
-    """H-G phase correction in magnitudes, from ``cos`` of the phase angle (JAX kernels).
-
-    Same coefficients as :func:`hg_phase_correction`, but takes ``cos_phase`` directly
-    (avoiding ``arccos``) via the identity ``tan(alpha/2) = sqrt((1 - cos) / (1 + cos))``.
-    """
-    tan_half = jnp.sqrt((1.0 - cos_phase) / (1.0 + cos_phase))
-    phi1 = jnp.exp(-_HG_PHI1_SCALE * tan_half**_HG_PHI1_EXP)
-    phi2 = jnp.exp(-_HG_PHI2_SCALE * tan_half**_HG_PHI2_EXP)
-    phase_function = (1.0 - G) * phi1 + G * phi2
-    return -2.5 * jnp.log10(phase_function)
-
-
 @lru_cache(maxsize=1)
 def bandpass_filter_id_table() -> tuple[
     tuple[str, ...],
@@ -71,10 +51,11 @@ def bandpass_filter_id_table() -> tuple[
     Return (filter_ids, filter_ids_arrow, filter_to_id, v_id) for bandpass conversions.
 
     We intentionally build this lazily (rather than at import time) since it requires
-    reading packaged Parquet data.
+    reading packaged Parquet data (Rust-side since bead personal-cmy.24).
     """
-    curves = _load_bandpass_curves()
-    filter_ids = tuple(curves.filter_id.to_pylist())
+    from adam_core import _rust_native as _rn
+
+    filter_ids = tuple(_rn.bandpasses_filter_ids(_data_dir_str()))
     if "V" not in filter_ids:
         raise ValueError("Bandpass curves must include a canonical 'V' filter_id.")
 
@@ -100,10 +81,12 @@ def bandpass_integrals_for_composition(
 
 
 def bandpass_composition_key(composition: BandpassComposition) -> BandpassComposition:
+    from adam_core import _rust_native as _rn
+
     if isinstance(composition, str):
-        if not composition:
-            raise ValueError("composition template_id must be non-empty")
-        return composition
+        template_id, mix = _rn.bandpasses_composition_key(composition, None)
+        assert mix is None
+        return str(template_id)
     try:
         w_c, w_s = composition
     except Exception as e:
@@ -111,16 +94,9 @@ def bandpass_composition_key(composition: BandpassComposition) -> BandpassCompos
             "composition must be either a template_id string (e.g. 'C') "
             "or a (weight_C, weight_S) tuple"
         ) from e
-    w_c = float(w_c)
-    w_s = float(w_s)
-    if not np.isfinite(w_c) or not np.isfinite(w_s):
-        raise ValueError("composition weights must be finite")
-    if w_c < 0.0 or w_s < 0.0:
-        raise ValueError("composition weights must be non-negative")
-    s = w_c + w_s
-    if s <= 0.0:
-        raise ValueError("at least one composition weight must be > 0")
-    return (w_c / s, w_s / s)
+    template_id, mix = _rn.bandpasses_composition_key(None, (float(w_c), float(w_s)))
+    assert template_id is None
+    return (float(mix[0]), float(mix[1]))
 
 
 @lru_cache(maxsize=None)
@@ -131,26 +107,16 @@ def bandpass_delta_table_for_composition_cached(
     Compute per-filter delta magnitudes relative to V for the given composition:
 
         delta[filter] = m_filter - m_V
+
+    Computed in the Rust backend (bead personal-cmy.24).
     """
-    filter_ids, _, _, v_id = bandpass_filter_id_table()
-    ids = np.asarray(filter_ids, dtype=object)
-    integrals = bandpass_integrals_for_composition(composition_key, ids)
+    from adam_core import _rust_native as _rn
 
-    i_v = float(integrals[v_id])
-    if not np.isfinite(i_v) or i_v <= 0.0:
-        raise ValueError("Invalid V-band integral for bandpass conversion.")
-
-    with np.errstate(divide="raise", invalid="raise"):
-        delta = -2.5 * np.log10(np.asarray(integrals, dtype=np.float64) / i_v)
+    template_id, mix = _composition_args(composition_key)
+    delta = _rn.bandpasses_delta_table(
+        _data_dir_str(), template_id=template_id, mix=mix
+    )
     return np.asarray(delta, dtype=np.float64)
-
-
-@lru_cache(maxsize=None)
-def bandpass_delta_table_jax_for_composition_cached(
-    composition_key: BandpassComposition,
-) -> jax.Array:
-    delta = bandpass_delta_table_for_composition_cached(composition_key)
-    return jnp.asarray(delta, dtype=jnp.float64)
 
 
 def bandpass_delta_table_for_composition(

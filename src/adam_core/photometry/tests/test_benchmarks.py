@@ -6,19 +6,11 @@ from ...coordinates.origin import Origin
 from ...observers.observers import Observers
 from ...time import Timestamp
 from ..magnitude import (
-    JAX_CHUNK_SIZE,
     calculate_apparent_magnitude_v,
     calculate_apparent_magnitude_v_and_phase_angle,
     calculate_phase_angle,
     convert_magnitude,
 )
-
-
-def _padded_size(n: int, pad_to: int) -> int:
-    """Round n up to the next multiple of pad_to."""
-    if pad_to <= 0:
-        raise ValueError("pad_to must be > 0")
-    return int(((n + pad_to - 1) // pad_to) * pad_to)
 
 
 def _make_benchmark_case(n: int = 2048):
@@ -77,20 +69,14 @@ def _make_convert_case(n: int = 262144):
     ids=lambda x: f"n={x}",
 )
 @pytest.mark.benchmark(group="photometry_magnitude_apparent")
-def test_benchmark_calculate_apparent_magnitude_jax(benchmark, n):
-    pad_to = JAX_CHUNK_SIZE
-    n_padded = _padded_size(n, pad_to)
-    H, obj, observer, G = _make_benchmark_case(n=n_padded)
-
-    # Warm-up to exclude JIT compilation from the benchmark measurement.
-    _ = calculate_apparent_magnitude_v(H, obj, observer, G=G)
+def test_benchmark_calculate_apparent_magnitude(benchmark, n):
+    H, obj, observer, G = _make_benchmark_case(n=n)
 
     def run():
         out = calculate_apparent_magnitude_v(H, obj, observer, G=G)
         return out
 
     out = benchmark(run)
-    out = out[:n]  # window back to requested n
     assert len(out) == n
 
 
@@ -100,20 +86,14 @@ def test_benchmark_calculate_apparent_magnitude_jax(benchmark, n):
     ids=lambda x: f"n={x}",
 )
 @pytest.mark.benchmark(group="photometry_phase_angle")
-def test_benchmark_calculate_phase_angle_jax(benchmark, n):
-    pad_to = JAX_CHUNK_SIZE
-    n_padded = _padded_size(n, pad_to)
-    _, obj, observer, _ = _make_benchmark_case(n=n_padded)
-
-    # Warm-up to exclude JIT compilation from the benchmark measurement.
-    _ = calculate_phase_angle(obj, observer)
+def test_benchmark_calculate_phase_angle(benchmark, n):
+    _, obj, observer, _ = _make_benchmark_case(n=n)
 
     def run():
         out = calculate_phase_angle(obj, observer)
         return out
 
     out = benchmark(run)
-    out = out[:n]
     assert len(out) == n
 
 
@@ -123,13 +103,8 @@ def test_benchmark_calculate_phase_angle_jax(benchmark, n):
     ids=lambda x: f"n={x}",
 )
 @pytest.mark.benchmark(group="photometry_magnitude_apparent_and_phase_angle")
-def test_benchmark_calculate_apparent_magnitude_and_phase_jax(benchmark, n):
-    pad_to = JAX_CHUNK_SIZE
-    n_padded = _padded_size(n, pad_to)
-    H, obj, observer, G = _make_benchmark_case(n=n_padded)
-
-    # Warm-up to exclude JIT compilation from the benchmark measurement.
-    _ = calculate_apparent_magnitude_v_and_phase_angle(H, obj, observer, G=G)
+def test_benchmark_calculate_apparent_magnitude_and_phase(benchmark, n):
+    H, obj, observer, G = _make_benchmark_case(n=n)
 
     def run():
         mags, alpha = calculate_apparent_magnitude_v_and_phase_angle(
@@ -138,8 +113,8 @@ def test_benchmark_calculate_apparent_magnitude_and_phase_jax(benchmark, n):
         return mags, alpha
 
     mags, alpha = benchmark(run)
-    mags = np.asarray(mags)[:n]
-    alpha = np.asarray(alpha)[:n]
+    mags = np.asarray(mags)
+    alpha = np.asarray(alpha)
     assert len(mags) == n
     assert len(alpha) == n
 
@@ -151,60 +126,11 @@ def test_benchmark_calculate_apparent_magnitude_and_phase_jax(benchmark, n):
 )
 @pytest.mark.benchmark(group="photometry_magnitude_convert_magnitude")
 def test_benchmark_convert_magnitude_bandpass(benchmark, n):
-    pad_to = JAX_CHUNK_SIZE
-    n_padded = _padded_size(n, pad_to)
-    mags, src, tgt = _make_convert_case(n=n_padded)
+    mags, src, tgt = _make_convert_case(n=n)
 
     def run():
         return convert_magnitude(mags, src, tgt, composition="NEO")
 
     out = benchmark(run)
-    out = np.asarray(out)[:n]
+    out = np.asarray(out)
     assert len(out) == n
-
-
-@pytest.mark.benchmark(group="photometry_magnitude_convert_magnitude_shape_sweep")
-def test_benchmark_convert_magnitude_bandpass_shape_sweep(benchmark):
-    """
-    Shape-sweep benchmark to ensure runtime does not exhibit repeated "first call" spikes
-    across varying `n`.
-    """
-    pad_to = JAX_CHUNK_SIZE
-    sizes = [256, 12345, 65536, 99999, 262144]
-    cases = []
-    for n in sizes:
-        n_padded = _padded_size(n, pad_to)
-        mags, src, tgt = _make_convert_case(n=n_padded)
-        cases.append((mags, src, tgt))
-
-    def run():
-        out = None
-        for mags, src, tgt in cases:
-            out = convert_magnitude(mags, src, tgt, composition="NEO")
-        return out
-
-    out = benchmark(run)
-    assert out is not None
-
-
-def test_benchmark_calculate_apparent_magnitude_jax_shape_sweep(benchmark):
-    pad_to = JAX_CHUNK_SIZE
-    sizes = [256, 12345, 65536, 99999, 262144]
-    cases = []
-    for n in sizes:
-        n_padded = _padded_size(n, pad_to)
-        H, obj, observer, G = _make_benchmark_case(n=n_padded)
-        cases.append((H, obj, observer, G))
-
-    # Warm-up: compile once before benchmarking the sweep.
-    H0, obj0, observer0, G0 = cases[0]
-    _ = calculate_apparent_magnitude_v(H0, obj0, observer0, G=G0)
-
-    def run():
-        out = None
-        for H, obj, observer, G in cases:
-            out = calculate_apparent_magnitude_v(H, obj, observer, G=G)
-        return out
-
-    out = benchmark(run)
-    assert out is not None

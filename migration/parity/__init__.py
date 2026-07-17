@@ -1,0 +1,22 @@
+"""Baseline-main parity + speedup gate for the Rust migration.
+
+This package owns the baseline-main guarantees for APIs wired into the
+parity harness:
+
+1. **Bit/ULP-level parity** between current Rust output and the upstream
+   baseline-main implementation, sampled across a randomized input space.
+2. **Fixed-fixture parity** for APIs where random fuzz is intentionally
+   misleading but deterministic baseline-main fixtures are valid.
+3. **Speedup floor**: each measured API must be >= 1.3x p50 and p95 latency
+   vs the baseline-main implementation unless an explicit waiver is attached
+   (raised from 1.2x on 2026-07-02; tiny-n p95 stays report-only).
+
+The legacy oracle is the upstream-pinned ``adam_core`` install in the
+sibling ``.legacy-venv`` (see migration/parity/_oracle.py). We invoke
+the oracle via subprocess because both repositories export the same
+``adam_core`` package name and cannot coexist in one venv.
+
+Do not use this package to time current-branch Python fallbacks as "legacy".
+For post-legacy performance regression tracking, use
+``migration/scripts/rust_backend_benchmark_gate.py``.
+"""

@@ -1,7 +1,9 @@
 from decimal import Decimal
 
+import numpy as np
 import pytest
 
+from adam_core import _rust_native
 from adam_core.observations.obs80 import (
     NANOSECONDS_PER_DAY,
     Obs80ParseError,
@@ -73,3 +75,17 @@ def test_parser_rejects_malformed_rows() -> None:
         parse_optical_obs80("too short")
     with pytest.raises(Obs80ParseError, match="observation date"):
         parse_optical_obs80(optical[:15] + "not a valid date!" + optical[32:])
+
+
+def test_obs80_parser_has_rust_owned_timing() -> None:
+    raw = "\n".join(
+        [
+            "     A11EpSe*0C2026 07 08.17725719 41 24.185-30 19 19.42         19.35oVNEOCPW68",
+            "     A11EpSe KC2026 07 14.53636 19 37 22.30 -29 16 44.5          19.0 GVNEOCPE23",
+        ]
+    )
+    samples = np.asarray(
+        _rust_native.benchmark_parse_optical_obs80(raw, 2, 2, 1, True, True)
+    )
+    assert samples.shape == (2, 2)
+    assert np.all(samples > 0.0)

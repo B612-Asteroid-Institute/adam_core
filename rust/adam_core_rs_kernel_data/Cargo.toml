@@ -1,0 +1,22 @@
+[package]
+name = "adam_core_rs_kernel_data"
+version = "0.1.0-rc.1"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "Kernel/data-file resolution for adam-core Rust consumers: overrides, installed Python, cache, and verified wheel fetch"
+
+[features]
+default = ["spice"]
+spice = ["dep:adam_core_rs_spice"]
+
+[dependencies]
+sha2 = "0.10"
+ureq = { version = "2.12", default-features = false, features = ["tls"] }
+zip = { version = "2", default-features = false, features = ["deflate"] }
+adam_core_rs_spice = { version = "=0.1.0-rc.1", path = "../adam_core_rs_spice", optional = true }
+
+[dev-dependencies]
+tempfile = "3"

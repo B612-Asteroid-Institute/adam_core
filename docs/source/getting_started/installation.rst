@@ -13,6 +13,28 @@ Use ``pip`` for user/runtime installs:
 
    pip install adam_core
 
+Supported Native Wheels
+-----------------------
+
+The native release matrix supports CPython 3.11, 3.12, and 3.13 on:
+
+* manylinux 2.17+ x86-64;
+* manylinux 2.17+ AArch64;
+* macOS 11+ Apple silicon; and
+* macOS Intel x86-64.
+
+Windows wheels are deferred because the reviewed ``libassist-sys 1.2.1``
+backend used by the required adam-assist acceptance stack wraps upstream
+ASSIST code that depends on POSIX ``sys/mman.h``. Windows source builds are not
+a supported substitute, and no unreviewed compatibility port is bundled.
+
+These wheels are built once, installed and exercised by the clean-room
+acceptance suite, and only those exact tested files are eligible for
+publication. ``musllinux`` is not a supported release target: the SPICE and
+ASSIST native stacks target glibc on Linux, and no native musllinux acceptance
+runner is available. Installing from source requires a Rust toolchain and the
+platform C build tools; release consumers should normally require wheels.
+
 Optional Installation Profiles
 ------------------------------
 
@@ -25,6 +47,18 @@ Pip Extras
 
    # plotting and visualization helpers used in impact analysis
    pip install "adam_core[plots]"
+
+   # Astropy Time objects and explicit UT1/IERS conversions
+   pip install "adam_core[astropy]"
+
+   # compatibility with code that monkeypatches astroquery.jplsbdb.SBDB.query
+   pip install "adam_core[legacy-sbdb]"
+
+   # Healpy compatibility helpers
+   pip install "adam_core[healpix]"
+
+   # historical explicit JAX rotation-fit bridge (the public solver uses Rust)
+   pip install "adam_core[jax]"
 
    # OEM export/import helpers
    pip install "adam_core[oem]"
@@ -39,15 +73,49 @@ A common setup is ``adam-assist``:
 
    pip install adam-assist
 
+``adam-core`` owns data models, coordinate/dynamics kernels, provider clients,
+and generic propagator contracts. ``adam-assist`` owns ASSIST orchestration and
+exposes ``adam_assist.ASSISTPropagator``. Its Rust extension consumes the
+reviewed ``libassist-sys`` and ``librebound-sys`` crates directly; there is no
+separate ``assist-rs`` runtime package.
+
+Kernel Data Resolution
+----------------------
+
+Python wheels use the NAIF kernel files already installed in the active Python
+environment; they do not copy those large files into another cache. Pure-Rust
+consumers resolve kernel data in this order: an explicit path override, an
+installed Python package, the adam-core kernel cache, then a checksummed wheel
+download. Set ``ADAM_CORE_KERNEL_OFFLINE=1`` to prohibit downloads. A cache is
+populated only when no installed package provides the requested file, avoiding
+unnecessary duplication.
+
 Development with PDM
 --------------------
 
 For contributor/development tasks, use PDM in a cloned repository checkout:
 
+This repository does not commit ``pdm.lock``. CI resolves dependencies from
+``pyproject.toml`` for each job, and local ``pdm.lock`` files are disposable
+developer artifacts.
+
 .. code-block:: bash
 
    # install runtime + test + docs dependency groups
    pdm install -G test -G docs
+
+If an existing local ``pdm.lock`` was generated before the docs group was
+included, PDM may report ``Requested groups not in lockfile: docs``. Refresh the
+ignored local lockfile for the requested groups, then retry the install:
+
+.. code-block:: bash
+
+   pdm lock -G test -G docs
+   pdm install -G test -G docs
+
+Then run the documentation builds:
+
+.. code-block:: bash
 
    # run documentation builds
    pdm run docs

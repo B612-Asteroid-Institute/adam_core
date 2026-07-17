@@ -1,16 +1,14 @@
 import logging
-from abc import abstractmethod
-from typing import List, Optional, Tuple
+from abc import ABC, abstractmethod
+from typing import Optional, Tuple
 
 import numpy as np
 import numpy.typing as npt
-import pyarrow.compute as pc
 import quivr as qv
 
 from adam_core.constants import KM_P_AU
 from adam_core.constants import Constants as c
 from adam_core.coordinates import CartesianCoordinates, Origin
-from adam_core.ray_cluster import initialize_use_ray
 
 from ..coordinates.residuals import Residuals
 from ..coordinates.spherical import SphericalCoordinates
@@ -18,9 +16,7 @@ from ..orbits import Orbits
 from ..orbits.variants import VariantOrbits
 from ..propagator import Propagator
 from ..propagator.propagator import OrbitType
-from ..propagator.utils import ensure_input_origin_and_frame
 from ..time import Timestamp
-from ..utils.iter import _iterate_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -29,25 +25,6 @@ C = c.C
 # Use the Earth's equatorial radius as used in DE4XX ephemerides
 # adam_core defines it in au but we need it in km
 EARTH_RADIUS_KM = c.R_EARTH_EQUATORIAL * KM_P_AU
-
-RAY_INSTALLED = False
-try:
-    import ray
-    from ray import ObjectRef
-
-    RAY_INSTALLED = True
-except ImportError:
-    pass
-
-
-if RAY_INSTALLED:
-
-    @ray.remote
-    def impact_worker_ray(idx_chunk, orbits, propagator_class, num_days, conditions):
-        prop = propagator_class()
-        orbits_chunk = orbits.take(idx_chunk)
-        variants, impacts = prop._detect_collisions(orbits_chunk, num_days, conditions)
-        return variants, impacts
 
 
 class ImpactProbabilities(qv.Table):
@@ -74,11 +51,16 @@ class CollisionConditions(qv.Table):
 
     @classmethod
     def default(cls) -> "CollisionConditions":
+        from adam_core import _rust_native
+
+        condition_id, object_code, distance, stopping = (
+            _rust_native.default_collision_condition_values()
+        )
         return cls.from_kwargs(
-            condition_id=["Default"],
-            collision_object=Origin.from_kwargs(code=["EARTH"]),
-            collision_distance=[EARTH_RADIUS_KM],
-            stopping_condition=[True],
+            condition_id=[condition_id],
+            collision_object=Origin.from_kwargs(code=[object_code]),
+            collision_distance=[distance],
+            stopping_condition=[stopping],
         )
 
 
@@ -109,23 +91,16 @@ class CollisionEvent(qv.Table):
         fig.show()
 
 
-class ImpactMixin:
-    """
-    `~adam_core.propagator.Propagator` mixin with signature for detecting Earth impacts.
-    Subclasses should implement the _detect_collisions method.
+class ImpactMixin(ABC):
+    """Collision-detection contract for propagators.
+
+    Concrete (Rust-backed) propagators implement :meth:`detect_collisions` as a
+    single Python->Rust crossing (rayon parallelism lives in the backend).
+    adam_core provides only the abstract contract -- no Python/Ray composition.
+    Callers sample variants (via :func:`calculate_impacts`) before calling this.
     """
 
     @abstractmethod
-    def _detect_collisions(
-        self, orbits: Orbits, num_days: float, conditions: CollisionConditions
-    ) -> Tuple[OrbitType, CollisionEvent]:
-        """
-        Detect collisions for the given orbits.
-
-        THIS FUNCTION SHOULD NOT BE OVERRIDDEN BY THE USER.
-        """
-        pass
-
     def detect_collisions(
         self,
         orbits: OrbitType,
@@ -169,63 +144,7 @@ class ImpactMixin:
             - collision_distance: Distance from the object at which collisions were detected.
             - stopping_condition: Whether the propagation was stopped after a collision.
         """
-        if conditions is None:
-            conditions = CollisionConditions.from_kwargs(
-                condition_id=["Earth"],
-                collision_object=Origin.from_kwargs(code=["EARTH"]),
-                collision_distance=[EARTH_RADIUS_KM],
-                stopping_condition=[True],
-            )
-
-        if max_processes is None or max_processes > 1:
-            impact_list: List[CollisionConditions] = []
-            propagated_list: List[OrbitType] = []
-
-            if RAY_INSTALLED is False:
-                raise ImportError(
-                    "Ray must be installed to use the ray parallel backend"
-                )
-
-            initialize_use_ray(num_cpus=max_processes)
-
-            # Add orbits to object store if
-            # they haven't already been added
-            if not isinstance(orbits, ObjectRef):
-                orbits_ref = ray.put(orbits)
-            else:
-                orbits_ref = orbits
-                # We need to dereference the orbits ObjectRef so we can
-                # check its length for chunking and determine
-                # if we need to propagate variants
-                orbits = ray.get(orbits_ref)
-
-            # Create futures
-            futures = []
-            idx = np.arange(0, len(orbits))
-            for idx_chunk in _iterate_chunks(idx, chunk_size):
-                futures.append(
-                    impact_worker_ray.remote(
-                        idx_chunk, orbits_ref, self.__class__, num_days, conditions
-                    )
-                )
-
-            # Get results as they finish (we sort later)
-            unfinished = futures
-            while unfinished:
-                finished, unfinished = ray.wait(unfinished, num_returns=1)
-                propagated, impacts = ray.get(finished[0])
-                propagated_list.append(propagated)
-                impact_list.append(impacts)
-
-            propagated = qv.concatenate(propagated_list)
-            impacts = qv.concatenate(impact_list)
-
-        else:
-            propagated, impacts = self._detect_collisions(orbits, num_days, conditions)
-
-        propagated = ensure_input_origin_and_frame(orbits, propagated)
-
-        return propagated, impacts
+        ...
 
 
 def calculate_impacts(
@@ -267,12 +186,7 @@ def calculate_impacts(
         orbits, method="monte-carlo", num_samples=num_samples, seed=seed
     )
     if conditions is None:
-        conditions = CollisionConditions.from_kwargs(
-            condition_id=["Default"],
-            collision_object=Origin.from_kwargs(code=["EARTH"]),
-            collision_distance=[EARTH_RADIUS_KM],
-            stopping_condition=[True],
-        )
+        conditions = CollisionConditions.default()
     logger.info("Detecting impacts...")
     results, collisions = propagator.detect_collisions(
         variants,
@@ -304,69 +218,61 @@ def calculate_impact_probabilities(
     """
 
     if conditions is None:
-        conditions = CollisionConditions.from_kwargs(
-            condition_id=["Default"],
-            collision_object=Origin.from_kwargs(code=["EARTH"]),
-            collision_distance=[EARTH_RADIUS_KM],
-            stopping_condition=[True],
-        )
+        conditions = CollisionConditions.default()
+    if len(variants) == 0:
+        return ImpactProbabilities.empty()
 
-    # Loop through the unique set of orbit_ids within variants using quivr
-    unique_orbits = pc.unique(variants.orbit_id).to_pylist()
+    from adam_core import _rust_native
 
-    impact_probabilities = None
+    collision_time = collision_events.coordinates.time
+    scale = (
+        collision_time.scale
+        if len(collision_events) > 0
+        else variants.coordinates.time.scale
+    )
+    stats = _rust_native.impact_probability_stats_numpy(
+        variants.orbit_id.to_pylist(),
+        collision_events.orbit_id.to_pylist(),
+        collision_events.condition_id.to_pylist(),
+        np.ascontiguousarray(
+            collision_time.days.to_numpy(zero_copy_only=False), dtype=np.int64
+        ),
+        np.ascontiguousarray(
+            collision_time.nanos.to_numpy(zero_copy_only=False), dtype=np.int64
+        ),
+        scale,
+        conditions.condition_id.to_pylist(),
+    )
 
-    for orbit_id in unique_orbits:
-        variant_masked = variants.select("orbit_id", orbit_id)
-        variant_count = len(variant_masked)
-        impacts_masked = collision_events.select("orbit_id", orbit_id)
-
-        for unique_condition in conditions:
-            condition_id = unique_condition.condition_id[0]
-            impacts_per_condition = impacts_masked.select("condition_id", condition_id)
-            impact_count = len(impacts_per_condition)
-
-            if len(impacts_per_condition) > 0:
-                impact_mjds = impacts_per_condition.coordinates.time.mjd().to_numpy(
-                    zero_copy_only=False
-                )
-                mean_mjd = Timestamp.from_mjd(
-                    [np.mean(impact_mjds)],
-                    scale=impacts_per_condition.coordinates.time.scale,
-                )
-                stddev = np.std(impact_mjds)
-                min_mjd = impacts_per_condition.coordinates.time.min()
-                max_mjd = impacts_per_condition.coordinates.time.max()
-            else:
-                mean_mjd = Timestamp.nulls(
-                    1, scale=variant_masked.coordinates.time.scale
-                )
-                stddev = None
-                min_mjd = Timestamp.nulls(
-                    1, scale=variant_masked.coordinates.time.scale
-                )
-                max_mjd = Timestamp.nulls(
-                    1, scale=variant_masked.coordinates.time.scale
-                )
-
-            ip = ImpactProbabilities.from_kwargs(
-                condition_id=[condition_id],
-                orbit_id=[orbit_id],
-                impacts=[impact_count],
-                variants=[variant_count],
-                cumulative_probability=[impact_count / variant_count],
-                mean_impact_time=mean_mjd,
-                stddev_impact_time=[stddev],
-                minimum_impact_time=min_mjd,
-                maximum_impact_time=max_mjd,
-            )
-
-            if impact_probabilities is None:
-                impact_probabilities = ip
-            else:
-                impact_probabilities = qv.concatenate([impact_probabilities, ip])
-
-    return impact_probabilities
+    mean_time = Timestamp.from_kwargs(
+        days=stats["mean_days"],
+        nanos=stats["mean_nanos"],
+        scale=scale,
+        permit_nulls=True,
+    )
+    minimum_time = Timestamp.from_kwargs(
+        days=stats["minimum_days"],
+        nanos=stats["minimum_nanos"],
+        scale=scale,
+        permit_nulls=True,
+    )
+    maximum_time = Timestamp.from_kwargs(
+        days=stats["maximum_days"],
+        nanos=stats["maximum_nanos"],
+        scale=scale,
+        permit_nulls=True,
+    )
+    return ImpactProbabilities.from_kwargs(
+        condition_id=stats["condition_id"],
+        orbit_id=stats["orbit_id"],
+        impacts=stats["impacts"],
+        variants=stats["variants"],
+        cumulative_probability=stats["cumulative_probability"],
+        mean_impact_time=mean_time,
+        stddev_impact_time=stats["stddev_impact_time"],
+        minimum_impact_time=minimum_time,
+        maximum_impact_time=maximum_time,
+    )
 
 
 def link_impacting_variants(variants, impacts):
@@ -418,5 +324,13 @@ def calculate_mahalanobis_distance(
     residuals = Residuals.calculate(
         observed_orbit.coordinates, predicted_orbit.coordinates
     )
-    mahalanobis_distance = np.sqrt(residuals.chi2.to_numpy(zero_copy_only=False))
-    return mahalanobis_distance
+    from adam_core import _rust_native
+
+    return np.asarray(
+        _rust_native.sqrt_values_numpy(
+            np.ascontiguousarray(
+                residuals.chi2.to_numpy(zero_copy_only=False), dtype=np.float64
+            )
+        ),
+        dtype=np.float64,
+    )
