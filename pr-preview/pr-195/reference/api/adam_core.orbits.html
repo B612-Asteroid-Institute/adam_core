@@ -279,6 +279,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -326,6 +327,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -626,6 +628,151 @@ variable-length chunks.</p>
 <dt class="sig sig-object py" id="adam_core.orbits.Orbits.schema">
 <span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">orbit_id:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">object_id:</span> <span class="pre">large_string</span> <span class="pre">coordinates:</span> <span class="pre">struct&lt;x:</span> <span class="pre">double,</span> <span class="pre">y:</span> <span class="pre">double,</span> <span class="pre">z:</span> <span class="pre">double,</span> <span class="pre">vx:</span> <span class="pre">double,</span> <span class="pre">vy:</span> <span class="pre">double,</span> <span class="pre">vz:</span> <span class="pre">double,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64</span> <span class="pre">(...</span> <span class="pre">106</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">x:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">y:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">z:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">vx:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">vy:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">vz:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">covariance:</span> <span class="pre">struct&lt;values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">origin:</span> <span class="pre">struct&lt;code:</span> <span class="pre">large_string&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">code:</span> <span class="pre">large_string</span> <span class="pre">physical_parameters:</span> <span class="pre">struct&lt;H_v:</span> <span class="pre">double,</span> <span class="pre">H_v_sigma:</span> <span class="pre">double,</span> <span class="pre">G:</span> <span class="pre">double,</span> <span class="pre">G_sigma:</span> <span class="pre">double,</span> <span class="pre">sigma_eff:</span> <span class="pre">double,</span> <span class="pre">chi2_red:</span> <span class="pre">doub</span> <span class="pre">(...</span> <span class="pre">3</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">H_v:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">H_v_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">G:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">G_sigma:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">sigma_eff:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">chi2_red:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.Orbits.schema" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.orbits.</span></span><span class="sig-name descname"><span class="pre">Trajectory</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v24.0.0)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/orbits/trajectory.html#Trajectory"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Trajectory" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/tables.html#quivr.Table" title="(in quivr v0.7.6.dev5+g5e130d9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
+<p>A set of validity-bounded orbit segments (rows are segments).</p>
+<p>Segments belonging to the same <code class="docutils literal notranslate"><span class="pre">object_id</span></code> must have non-overlapping
+coverage windows; gaps between them are allowed and are treated as
+“no valid state” (fail closed) rather than silently extrapolated.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.coverage_end">
+<span class="sig-name descname"><span class="pre">coverage_end</span></span><a class="headerlink" href="#adam_core.orbits.Trajectory.coverage_end" title="Link to this definition">¶</a></dt>
+<dd><p>A column which represents an embedded quivr table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table_type</strong> – The type of the table to embed.</p></li>
+<li><p><strong>nullable</strong> – Whether the column can contain null values.</p></li>
+<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.coverage_end_mjd">
+<span class="sig-name descname"><span class="pre">coverage_end_mjd</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/trajectory.html#Trajectory.coverage_end_mjd"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Trajectory.coverage_end_mjd" title="Link to this definition">¶</a></dt>
+<dd><p>Coverage-window end times as TDB MJD.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.coverage_start">
+<span class="sig-name descname"><span class="pre">coverage_start</span></span><a class="headerlink" href="#adam_core.orbits.Trajectory.coverage_start" title="Link to this definition">¶</a></dt>
+<dd><p>A column which represents an embedded quivr table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table_type</strong> – The type of the table to embed.</p></li>
+<li><p><strong>nullable</strong> – Whether the column can contain null values.</p></li>
+<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.coverage_start_mjd">
+<span class="sig-name descname"><span class="pre">coverage_start_mjd</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/trajectory.html#Trajectory.coverage_start_mjd"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Trajectory.coverage_start_mjd" title="Link to this definition">¶</a></dt>
+<dd><p>Coverage-window start times as TDB MJD.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.epoch_mjd">
+<span class="sig-name descname"><span class="pre">epoch_mjd</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/trajectory.html#Trajectory.epoch_mjd"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Trajectory.epoch_mjd" title="Link to this definition">¶</a></dt>
+<dd><p>Anchor-state epochs as TDB MJD.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.is_maneuver_boundary">
+<span class="sig-name descname"><span class="pre">is_maneuver_boundary</span></span><a class="headerlink" href="#adam_core.orbits.Trajectory.is_maneuver_boundary" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing booleans.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.max_propagation_days">
+<span class="sig-name descname"><span class="pre">max_propagation_days</span></span><a class="headerlink" href="#adam_core.orbits.Trajectory.max_propagation_days" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.object_id">
+<span class="sig-name descname"><span class="pre">object_id</span></span><a class="headerlink" href="#adam_core.orbits.Trajectory.object_id" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.object_ids">
+<span class="sig-name descname"><span class="pre">object_ids</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.14)"><span class="pre">list</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/trajectory.html#Trajectory.object_ids"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Trajectory.object_ids" title="Link to this definition">¶</a></dt>
+<dd><p>Distinct object ids, in first-seen order.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.orbit">
+<span class="sig-name descname"><span class="pre">orbit</span></span><a class="headerlink" href="#adam_core.orbits.Trajectory.orbit" title="Link to this definition">¶</a></dt>
+<dd><p>A column which represents an embedded quivr table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table_type</strong> – The type of the table to embed.</p></li>
+<li><p><strong>nullable</strong> – Whether the column can contain null values.</p></li>
+<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.schema">
+<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">object_id:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">segment_id:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">coverage_start:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span> <span class="pre">coverage_end:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span> <span class="pre">orbit:</span> <span class="pre">struct&lt;orbit_id:</span> <span class="pre">large_string,</span> <span class="pre">object_id:</span> <span class="pre">large_string,</span> <span class="pre">coordinates:</span> <span class="pre">struct&lt;x:</span> <span class="pre">double,</span> <span class="pre">y:</span> <span class="pre">double,</span> <span class="pre">z:</span> <span class="pre">(...</span> <span class="pre">302</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">orbit_id:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">object_id:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">coordinates:</span> <span class="pre">struct&lt;x:</span> <span class="pre">double,</span> <span class="pre">y:</span> <span class="pre">double,</span> <span class="pre">z:</span> <span class="pre">double,</span> <span class="pre">vx:</span> <span class="pre">double,</span> <span class="pre">vy:</span> <span class="pre">double,</span> <span class="pre">vz:</span> <span class="pre">double,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64</span> <span class="pre">(...</span> <span class="pre">106</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">x:</span> <span class="pre">double</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">y:</span> <span class="pre">double</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">z:</span> <span class="pre">double</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">vx:</span> <span class="pre">double</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">vy:</span> <span class="pre">double</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">vz:</span> <span class="pre">double</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">covariance:</span> <span class="pre">struct&lt;values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">origin:</span> <span class="pre">struct&lt;code:</span> <span class="pre">large_string&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">code:</span> <span class="pre">large_string</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">physical_parameters:</span> <span class="pre">struct&lt;H_v:</span> <span class="pre">double,</span> <span class="pre">H_v_sigma:</span> <span class="pre">double,</span> <span class="pre">G:</span> <span class="pre">double,</span> <span class="pre">G_sigma:</span> <span class="pre">double,</span> <span class="pre">sigma_eff:</span> <span class="pre">double,</span> <span class="pre">chi2_red:</span> <span class="pre">doub</span> <span class="pre">(...</span> <span class="pre">3</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">H_v:</span> <span class="pre">double</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">H_v_sigma:</span> <span class="pre">double</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">G:</span> <span class="pre">double</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">G_sigma:</span> <span class="pre">double</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">sigma_eff:</span> <span class="pre">double</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">chi2_red:</span> <span class="pre">double</span> <span class="pre">source:</span> <span class="pre">large_string</span> <span class="pre">source_version:</span> <span class="pre">large_string</span> <span class="pre">max_propagation_days:</span> <span class="pre">double</span> <span class="pre">is_maneuver_boundary:</span> <span class="pre">bool</span></em><a class="headerlink" href="#adam_core.orbits.Trajectory.schema" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.segment_for">
+<span class="sig-name descname"><span class="pre">segment_for</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">time_mjd_tdb</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">object_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory" title="adam_core.orbits.trajectory.Trajectory"><span class="pre">Trajectory</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/trajectory.html#Trajectory.segment_for"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Trajectory.segment_for" title="Link to this definition">¶</a></dt>
+<dd><p>Return the single segment whose coverage window contains <code class="docutils literal notranslate"><span class="pre">time</span></code>.</p>
+<p>Coverage windows are half-open <code class="docutils literal notranslate"><span class="pre">[coverage_start,</span> <span class="pre">coverage_end)</span></code>.
+Returns <code class="docutils literal notranslate"><span class="pre">None</span></code> when no segment covers the time (a gap; fail closed).
+Raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> when more than one segment matches (an invalid,
+overlapping trajectory) or when the trajectory holds multiple objects
+and <code class="docutils literal notranslate"><span class="pre">object_id</span></code> was not supplied.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.segment_id">
+<span class="sig-name descname"><span class="pre">segment_id</span></span><a class="headerlink" href="#adam_core.orbits.Trajectory.segment_id" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.source">
+<span class="sig-name descname"><span class="pre">source</span></span><a class="headerlink" href="#adam_core.orbits.Trajectory.source" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.source_version">
+<span class="sig-name descname"><span class="pre">source_version</span></span><a class="headerlink" href="#adam_core.orbits.Trajectory.source_version" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.Trajectory.validate_coverage">
+<span class="sig-name descname"><span class="pre">validate_coverage</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory" title="adam_core.orbits.trajectory.Trajectory"><span class="pre">Trajectory</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/trajectory.html#Trajectory.validate_coverage"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.Trajectory.validate_coverage" title="Link to this definition">¶</a></dt>
+<dd><p>Check structural invariants; raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> on violation.</p>
+<p>Enforces, per object: <code class="docutils literal notranslate"><span class="pre">coverage_end</span></code> strictly after
+<code class="docutils literal notranslate"><span class="pre">coverage_start</span></code>, each anchor epoch inside its own coverage window,
+and non-overlapping coverage windows (touching endpoints are allowed
+because windows are half-open <code class="docutils literal notranslate"><span class="pre">[start,</span> <span class="pre">end)</span></code>).</p>
+</dd></dl>
 
 </dd></dl>
 
@@ -1021,10 +1168,15 @@ variable-length chunks.</p>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutQueryError"><code class="docutils literal notranslate"><span class="pre">ScoutQueryError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutObjectNotFoundError"><code class="docutils literal notranslate"><span class="pre">ScoutObjectNotFoundError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutServiceUnavailableError"><code class="docutils literal notranslate"><span class="pre">ScoutServiceUnavailableError</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutResponseError"><code class="docutils literal notranslate"><span class="pre">ScoutResponseError</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutObjectSummary"><code class="docutils literal notranslate"><span class="pre">ScoutObjectSummary</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.get_scout_objects"><code class="docutils literal notranslate"><span class="pre">get_scout_objects()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutOrbit"><code class="docutils literal notranslate"><span class="pre">ScoutOrbit</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.scout_orbits_to_variant_orbits"><code class="docutils literal notranslate"><span class="pre">scout_orbits_to_variant_orbits()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.query_scout_observations"><code class="docutils literal notranslate"><span class="pre">query_scout_observations()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.query_scout"><code class="docutils literal notranslate"><span class="pre">query_scout()</span></code></a></li>
 </ul>
 </li>
@@ -1124,6 +1276,29 @@ variable-length chunks.</p>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.spice_kernel.html#adam_core.orbits.spice_kernel.write_spkw09_segment"><code class="docutils literal notranslate"><span class="pre">write_spkw09_segment()</span></code></a></li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory"><code class="docutils literal notranslate"><span class="pre">Trajectory</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.object_id"><code class="docutils literal notranslate"><span class="pre">Trajectory.object_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.segment_id"><code class="docutils literal notranslate"><span class="pre">Trajectory.segment_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.coverage_start"><code class="docutils literal notranslate"><span class="pre">Trajectory.coverage_start</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.coverage_end"><code class="docutils literal notranslate"><span class="pre">Trajectory.coverage_end</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.orbit"><code class="docutils literal notranslate"><span class="pre">Trajectory.orbit</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.source"><code class="docutils literal notranslate"><span class="pre">Trajectory.source</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.source_version"><code class="docutils literal notranslate"><span class="pre">Trajectory.source_version</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.max_propagation_days"><code class="docutils literal notranslate"><span class="pre">Trajectory.max_propagation_days</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.is_maneuver_boundary"><code class="docutils literal notranslate"><span class="pre">Trajectory.is_maneuver_boundary</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.coverage_start_mjd"><code class="docutils literal notranslate"><span class="pre">Trajectory.coverage_start_mjd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.coverage_end_mjd"><code class="docutils literal notranslate"><span class="pre">Trajectory.coverage_end_mjd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.epoch_mjd"><code class="docutils literal notranslate"><span class="pre">Trajectory.epoch_mjd()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.object_ids"><code class="docutils literal notranslate"><span class="pre">Trajectory.object_ids()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.validate_coverage"><code class="docutils literal notranslate"><span class="pre">Trajectory.validate_coverage()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.segment_for"><code class="docutils literal notranslate"><span class="pre">Trajectory.segment_for()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.schema"><code class="docutils literal notranslate"><span class="pre">Trajectory.schema</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.trajectory.html#adam_core.orbits.trajectory.Trajectory.table"><code class="docutils literal notranslate"><span class="pre">Trajectory.table</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="adam_core.orbits.variants.html">adam_core.orbits.variants module</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits"><code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits.orbit_id"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.orbit_id</span></code></a></li>
@@ -1202,7 +1377,7 @@ variable-length chunks.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-15</div>
+              Last updated on 2026-07-17</div>
           </div>
           <div class="right-details">
             
@@ -1245,6 +1420,25 @@ variable-length chunks.</p>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.physical_parameters"><code class="docutils literal notranslate"><span class="pre">Orbits.physical_parameters</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.preview"><code class="docutils literal notranslate"><span class="pre">Orbits.preview()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.Orbits.schema"><code class="docutils literal notranslate"><span class="pre">Orbits.schema</span></code></a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory"><code class="docutils literal notranslate"><span class="pre">Trajectory</span></code></a><ul>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.coverage_end"><code class="docutils literal notranslate"><span class="pre">Trajectory.coverage_end</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.coverage_end_mjd"><code class="docutils literal notranslate"><span class="pre">Trajectory.coverage_end_mjd()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.coverage_start"><code class="docutils literal notranslate"><span class="pre">Trajectory.coverage_start</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.coverage_start_mjd"><code class="docutils literal notranslate"><span class="pre">Trajectory.coverage_start_mjd()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.epoch_mjd"><code class="docutils literal notranslate"><span class="pre">Trajectory.epoch_mjd()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.is_maneuver_boundary"><code class="docutils literal notranslate"><span class="pre">Trajectory.is_maneuver_boundary</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.max_propagation_days"><code class="docutils literal notranslate"><span class="pre">Trajectory.max_propagation_days</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.object_id"><code class="docutils literal notranslate"><span class="pre">Trajectory.object_id</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.object_ids"><code class="docutils literal notranslate"><span class="pre">Trajectory.object_ids()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.orbit"><code class="docutils literal notranslate"><span class="pre">Trajectory.orbit</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.schema"><code class="docutils literal notranslate"><span class="pre">Trajectory.schema</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.segment_for"><code class="docutils literal notranslate"><span class="pre">Trajectory.segment_for()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.segment_id"><code class="docutils literal notranslate"><span class="pre">Trajectory.segment_id</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.source"><code class="docutils literal notranslate"><span class="pre">Trajectory.source</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.source_version"><code class="docutils literal notranslate"><span class="pre">Trajectory.source_version</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.Trajectory.validate_coverage"><code class="docutils literal notranslate"><span class="pre">Trajectory.validate_coverage()</span></code></a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#adam_core.orbits.VariantOrbits"><code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code></a><ul>

@@ -278,6 +278,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -325,6 +326,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -425,11 +427,224 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for adam_core.orbits.query.scout</h1><div class="highlight"><pre>
-<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Callable</span><span class="p">,</span> <span class="n">Iterable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">NoReturn</span><span class="p">,</span> <span class="n">cast</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">...utils.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">_raise_compatible_http_error</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">requests</span>  <span class="c1"># type: ignore[import-untyped]</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">...observations.obs80</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Obs80ParseError</span><span class="p">,</span>
+    <span class="n">ScoutObservations</span><span class="p">,</span>
+    <span class="n">parse_optical_obs80_file</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..variants</span><span class="w"> </span><span class="kn">import</span> <span class="n">VariantOrbits</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+<span class="n">_SCOUT_API_URL</span> <span class="o">=</span> <span class="s2">&quot;https://ssd-api.jpl.nasa.gov/scout.api&quot;</span>
+<span class="n">_DEFAULT_HTTP_GET</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span>
+
+
+<div class="viewcode-block" id="ScoutQueryError">
+<a class="viewcode-back" href="../../../../reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutQueryError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ScoutQueryError</span><span class="p">(</span><span class="ne">RuntimeError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;A structured failure while querying JPL Scout.&quot;&quot;&quot;</span>
+
+    <span class="n">error_type</span> <span class="o">=</span> <span class="s2">&quot;query_error&quot;</span>
+    <span class="n">http_status</span> <span class="o">=</span> <span class="mi">502</span>
+    <span class="n">retryable</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">message</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">object_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">upstream_status</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">object_id</span> <span class="o">=</span> <span class="n">object_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">upstream_status</span> <span class="o">=</span> <span class="n">upstream_status</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">message</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="ScoutObjectNotFoundError">
+<a class="viewcode-back" href="../../../../reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutObjectNotFoundError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ScoutObjectNotFoundError</span><span class="p">(</span><span class="n">ScoutQueryError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;The requested live Scout object no longer exists.&quot;&quot;&quot;</span>
+
+    <span class="n">error_type</span> <span class="o">=</span> <span class="s2">&quot;not_found&quot;</span>
+    <span class="n">http_status</span> <span class="o">=</span> <span class="mi">404</span></div>
+
+
+
+<div class="viewcode-block" id="ScoutServiceUnavailableError">
+<a class="viewcode-back" href="../../../../reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutServiceUnavailableError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ScoutServiceUnavailableError</span><span class="p">(</span><span class="n">ScoutQueryError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Scout remained unavailable after bounded retries.&quot;&quot;&quot;</span>
+
+    <span class="n">error_type</span> <span class="o">=</span> <span class="s2">&quot;service_unavailable&quot;</span>
+    <span class="n">http_status</span> <span class="o">=</span> <span class="mi">503</span>
+    <span class="n">retryable</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+
+
+<div class="viewcode-block" id="ScoutResponseError">
+<a class="viewcode-back" href="../../../../reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.ScoutResponseError">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ScoutResponseError</span><span class="p">(</span><span class="n">ScoutQueryError</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Scout returned an unsupported or malformed successful response.&quot;&quot;&quot;</span>
+
+    <span class="n">error_type</span> <span class="o">=</span> <span class="s2">&quot;invalid_response&quot;</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_raise_native_scout_error</span><span class="p">(</span><span class="n">error</span><span class="p">:</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">NoReturn</span><span class="p">:</span>
+    <span class="n">marker</span> <span class="o">=</span> <span class="s2">&quot;__SCOUT_ERROR__:&quot;</span>
+    <span class="n">message</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">marker</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">message</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">error</span>
+    <span class="n">payload</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">marker</span><span class="p">,</span> <span class="mi">1</span><span class="p">)[</span><span class="mi">1</span><span class="p">])</span>
+    <span class="n">kind</span> <span class="o">=</span> <span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;kind&quot;</span><span class="p">)</span>
+    <span class="n">exception_type</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">&quot;not_found&quot;</span><span class="p">:</span> <span class="n">ScoutObjectNotFoundError</span><span class="p">,</span>
+        <span class="s2">&quot;service_unavailable&quot;</span><span class="p">:</span> <span class="n">ScoutServiceUnavailableError</span><span class="p">,</span>
+        <span class="s2">&quot;response&quot;</span><span class="p">:</span> <span class="n">ScoutResponseError</span><span class="p">,</span>
+    <span class="p">}</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">kind</span><span class="p">,</span> <span class="n">ScoutQueryError</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="n">exception_type</span><span class="p">(</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;message&quot;</span><span class="p">,</span> <span class="n">message</span><span class="p">)),</span>
+        <span class="n">object_id</span><span class="o">=</span><span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;object_id&quot;</span><span class="p">),</span>
+        <span class="n">upstream_status</span><span class="o">=</span><span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;upstream_status&quot;</span><span class="p">),</span>
+    <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">error</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_normalized_object_ids</span><span class="p">(</span><span class="n">ids</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">ids</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">ids</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">cast</span><span class="p">(</span><span class="n">Iterable</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">ids</span><span class="p">)]</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_request_scout_json</span><span class="p">(</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">params</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">timeout_s</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">30.0</span><span class="p">,</span>
+    <span class="n">max_attempts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+    <span class="n">retry_delay_s</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">http_get</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">_DEFAULT_HTTP_GET</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fetch Scout JSON with bounded retries for transient HTTP failures.&quot;&quot;&quot;</span>
+    <span class="n">attempts</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">max_attempts</span><span class="p">))</span>
+    <span class="k">for</span> <span class="n">attempt</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">attempts</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">response</span> <span class="o">=</span> <span class="n">http_get</span><span class="p">(</span><span class="n">_SCOUT_API_URL</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="n">timeout_s</span><span class="p">)</span>
+            <span class="n">response</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+            <span class="k">return</span> <span class="n">response</span><span class="o">.</span><span class="n">json</span><span class="p">()</span>
+        <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">RequestException</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="n">status</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">exc</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="s2">&quot;status_code&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+            <span class="n">retryable</span> <span class="o">=</span> <span class="n">status</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">status</span> <span class="o">==</span> <span class="mi">429</span> <span class="ow">or</span> <span class="n">status</span> <span class="o">&gt;=</span> <span class="mi">500</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">retryable</span> <span class="ow">or</span> <span class="n">attempt</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">&gt;=</span> <span class="n">attempts</span><span class="p">:</span>
+                <span class="k">raise</span>
+            <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">retry_delay_s</span> <span class="o">*</span> <span class="p">(</span><span class="mi">2</span><span class="o">**</span><span class="n">attempt</span><span class="p">))</span>
+    <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;unreachable Scout retry state&quot;</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_request_scout_object_json</span><span class="p">(</span>
+    <span class="n">object_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">params</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+    <span class="n">timeout_s</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">max_attempts</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">retry_delay_s</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">http_get</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fetch one object product and map lifecycle/transport failures.&quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="n">_request_scout_json</span><span class="p">(</span>
+            <span class="n">params</span><span class="o">=</span><span class="n">params</span><span class="p">,</span>
+            <span class="n">timeout_s</span><span class="o">=</span><span class="n">timeout_s</span><span class="p">,</span>
+            <span class="n">max_attempts</span><span class="o">=</span><span class="n">max_attempts</span><span class="p">,</span>
+            <span class="n">retry_delay_s</span><span class="o">=</span><span class="n">retry_delay_s</span><span class="p">,</span>
+            <span class="n">http_get</span><span class="o">=</span><span class="n">http_get</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="n">requests</span><span class="o">.</span><span class="n">RequestException</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+        <span class="n">upstream_status</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">exc</span><span class="p">,</span> <span class="s2">&quot;response&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">),</span> <span class="s2">&quot;status_code&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">upstream_status</span> <span class="o">==</span> <span class="mi">404</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ScoutObjectNotFoundError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scout object </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2"> was not found&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+                <span class="n">upstream_status</span><span class="o">=</span><span class="n">upstream_status</span><span class="p">,</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="k">if</span> <span class="n">upstream_status</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">upstream_status</span> <span class="o">==</span> <span class="mi">429</span> <span class="ow">or</span> <span class="n">upstream_status</span> <span class="o">&gt;=</span> <span class="mi">500</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ScoutServiceUnavailableError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scout is temporarily unavailable for </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2">; retry later&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+                <span class="n">upstream_status</span><span class="o">=</span><span class="n">upstream_status</span><span class="p">,</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="k">raise</span> <span class="n">ScoutQueryError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Scout request failed for </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2"> with HTTP </span><span class="si">{</span><span class="n">upstream_status</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="n">upstream_status</span><span class="o">=</span><span class="n">upstream_status</span><span class="p">,</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="n">ScoutResponseError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Scout returned a non-object response for </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;error&quot;</span><span class="p">):</span>
+        <span class="n">detail</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">payload</span><span class="p">[</span><span class="s2">&quot;error&quot;</span><span class="p">])</span>
+        <span class="n">normalized</span> <span class="o">=</span> <span class="n">detail</span><span class="o">.</span><span class="n">casefold</span><span class="p">()</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="n">token</span> <span class="ow">in</span> <span class="n">normalized</span>
+            <span class="k">for</span> <span class="n">token</span> <span class="ow">in</span> <span class="p">(</span>
+                <span class="s2">&quot;not found&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;no object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;does not exist&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;unknown object&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;invalid designation&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="n">ScoutObjectNotFoundError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scout object </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2"> is unavailable: </span><span class="si">{</span><span class="n">detail</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span>
+            <span class="n">token</span> <span class="ow">in</span> <span class="n">normalized</span>
+            <span class="k">for</span> <span class="n">token</span> <span class="ow">in</span> <span class="p">(</span>
+                <span class="s2">&quot;temporar&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;service unavailable&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;timeout&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;try again&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;rate limit&quot;</span><span class="p">,</span>
+                <span class="s2">&quot;internal server&quot;</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">raise</span> <span class="n">ScoutServiceUnavailableError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scout is temporarily unavailable for </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2">: </span><span class="si">{</span><span class="n">detail</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">raise</span> <span class="n">ScoutResponseError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Scout returned an error for </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2">: </span><span class="si">{</span><span class="n">detail</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">payload</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_require_scout_signature</span><span class="p">(</span>
+    <span class="n">payload</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span> <span class="o">*</span><span class="p">,</span> <span class="n">object_id</span><span class="p">:</span> <span class="nb">str</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+    <span class="n">signature</span> <span class="o">=</span> <span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;signature&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">signature</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">str</span><span class="p">(</span><span class="n">signature</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">))</span> <span class="o">!=</span> <span class="s2">&quot;1.3&quot;</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="n">ScoutResponseError</span><span class="p">(</span>
+            <span class="s2">&quot;Unsupported or missing Scout API signature for &quot;</span>
+            <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">object_id</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">signature</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">,</span>
+            <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">signature</span>
 
 
 <div class="viewcode-block" id="ScoutObjectSummary">
@@ -505,9 +720,10 @@
 <span class="sd">    scout_objects : `~adam_core.orbits.query.scout.ScoutObjectSummary`</span>
 <span class="sd">        Table containing the summary of all objects.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>  <span class="c1"># type: ignore[attr-defined]</span>
 
     <span class="kn">from</span><span class="w"> </span><span class="nn">..._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">...utils.http</span><span class="w"> </span><span class="kn">import</span> <span class="n">_raise_compatible_http_error</span>
 
     <span class="k">try</span><span class="p">:</span>
         <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">get_scout_objects_arrow</span><span class="p">()</span>
@@ -584,20 +800,157 @@
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">scout_orbits</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">VariantOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
 
-    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>  <span class="c1"># type: ignore[attr-defined]</span>
 
     <span class="kn">from</span><span class="w"> </span><span class="nn">..._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
 
     <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">scout_orbits_to_variants_arrow</span><span class="p">(</span>
-        <span class="nb">str</span><span class="p">(</span><span class="n">object_id</span><span class="p">),</span> <span class="n">scout_orbits</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">to_batches</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="nb">str</span><span class="p">(</span><span class="n">object_id</span><span class="p">),</span> <span class="n">scout_orbits</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">combine_chunks</span><span class="p">()</span><span class="o">.</span><span class="n">to_batches</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">VariantOrbits</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span></div>
 
 
 
+<div class="viewcode-block" id="query_scout_observations">
+<a class="viewcode-back" href="../../../../reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.query_scout_observations">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">query_scout_observations</span><span class="p">(</span>
+    <span class="n">ids</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">timeout_s</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">30.0</span><span class="p">,</span>
+    <span class="n">max_attempts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+    <span class="n">retry_delay_s</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">http_get</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">_DEFAULT_HTTP_GET</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ScoutObservations</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Query authoritative fitted observations from JPL Scout.</span>
+
+<span class="sd">    Scout&#39;s ``file=mpc`` payload exclusively defines snapshot membership.</span>
+<span class="sd">    ``nObs`` is retained as metadata but is not used to add/remove records: in</span>
+<span class="sd">    live Scout data it can differ from the file row count.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">object_ids</span> <span class="o">=</span> <span class="n">_normalized_object_ids</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">http_get</span> <span class="ow">is</span> <span class="n">_DEFAULT_HTTP_GET</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>  <span class="c1"># type: ignore[attr-defined]</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">query_scout_observations_arrow</span><span class="p">(</span>
+                <span class="n">object_ids</span><span class="p">,</span>
+                <span class="kc">None</span><span class="p">,</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">timeout_s</span><span class="p">),</span>
+                <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">max_attempts</span><span class="p">)),</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">retry_delay_s</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="n">_raise_native_scout_error</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+        <span class="n">snapshots_table</span> <span class="o">=</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">ScoutObservations</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+        <span class="n">warned</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">snapshots_table</span><span class="p">)):</span>
+            <span class="n">object_id</span> <span class="o">=</span> <span class="n">snapshots_table</span><span class="o">.</span><span class="n">object_id</span><span class="p">[</span><span class="n">row</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+            <span class="n">declared</span> <span class="o">=</span> <span class="n">snapshots_table</span><span class="o">.</span><span class="n">declared_n_obs</span><span class="p">[</span><span class="n">row</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="n">snapshots_table</span><span class="o">.</span><span class="n">snapshot_observation_count</span><span class="p">[</span><span class="n">row</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">declared</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">declared</span> <span class="o">!=</span> <span class="n">count</span> <span class="ow">and</span> <span class="n">object_id</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">warned</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="s2">&quot;Scout nObs differs from file=mpc membership for </span><span class="si">%s</span><span class="s2">: &quot;</span>
+                    <span class="s2">&quot;nObs=</span><span class="si">%d</span><span class="s2"> file=</span><span class="si">%d</span><span class="s2">; file=mpc remains authoritative&quot;</span><span class="p">,</span>
+                    <span class="n">object_id</span><span class="p">,</span>
+                    <span class="n">declared</span><span class="p">,</span>
+                    <span class="n">count</span><span class="p">,</span>
+                <span class="p">)</span>
+                <span class="n">warned</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">object_id</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">snapshots_table</span>
+
+    <span class="n">snapshots</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ScoutObservations</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">object_id_value</span> <span class="ow">in</span> <span class="n">object_ids</span><span class="p">:</span>
+        <span class="n">object_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">object_id_value</span><span class="p">)</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="n">_request_scout_object_json</span><span class="p">(</span>
+            <span class="n">object_id</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;tdes&quot;</span><span class="p">:</span> <span class="n">object_id</span><span class="p">,</span> <span class="s2">&quot;file&quot;</span><span class="p">:</span> <span class="s2">&quot;mpc&quot;</span><span class="p">},</span>
+            <span class="n">timeout_s</span><span class="o">=</span><span class="n">timeout_s</span><span class="p">,</span>
+            <span class="n">max_attempts</span><span class="o">=</span><span class="n">max_attempts</span><span class="p">,</span>
+            <span class="n">retry_delay_s</span><span class="o">=</span><span class="n">retry_delay_s</span><span class="p">,</span>
+            <span class="n">http_get</span><span class="o">=</span><span class="n">http_get</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">signature</span> <span class="o">=</span> <span class="n">_require_scout_signature</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">)</span>
+
+        <span class="n">raw_file</span> <span class="o">=</span> <span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;fileMPC&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">raw_file</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">raw_file</span><span class="o">.</span><span class="n">strip</span><span class="p">():</span>
+            <span class="k">raise</span> <span class="n">ScoutResponseError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scout returned no file=mpc snapshot for </span><span class="si">{</span><span class="n">object_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">observations</span> <span class="o">=</span> <span class="n">parse_optical_obs80_file</span><span class="p">(</span><span class="n">raw_file</span><span class="p">)</span>
+        <span class="k">except</span> <span class="n">Obs80ParseError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ScoutResponseError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scout returned an invalid file=mpc snapshot for </span><span class="si">{</span><span class="n">object_id</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ScoutResponseError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scout returned an empty file=mpc snapshot for </span><span class="si">{</span><span class="n">object_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">value</span> <span class="o">!=</span> <span class="n">object_id</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">observations</span><span class="o">.</span><span class="n">designation</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()):</span>
+            <span class="k">raise</span> <span class="n">ScoutResponseError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scout file=mpc designation mismatch for requested object </span><span class="si">{</span><span class="n">object_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="n">declared_n_obs_raw</span> <span class="o">=</span> <span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;nObs&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">declared_n_obs</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="nb">int</span><span class="p">(</span><span class="n">declared_n_obs_raw</span><span class="p">)</span> <span class="k">if</span> <span class="n">declared_n_obs_raw</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="kc">None</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">):</span>
+            <span class="n">declared_n_obs</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="n">declared_n_obs</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">declared_n_obs</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                <span class="s2">&quot;Scout nObs differs from file=mpc membership for </span><span class="si">%s</span><span class="s2">: &quot;</span>
+                <span class="s2">&quot;nObs=</span><span class="si">%d</span><span class="s2"> file=</span><span class="si">%d</span><span class="s2">; file=mpc remains authoritative&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="p">,</span>
+                <span class="n">declared_n_obs</span><span class="p">,</span>
+                <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span>
+            <span class="p">)</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+        <span class="n">snapshots</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+            <span class="n">ScoutObservations</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">object_id</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span>
+                <span class="n">solution_date_utc</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+                    <span class="p">[</span><span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;lastRun&quot;</span><span class="p">)]</span> <span class="o">*</span> <span class="n">n</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">()</span>
+                <span class="p">),</span>
+                <span class="n">declared_n_obs</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">declared_n_obs</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">()),</span>
+                <span class="n">snapshot_sha256</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span>
+                    <span class="n">hashlib</span><span class="o">.</span><span class="n">sha256</span><span class="p">(</span><span class="n">raw_file</span><span class="o">.</span><span class="n">encode</span><span class="p">(</span><span class="s2">&quot;utf-8&quot;</span><span class="p">))</span><span class="o">.</span><span class="n">hexdigest</span><span class="p">(),</span> <span class="n">n</span>
+                <span class="p">),</span>
+                <span class="n">snapshot_observation_count</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">repeat</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">),</span>
+                <span class="n">signature_version</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+                    <span class="p">[</span><span class="n">signature</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;version&quot;</span><span class="p">)]</span> <span class="o">*</span> <span class="n">n</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">()</span>
+                <span class="p">),</span>
+                <span class="n">signature_source</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+                    <span class="p">[</span><span class="n">signature</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;source&quot;</span><span class="p">)]</span> <span class="o">*</span> <span class="n">n</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">()</span>
+                <span class="p">),</span>
+                <span class="n">observation_index</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">),</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">()),</span>
+                <span class="n">observation</span><span class="o">=</span><span class="n">observations</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">snapshots</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">ScoutObservations</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">snapshots</span><span class="p">)</span></div>
+
+
+
 <div class="viewcode-block" id="query_scout">
 <a class="viewcode-back" href="../../../../reference/api/adam_core.orbits.query.scout.html#adam_core.orbits.query.scout.query_scout">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">query_scout</span><span class="p">(</span><span class="n">ids</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VariantOrbits</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">query_scout</span><span class="p">(</span>
+    <span class="n">ids</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">timeout_s</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">30.0</span><span class="p">,</span>
+    <span class="n">max_attempts</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+    <span class="n">retry_delay_s</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">http_get</span><span class="p">:</span> <span class="n">Callable</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="n">_DEFAULT_HTTP_GET</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VariantOrbits</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Query the Scout API for a list of objects by id</span>
 
@@ -617,15 +970,63 @@
 <span class="sd">    orbits : `~adam_core.orbits.VariantOrbits`</span>
 <span class="sd">        Table containing the orbits of the objects</span>
 <span class="sd">    &quot;&quot;&quot;</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+    <span class="n">object_ids</span> <span class="o">=</span> <span class="n">_normalized_object_ids</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">http_get</span> <span class="ow">is</span> <span class="n">_DEFAULT_HTTP_GET</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>  <span class="c1"># type: ignore[attr-defined]</span>
 
-    <span class="kn">from</span><span class="w"> </span><span class="nn">..._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">..._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
 
-    <span class="k">try</span><span class="p">:</span>
-        <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">query_scout_arrow</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">])</span>
-    <span class="k">except</span> <span class="ne">RuntimeError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
-        <span class="n">_raise_compatible_http_error</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">VariantOrbits</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span></div>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">batch</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">query_scout_arrow</span><span class="p">(</span>
+                <span class="n">object_ids</span><span class="p">,</span>
+                <span class="kc">None</span><span class="p">,</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">timeout_s</span><span class="p">),</span>
+                <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">int</span><span class="p">(</span><span class="n">max_attempts</span><span class="p">)),</span>
+                <span class="nb">float</span><span class="p">(</span><span class="n">retry_delay_s</span><span class="p">),</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">error</span><span class="p">:</span>
+            <span class="n">_raise_native_scout_error</span><span class="p">(</span><span class="n">error</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">VariantOrbits</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
+
+    <span class="n">variant_orbits</span> <span class="o">=</span> <span class="n">VariantOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">object_id_value</span> <span class="ow">in</span> <span class="n">object_ids</span><span class="p">:</span>
+        <span class="n">object_id</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">object_id_value</span><span class="p">)</span>
+        <span class="n">payload</span> <span class="o">=</span> <span class="n">_request_scout_object_json</span><span class="p">(</span>
+            <span class="n">object_id</span><span class="p">,</span>
+            <span class="n">params</span><span class="o">=</span><span class="p">{</span><span class="s2">&quot;tdes&quot;</span><span class="p">:</span> <span class="n">object_id</span><span class="p">,</span> <span class="s2">&quot;orbits&quot;</span><span class="p">:</span> <span class="s2">&quot;1&quot;</span><span class="p">},</span>
+            <span class="n">timeout_s</span><span class="o">=</span><span class="n">timeout_s</span><span class="p">,</span>
+            <span class="n">max_attempts</span><span class="o">=</span><span class="n">max_attempts</span><span class="p">,</span>
+            <span class="n">retry_delay_s</span><span class="o">=</span><span class="n">retry_delay_s</span><span class="p">,</span>
+            <span class="n">http_get</span><span class="o">=</span><span class="n">http_get</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">_require_scout_signature</span><span class="p">(</span><span class="n">payload</span><span class="p">,</span> <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">)</span>
+        <span class="n">orbits_payload</span> <span class="o">=</span> <span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;orbits&quot;</span><span class="p">)</span>
+        <span class="n">rows</span> <span class="o">=</span> <span class="n">orbits_payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;data&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbits_payload</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="k">else</span> <span class="kc">None</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rows</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="n">ScoutResponseError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scout response for </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2"> is missing orbits.data&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">rows</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ScoutObjectNotFoundError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scout returned no orbit samples for </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># Convert from list of rows to list of columns.</span>
+            <span class="n">columns</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">map</span><span class="p">(</span><span class="nb">list</span><span class="p">,</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">rows</span><span class="p">)))</span>
+            <span class="n">table</span> <span class="o">=</span> <span class="n">pa</span><span class="o">.</span><span class="n">Table</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span><span class="n">columns</span><span class="p">,</span> <span class="n">schema</span><span class="o">=</span><span class="n">ScoutOrbit</span><span class="o">.</span><span class="n">schema</span><span class="p">)</span>
+            <span class="n">scout_orbits</span> <span class="o">=</span> <span class="n">ScoutOrbit</span><span class="o">.</span><span class="n">from_pyarrow</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">ArrowException</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="n">ScoutResponseError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Scout returned invalid orbit samples for </span><span class="si">{</span><span class="n">object_id</span><span class="si">!r}</span><span class="s2">: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">,</span>
+                <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="n">object_variants</span> <span class="o">=</span> <span class="n">scout_orbits_to_variant_orbits</span><span class="p">(</span><span class="n">object_id</span><span class="p">,</span> <span class="n">scout_orbits</span><span class="p">)</span>
+        <span class="n">variant_orbits</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">variant_orbits</span><span class="p">,</span> <span class="n">object_variants</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="n">variant_orbits</span></div>
 
 </pre></div>
         </article>
@@ -645,7 +1046,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-15</div>
+              Last updated on 2026-07-17</div>
           </div>
           <div class="right-details">
             

@@ -28,7 +28,8 @@ Complete Surface Status
 -----------------------
 
 The authoritative latest-main inventory is
-``migration/public_surface/manifest.json`` (576 symbols / 66 constants). The
+``migration/public_surface/manifest.json`` (595 symbols / 67 constants at
+upstream ``9b756803ab3afbe11e33df9e57d30a28e7976b92``). The
 selected parity registry is a benchmark set, not the public-surface count.
 Every adam-core-owned non-plotting operation is either Rust-backed, a thin
 single-crossing compatibility veneer, or an explicitly documented provider
