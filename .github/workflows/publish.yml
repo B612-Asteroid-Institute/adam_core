@@ -10,7 +10,7 @@ on:
       expected_version:
         description: Exact PEP 440 release-candidate version
         required: true
-        default: 0.5.6rc1
+        default: 0.5.6rc2
         type: string
       repository:
         description: Destination index
@@ -31,7 +31,7 @@ permissions:
   id-token: write
 
 env:
-  RUST_PREVIEW_VERSION: "0.1.0-rc.1"
+  RUST_PREVIEW_VERSION: "0.1.0-rc.2"
 
 jobs:
   collect-tested-artifacts:

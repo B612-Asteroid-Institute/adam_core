@@ -1,6 +1,6 @@
 [package]
 name = "adam_core_rs_coords"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -15,8 +15,8 @@ arrow-buffer = "54"
 arrow-schema = "54"
 parquet = { version = "54", default-features = false, features = ["arrow", "snap", "zstd"] }
 erfars = "0.2"
-adam_core_rs_autodiff = { version = "=0.1.0-rc.1", path = "../adam_core_rs_autodiff" }
-adam_core_rs_orbit_determination = { version = "=0.1.0-rc.1", path = "../adam_core_rs_orbit_determination" }
+adam_core_rs_autodiff = { version = "=0.1.0-rc.2", path = "../adam_core_rs_autodiff" }
+adam_core_rs_orbit_determination = { version = "=0.1.0-rc.2", path = "../adam_core_rs_orbit_determination" }
 # Pure-rust dense linalg with hand-tuned SIMD (NEON, AVX2/512). Used for
 # weighted_mean / weighted_covariance GEMV/GEMM and unblocks future
 # Cholesky/LU/QR/eigen kernels (sigma-point sampling, ATWA solve, etc.).

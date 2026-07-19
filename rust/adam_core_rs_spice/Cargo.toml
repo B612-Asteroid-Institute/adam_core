@@ -1,6 +1,6 @@
 [package]
 name = "adam_core_rs_spice"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,7 +9,7 @@ rust-version.workspace = true
 description = "SPICE kernel loading, state queries, and SPK products for adam-core"
 
 [dependencies]
-adam_core_rs_coords = { version = "=0.1.0-rc.1", path = "../adam_core_rs_coords" }
+adam_core_rs_coords = { version = "=0.1.0-rc.2", path = "../adam_core_rs_coords" }
 rayon = "1"
 faer = "0.22"
 serde_json = "1"

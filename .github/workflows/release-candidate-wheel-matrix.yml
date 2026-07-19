@@ -22,7 +22,7 @@ concurrency:
 env:
   ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref || 'rust-migration-assist' }}
   PIP_ONLY_BINARY: ":all:"
-  PYTHON_PREVIEW_VERSION: "0.5.6rc1"
+  PYTHON_PREVIEW_VERSION: "0.5.6rc2"
 
 jobs:
   artifact-acceptance:

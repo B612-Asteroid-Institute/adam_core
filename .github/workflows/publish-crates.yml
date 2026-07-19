@@ -10,15 +10,14 @@ on:
       expected_version:
         description: Exact prerelease shared by all six crates
         required: true
-        default: 0.1.0-rc.1
+        default: 0.1.0-rc.2
         type: string
       authentication:
-        description: First releases require the protected bootstrap token; later releases use OIDC
+        description: crates.io OIDC trusted publishing (bootstrap token was revoked after rc.1)
         required: true
-        default: bootstrap-token
+        default: trusted-publishing
         type: choice
         options:
-          - bootstrap-token
           - trusted-publishing
       confirmation:
         description: Type "publish <version> from <sha> to crates.io"
@@ -31,7 +30,7 @@ permissions:
   id-token: write
 
 env:
-  PYTHON_PREVIEW_VERSION: "0.5.6rc1"
+  PYTHON_PREVIEW_VERSION: "0.5.6rc2"
 
 jobs:
   publish:
@@ -84,12 +83,11 @@ jobs:
             --archives accepted-crates \
             --expected-version "${{ inputs.expected_version }}"
       - name: Acquire crates.io trusted-publishing token
-        if: inputs.authentication == 'trusted-publishing'
         id: auth
         uses: rust-lang/crates-io-auth-action@v1
       - name: Upload exact reviewed archives in dependency order
         env:
-          CARGO_REGISTRY_TOKEN: ${{ inputs.authentication == 'bootstrap-token' && secrets.CRATES_IO_BOOTSTRAP_TOKEN || steps.auth.outputs.token }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
         run: |
           python migration/scripts/publish_crate_archives.py \
             --archives accepted-crates \
