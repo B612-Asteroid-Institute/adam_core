@@ -17,10 +17,34 @@ use std::collections::HashMap;
 
 const DIM: usize = 6;
 const SIGMA_POINT_COUNT: usize = 2 * DIM + 1;
-const JACOBI_MAX_SWEEPS: usize = 100;
-const JACOBI_TOLERANCE: f64 = 1.0e-18;
-const PSD_TOLERANCE: f64 = 1.0e-12;
+/// Total Jacobi rotation budget (30 cycles over the 15 upper-triangle pairs
+/// of a 6x6 symmetric matrix). Classical max-element Jacobi converges
+/// quadratically, so well-posed covariances need far fewer rotations; the
+/// budget only bounds pathological inputs, which fail closed instead of
+/// returning an inaccurate square root.
+const JACOBI_MAX_ROTATIONS: usize = 450;
+/// Scale-aware Jacobi convergence threshold, relative to the largest absolute
+/// entry of the symmetrized, scaled matrix. An absolute threshold is not
+/// meaningful across covariance scales: public orbit covariances near 1e-17
+/// "converged" against the previous absolute 1e-18 cutoff while material
+/// off-diagonal structure remained, and the resulting sigma-point clouds
+/// failed to reconstruct the input covariance by ~0.86% (bead personal-yv7s).
+const JACOBI_RELATIVE_TOLERANCE: f64 = f64::EPSILON;
+/// Sigma-point PSD floor relative to the largest absolute eigenvalue. Legacy
+/// Python had no PSD validation on the sigma-point path (scipy `sqrtm`
+/// silently returned complex roots), so this scale-aware floor keeps the
+/// established Rust fail-closed behavior while staying meaningful for both
+/// order-one and public-scale (~1e-17) covariances. For order-one matrices it
+/// matches the previous absolute 1e-12 floor exactly.
+const SIGMA_POINT_PSD_RELATIVE_TOLERANCE: f64 = 1.0e-12;
+/// Absolute Monte Carlo eigenvalue floor mirroring the legacy public
+/// `sample_covariance_random(semidef_tol=1e-15)` acceptance contract.
 const MONTE_CARLO_PSD_TOLERANCE: f64 = 1.0e-15;
+/// Absolute auto-mode reconstruction thresholds mirroring the legacy Python
+/// `create_coordinate_variants` sigma-point-versus-Monte-Carlo decision
+/// (`diff >= 1e-12` per entry). This is intentionally a method-selection
+/// contract, not an accuracy guarantee; accuracy is owned by the scale-aware
+/// symmetric square root below.
 const AUTO_RECONSTRUCTION_TOLERANCE: f64 = 1.0e-12;
 const DEFAULT_RANDOM_SEED: u64 = 0x4d59_5df4_d0f3_3173;
 const TWO_POW_53: f64 = 9_007_199_254_740_992.0;
@@ -261,6 +285,9 @@ pub fn sample_coordinate_covariances_flat(
         }
         let mut mean = [0.0_f64; DIM];
         mean.copy_from_slice(mean_slice);
+        // The legacy checks above preserve exact NaN error messages; this
+        // additional validation fails closed for infinities as well.
+        validate_sampling_row(&mean, covariance)?;
         let row_samples = match method {
             OrbitVariantSamplingMethod::SigmaPoint => {
                 sigma_point_samples(&mean, covariance, alpha, beta, kappa)?
@@ -299,8 +326,14 @@ pub fn sample_covariance_sigma_points_flat(
     kappa: f64,
 ) -> SchemaResult<(Vec<f64>, Vec<f64>, Vec<f64>)> {
     validate_sigma_point_parameters(alpha, beta, kappa)?;
+    if mean.len() != DIM {
+        return Err(SchemaError::InvalidRecordBatch(
+            "mean must have shape (6,) for covariance sampling".to_string(),
+        ));
+    }
     let mut mean6 = [0.0_f64; DIM];
     mean6.copy_from_slice(mean);
+    validate_sampling_row(&mean6, covariance)?;
     let samples = sigma_point_samples(&mean6, covariance, alpha, beta, kappa)?;
     Ok(split_samples(samples))
 }
@@ -315,8 +348,14 @@ pub fn sample_covariance_random_flat(
     seed: Option<u64>,
 ) -> SchemaResult<(Vec<f64>, Vec<f64>, Vec<f64>)> {
     validate_monte_carlo_parameters(num_samples)?;
+    if mean.len() != DIM {
+        return Err(SchemaError::InvalidRecordBatch(
+            "mean must have shape (6,) for covariance sampling".to_string(),
+        ));
+    }
     let mut mean6 = [0.0_f64; DIM];
     mean6.copy_from_slice(mean);
+    validate_sampling_row(&mean6, covariance)?;
     let samples = monte_carlo_samples(&mean6, covariance, num_samples, seed_for_row(seed, 0))?;
     Ok(split_samples(samples))
 }
@@ -350,6 +389,11 @@ fn sigma_point_samples(
     let w0 = lambda / denom;
     let w0_cov = w0 + (1.0 - alpha * alpha + beta);
     let wi = 1.0 / (2.0 * denom);
+    if !w0.is_finite() || !w0_cov.is_finite() || !wi.is_finite() {
+        return Err(SchemaError::InvalidRecordBatch(
+            "sigma-point covariance parameters must produce finite weights".to_string(),
+        ));
+    }
     let root = symmetric_square_root_scaled(covariance, denom)?;
 
     let mut samples = Vec::with_capacity(SIGMA_POINT_COUNT);
@@ -372,6 +416,15 @@ fn sigma_point_samples(
             weight_cov: wi,
         });
     }
+    if samples
+        .iter()
+        .flat_map(|sample| sample.values)
+        .any(|value| !value.is_finite())
+    {
+        return Err(SchemaError::InvalidRecordBatch(
+            "Sigma-point covariance sampling produced non-finite samples.".to_string(),
+        ));
+    }
     Ok(samples)
 }
 
@@ -381,8 +434,11 @@ fn monte_carlo_samples(
     num_samples: usize,
     seed: u64,
 ) -> SchemaResult<Vec<CoordinateSample>> {
-    let root =
-        symmetric_square_root_scaled_with_tolerance(covariance, 1.0, MONTE_CARLO_PSD_TOLERANCE)?;
+    let root = symmetric_square_root_scaled_with_tolerance(
+        covariance,
+        1.0,
+        PsdTolerance::Absolute(MONTE_CARLO_PSD_TOLERANCE),
+    )?;
     let mut rng = SplitMix64Normal::new(seed);
     let weight = 1.0 / num_samples as f64;
     let mut samples = Vec::with_capacity(num_samples);
@@ -398,6 +454,11 @@ fn monte_carlo_samples(
                 offset += z[k] * root[k][dim];
             }
             values[dim] += offset;
+        }
+        if values.iter().any(|value| !value.is_finite()) {
+            return Err(SchemaError::InvalidRecordBatch(
+                "Monte Carlo covariance sampling produced non-finite samples.".to_string(),
+            ));
         }
         samples.push(CoordinateSample {
             values,
@@ -898,17 +959,32 @@ fn sub_rows(left: &[f64; DIM], right: &[f64; DIM]) -> [f64; DIM] {
     out
 }
 
+/// Eigenvalue floor semantics for PSD classification in covariance sampling.
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum PsdTolerance {
+    /// Fixed eigenvalue floor, preserving the legacy public absolute
+    /// `semidef_tol` contract on the Monte Carlo path.
+    Absolute(f64),
+    /// Floor relative to the largest absolute eigenvalue, so classification
+    /// stays meaningful across covariance scales (bead personal-yv7s).
+    RelativeToLargestEigenvalue(f64),
+}
+
 fn symmetric_square_root_scaled(
     values_row_major: &[f64],
     scale: f64,
 ) -> SchemaResult<[[f64; DIM]; DIM]> {
-    symmetric_square_root_scaled_with_tolerance(values_row_major, scale, PSD_TOLERANCE)
+    symmetric_square_root_scaled_with_tolerance(
+        values_row_major,
+        scale,
+        PsdTolerance::RelativeToLargestEigenvalue(SIGMA_POINT_PSD_RELATIVE_TOLERANCE),
+    )
 }
 
 fn symmetric_square_root_scaled_with_tolerance(
     values_row_major: &[f64],
     scale: f64,
-    psd_tolerance: f64,
+    psd_tolerance: PsdTolerance,
 ) -> SchemaResult<[[f64; DIM]; DIM]> {
     if values_row_major.len() != DIM * DIM {
         return Err(SchemaError::InvalidCovarianceShape {
@@ -925,23 +1001,63 @@ fn symmetric_square_root_scaled_with_tolerance(
             a[row][col] = 0.5 * scale * (left + right);
         }
     }
+    // Fail closed on nonfinite input (NaN or infinity, including overflow
+    // introduced by `scale`) before iterating: the Jacobi loop would
+    // otherwise silently degrade instead of erroring.
+    let mut max_abs = 0.0_f64;
+    for row in &a {
+        for value in row {
+            // Check each value before reduction: `f64::max` deliberately
+            // ignores a single NaN operand and would otherwise mask it.
+            if !value.is_finite() {
+                return Err(SchemaError::InvalidRecordBatch(
+                    "Covariance matrix must contain finite values for covariance sampling."
+                        .to_string(),
+                ));
+            }
+            max_abs = max_abs.max(value.abs());
+        }
+    }
+
     let mut vectors = [[0.0; DIM]; DIM];
     for (index, row) in vectors.iter_mut().enumerate() {
         row[index] = 1.0;
     }
 
-    for _ in 0..JACOBI_MAX_SWEEPS {
+    // Scale-aware convergence: iterate until the largest off-diagonal is at
+    // machine precision relative to the matrix magnitude, so the square root
+    // reconstructs the input covariance to ~n*eps regardless of scale. A zero
+    // matrix converges immediately (0 <= 0). If the rotation budget is
+    // exhausted first, fail closed rather than return an inaccurate root.
+    let threshold = JACOBI_RELATIVE_TOLERANCE * max_abs;
+    let mut rotations = 0;
+    loop {
         let (p, q, max_off_diag) = max_off_diagonal(&a);
-        if max_off_diag <= JACOBI_TOLERANCE {
+        if max_off_diag <= threshold {
             break;
         }
+        if rotations == JACOBI_MAX_ROTATIONS {
+            return Err(SchemaError::InvalidRecordBatch(
+                "Covariance eigendecomposition did not converge for covariance sampling."
+                    .to_string(),
+            ));
+        }
         rotate_jacobi(&mut a, &mut vectors, p, q);
+        rotations += 1;
     }
 
+    let mut eigen_scale = 0.0_f64;
+    for (index, row) in a.iter().enumerate() {
+        eigen_scale = eigen_scale.max(row[index].abs());
+    }
+    let psd_floor = match psd_tolerance {
+        PsdTolerance::Absolute(tolerance) => tolerance,
+        PsdTolerance::RelativeToLargestEigenvalue(tolerance) => tolerance * eigen_scale,
+    };
     let mut roots = [0.0; DIM];
     for index in 0..DIM {
         let eigenvalue = a[index][index];
-        if eigenvalue < -psd_tolerance {
+        if eigenvalue < -psd_floor {
             return Err(SchemaError::InvalidRecordBatch(
                 "Covariance matrix is not positive semidefinite for covariance sampling."
                     .to_string(),
@@ -958,6 +1074,15 @@ fn symmetric_square_root_scaled_with_tolerance(
                 value += vectors[row][k] * roots[k] * vectors[col][k];
             }
             sqrt[row][col] = value;
+        }
+    }
+    for row in &sqrt {
+        for value in row {
+            if !value.is_finite() {
+                return Err(SchemaError::InvalidRecordBatch(
+                    "Covariance square root is not finite for covariance sampling.".to_string(),
+                ));
+            }
         }
     }
     Ok(sqrt)
@@ -1168,6 +1293,447 @@ mod tests {
             OrbitBatch::new(vec![OrbitId("o1".to_string())], vec![None], coordinates).unwrap();
         let samples = create_sigma_point_orbit_variants(&orbits, 1.0, 0.0, 0.0).unwrap();
         assert_reconstructs_covariance(&samples, &state, &covariance);
+    }
+
+    /// Frozen release-blocker fixture (bead personal-yv7s): the immutable
+    /// public Apophis Cartesian orbit at MJD 59215 TDB whose small correlated
+    /// covariance (eigenvalues ~1.91e-23..1.918e-17, condition ~1.0e6) the
+    /// 0.5.6rc1 sampler failed to reconstruct (relative Frobenius error
+    /// ~8.64e-3 versus ~3.64e-9 for legacy scipy `sqrtm`).
+    fn apophis_public_scale_fixture() -> ([f64; DIM], Vec<f64>) {
+        let mean = [
+            -0.4098530841678254,
+            0.9621648472038595,
+            -0.06096604136465475,
+            -0.015075524121655987,
+            -0.004107955457204797,
+            -0.00013931296759505984,
+        ];
+        let covariance = vec![
+            1.605921382259025e-17,
+            6.698340830041905e-18,
+            -8.737065006307528e-19,
+            -4.5472668722760005e-20,
+            1.7763932740552372e-19,
+            4.6331011863059437e-20,
+            6.698340830042149e-18,
+            4.812399377784115e-18,
+            2.057968530102772e-18,
+            -2.8962987106026045e-21,
+            5.580793146667982e-20,
+            -9.588370494872105e-21,
+            -8.737065006307472e-19,
+            2.057968530102776e-18,
+            3.1385957942465762e-18,
+            2.32327631807789e-20,
+            -3.1089620646766e-20,
+            -4.6360248829710874e-20,
+            -4.5472668722761714e-20,
+            -2.8962987106023167e-21,
+            2.32327631807789e-20,
+            4.84280807790098e-22,
+            -7.4990334668123335e-22,
+            -7.452802940544717e-22,
+            1.77639327405528e-19,
+            5.580793146667778e-20,
+            -3.10896206467661e-20,
+            -7.499033466812239e-22,
+            2.2362011488275277e-21,
+            1.0249870065302596e-21,
+            4.6331011863059196e-20,
+            -9.588370494872127e-21,
+            -4.636024882971086e-20,
+            -7.452802940544722e-22,
+            1.0249870065302542e-21,
+            1.9365744621176817e-21,
+        ];
+        (mean, covariance)
+    }
+
+    /// Relative Frobenius error between the weighted covariance reconstructed
+    /// from a sample cloud and the (symmetrized) input covariance, mirroring
+    /// the personal-yv7s evidence computation: weighted mean first, then
+    /// weighted covariance about that mean.
+    fn relative_frobenius_reconstruction_error(
+        covariance: &[f64],
+        values_flat: &[f64],
+        weights: &[f64],
+        weights_cov: &[f64],
+    ) -> f64 {
+        let n = weights.len();
+        let reconstructed_mean = crate::weighted_mean_flat(values_flat, weights, n, DIM);
+        let reconstructed =
+            crate::weighted_covariance_flat(&reconstructed_mean, values_flat, weights_cov, n, DIM);
+        let mut squared_error = 0.0_f64;
+        let mut squared_norm = 0.0_f64;
+        for row in 0..DIM {
+            for col in 0..DIM {
+                let expected = 0.5 * (covariance[row * DIM + col] + covariance[col * DIM + row]);
+                let delta = reconstructed[row * DIM + col] - expected;
+                squared_error += delta * delta;
+                squared_norm += expected * expected;
+            }
+        }
+        squared_error.sqrt() / squared_norm.sqrt()
+    }
+
+    #[test]
+    fn sigma_point_cloud_reconstructs_small_correlated_public_scale_covariance() {
+        let (mean, covariance) = apophis_public_scale_fixture();
+        let (values, weights, weights_cov) =
+            sample_covariance_sigma_points_flat(&mean, &covariance, 1.0, 0.0, 0.0).unwrap();
+        assert_eq!(values.len(), SIGMA_POINT_COUNT * DIM);
+        let error =
+            relative_frobenius_reconstruction_error(&covariance, &values, &weights, &weights_cov);
+        assert!(
+            error <= 1.0e-8,
+            "sigma-point cloud reconstructs the public-scale covariance with relative \
+             Frobenius error {error}, above the 1e-8 release gate (personal-yv7s)"
+        );
+    }
+
+    #[test]
+    fn sigma_point_variants_reconstruct_small_correlated_public_scale_covariance() {
+        let (mean, covariance) = apophis_public_scale_fixture();
+        let covariance_batch = CovarianceBatch::new(
+            1,
+            DIM,
+            covariance.clone(),
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap();
+        let coordinates = CoordinateBatch::cartesian(
+            vec![mean],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::Named("SUN".to_string()), 1),
+            Some(TimeArray::new(TimeScale::Tdb, vec![Epoch::new(59_215, 0)]).unwrap()),
+            Some(covariance_batch),
+        )
+        .unwrap();
+        let orbits = OrbitBatch::new(
+            vec![OrbitId("Apophis".to_string())],
+            vec![None],
+            coordinates,
+        )
+        .unwrap();
+        let samples = create_sigma_point_orbit_variants(&orbits, 1.0, 0.0, 0.0).unwrap();
+        assert_eq!(samples.variants.len(), SIGMA_POINT_COUNT);
+        let values = coordinate_rows(&samples.variants.coordinates.values)
+            .iter()
+            .flat_map(|row| row.iter().copied())
+            .collect::<Vec<_>>();
+        let weights = samples
+            .variants
+            .weights
+            .iter()
+            .map(|value| value.unwrap())
+            .collect::<Vec<_>>();
+        let weights_cov = samples
+            .variants
+            .weights_cov
+            .iter()
+            .map(|value| value.unwrap())
+            .collect::<Vec<_>>();
+        let error =
+            relative_frobenius_reconstruction_error(&covariance, &values, &weights, &weights_cov);
+        assert!(
+            error <= 1.0e-8,
+            "variant batch reconstructs the public-scale covariance with relative \
+             Frobenius error {error}, above the 1e-8 release gate (personal-yv7s)"
+        );
+    }
+
+    #[test]
+    fn sigma_point_cloud_matches_frozen_legacy_scipy_cloud() {
+        // Frozen legacy cloud from the personal-yv7s evidence
+        // (full-history-parity/variant-samples/a0.json, SHA-256
+        // d01649e5765c062997b921402d1e305eeaf34dd36f4141a3696cefb18550284c over
+        // contiguous little-endian float64 coordinate bytes). The symmetric
+        // PSD square root is unique, so a converged Jacobi root must land on
+        // the same geometry as scipy `sqrtm`; the 0.5.6rc1 sampler deviated by
+        // up to 7.12e-11 here.
+        let expected: [[f64; DIM]; SIGMA_POINT_COUNT] = [
+            [
+                -0.4098530841678254,
+                0.9621648472038595,
+                -0.06096604136465475,
+                -0.015075524121655987,
+                -0.004107955457204797,
+                -0.00013931296759505984,
+            ],
+            [
+                -0.4098530749482144,
+                0.9621648504438642,
+                -0.060966042283045994,
+                -0.015075524150197164,
+                -0.004107955348857329,
+                -0.0001393129468913005,
+            ],
+            [
+                -0.4098530809278207,
+                0.9621648509690769,
+                -0.06096603931533489,
+                -0.015075524116373654,
+                -0.004107955445630225,
+                -0.00013931296210079034,
+            ],
+            [
+                -0.40985308508621665,
+                0.9621648492531794,
+                -0.06096603765227371,
+                -0.015075524094707572,
+                -0.004107955486503837,
+                -0.00013931303874827007,
+            ],
+            [
+                -0.40985308419636657,
+                0.9621648472091419,
+                -0.060966041337706334,
+                -0.015075524090545002,
+                -0.004107955464668054,
+                -0.0001393129852973872,
+            ],
+            [
+                -0.40985308405947796,
+                0.962164847215434,
+                -0.06096604139395379,
+                -0.015075524129119245,
+                -0.004107955439440535,
+                -0.0001393129498648764,
+            ],
+            [
+                -0.4098530841471216,
+                0.9621648472093538,
+                -0.06096604143580796,
+                -0.015075524139358315,
+                -0.004107955439474614,
+                -0.00013931289363491517,
+            ],
+            [
+                -0.4098530933874364,
+                0.9621648439638548,
+                -0.060966040446263504,
+                -0.015075524093114811,
+                -0.0041079555655522655,
+                -0.0001393129882988192,
+            ],
+            [
+                -0.4098530874078301,
+                0.9621648434386422,
+                -0.06096604341397461,
+                -0.01507552412693832,
+                -0.004107955468779369,
+                -0.00013931297308932935,
+            ],
+            [
+                -0.40985308324943415,
+                0.9621648451545397,
+                -0.06096604507703579,
+                -0.015075524148604403,
+                -0.004107955427905758,
+                -0.00013931289644184962,
+            ],
+            [
+                -0.40985308413928423,
+                0.9621648471985772,
+                -0.060966041391603165,
+                -0.015075524152766973,
+                -0.004107955449741541,
+                -0.0001393129498927325,
+            ],
+            [
+                -0.40985308427617284,
+                0.962164847192285,
+                -0.06096604133535571,
+                -0.01507552411419273,
+                -0.00410795547496906,
+                -0.0001393129853252433,
+            ],
+            [
+                -0.40985308418852917,
+                0.9621648471983653,
+                -0.06096604129350154,
+                -0.01507552410395366,
+                -0.004107955474934981,
+                -0.00013931304155520452,
+            ],
+        ];
+        let (mean, covariance) = apophis_public_scale_fixture();
+        let (values, _weights, _weights_cov) =
+            sample_covariance_sigma_points_flat(&mean, &covariance, 1.0, 0.0, 0.0).unwrap();
+        for (row, expected_row) in expected.iter().enumerate() {
+            for (col, expected_value) in expected_row.iter().enumerate() {
+                let actual = values[row * DIM + col];
+                assert!(
+                    (actual - expected_value).abs() <= 1.0e-12,
+                    "sigma point [{row}][{col}] = {actual} deviates from the frozen legacy \
+                     scipy cloud value {expected_value} by more than 1e-12"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn sigma_point_sampling_rejects_materially_non_psd_public_scale_covariance() {
+        // -1e-19 against 1e-17 eigenvalues is materially indefinite (1e-2
+        // relative) even though it passed the previous absolute 1e-12 floor.
+        let mean = [0.0_f64; DIM];
+        let mut covariance = vec![0.0_f64; DIM * DIM];
+        for index in 0..DIM - 1 {
+            covariance[index * DIM + index] = 1.0e-17;
+        }
+        covariance[(DIM - 1) * DIM + (DIM - 1)] = -1.0e-19;
+        let error =
+            sample_covariance_sigma_points_flat(&mean, &covariance, 1.0, 0.0, 0.0).unwrap_err();
+        match error {
+            SchemaError::InvalidRecordBatch(message) => assert!(
+                message.contains("not positive semidefinite"),
+                "unexpected message: {message}"
+            ),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn sigma_point_sampling_clamps_float_noise_negative_eigenvalues() {
+        // Legacy-equivalent acceptance: negatives within the scale-aware floor
+        // (-1e-13 against unit-scale eigenvalues) are clamped to zero, exactly
+        // as the previous absolute 1e-12 floor accepted them.
+        let mean = [0.0_f64; DIM];
+        let mut covariance = vec![0.0_f64; DIM * DIM];
+        for index in 0..DIM - 1 {
+            covariance[index * DIM + index] = 1.0;
+        }
+        covariance[(DIM - 1) * DIM + (DIM - 1)] = -1.0e-13;
+        let (values, weights, _weights_cov) =
+            sample_covariance_sigma_points_flat(&mean, &covariance, 1.0, 0.0, 0.0).unwrap();
+        assert_eq!(weights.len(), SIGMA_POINT_COUNT);
+        assert!(values.iter().all(|value| value.is_finite()));
+        // The clamped dimension contributes zero offsets.
+        let clamped_offset = values[SIGMA_POINT_COUNT * DIM - 1];
+        assert_eq!(clamped_offset, 0.0);
+    }
+
+    #[test]
+    fn covariance_sampling_fails_closed_for_nonfinite_covariance() {
+        let mean = [0.0_f64; DIM];
+        let mut covariance = vec![0.0_f64; DIM * DIM];
+        for index in 0..DIM {
+            covariance[index * DIM + index] = 1.0;
+        }
+        covariance[1] = f64::INFINITY;
+        covariance[DIM] = f64::INFINITY;
+        let error =
+            sample_covariance_sigma_points_flat(&mean, &covariance, 1.0, 0.0, 0.0).unwrap_err();
+        match error {
+            SchemaError::InvalidRecordBatch(message) => assert!(
+                message.contains("covariance elements are non-finite"),
+                "unexpected message: {message}"
+            ),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn square_root_boundary_fails_closed_for_nonfinite_covariance() {
+        let mut covariance = vec![0.0_f64; DIM * DIM];
+        for index in 0..DIM {
+            covariance[index * DIM + index] = 1.0;
+        }
+        covariance[0] = f64::NAN;
+        let error = symmetric_square_root_scaled(&covariance, 1.0).unwrap_err();
+        match error {
+            SchemaError::InvalidRecordBatch(message) => assert!(
+                message.contains("must contain finite values"),
+                "unexpected message: {message}"
+            ),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn direct_covariance_sampling_fails_closed_for_nan_covariance() {
+        let mean = [0.0_f64; DIM];
+        let mut covariance = vec![0.0_f64; DIM * DIM];
+        for index in 0..DIM {
+            covariance[index * DIM + index] = 1.0;
+        }
+        covariance[0] = f64::NAN;
+        let error =
+            sample_covariance_sigma_points_flat(&mean, &covariance, 1.0, 0.0, 0.0).unwrap_err();
+        match error {
+            SchemaError::InvalidRecordBatch(message) => assert!(
+                message.contains("covariance elements are undefined"),
+                "unexpected message: {message}"
+            ),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn direct_covariance_samplers_fail_closed_for_nonfinite_mean() {
+        let mut mean = [0.0_f64; DIM];
+        mean[0] = f64::INFINITY;
+        let mut covariance = vec![0.0_f64; DIM * DIM];
+        for index in 0..DIM {
+            covariance[index * DIM + index] = 1.0;
+        }
+        for error in [
+            sample_covariance_sigma_points_flat(&mean, &covariance, 1.0, 0.0, 0.0).unwrap_err(),
+            sample_covariance_random_flat(&mean, &covariance, 16, Some(1)).unwrap_err(),
+        ] {
+            match error {
+                SchemaError::InvalidRecordBatch(message) => assert!(
+                    message.contains("coordinate dimensions are undefined"),
+                    "unexpected message: {message}"
+                ),
+                other => panic!("unexpected error: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn sigma_point_sampling_rejects_nonfinite_computed_weights() {
+        let mean = [0.0_f64; DIM];
+        let mut covariance = vec![0.0_f64; DIM * DIM];
+        for index in 0..DIM {
+            covariance[index * DIM + index] = 1.0;
+        }
+        // All inputs are finite and denom remains positive/finite, but the
+        // reciprocal sigma-point weight overflows. Fail before emitting an
+        // infinite-weight cloud.
+        let error = sample_covariance_sigma_points_flat(&mean, &covariance, 1.0e-155, 0.0, 0.0)
+            .unwrap_err();
+        match error {
+            SchemaError::InvalidRecordBatch(message) => assert!(
+                message.contains("finite weights"),
+                "unexpected message: {message}"
+            ),
+            other => panic!("unexpected error: {other:?}"),
+        }
+    }
+
+    #[test]
+    fn monte_carlo_sampling_keeps_legacy_absolute_psd_acceptance() {
+        // The Monte Carlo path preserves the legacy public
+        // `sample_covariance_random(semidef_tol=1e-15)` absolute contract:
+        // -1e-16 is accepted (and clamped), -1e-14 is rejected.
+        let mean = [0.0_f64; DIM];
+        let mut covariance = vec![0.0_f64; DIM * DIM];
+        for index in 0..DIM - 1 {
+            covariance[index * DIM + index] = 1.0e-17;
+        }
+        covariance[(DIM - 1) * DIM + (DIM - 1)] = -1.0e-16;
+        sample_covariance_random_flat(&mean, &covariance, 16, Some(1)).unwrap();
+        covariance[(DIM - 1) * DIM + (DIM - 1)] = -1.0e-14;
+        let error = sample_covariance_random_flat(&mean, &covariance, 16, Some(1)).unwrap_err();
+        match error {
+            SchemaError::InvalidRecordBatch(message) => assert!(
+                message.contains("not positive semidefinite"),
+                "unexpected message: {message}"
+            ),
+            other => panic!("unexpected error: {other:?}"),
+        }
     }
 
     #[test]

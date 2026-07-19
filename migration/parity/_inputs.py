@@ -1801,13 +1801,100 @@ def make_predict_magnitudes_shape(
 # ---------------------------------------------------------------------------
 
 
+# Frozen public-scale correlated covariance row (bead personal-yv7s): the
+# immutable Apophis Cartesian orbit at MJD 59215 TDB whose covariance
+# (eigenvalues ~1.91e-23..1.918e-17, condition ~1.0e6) the 0.5.6rc1 sampler
+# reconstructed with ~8.64e-3 relative Frobenius error while its sigma points
+# deviated from legacy scipy sqrtm by up to 7.12e-11 — above the 1e-12
+# coordinate parity gate. Scaling this covariance across every generated row
+# keeps both parity and throughput lanes sensitive to the correlated,
+# public-scale eigensolver path rather than benchmarking diagonal no-op roots.
+_APOPHIS_PUBLIC_SCALE_MEAN = np.array(
+    [
+        -0.4098530841678254,
+        0.9621648472038595,
+        -0.06096604136465475,
+        -0.015075524121655987,
+        -0.004107955457204797,
+        -0.00013931296759505984,
+    ],
+    dtype=np.float64,
+)
+_APOPHIS_PUBLIC_SCALE_EPOCH_MJD = 59215.0
+_APOPHIS_PUBLIC_SCALE_COVARIANCE = np.array(
+    [
+        [
+            1.605921382259025e-17,
+            6.698340830041905e-18,
+            -8.737065006307528e-19,
+            -4.5472668722760005e-20,
+            1.7763932740552372e-19,
+            4.6331011863059437e-20,
+        ],
+        [
+            6.698340830042149e-18,
+            4.812399377784115e-18,
+            2.057968530102772e-18,
+            -2.8962987106026045e-21,
+            5.580793146667982e-20,
+            -9.588370494872105e-21,
+        ],
+        [
+            -8.737065006307472e-19,
+            2.057968530102776e-18,
+            3.1385957942465762e-18,
+            2.32327631807789e-20,
+            -3.1089620646766e-20,
+            -4.6360248829710874e-20,
+        ],
+        [
+            -4.5472668722761714e-20,
+            -2.8962987106023167e-21,
+            2.32327631807789e-20,
+            4.84280807790098e-22,
+            -7.4990334668123335e-22,
+            -7.452802940544717e-22,
+        ],
+        [
+            1.77639327405528e-19,
+            5.580793146667778e-20,
+            -3.10896206467661e-20,
+            -7.499033466812239e-22,
+            2.2362011488275277e-21,
+            1.0249870065302596e-21,
+        ],
+        [
+            4.6331011863059196e-20,
+            -9.588370494872127e-21,
+            -4.636024882971086e-20,
+            -7.452802940544722e-22,
+            1.0249870065302542e-21,
+            1.9365744621176817e-21,
+        ],
+    ],
+    dtype=np.float64,
+)
+
+
 def make_variant_orbits_create(rng: np.random.Generator, n: int) -> Sample:
     """Public ``VariantOrbits.create`` sigma-point sampling (deterministic
-    unscented transform) with PSD covariance, runtime-neutral array inputs."""
-    coords = _kep_to_cart(_sample_keplerian_elements(rng, n))
-    epoch_mjd = 59800.0 + rng.uniform(0.0, 200.0, size=n)
-    base = np.diag([1e-6, 1e-6, 1e-6, 1e-9, 1e-9, 1e-9])
-    cov = np.stack([base * (i + 1) for i in range(n)])
+    unscented transform) with PSD covariance, runtime-neutral array inputs.
+
+    Every generated row uses the correlated Apophis covariance scaled by a
+    deterministic factor from one through seven, and the final row is the
+    exact frozen fixture. This makes the speed lanes representative of the
+    Jacobi path changed by personal-yv7s instead of measuring mostly diagonal
+    matrices that converge without a rotation.
+    """
+    generated_rows = max(n - 1, 0)
+    coords = _kep_to_cart(_sample_keplerian_elements(rng, generated_rows))
+    epoch_mjd = 59800.0 + rng.uniform(0.0, 200.0, size=generated_rows)
+    scale_factors = 1.0 + np.arange(generated_rows, dtype=np.float64) % 7.0
+    cov = scale_factors[:, None, None] * _APOPHIS_PUBLIC_SCALE_COVARIANCE
+    if n:
+        coords = np.vstack([coords, _APOPHIS_PUBLIC_SCALE_MEAN[None, :]])
+        epoch_mjd = np.concatenate([epoch_mjd, [_APOPHIS_PUBLIC_SCALE_EPOCH_MJD]])
+        cov = np.concatenate([cov, _APOPHIS_PUBLIC_SCALE_COVARIANCE[None, :, :]])
     kw = {
         "coords": np.ascontiguousarray(coords, dtype=np.float64),
         "epoch_mjd": np.ascontiguousarray(epoch_mjd, dtype=np.float64),

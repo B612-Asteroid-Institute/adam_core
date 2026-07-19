@@ -1031,7 +1031,12 @@ TOLERANCES: dict[str, ToleranceSpec] = {
         rationale=(
             "Public VariantOrbits.create sigma-point facade (deterministic "
             "unscented transform) compared against pinned-legacy "
-            "``VariantOrbits.create`` on identical PSD covariances."
+            "``VariantOrbits.create`` on identical PSD covariances. The "
+            "workload uses scaled copies of the frozen public-scale correlated "
+            "Apophis covariance on every row (bead personal-yv7s, eigenvalues "
+            "~1.9e-23..1.9e-17), with the exact immutable fixture last: the "
+            "0.5.6rc1 absolute-tolerance square root deviated from legacy by "
+            "up to 7.12e-11 on that row, above this 1e-12 coordinate gate."
         ),
         dominant_column="sigma-point coordinates",
         physical_magnitude=(
@@ -1039,9 +1044,10 @@ TOLERANCES: dict[str, ToleranceSpec] = {
             "legacy, weights bit-identical."
         ),
         root_cause=(
-            "Sigma points are mean +/- columns of sqrt((n+lambda) Sigma); the "
-            "matrix square-root last-bit choice differs from the legacy NumPy path "
-            "at ~1e-12 while the analytic weights are bit-identical."
+            "Sigma points are mean +/- rows of sqrt((n+lambda) Sigma). The "
+            "scale-aware converged symmetric root matches legacy scipy sqrtm "
+            "exactly on the pinned workload while analytic weights remain "
+            "bit-identical."
         ),
         verdict=(
             "backend-candidate parity; the deterministic sigma-point set and "

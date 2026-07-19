@@ -47,6 +47,91 @@ def test_sample_covariance_sigma_points():
         np.testing.assert_allclose(covariance_sg, covariance, rtol=0, atol=1e-14)
 
 
+def test_sample_covariance_sigma_points_small_correlated_public_scale():
+    # Frozen release-blocker fixture (bead personal-yv7s): a real public-scale
+    # Apophis Cartesian covariance (eigenvalues ~1.91e-23..1.918e-17,
+    # condition ~1.0e6) must be reconstructed by the sigma-point cloud far
+    # below 1e-6 relative Frobenius error. Legacy scipy sqrtm achieved
+    # ~3.64e-9; the 0.5.6rc1 Rust sampler regressed to ~8.64e-3 because its
+    # Jacobi/PSD tolerances were absolute rather than scale-aware.
+    mean = np.array(
+        [
+            -0.4098530841678254,
+            0.9621648472038595,
+            -0.06096604136465475,
+            -0.015075524121655987,
+            -0.004107955457204797,
+            -0.00013931296759505984,
+        ]
+    )
+    covariance = np.array(
+        [
+            [
+                1.605921382259025e-17,
+                6.698340830041905e-18,
+                -8.737065006307528e-19,
+                -4.5472668722760005e-20,
+                1.7763932740552372e-19,
+                4.6331011863059437e-20,
+            ],
+            [
+                6.698340830042149e-18,
+                4.812399377784115e-18,
+                2.057968530102772e-18,
+                -2.8962987106026045e-21,
+                5.580793146667982e-20,
+                -9.588370494872105e-21,
+            ],
+            [
+                -8.737065006307472e-19,
+                2.057968530102776e-18,
+                3.1385957942465762e-18,
+                2.32327631807789e-20,
+                -3.1089620646766e-20,
+                -4.6360248829710874e-20,
+            ],
+            [
+                -4.5472668722761714e-20,
+                -2.8962987106023167e-21,
+                2.32327631807789e-20,
+                4.84280807790098e-22,
+                -7.4990334668123335e-22,
+                -7.452802940544717e-22,
+            ],
+            [
+                1.77639327405528e-19,
+                5.580793146667778e-20,
+                -3.10896206467661e-20,
+                -7.499033466812239e-22,
+                2.2362011488275277e-21,
+                1.0249870065302596e-21,
+            ],
+            [
+                4.6331011863059196e-20,
+                -9.588370494872127e-21,
+                -4.636024882971086e-20,
+                -7.452802940544722e-22,
+                1.0249870065302542e-21,
+                1.9365744621176817e-21,
+            ],
+        ]
+    )
+
+    samples, W, W_cov = sample_covariance_sigma_points(mean, covariance)
+
+    assert len(samples) == 13
+    np.testing.assert_equal(samples[0], mean)
+
+    mean_sg = weighted_mean(samples, W)
+    covariance_sg = weighted_covariance(mean_sg, samples, W_cov)
+
+    error = np.linalg.norm(covariance_sg - covariance) / np.linalg.norm(covariance)
+    assert error <= 1e-8, (
+        f"sigma-point cloud reconstructs the public-scale covariance with "
+        f"relative Frobenius error {error}, above the 1e-8 release gate"
+    )
+
+
 def test_make_positive_semidefinite():
     non_psd_matrix = np.array(
         [
