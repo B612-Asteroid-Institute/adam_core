@@ -55,6 +55,18 @@ Note that ``single_period`` is high-confidence but **not a zero-alias guarantee.
   ``single_period`` result against ``alternate_period_days`` and
   ``reliability_code`` rather than treating it as infallible.
 
+One disclosed assumption: when the best fit is a single-peaked fold whose only
+surviving ambiguity is the half/full octave, the solver doubles the period on
+the two-peaks-per-rotation shape prior and, by default, claims
+``single_period`` with the confidence flag ``doubled_fold_assumed``. Measured
+on the LCDB/DAMIT standard-candle sets this raises confident claims (76 to 83
+pooled) with strict precision improving and no new wrong-family claim; on the
+Rubin survey regression it raises claims from 6 to 11 of 76, all strictly
+correct. A genuinely single-peaked (spheroidal) body would make such a claim a
+2x alias, so pass ``claim_doubled_fold=False`` to keep these cases as
+``period_family`` (reason ``single_max_alias``). Filter on the flag to treat
+them separately in bulk results.
+
 Data Requirements
 -----------------
 
