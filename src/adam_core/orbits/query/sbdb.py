@@ -655,9 +655,9 @@ def _orbits_from_sbdb_payloads(
                         labels6,
                         expected_labels,
                     )
-                    covariance_usable = False
+                    cov_usable = False
 
-            if covariance_usable:
+            if cov_usable:
                 data = np.asarray(cov["data"], dtype=np.float64)
                 if data.ndim != 2 or data.shape[0] < 6 or data.shape[1] < 6:
                     logger.warning(
