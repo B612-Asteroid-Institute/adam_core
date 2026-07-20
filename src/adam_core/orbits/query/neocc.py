@@ -299,6 +299,12 @@ def _neocc_nongrav_solution_is_decodable(data: Dict[str, Any]) -> bool:
         return False
     if info.get("model_used") not in (None, 0, 1):
         return False
+    vector = info.get("vector") or []
+    if vector and len(vector) != 2:
+        # The Yarkovsky-model NGR record is the documented pair
+        # (AMRAT [m^2/t], A2 [1e-10 au/d^2]); any other layout would make
+        # the positional vector[1] read below decode the wrong value.
+        return False
     return all(name in _NEOCC_SUPPORTED_SOLVE_FOR for name in solve_for)
 
 
