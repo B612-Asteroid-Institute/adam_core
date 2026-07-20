@@ -212,18 +212,23 @@ class CoordinateCovariances(qv.Table):
                 f"but got {covariances.shape}"
             )
 
-        rows = []
-        offsets = [0]
-        for cov in covariances:
-            if (
-                np.isnan(cov[COORD_DIM:, :]).all()
-                and np.isnan(cov[:, COORD_DIM:]).all()
-            ):
-                rows.append(cov[:COORD_DIM, :COORD_DIM].reshape(-1))
-            else:
-                rows.append(np.asarray(cov, dtype=np.float64).reshape(-1))
-            offsets.append(offsets[-1] + rows[-1].size)
-        flat = np.concatenate(rows) if rows else np.empty(0, dtype=np.float64)
+        is6 = np.isnan(covariances[:, COORD_DIM:, :]).all(axis=(1, 2)) & np.isnan(
+            covariances[:, :, COORD_DIM:]
+        ).all(axis=(1, 2))
+        lengths = np.where(
+            is6, COORD_DIM * COORD_DIM, FULL_DIM * FULL_DIM
+        ).astype(np.int64)
+        offsets = np.zeros(len(covariances) + 1, dtype=np.int64)
+        np.cumsum(lengths, out=offsets[1:])
+        flat = np.empty(offsets[-1], dtype=np.float64)
+        if is6.any():
+            scatter = offsets[:-1][is6, None] + np.arange(COORD_DIM * COORD_DIM)
+            flat[scatter] = covariances[is6][:, :COORD_DIM, :COORD_DIM].reshape(
+                scatter.shape[0], -1
+            )
+        if (~is6).any():
+            scatter = offsets[:-1][~is6, None] + np.arange(FULL_DIM * FULL_DIM)
+            flat[scatter] = covariances[~is6].reshape(scatter.shape[0], -1)
         return cls.from_kwargs(
             values=pa.LargeListArray.from_arrays(
                 pa.array(offsets, type=pa.int64()),
