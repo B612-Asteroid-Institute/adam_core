@@ -57,6 +57,9 @@ class CoordinateCovariances(qv.Table):
     @property
     def sigmas(self):
         cov_diag = np.diagonal(self.to_matrix(), axis1=1, axis2=2)
+        # NOTE: coordinate (6x6) block only; the non-gravitational
+        # (A1, A2, A3) dimensions of extended rows are not included --
+        # take the diagonal of `to_full_matrix` for those.
         sigmas = np.sqrt(cov_diag)
         return sigmas
 
