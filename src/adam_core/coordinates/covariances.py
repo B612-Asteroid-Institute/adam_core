@@ -151,20 +151,32 @@ class CoordinateCovariances(qv.Table):
             full[:, :COORD_DIM, :COORD_DIM] = self.to_matrix()
             return full
 
-        values = self.values.to_numpy(zero_copy_only=False)
-        for i, value in enumerate(values):
-            if value is None:
-                continue
-            value = np.asarray(value, dtype=np.float64)
-            if value.size == COORD_DIM * COORD_DIM:
-                full[i, :COORD_DIM, :COORD_DIM] = value.reshape(COORD_DIM, COORD_DIM)
-            elif value.size == FULL_DIM * FULL_DIM:
-                full[i] = value.reshape(FULL_DIM, FULL_DIM)
-            else:
-                raise ValueError(
-                    f"Covariance row {i} has {value.size} values; expected "
-                    f"{COORD_DIM * COORD_DIM} or {FULL_DIM * FULL_DIM}."
-                )
+        arr = self.values
+        if isinstance(arr, pa.ChunkedArray):
+            arr = arr.combine_chunks()
+        flat = arr.values.to_numpy(zero_copy_only=False)
+        offsets = arr.offsets.to_numpy(zero_copy_only=False)
+        starts = offsets[:-1]
+        lengths = np.diff(offsets)
+        valid = ~arr.is_null().to_numpy(zero_copy_only=False)
+
+        is6 = valid & (lengths == COORD_DIM * COORD_DIM)
+        is9 = valid & (lengths == FULL_DIM * FULL_DIM)
+        bad = valid & ~is6 & ~is9
+        if bad.any():
+            i = int(np.flatnonzero(bad)[0])
+            raise ValueError(
+                f"Covariance row {i} has {lengths[i]} values; expected "
+                f"{COORD_DIM * COORD_DIM} or {FULL_DIM * FULL_DIM}."
+            )
+        if is6.any():
+            gather = starts[is6, None] + np.arange(COORD_DIM * COORD_DIM)
+            full[is6, :COORD_DIM, :COORD_DIM] = flat[gather].reshape(
+                -1, COORD_DIM, COORD_DIM
+            )
+        if is9.any():
+            gather = starts[is9, None] + np.arange(FULL_DIM * FULL_DIM)
+            full[is9] = flat[gather].reshape(-1, FULL_DIM, FULL_DIM)
         return full
 
     def to_transform_matrix(self) -> np.ndarray:
