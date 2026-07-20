@@ -548,6 +548,31 @@ def test_query_sbdb_unexpected_covariance_labels(caplog) -> None:
     )
 
 
+def test_query_sbdb_ragged_covariance_data(caplog) -> None:
+    payload_good = _load_sbdb_fixture_payload("Ceres.json")
+    payload_bad = _load_sbdb_fixture_payload("99942_phys.json")
+    # A truncated/ragged covariance payload fails inside np.asarray, before
+    # any shape check; it must degrade this object, not the whole batch.
+    payload_bad["orbit"]["covariance"]["data"] = [[1.0, 2.0], [3.0]]
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload_good if object_id == "Ceres" else payload_bad
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        with caplog.at_level(logging.WARNING, logger="adam_core.orbits.query.sbdb"):
+            orbits = query_sbdb_new(["Ceres", "99942"], timeout_s=1.0, max_attempts=1)
+
+    assert len(orbits) == 2
+    assert any(
+        "falling back to per-element sigmas" in record.message
+        for record in caplog.records
+    )
+    degraded = orbits.take([1])
+    assert not degraded.coordinates.covariance.has_nongrav_block()
+    assert np.isfinite(degraded.coordinates.covariance.to_matrix()).all()
+
+
 def test_real_sbdb_payloads_parse_without_error() -> None:
     # Parse every *_phys.json in testdata; ensures real API response shapes don't break us.
     sbdb_dir = os.path.join(os.path.dirname(__file__), "testdata", "sbdb")

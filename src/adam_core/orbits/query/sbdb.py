@@ -658,14 +658,22 @@ def _orbits_from_sbdb_payloads(
                     cov_usable = False
 
             if cov_usable:
-                data = np.asarray(cov["data"], dtype=np.float64)
-                if data.ndim != 2 or data.shape[0] < 6 or data.shape[1] < 6:
+                try:
+                    data = np.asarray(cov["data"], dtype=np.float64)
+                except (ValueError, TypeError):
+                    data = None
+                if (
+                    data is None
+                    or data.ndim != 2
+                    or data.shape[0] < 6
+                    or data.shape[1] < 6
+                ):
                     logger.warning(
                         "SBDB covariance matrix for object %s has shape %s, "
                         "expected at least 6x6; discarding the covariance "
                         "record and falling back to per-element sigmas.",
                         obj_id,
-                        data.shape,
+                        None if data is None else data.shape,
                     )
                 else:
                     cov_matrix = data[:6, :6]
@@ -691,7 +699,7 @@ def _orbits_from_sbdb_payloads(
                                 "non-gravitational covariance block.",
                                 obj_id,
                             )
-                            
+
                     # If covariance provides elements, prefer them (and the
                     # covariance epoch).
                     if "elements" in cov and cov["elements"] is not None:
