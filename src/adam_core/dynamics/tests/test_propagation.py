@@ -9,6 +9,7 @@ import spiceypy as sp
 from astropy import units as u
 
 from ...coordinates.cartesian import CartesianCoordinates
+from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.origin import Origin
 from ...dynamics.exceptions import DynamicsNumericalError
 from ...orbits import Orbits
