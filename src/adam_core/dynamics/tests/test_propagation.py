@@ -604,6 +604,74 @@ def test_propagate_2body_include_nongrav_false_strips_nongrav():
     assert not propagated.coordinates.covariance.has_nongrav_block()
 
 
+def test_propagate_2body_carries_extended_covariance_through_stm():
+    # Zero-mean A1/A2 with real variance and state cross-covariances is the
+    # one legal path for a 9x9 covariance through 2-body dynamics: the
+    # coordinate block gets the STM, the cross-covariances rotate with it,
+    # and the non-gravitational block is dynamically inert.
+    cov6 = np.diag([1e-14, 1e-14, 1e-14, 1e-16, 1e-16, 1e-16])
+    P = np.zeros((7, 7))
+    P[:6, :6] = cov6
+    P[6, 6] = 1.0
+    P[0, 6] = P[6, 0] = 0.3 * np.sqrt(cov6[0, 0])  # corr(x, w) = 0.3
+
+    a = 1e-13  # au/d^2 scale of the A-parameter uncertainty
+    M = np.zeros((9, 7))
+    M[:6, :6] = np.eye(6)
+    M[6, 6] = a  # A1 = a * w
+    M[7, 6] = 2.0 * a  # A2 = 2a * w
+    full = M @ P @ M.T
+
+    def _orbit(covariance: np.ndarray) -> Orbits:
+        return Orbits.from_kwargs(
+            orbit_id=["o1"],
+            object_id=["o1"],
+            non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
+                source=["SBDB"],
+                A1=[0.0],
+                A2=[0.0],
+                A3=[None],
+            ),
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=[1.0],
+                y=[0.0],
+                z=[0.0],
+                vx=[0.0],
+                vy=[0.017],
+                vz=[0.0],
+                covariance=CoordinateCovariances.from_matrix(
+                    covariance[np.newaxis, ...]
+                ),
+                time=Timestamp.from_mjd([60000.0], scale="tdb"),
+                origin=Origin.from_kwargs(code=["SUN"]),
+                frame="ecliptic",
+            ),
+        )
+
+    times = Timestamp.from_mjd([60030.0], scale="tdb")
+    propagated = propagate_2body(_orbit(full), times)
+    control = propagate_2body(_orbit(full[:6, :6].copy()), times)
+
+    out = propagated.coordinates.covariance
+    assert out.nongrav_block_mask().tolist() == [True]
+    full_out = out.to_full_matrix()[0]
+
+    # The A-block is dynamically inert under 2-body dynamics.
+    np.testing.assert_array_equal(full_out[6:, 6:], full[6:, 6:])
+
+    # The coordinate block matches a plain 6x6 propagation of the same orbit.
+    np.testing.assert_allclose(
+        full_out[:6, :6],
+        control.coordinates.covariance.to_matrix()[0],
+        rtol=1e-12,
+    )
+
+    # The cross-covariances were transformed (not copied verbatim) ...
+    assert not np.allclose(full_out[:6, 6], full[:6, 6])
+    # ... by a linear map: the exact 1:2 column ratio survives the STM.
+    np.testing.assert_allclose(full_out[:6, 7], 2.0 * full_out[:6, 6], rtol=1e-12)
+
+
 def test_propagate_2body_does_not_include_padded_rows() -> None:
     """
     `process_in_chunks` pads the final chunk to a fixed size. Ensure the propagation
