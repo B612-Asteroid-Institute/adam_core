@@ -641,48 +641,63 @@ def _orbits_from_sbdb_payloads(
 
         cov = orbit.get("covariance")
         cov_matrix: np.ndarray | None = None
+        cov_usable = True
         if isinstance(cov, dict) and cov.get("data") is not None:
             labels = cov.get("labels")
             if isinstance(labels, list):
                 labels6 = [str(x) for x in labels[:6]]
                 if labels6 != expected_labels:
-                    raise ValueError(
-                        f"Expected covariance matrix labels to be {expected_labels} "
-                        f"in the first 6 entries, got {labels6}."
-                    )
-
-            data = np.asarray(cov["data"], dtype=np.float64)
-            if data.ndim != 2 or data.shape[0] < 6 or data.shape[1] < 6:
-                raise ValueError("Expected SBDB covariance matrix to be at least 6x6.")
-            cov_matrix = data[:6, :6]
-            if data.shape[0] > 6:
-                if isinstance(labels, list) and len(labels) == data.shape[0]:
-                    covariance_full, dropped = _convert_sbdb_full_covariance(
-                        data, [str(label) for label in labels]
-                    )
-                    if dropped:
-                        logger.warning(
-                            "SBDB covariance for object %s includes estimated "
-                            "parameters %s that are not supported for storage "
-                            "(only A1, A2, A3); marginalizing them out.",
-                            obj_id,
-                            dropped,
-                        )
-                    if len(dropped) < data.shape[0] - 6:
-                        covariances_full[i] = covariance_full
-                else:
                     logger.warning(
-                        "SBDB covariance labels for object %s are missing or do "
-                        "not match the matrix size; discarding the "
-                        "non-gravitational covariance block.",
+                        "SBDB covariance labels for object %s start with %s, "
+                        "expected %s; discarding the covariance and falling "
+                        "back to per-element sigmas.",
                         obj_id,
+                        labels6,
+                        expected_labels,
                     )
+                    covariance_usable = False
 
-            # If covariance provides elements, prefer them (and the covariance epoch).
-            if "elements" in cov and cov["elements"] is not None:
-                elements_list = cov["elements"]
-                if cov.get("epoch") is not None:
-                    epoch_jd = _sbdb_float(cov.get("epoch"))
+            if covariance_usable:
+                data = np.asarray(cov["data"], dtype=np.float64)
+                if data.ndim != 2 or data.shape[0] < 6 or data.shape[1] < 6:
+                    logger.warning(
+                        "SBDB covariance matrix for object %s has shape %s, "
+                        "expected at least 6x6; discarding the covariance "
+                        "record and falling back to per-element sigmas.",
+                        obj_id,
+                        data.shape,
+                    )
+                else:
+                    cov_matrix = data[:6, :6]
+                    if data.shape[0] > 6:
+                        if isinstance(labels, list) and len(labels) == data.shape[0]:
+                            covariance_full, dropped = _convert_sbdb_full_covariance(
+                                data, [str(label) for label in labels]
+                            )
+                            if dropped:
+                                logger.warning(
+                                    "SBDB covariance for object %s includes estimated "
+                                    "parameters %s that are not supported for storage "
+                                    "(only A1, A2, A3); marginalizing them out.",
+                                    obj_id,
+                                    dropped,
+                                )
+                            if len(dropped) < data.shape[0] - 6:
+                                covariances_full[i] = covariance_full
+                        else:
+                            logger.warning(
+                                "SBDB covariance labels for object %s are missing or do "
+                                "not match the matrix size; discarding the "
+                                "non-gravitational covariance block.",
+                                obj_id,
+                            )
+                            
+                    # If covariance provides elements, prefer them (and the
+                    # covariance epoch).
+                    if "elements" in cov and cov["elements"] is not None:
+                        elements_list = cov["elements"]
+                        if cov.get("epoch") is not None:
+                            epoch_jd = _sbdb_float(cov.get("epoch"))
 
         if elements_list is None:
             raise ValueError(f"SBDB payload for {obj_id!r} missing orbit elements.")
