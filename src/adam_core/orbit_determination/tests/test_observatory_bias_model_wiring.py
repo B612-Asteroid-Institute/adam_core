@@ -1,10 +1,14 @@
 """
 Tests for the observatory_bias_model parameter on the OD entry points.
 
-Every OD entry point accepts observatory_bias_model (default None = nothing
-changed) and applies it to the observations once, at entry, before fitting.
-These tests use spy models to prove invocation, ordering, and single
-application without running real fits.
+Every module-level OD entry point accepts observatory_bias_model (default
+None = nothing changed) and applies it to the observations once, at entry,
+before fitting. The OrbitFitter interface (full_od / initial_fit /
+refine_fit) deliberately does NOT take the parameter: fitter
+implementations, including external plugins such as adam_fo, are passed
+observations whose uncertainties were already transformed upstream. These
+tests use spy models to prove invocation, ordering, and single application
+without running real fits.
 """
 
 import importlib
@@ -32,17 +36,13 @@ dc_module = importlib.import_module(
     "adam_core.orbit_determination.differential_correction"
 )
 iod_module = importlib.import_module("adam_core.orbit_determination.iod")
-native_module = importlib.import_module(
-    "adam_core.orbit_determination.native_orbit_fitter"
-)
 od_module = importlib.import_module("adam_core.orbit_determination.od")
 
 INFLATION_FACTOR = 4.0
 
-# Placeholders for propagator arguments that are never reached: the spy
+# Placeholder for propagator arguments that are never reached: the spy
 # models prove the bias model is applied before any fitting machinery.
 UNUSED_PROPAGATOR = cast(Propagator, None)
-UNUSED_PROPAGATOR_CLASS = cast(type[Propagator], object)
 
 
 class InflatingSpy(ObservationUncertaintyModel):
@@ -109,9 +109,6 @@ class TestSignatures:
             dc_module.fit_least_squares,
             dc_module.iterative_fit,
             evaluate_orbits,
-            OrbitFitter.full_od,
-            NativeOrbitFitter.initial_fit,
-            NativeOrbitFitter.refine_fit,
         ],
         ids=lambda f: f.__qualname__,
     )
@@ -123,9 +120,29 @@ class TestSignatures:
         )
         assert parameter.default is None
 
+    @pytest.mark.parametrize(
+        "method",
+        [
+            OrbitFitter.full_od,
+            OrbitFitter.initial_fit,
+            OrbitFitter.refine_fit,
+            NativeOrbitFitter.initial_fit,
+            NativeOrbitFitter.refine_fit,
+        ],
+        ids=lambda f: f.__qualname__,
+    )
+    def test_fitter_interface_does_not_take_the_flag(self, method: Any) -> None:
+        # Bias handling happens above the fitter interface: implementations
+        # (including external plugins such as adam_fo) receive observations
+        # already inflated, never the flag.
+        assert "observatory_bias_model" not in inspect.signature(method).parameters
+
 
 class TestFullOD:
-    def test_applies_model_once_before_fitting(self) -> None:
+    def test_upstream_application_reaches_both_stages(self) -> None:
+        # The wrapper pattern for fitter plugins: apply the model upstream and
+        # hand the fitter pre-inflated observations. Both fitting stages see
+        # the same singly-inflated observations (factor 4, not 16).
         observations = make_observations(["500", "F51", "W84"], [0.0, 30.0, -45.0])
         base_var = observations.coordinates.covariance.to_matrix()[:, 1, 1].copy()
         spy = InflatingSpy()
@@ -160,15 +177,8 @@ class TestFullOD:
                 return fitted_orbit, FittedOrbitMembers.empty()
 
         fitter = FakeFitter()
-        fitter.full_od(
-            "obj",
-            observations,
-            propagator=UNUSED_PROPAGATOR,
-            observatory_bias_model=spy,
-        )
+        fitter.full_od("obj", spy.apply(observations), propagator=UNUSED_PROPAGATOR)
 
-        # Applied exactly once, and both stages saw the same inflated
-        # observations (factor 4, not 16 = no double application).
         assert spy.calls == 1
         np.testing.assert_allclose(
             received["initial_fit"], INFLATION_FACTOR * base_var, rtol=1e-12
@@ -234,64 +244,6 @@ class TestIterativeFit:
         with pytest.raises(_Applied):
             dc_module.iterative_fit(
                 orbit, observations, UNUSED_PROPAGATOR, observatory_bias_model=spy
-            )
-
-        assert spy.calls == 1
-        np.testing.assert_allclose(
-            captured["var"], INFLATION_FACTOR * base_var, rtol=1e-12
-        )
-        assert "observatory_bias_model" not in captured["kwargs"]
-
-
-class TestNativeOrbitFitter:
-    def test_initial_fit_applies_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        observations = make_observations(["500"], [0.0])
-        base_var = observations.coordinates.covariance.to_matrix()[:, 1, 1].copy()
-        spy = InflatingSpy()
-        captured: dict[str, np.ndarray] = {}
-
-        def fake_iod(
-            observations: OrbitDeterminationObservations, *args: Any, **kwargs: Any
-        ) -> Any:
-            captured["var"] = observations.coordinates.covariance.to_matrix()[:, 1, 1]
-            raise _Applied()
-
-        monkeypatch.setattr(native_module, "iod", fake_iod)
-
-        fitter = NativeOrbitFitter(propagator_class=UNUSED_PROPAGATOR_CLASS)
-        with pytest.raises(_Applied):
-            fitter.initial_fit("obj", observations, observatory_bias_model=spy)
-
-        assert spy.calls == 1
-        np.testing.assert_allclose(
-            captured["var"], INFLATION_FACTOR * base_var, rtol=1e-12
-        )
-
-    def test_refine_fit_applies_model(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        observations = make_observations(["500"], [0.0])
-        base_var = observations.coordinates.covariance.to_matrix()[:, 1, 1].copy()
-        spy = InflatingSpy()
-        captured: dict[str, Any] = {}
-
-        def fake_iterative_fit(
-            orbit: Any,
-            observations: OrbitDeterminationObservations,
-            propagator: Any,
-            **kwargs: Any,
-        ) -> Any:
-            captured["var"] = observations.coordinates.covariance.to_matrix()[:, 1, 1]
-            captured["kwargs"] = kwargs
-            raise _Applied()
-
-        monkeypatch.setattr(native_module, "iterative_fit", fake_iterative_fit)
-
-        fitter = NativeOrbitFitter(propagator_class=UNUSED_PROPAGATOR_CLASS)
-        with pytest.raises(_Applied):
-            fitter.refine_fit(
-                make_fitted_orbit(),
-                observations,
-                UNUSED_PROPAGATOR,
-                observatory_bias_model=spy,
             )
 
         assert spy.calls == 1

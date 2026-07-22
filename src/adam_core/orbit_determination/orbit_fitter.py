@@ -6,7 +6,6 @@ import pyarrow as pa
 
 from ..propagator.propagator import Propagator
 from .evaluate import FittedOrbitMembers, FittedOrbits, OrbitDeterminationObservations
-from .observation_uncertainty import ObservationUncertaintyModel
 
 logger = logging.getLogger(__name__)
 
@@ -109,7 +108,6 @@ class OrbitFitter(ABC):
         object_id: str | pa.LargeStringScalar,
         observations: OrbitDeterminationObservations,
         propagator: Propagator,
-        observatory_bias_model: ObservationUncertaintyModel | None = None,
     ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
         """Run full orbit determination: IOD followed by differential correction.
 
@@ -125,12 +123,6 @@ class OrbitFitter(ABC):
             All observations for this object.
         propagator : Propagator
             Propagator used during differential correction.
-        observatory_bias_model : ObservationUncertaintyModel, optional
-            Observation uncertainty model applied to the observations before
-            fitting (e.g. inflating per-station sigmas from an observatory
-            bias table). Default None leaves the observations unchanged. The
-            model is applied once here; the inflated observations (not the
-            model) are passed to `initial_fit` and `refine_fit`.
 
         Returns
         -------
@@ -138,10 +130,17 @@ class OrbitFitter(ABC):
             Best orbit found across IOD + DC.
         fitted_orbit_members : FittedOrbitMembers (N)
             Observations with residuals and outlier/solution flags.
-        """
-        if observatory_bias_model is not None:
-            observations = observatory_bias_model.apply(observations)
 
+        Notes
+        -----
+        Observation uncertainty handling (e.g. an observatory bias model)
+        deliberately happens ABOVE this interface: fitter implementations,
+        including external plugins, are passed observations whose
+        uncertainties have already been transformed. Apply a model upstream,
+        e.g. ``fitter.full_od(object_id, model.apply(observations),
+        propagator)``, or use the module-level OD functions which accept
+        ``observatory_bias_model`` directly.
+        """
         iod_orbit, iod_members = self.initial_fit(object_id, observations)
         if len(iod_orbit) == 0:
             return iod_orbit, iod_members
