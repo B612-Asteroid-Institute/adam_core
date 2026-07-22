@@ -8,6 +8,7 @@ from .differential_correction import iterative_fit
 from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .iod import iod
+from .observation_uncertainty import ObservationUncertaintyModel
 from .orbit_fitter import OrbitFitter
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,7 @@ class NativeOrbitFitter(OrbitFitter):
         self,
         object_id: str | pa.LargeStringScalar,
         observations: OrbitDeterminationObservations,
+        observatory_bias_model: ObservationUncertaintyModel | None = None,
     ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
         """Run Gauss IOD on the observations.
 
@@ -88,6 +90,9 @@ class NativeOrbitFitter(OrbitFitter):
             Object identifier for output tables.
         observations : OrbitDeterminationObservations
             Observations to fit, assumed to belong to a single object.
+        observatory_bias_model : ObservationUncertaintyModel, optional
+            Observation uncertainty model applied to the observations before
+            fitting. Default None leaves the observations unchanged.
 
         Returns
         -------
@@ -96,6 +101,9 @@ class NativeOrbitFitter(OrbitFitter):
         fitted_orbit_members : FittedOrbitMembers
             Observations with solution/outlier flags from IOD.
         """
+        if observatory_bias_model is not None:
+            observations = observatory_bias_model.apply(observations)
+
         fitted_orbits, fitted_orbit_members = iod(
             observations,
             self.propagator_class,
@@ -113,6 +121,7 @@ class NativeOrbitFitter(OrbitFitter):
         fitted_orbit: FittedOrbits,
         observations: OrbitDeterminationObservations,
         propagator: Propagator,
+        observatory_bias_model: ObservationUncertaintyModel | None = None,
     ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
         """Refine an IOD orbit via iterative differential correction.
 
@@ -124,6 +133,11 @@ class NativeOrbitFitter(OrbitFitter):
             Observations to fit against.
         propagator : Propagator
             Propagator instance used during DC ephemeris evaluation.
+        observatory_bias_model : ObservationUncertaintyModel, optional
+            Observation uncertainty model applied to the observations before
+            fitting. Default None leaves the observations unchanged. Do not
+            pass it here if it was already applied upstream (e.g. via
+            `full_od`); the inflation would be applied twice.
 
         Returns
         -------
@@ -133,6 +147,10 @@ class NativeOrbitFitter(OrbitFitter):
             Observations with residuals and outlier/solution flags.
         """
         assert len(fitted_orbit) == 1, "refine_fit expects exactly one orbit"
+
+        if observatory_bias_model is not None:
+            observations = observatory_bias_model.apply(observations)
+
         orbit = fitted_orbit.to_orbits()
         return iterative_fit(
             orbit,

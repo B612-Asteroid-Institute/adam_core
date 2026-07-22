@@ -19,6 +19,7 @@ from ..propagator import Propagator
 from ..ray_cluster import initialize_use_ray
 from ..utils.iter import _iterate_chunk_indices, _iterate_chunks
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
+from .observation_uncertainty import ObservationUncertaintyModel
 from .outliers import calculate_max_outliers
 
 logger = logging.getLogger(__name__)
@@ -140,7 +141,13 @@ def od(
     max_iter: int = 20,
     method: Literal["central", "finite"] = "central",
     propagator_kwargs: dict = {},
+    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    # Apply the observatory bias model (if any) before fitting: inflates the
+    # observation uncertainties once at this entry point.
+    if observatory_bias_model is not None:
+        observations = observatory_bias_model.apply(observations)
+
     # Intialize the propagator
     prop = propagator(**propagator_kwargs)
 
@@ -584,6 +591,7 @@ def differential_correction(
     max_processes: Optional[int] = 1,
     orbit_ids: Optional[npt.NDArray[np.str_]] = None,
     obs_ids: Optional[npt.NDArray[np.str_]] = None,
+    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
     Differentially correct (via finite/central differencing).
@@ -649,6 +657,14 @@ def differential_correction(
             observations = observations.apply_mask(pc.is_in(observations.id, obs_ids))
             logger.info("Applied mask to observations.")
     else:
+        observations_ref = None
+
+    if observatory_bias_model is not None:
+        # Apply once here so every worker sees the inflated uncertainties.
+        # Invalidate any caller-supplied object-store reference: it points at
+        # the un-inflated observations, so the local (inflated) copy must be
+        # re-put for the workers instead.
+        observations = observatory_bias_model.apply(observations)
         observations_ref = None
 
     if len(orbits) == 0 or len(orbit_members) == 0:

@@ -16,6 +16,7 @@ from ..propagator.propagator import Propagator
 from ..time.time import Timestamp
 from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
+from .observation_uncertainty import ObservationUncertaintyModel
 from .outliers import calculate_max_outliers, remove_lowest_probability_observation
 
 
@@ -76,6 +77,7 @@ def fit_least_squares(
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     ignore: Optional[List[str]] = None,
+    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
     **kwargs,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
@@ -92,6 +94,11 @@ def fit_least_squares(
     ignore : list of str
         List of observation IDs to ignore when fitting the orbit with least squares.
         These observations will be marked as outliers in the fitted orbit members.
+    observatory_bias_model : `~adam_core.orbit_determination.ObservationUncertaintyModel`, optional
+        Observation uncertainty model applied to the observations before fitting
+        (e.g. inflating per-station sigmas from an observatory bias table). Default
+        None leaves the observations unchanged. The model is applied once at this
+        entry point and is not forwarded to nested calls.
     **kwargs
         Additional keyword arguments to pass to `~scipy.optimize.least_squares`.
         Some of these parameters if not specified will be set to sensible defaults.
@@ -110,6 +117,9 @@ def fit_least_squares(
         Fitted orbit members.
     """
     assert len(orbit) == 1, "Only one orbit can be differentially corrected"
+
+    if observatory_bias_model is not None:
+        observations = observatory_bias_model.apply(observations)
 
     # TODO: Investigate whether we want to add fitting for the epoch as well
     # Set up least squares problem
@@ -215,6 +225,7 @@ def iterative_fit(
     min_obs: int = 6,
     min_arc_length: float = 1.0,
     contamination_percentage: float = 20.0,
+    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
     **kwargs,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
@@ -246,6 +257,11 @@ def iterative_fit(
     contamination_percentage : float, optional
         Maximum percentage of observations that may be rejected as outliers.
         Range is [0, 100]. Default is 20.0.
+    observatory_bias_model : `~adam_core.orbit_determination.ObservationUncertaintyModel`, optional
+        Observation uncertainty model applied to the observations before fitting
+        (e.g. inflating per-station sigmas from an observatory bias table). Default
+        None leaves the observations unchanged. The model is applied once at this
+        entry point and is not forwarded to nested calls.
     **kwargs
         Additional keyword arguments passed to `fit_least_squares` and
         ultimately to `~scipy.optimize.least_squares`.
@@ -258,6 +274,11 @@ def iterative_fit(
         Fitted orbit members with residuals and outlier flags.
     """
     assert len(orbit) == 1, "Only one orbit can be iteratively fitted"
+
+    if observatory_bias_model is not None:
+        # Applied once here; the inflated observations (not the model) are
+        # passed to the nested fit_least_squares calls below.
+        observations = observatory_bias_model.apply(observations)
 
     num_obs = len(observations)
     max_outliers = calculate_max_outliers(num_obs, min_obs, contamination_percentage)
@@ -306,7 +327,10 @@ def iterative_fit(
 
         # Check that removing this observation still leaves enough arc length
         arc_length = remaining_observations.coordinates.time.mjd().to_numpy()
-        if len(arc_length) < min_obs or (arc_length.max() - arc_length.min()) < min_arc_length:
+        if (
+            len(arc_length) < min_obs
+            or (arc_length.max() - arc_length.min()) < min_arc_length
+        ):
             break
 
         ignore.append(obs_id)
