@@ -1,4 +1,5 @@
 import numpy as np
+import pyarrow as pa
 import pytest
 
 from ...time import Timestamp
@@ -438,6 +439,28 @@ permID|trkSub|obsSubID|obsTime|ra|dec|rmsRA|rmsDec|mag|band|stn|mode|astCat|rema
         },
     )
     assert desired == actual
+
+
+def test_ADES_to_string_without_context(ades_observations):
+    ades_string = ADES_to_string(ades_observations, None)
+
+    assert ades_string.startswith("# version=2022\n")
+    assert "# observatory" not in ades_string
+    contexts, parsed_observations = ADES_string_to_tables(ades_string)
+    assert contexts == {}
+    assert len(parsed_observations) == len(ades_observations)
+
+    with pytest.raises(ValueError, match="not found in obs_contexts"):
+        ADES_to_string(ades_observations, {})
+
+
+def test_ADES_to_string_preserves_block_order_when_sort_disabled(ades_observations):
+    observations = ades_observations.select("stn", "W84").take(pa.array([1, 0]))
+
+    ades_string = ADES_to_string(observations, None, sort=False)
+    _contexts, parsed_observations = ADES_string_to_tables(ades_string)
+
+    assert parsed_observations.obsSubID.to_pylist() == observations.obsSubID.to_pylist()
 
 
 def test_ADES_string_to_tables(ades_observations, ades_obscontext):

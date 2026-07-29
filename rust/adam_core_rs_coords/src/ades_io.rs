@@ -184,12 +184,15 @@ impl RenderedColumn {
 ///
 /// `contexts` maps observatory codes to their pre-rendered `ObsContext`
 /// blocks (`ObsContext.to_string()` output, newline-terminated) -- the
-/// ObsContext dataclasses themselves stay Python-side.
+/// ObsContext dataclasses themselves stay Python-side. `context_free` omits
+/// all ObsContext blocks without changing strict empty-map semantics.
 pub fn ades_to_string(
     observations: &AdesObservationBatch,
     contexts: &HashMap<String, String>,
     seconds_precision: i32,
     columns_precision: &HashMap<String, i32>,
+    context_free: bool,
+    sort: bool,
 ) -> SchemaResult<String> {
     observations.validate()?;
     if !observations.is_empty() && observations.obs_time.scale != TimeScale::Utc {
@@ -210,22 +213,31 @@ pub fn ades_to_string(
         observations.stn.iter().map(|stn| stn.as_str()).collect();
 
     for obs in unique_observatories {
-        let context = contexts
-            .get(obs)
-            .ok_or_else(|| invalid(format!("Observatory {obs} not found in obs_contexts")))?;
+        let context =
+            if context_free {
+                None
+            } else {
+                Some(contexts.get(obs).ok_or_else(|| {
+                    invalid(format!("Observatory {obs} not found in obs_contexts"))
+                })?)
+            };
 
         // Filter (original order), then stable-sort by the legacy keys with
         // nulls last -- matching pyarrow Table.sort_by defaults.
         let mut indices: Vec<usize> = (0..observations.len())
             .filter(|&row| observations.stn[row] == obs)
             .collect();
-        indices.sort_by(|&a, &b| {
-            cmp_opt_str(&observations.prov_id[a], &observations.prov_id[b])
-                .then_with(|| cmp_opt_str(&observations.perm_id[a], &observations.perm_id[b]))
-                .then_with(|| cmp_opt_str(&observations.trk_sub[a], &observations.trk_sub[b]))
-                .then_with(|| observations.obs_time.days[a].cmp(&observations.obs_time.days[b]))
-                .then_with(|| observations.obs_time.nanos[a].cmp(&observations.obs_time.nanos[b]))
-        });
+        if sort {
+            indices.sort_by(|&a, &b| {
+                cmp_opt_str(&observations.prov_id[a], &observations.prov_id[b])
+                    .then_with(|| cmp_opt_str(&observations.perm_id[a], &observations.perm_id[b]))
+                    .then_with(|| cmp_opt_str(&observations.trk_sub[a], &observations.trk_sub[b]))
+                    .then_with(|| observations.obs_time.days[a].cmp(&observations.obs_time.days[b]))
+                    .then_with(|| {
+                        observations.obs_time.nanos[a].cmp(&observations.obs_time.nanos[b])
+                    })
+            });
+        }
 
         let gather_str = |values: &[Option<String>]| -> Vec<Option<String>> {
             indices.iter().map(|&row| values[row].clone()).collect()
@@ -342,7 +354,9 @@ pub fn ades_to_string(
             .filter(|(_, column)| column.has_any_value())
             .collect();
 
-        out.push_str(context);
+        if let Some(context) = context {
+            out.push_str(context);
+        }
 
         // Header row with the rmsRACosDec -> rmsRA rename.
         let header: Vec<String> = kept

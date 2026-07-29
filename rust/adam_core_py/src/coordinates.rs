@@ -2633,6 +2633,8 @@ fn ades_to_string_ipc<'py>(
         &contexts,
         seconds_precision,
         &columns_precision,
+        false,
+        true,
     )
     .map_err(|err| match err {
         // Preserve the exact legacy ValueError messages (missing context /
@@ -2649,6 +2651,8 @@ fn ades_to_string_fused_core(
     contexts_json: &std::collections::HashMap<String, String>,
     seconds_precision: i32,
     columns_precision: &std::collections::HashMap<String, i32>,
+    context_free: bool,
+    sort: bool,
 ) -> Result<String, adam_core_rs_coords::SchemaError> {
     // Legacy guard: only non-empty tables are rescaled (`len(observations) > 0`),
     // so an empty table never errors here even when its scale has no
@@ -2676,6 +2680,8 @@ fn ades_to_string_fused_core(
         &contexts,
         seconds_precision,
         columns_precision,
+        context_free,
+        sort,
     )
 }
 
@@ -2694,6 +2700,8 @@ fn ades_to_string_fused_ipc(
     contexts_json: std::collections::HashMap<String, String>,
     seconds_precision: i32,
     columns_precision: std::collections::HashMap<String, i32>,
+    context_free: bool,
+    sort: bool,
 ) -> PyResult<String> {
     let observations =
         adam_core_rs_coords::observations::AdesObservationBatch::try_from_nested_record_batch(
@@ -2705,6 +2713,8 @@ fn ades_to_string_fused_ipc(
         &contexts_json,
         seconds_precision,
         &columns_precision,
+        context_free,
+        sort,
     )
     .map_err(ades_error)
 }
@@ -2735,6 +2745,8 @@ fn benchmark_ades_to_string_fused_ipc(
             &contexts_json,
             seconds_precision,
             &columns_precision,
+            false,
+            true,
         )
         .map_err(ades_error)
     };

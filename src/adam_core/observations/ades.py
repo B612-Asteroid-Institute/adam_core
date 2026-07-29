@@ -158,7 +158,7 @@ class ADESObservations(qv.Table):
 
 def ADES_to_string(
     observations: ADESObservations,
-    obs_contexts: dict[str, ObsContext],
+    obs_contexts: dict[str, ObsContext] | None = None,
     seconds_precision: int = 3,
     columns_precision: dict[str, int] = {
         "ra": 9,
@@ -172,6 +172,7 @@ def ADES_to_string(
         "logSNR": 2,
         "seeing": 2,
     },
+    sort: bool = True,
 ) -> str:
     """
     Write ADES observations to a string.
@@ -186,9 +187,10 @@ def ADES_to_string(
     ----------
     observations : ADESObservations
         The observations to write to a string.
-    obs_contexts : dict[str, ObsContext]
+    obs_contexts : dict[str, ObsContext] or None, optional
         A dictionary of observatory codes and their corresponding ObsContexts to use
         as the context headers for the different observatory codes in the observations.
+        If None, omit observatory context headers. Default is None.
     seconds_precision : int, optional
         The precision to use for the seconds in the obsTime field, by default 3.
     columns_precision : dict[str, int], optional
@@ -203,6 +205,9 @@ def ADES_to_string(
         }
         The MPC enforces strict limits on these and submitters may need permission to send
         high-precision data.
+    sort : bool, optional
+        Whether to sort rows within each observatory block by identity and observation
+        time. Set to False to preserve upstream order within each block. Default is True.
 
     Returns
     -------
@@ -213,14 +218,22 @@ def ADES_to_string(
 
     from .arrow_bridge import observations_to_ipc
 
-    contexts_json = {
-        code: json.dumps(asdict(context)) for code, context in obs_contexts.items()
-    }
+    context_free = obs_contexts is None
+    contexts_json = (
+        {}
+        if context_free
+        else {
+            code: json.dumps(asdict(context))
+            for code, context in obs_contexts.items()
+        }
+    )
     return _rn.ades_to_string_fused_ipc(
         observations_to_ipc(observations),
         contexts_json,
         seconds_precision,
         {column: int(value) for column, value in columns_precision.items()},
+        context_free,
+        sort,
     )
 
 

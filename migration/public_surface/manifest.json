@@ -6805,7 +6805,7 @@
       "kind": "function",
       "domain": "observations",
       "source": "src/adam_core/observations/ades.py",
-      "line": 227,
+      "line": 240,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
