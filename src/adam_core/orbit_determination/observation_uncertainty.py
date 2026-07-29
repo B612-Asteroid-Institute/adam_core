@@ -35,6 +35,7 @@ in tests to prove that a given model is position-preserving.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections import Counter
 from typing import Literal, Optional
 
 import numpy as np
@@ -50,6 +51,8 @@ __all__ = [
     "EmpiricalCovarianceModel",
     "PerformanceWeightedModel",
     "SigmaFloorModel",
+    "NightBatchDeweightingModel",
+    "CompositeModel",
     "validate_bias_table",
     "assert_positions_unchanged",
 ]
@@ -486,3 +489,90 @@ class SigmaFloorModel(_BiasTableModel):
         if new_var_lon == var_lon and new_var_lat == var_lat:
             return None
         return (new_var_lon, new_var_lat, cov_lonlat)
+
+
+class NightBatchDeweightingModel(ObservationUncertaintyModel):
+    """
+    Deweight same-station, same-night batches of observations following
+    Veres, Farnocchia & Chesley (2017): when a station contributes N > cap
+    observations on one night, each of those observations has its RA/Dec
+    covariance block scaled by N / cap, capping the effective statistical
+    weight of the night-batch at ~cap independent observations. This
+    accounts for error correlations within a night (shared calibration,
+    atmosphere, and reduction) that would otherwise let large batches
+    dominate a fit.
+
+    A "night" is approximated by floor(UTC MJD). The MJD boundary falls at
+    midnight UTC, so for stations whose local night straddles 0h UTC (e.g.
+    European longitudes) a single observing night may be split into two
+    batches; deweighting is then conservative (factors are underestimated,
+    never overestimated).
+
+    This model is bias-table-free and composes with the table-driven models
+    via `CompositeModel`.
+    """
+
+    def __init__(self, cap: int = 4) -> None:
+        if cap < 1:
+            raise ValueError(f"cap must be a positive integer, got {cap}")
+        self.cap = cap
+
+    def apply(
+        self, observations: OrbitDeterminationObservations
+    ) -> OrbitDeterminationObservations:
+        if len(observations) == 0:
+            return observations
+
+        codes = observations.observers.code.to_pylist()
+        mjd = (
+            observations.coordinates.time.rescale("utc")
+            .mjd()
+            .to_numpy(zero_copy_only=False)
+        )
+        nights = np.floor(mjd).astype(np.int64)
+
+        batch_sizes = Counter(zip(codes, nights))
+        factors = np.array(
+            [max(batch_sizes[key] / self.cap, 1.0) for key in zip(codes, nights)]
+        )
+        if np.all(factors == 1.0):
+            return observations
+
+        covariances = observations.coordinates.covariance.to_matrix().copy()
+        covariances[:, 1, 1] *= factors
+        covariances[:, 2, 2] *= factors
+        covariances[:, 1, 2] *= factors
+        covariances[:, 2, 1] *= factors
+        return observations.set_column(
+            "coordinates.covariance",
+            CoordinateCovariances.from_matrix(covariances),
+        )
+
+
+class CompositeModel(ObservationUncertaintyModel):
+    """
+    Apply a sequence of uncertainty models in order (left to right).
+
+    Because the shipped models act multiplicatively or additively on the
+    covariance block, order can matter: e.g.
+    ``CompositeModel(EmpiricalCovarianceModel(table), NightBatchDeweightingModel())``
+    deweights night-batches of the bias-inflated covariances.
+    """
+
+    def __init__(self, *models: ObservationUncertaintyModel) -> None:
+        if not models:
+            raise ValueError("CompositeModel requires at least one model")
+        for model in models:
+            if not isinstance(model, ObservationUncertaintyModel):
+                raise TypeError(
+                    f"CompositeModel components must be "
+                    f"ObservationUncertaintyModel instances, got {type(model)}"
+                )
+        self.models = tuple(models)
+
+    def apply(
+        self, observations: OrbitDeterminationObservations
+    ) -> OrbitDeterminationObservations:
+        for model in self.models:
+            observations = model.apply(observations)
+        return observations

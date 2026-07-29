@@ -14,8 +14,10 @@ from ..evaluate import OrbitDeterminationObservations, OrbitDeterminationPhotome
 from ..observation_uncertainty import (
     ARCSEC_PER_DEG,
     BIAS_TABLE_SCHEMA,
+    CompositeModel,
     EmpiricalCovarianceModel,
     IdentityModel,
+    NightBatchDeweightingModel,
     ObservationUncertaintyModel,
     PerformanceWeightedModel,
     SigmaFloorModel,
@@ -466,3 +468,106 @@ class TestPositionPreservation:
         observations = make_observations(["500", "F51"], [0.0, 45.0])
         with pytest.raises(AssertionError, match="Number of observations"):
             assert_positions_unchanged(observations, observations[:1])
+
+
+class TestNightBatchDeweightingModel:
+    def test_batch_above_cap_is_deweighted(self) -> None:
+        # 6 observations from one station on one night with cap 4:
+        # every observation's angular covariance block scales by 6/4.
+        observations = make_observations(["F51"] * 6, [10.0] * 6)
+        model = NightBatchDeweightingModel(cap=4)
+        result = model.apply(observations)
+        assert_positions_unchanged(observations, result)
+        before = observations.coordinates.covariance.to_matrix()
+        after = result.coordinates.covariance.to_matrix()
+        npt.assert_allclose(after[:, 1, 1], before[:, 1, 1] * 1.5)
+        npt.assert_allclose(after[:, 2, 2], before[:, 2, 2] * 1.5)
+
+    def test_batch_at_or_below_cap_passes_through(self) -> None:
+        observations = make_observations(["F51"] * 4, [10.0] * 4)
+        model = NightBatchDeweightingModel(cap=4)
+        assert_observations_identical(observations, model.apply(observations))
+
+    def test_batches_are_per_station_and_night(self) -> None:
+        # 5 obs from F51 on night 60000, 2 from 500 the same night, and
+        # 5 from F51 the following night: each station-night is counted
+        # separately.
+        n = 12
+        codes = ["F51"] * 5 + ["500"] * 2 + ["F51"] * 5
+        mjd = np.concatenate(
+            [
+                60000.1 + 0.01 * np.arange(5),
+                60000.3 + 0.01 * np.arange(2),
+                60001.1 + 0.01 * np.arange(5),
+            ]
+        )
+        times = Timestamp.from_mjd(mjd, scale="utc")
+        covariances = np.full((n, 6, 6), np.nan)
+        covariances[:, 1, 1] = 1e-8
+        covariances[:, 2, 2] = 4e-8
+        coordinates = SphericalCoordinates.from_kwargs(
+            lon=np.linspace(10.0, 11.0, n),
+            lat=np.zeros(n),
+            covariance=CoordinateCovariances.from_matrix(covariances),
+            time=times,
+            origin=Origin.from_kwargs(code=codes),
+            frame="equatorial",
+        )
+        observations = OrbitDeterminationObservations.from_kwargs(
+            id=[f"obs_{i:02d}" for i in range(n)],
+            coordinates=coordinates,
+            observers=Observers.from_codes(times=times, codes=codes),
+            photometry=OrbitDeterminationPhotometry.from_kwargs(
+                mag=[None] * n, rmsmag=[None] * n, band=[None] * n
+            ),
+        )
+        result = NightBatchDeweightingModel(cap=4).apply(observations)
+        after = result.coordinates.covariance.to_matrix()
+        expected_factors = np.array([1.25] * 5 + [1.0] * 2 + [1.25] * 5)
+        npt.assert_allclose(after[:, 1, 1], 1e-8 * expected_factors)
+        npt.assert_allclose(after[:, 2, 2], 4e-8 * expected_factors)
+
+    def test_cross_term_scales_with_the_block(self) -> None:
+        observations = make_observations(["F51"] * 5, [10.0] * 5, cov_lonlat_deg2=1e-9)
+        result = NightBatchDeweightingModel(cap=4).apply(observations)
+        after = result.coordinates.covariance.to_matrix()
+        npt.assert_allclose(after[:, 1, 2], 1e-9 * 1.25)
+        npt.assert_allclose(after[:, 2, 1], 1e-9 * 1.25)
+
+    def test_invalid_cap_raises(self) -> None:
+        with pytest.raises(ValueError, match="cap"):
+            NightBatchDeweightingModel(cap=0)
+
+    def test_empty_observations_pass_through(self) -> None:
+        observations = make_observations(["F51"], [10.0])[:0]
+        result = NightBatchDeweightingModel().apply(observations)
+        assert len(result) == 0
+
+
+class TestCompositeModel:
+    def test_applies_models_in_sequence(self) -> None:
+        # chi2_per_obs = 4 -> PerformanceWeighted scales the block by 4;
+        # 5-obs night batch with cap 4 -> NightBatch scales by 1.25.
+        observations = make_observations(["F51"] * 5, [10.0] * 5)
+        table = make_bias_table([{"obs_code": "F51", "chi2_per_obs": 4.0}])
+        composite = CompositeModel(
+            PerformanceWeightedModel(table), NightBatchDeweightingModel(cap=4)
+        )
+        result = composite.apply(observations)
+        before = observations.coordinates.covariance.to_matrix()
+        after = result.coordinates.covariance.to_matrix()
+        npt.assert_allclose(after[:, 1, 1], before[:, 1, 1] * 4.0 * 1.25)
+        npt.assert_allclose(after[:, 2, 2], before[:, 2, 2] * 4.0 * 1.25)
+
+    def test_identity_composition_is_identity(self) -> None:
+        observations = make_observations(["F51", "500"], [10.0, -20.0])
+        composite = CompositeModel(IdentityModel(), IdentityModel())
+        assert_observations_identical(observations, composite.apply(observations))
+
+    def test_empty_composite_raises(self) -> None:
+        with pytest.raises(ValueError, match="at least one model"):
+            CompositeModel()
+
+    def test_non_model_component_raises(self) -> None:
+        with pytest.raises(TypeError, match="ObservationUncertaintyModel"):
+            CompositeModel(IdentityModel(), "not a model")

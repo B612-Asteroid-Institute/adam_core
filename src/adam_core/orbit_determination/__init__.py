@@ -14,8 +14,10 @@ from .iod import (
 from .native_orbit_fitter import NativeOrbitFitter
 from .observation_uncertainty import (
     BIAS_TABLE_SCHEMA,
+    CompositeModel,
     EmpiricalCovarianceModel,
     IdentityModel,
+    NightBatchDeweightingModel,
     ObservationUncertaintyModel,
     PerformanceWeightedModel,
     SigmaFloorModel,
