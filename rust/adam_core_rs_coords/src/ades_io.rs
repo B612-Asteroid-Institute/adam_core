@@ -1,8 +1,8 @@
 //! ADES writer/parser (bead personal-cmy.20 slices B/C).
 //!
 //! Ports `adam_core.observations.ades.ADES_to_string` and the observation
-//! parsing half of `ADES_string_to_tables` to Rust, replicating the legacy
-//! Python/pandas/astropy behavior byte-for-byte:
+//! parsing half of `ADES_string_to_tables` to Rust, preserving the legacy
+//! Python/pandas/astropy behavior except for documented ADES corrections:
 //!
 //! * observatory blocks in ASCII-sorted `stn` order; per-block stable sort by
 //!   (provID, permID, trkSub, obsTime.days, obsTime.nanos) with nulls last;
@@ -12,9 +12,9 @@
 //!   precision=p).utc.isot + "Z"`: the float64 MJD is split with
 //!   round-half-even exactly like astropy's `day_frac`, then formatted with
 //!   ERFA `d2dtf` (via the pure-Rust `erfars` port, leap-second aware);
-//! * precision-formatted columns follow Python `f"{v:.Nf}"` semantics --
-//!   including the legacy quirk that missing values in those columns render
-//!   as the string `nan`;
+//! * present precision-formatted columns follow Python `f"{v:.Nf}"` semantics;
+//!   missing optional numeric values render as empty PSV fields, as required by
+//!   the ADES specification;
 //! * remaining float columns follow pandas `to_csv(float_format="%.16f",
 //!   na_rep="")`; strings render empty for null; fields containing the `|`
 //!   separator, quotes, or newlines get pandas QUOTE_MINIMAL quoting;
@@ -160,28 +160,20 @@ impl RenderedColumn {
                 Some(precision) => python_fixed(values[row], precision),
                 None => python_fixed(values[row], 16),
             },
-            Self::Floats(values) => match precision {
-                // Legacy quirk: the precision-formatting loop runs
-                // f"{v:.Nf}" on every element, so missing values (NaN after
-                // pandas conversion) render as the string "nan".
-                Some(precision) => match &values[row] {
-                    value if is_na(value) => "nan".to_string(),
-                    Some(value) => python_fixed(*value, precision),
-                    None => unreachable!(),
-                },
-                // Columns left as floats go through pandas to_csv
-                // float_format="%.16f" with na_rep="".
-                None => match &values[row] {
-                    value if is_na(value) => String::new(),
-                    Some(value) => python_fixed(*value, 16),
-                    None => unreachable!(),
-                },
+            Self::Floats(values) => match &values[row] {
+                // ADES PSV section 5 defines null fields as empty (consecutive
+                // delimiters) or blank-padded. Never serialize a missing value
+                // as the numeric-looking, non-standard token `nan`.
+                value if is_na(value) => String::new(),
+                Some(value) => python_fixed(*value, precision.unwrap_or(16)),
+                None => unreachable!(),
             },
         }
     }
 }
 
-/// Render `ADES_to_string` byte-identically to the legacy Python writer.
+/// Render `ADES_to_string`, preserving the legacy layout except that missing
+/// optional numerics use ADES-standard empty PSV fields.
 ///
 /// `contexts` maps observatory codes to their pre-rendered `ObsContext`
 /// blocks (`ObsContext.to_string()` output, newline-terminated) -- the
@@ -910,6 +902,18 @@ mod tests {
         assert_eq!(python_fixed(0.9659, 5), "0.96590");
         assert_eq!(python_fixed(f64::NAN, 4), "nan");
         assert_eq!(python_fixed(-15.05, 9), "-15.050000000");
+    }
+
+    #[test]
+    fn optional_float_nulls_render_as_empty_psv_fields() {
+        let values = RenderedColumn::Floats(vec![None, Some(f64::NAN), Some(1.25)]);
+
+        assert_eq!(values.render_cell(0, Some(4)), "");
+        assert_eq!(values.render_cell(1, Some(4)), "");
+        assert_eq!(values.render_cell(0, None), "");
+        assert_eq!(values.render_cell(1, None), "");
+        assert_eq!(values.render_cell(2, Some(4)), "1.2500");
+        assert_eq!(values.render_cell(2, None), "1.2500000000000000");
     }
 
     #[test]

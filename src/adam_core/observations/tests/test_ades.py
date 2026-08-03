@@ -459,6 +459,7 @@ def test_ADES_to_string_round_trips_mixed_null_numeric_cells():
         permID=["3000", "3000"],
         obsSubID=["obs01", "obs02"],
         obsTime=Timestamp.from_mjd([60434.0, 60434.1], scale="utc"),
+        rmsTime=[0.01, None],
         ra=[240.00, 240.05],
         dec=[-15.00, -15.05],
         rmsRACosDec=[0.9659, None],
@@ -469,19 +470,48 @@ def test_ADES_to_string_round_trips_mixed_null_numeric_cells():
         stn=["W84", "W84"],
         mode=["CCD", "CCD"],
         astCat=["Gaia2", "Gaia2"],
+        logSNR=[5.0, None],
+        seeing=[1.2, None],
+        exp=[30.0, None],
     )
 
     ades_string = ADES_to_string(observations, None, sort=False)
-    assert "|nan|nan|nan|nan|nan|" in ades_string
+    lines = ades_string.splitlines()
+    header = lines[1].split("|")
+    second_row = dict(zip(header, lines[3].split("|")))
+    optional_numeric_columns = {
+        "rmsTime",
+        "rmsRA",
+        "rmsDec",
+        "rmsCorr",
+        "mag",
+        "rmsMag",
+        "logSNR",
+        "seeing",
+        "exp",
+    }
+    assert optional_numeric_columns <= second_row.keys()
+    assert all(second_row[column] == "" for column in optional_numeric_columns)
+    assert "nan" not in ades_string.lower()
 
     contexts, parsed_observations = ADES_string_to_tables(ades_string)
 
     assert contexts == {}
-    assert parsed_observations.rmsRACosDec.to_pylist() == [0.9659, None]
-    assert parsed_observations.rmsDec.to_pylist() == [1.0, None]
-    assert parsed_observations.rmsCorr.to_pylist() == [0.1, None]
-    assert parsed_observations.mag.to_pylist() == [20.0, None]
-    assert parsed_observations.rmsMag.to_pylist() == [0.2, None]
+    expected_numeric_values = {
+        "rmsTime": 0.01,
+        "rmsRACosDec": 0.9659,
+        "rmsDec": 1.0,
+        "rmsCorr": 0.1,
+        "mag": 20.0,
+        "rmsMag": 0.2,
+        "logSNR": 5.0,
+        "seeing": 1.2,
+        "exp": 30.0,
+    }
+    for column, expected in expected_numeric_values.items():
+        actual = parsed_observations.table.column(column).to_pylist()
+        assert actual[0] == pytest.approx(expected)
+        assert actual[1] is None
 
 
 def test_ADES_to_string_preserves_block_order_when_sort_disabled(ades_observations):

@@ -178,10 +178,11 @@ def ADES_to_string(
     Write ADES observations to a string.
 
     The observation blocks are rendered in the Rust backend (bead
-    personal-cmy.20), byte-identically to the legacy Python/pandas writer
-    (gated by the frozen legacy fixture in
-    ``migration/artifacts/ades_parity_fixture_2026-07-05.json``); the
-    ObsContext headers stay Python-rendered.
+    personal-cmy.20), preserving the legacy Python/pandas layout except that
+    missing optional numeric values use ADES-standard empty PSV fields. The
+    frozen legacy fixture in
+    ``migration/artifacts/ades_parity_fixture_2026-07-05.json`` gates all
+    other writer behavior; the ObsContext headers stay Python-rendered.
 
     Parameters
     ----------

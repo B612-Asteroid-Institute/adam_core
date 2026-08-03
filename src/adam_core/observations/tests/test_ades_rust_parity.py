@@ -4,11 +4,12 @@ checkout (no Rust work) via
 ``.legacy-venv/bin/python migration/scripts/generate_ades_parity_fixture.py``.
 
 The Rust-dispatched public ``ADES_to_string`` / ``ADES_string_to_tables`` must
-reproduce the legacy outputs byte-for-byte: writer strings, parsed observation
-columns, parsed ObsContexts, and error messages. The one intentional parser
-correction maps legacy writer ``nan`` tokens for missing optional numerics to
-null before validation."""
+reproduce the legacy behavior except for two intentional ADES corrections:
+missing optional numerics serialize as empty PSV fields rather than ``nan``,
+and numeric ``nan`` tokens parse as null before validation."""
 
+import csv
+import io
 import json
 import math
 from dataclasses import asdict
@@ -34,6 +35,89 @@ FIXTURE_PATH = (
     / "artifacts"
     / "ades_parity_fixture_2026-07-05.json"
 )
+
+WRITER_COLUMNS = {
+    "permID",
+    "provID",
+    "trkSub",
+    "obsSubID",
+    "obsTime",
+    "rmsTime",
+    "ra",
+    "dec",
+    "rmsRA",
+    "rmsDec",
+    "rmsCorr",
+    "mag",
+    "rmsMag",
+    "band",
+    "stn",
+    "mode",
+    "astCat",
+    "photCat",
+    "logSNR",
+    "seeing",
+    "exp",
+    "remarks",
+}
+OPTIONAL_NUMERIC_COLUMNS = {
+    "rmsTime",
+    "rmsRA",
+    "rmsDec",
+    "rmsCorr",
+    "mag",
+    "rmsMag",
+    "logSNR",
+    "seeing",
+    "exp",
+}
+
+
+def normalize_legacy_writer_nulls(ades_string: str) -> str:
+    """Apply the intentional ADES null-field correction to legacy output."""
+    output = []
+    headers = None
+    for raw_line in ades_string.splitlines(keepends=True):
+        line = raw_line.rstrip("\r\n")
+        ending = raw_line[len(line) :]
+        if line.startswith("#"):
+            headers = None
+            output.append(raw_line)
+            continue
+        if line.startswith("!") or "|" not in line:
+            output.append(raw_line)
+            continue
+
+        fields = next(csv.reader([line], delimiter="|", quotechar='"'))
+        if (
+            fields
+            and fields[0] in {"permID", "provID", "trkSub"}
+            and all(field in WRITER_COLUMNS for field in fields)
+        ):
+            headers = fields
+            output.append(raw_line)
+            continue
+        if headers is None or len(fields) != len(headers):
+            output.append(raw_line)
+            continue
+
+        corrected = [
+            "" if header in OPTIONAL_NUMERIC_COLUMNS and value == "nan" else value
+            for header, value in zip(headers, fields)
+        ]
+        if corrected == fields:
+            output.append(raw_line)
+            continue
+
+        rendered = io.StringIO()
+        csv.writer(
+            rendered,
+            delimiter="|",
+            quotechar='"',
+            lineterminator="",
+        ).writerow(corrected)
+        output.append(rendered.getvalue() + ending)
+    return "".join(output)
 
 
 @pytest.fixture(scope="module")
@@ -94,13 +178,14 @@ def test_fixture_exists():
     )
 
 
-def test_writer_matches_legacy_fixture(fixture):
+def test_writer_matches_legacy_fixture_except_standard_null_fields(fixture):
     contexts = build_contexts(fixture["context_spec"])
     for panel in fixture["panels"]:
         observations = observations_from_flat(panel["observations"])
         kwargs = dict(panel["options"]) if panel["options"] else {}
         actual = ADES_to_string(observations, contexts, **kwargs)
-        assert actual == panel["ades_string"], panel["name"]
+        expected = normalize_legacy_writer_nulls(panel["ades_string"])
+        assert actual == expected, panel["name"]
 
 
 def test_parser_matches_legacy_fixture(fixture):
@@ -108,8 +193,7 @@ def test_parser_matches_legacy_fixture(fixture):
         if "parse_error_type" in panel["parsed"]:
             # The frozen legacy reader parsed writer-emitted ``nan`` tokens as
             # float NaNs and then failed quivr validation. The corrected Rust
-            # reader treats those missing optional numerics as null while the
-            # byte-for-byte writer parity gate above remains unchanged.
+            # reader treats those missing optional numerics as null.
             parsed_contexts, parsed_observations = ADES_string_to_tables(
                 panel["ades_string"]
             )
