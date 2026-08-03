@@ -19,8 +19,9 @@
 //!   na_rep="")`; strings render empty for null; fields containing the `|`
 //!   separator, quotes, or newlines get pandas QUOTE_MINIMAL quoting;
 //! * the parser mirrors `_data_dict_to_table`: `|`-split blocks headed by
-//!   lines containing permID/provID/trkSub, empty/whitespace cells -> null,
-//!   numeric/string column coercion with stripping (remarks unstripped),
+//!   lines containing permID/provID/trkSub, empty/whitespace cells and numeric
+//!   NaN tokens -> null, numeric/string column coercion with stripping (remarks
+//!   unstripped),
 //!   trailing-character removal from obsTime (legacy `t[:-1]`), ERFA `dtf2d`
 //!   plus the exact `Timestamp.from_astropy` divmod/round arithmetic, and
 //!   `rmsRA` -> `rmsRACosDec` renaming; unknown columns are reported back for
@@ -560,14 +561,14 @@ fn parse_float_column(
         None => Ok(vec![None; rows]),
         Some(values) => values
             .into_iter()
-            .map(|value| {
-                value
-                    .map(|value| {
-                        value.trim().parse::<f64>().map_err(|_| {
-                            invalid(format!("could not parse {name} value {value:?} as float"))
-                        })
-                    })
-                    .transpose()
+            .map(|value| match value {
+                None => Ok(None),
+                Some(value) => {
+                    let number = value.trim().parse::<f64>().map_err(|_| {
+                        invalid(format!("could not parse {name} value {value:?} as float"))
+                    })?;
+                    Ok((!number.is_nan()).then_some(number))
+                }
             })
             .collect(),
     }
@@ -935,5 +936,34 @@ mod tests {
         assert_eq!(csv_quote("plain"), "plain");
         assert_eq!(csv_quote("with|pipe"), "\"with|pipe\"");
         assert_eq!(csv_quote("with \"quote\""), "\"with \"\"quote\"\"\"");
+    }
+
+    #[test]
+    fn parser_treats_nan_optional_floats_as_null() {
+        let ades = "# version=2022\n\
+permID|obsTime|ra|dec|rmsRA|rmsDec|mag|stn|mode|astCat\n\
+1234|2024-01-01T00:00:00.000Z|180.0|0.0|0.5|0.6|inf|695|CCD|Gaia2\n\
+1234|2024-01-01T00:01:00.000Z|181.0|1.0|nan|NaN|-inf|695|CCD|Gaia2\n";
+
+        let (observations, unknown_columns) = ades_string_to_observations(ades).unwrap();
+
+        assert!(unknown_columns.is_empty());
+        assert_eq!(observations.rms_ra_cos_dec, vec![Some(0.5), None]);
+        assert_eq!(observations.rms_dec, vec![Some(0.6), None]);
+        assert_eq!(
+            observations.mag,
+            vec![Some(f64::INFINITY), Some(f64::NEG_INFINITY)]
+        );
+    }
+
+    #[test]
+    fn parser_rejects_nan_required_float_as_missing() {
+        let ades = "# version=2022\n\
+permID|obsTime|ra|dec|stn|mode|astCat\n\
+1234|2024-01-01T00:00:00.000Z|nan|0.0|695|CCD|Gaia2\n";
+
+        let error = ades_string_to_observations(ades).unwrap_err();
+
+        assert!(error.to_string().contains("ra must not be empty"));
     }
 }

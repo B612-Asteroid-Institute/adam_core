@@ -454,6 +454,36 @@ def test_ADES_to_string_without_context(ades_observations):
         ADES_to_string(ades_observations, {})
 
 
+def test_ADES_to_string_round_trips_mixed_null_numeric_cells():
+    observations = ADESObservations.from_kwargs(
+        permID=["3000", "3000"],
+        obsSubID=["obs01", "obs02"],
+        obsTime=Timestamp.from_mjd([60434.0, 60434.1], scale="utc"),
+        ra=[240.00, 240.05],
+        dec=[-15.00, -15.05],
+        rmsRACosDec=[0.9659, None],
+        rmsDec=[1.0, None],
+        rmsCorr=[0.1, None],
+        mag=[20.0, None],
+        rmsMag=[0.2, None],
+        stn=["W84", "W84"],
+        mode=["CCD", "CCD"],
+        astCat=["Gaia2", "Gaia2"],
+    )
+
+    ades_string = ADES_to_string(observations, None, sort=False)
+    assert "|nan|nan|nan|nan|nan|" in ades_string
+
+    contexts, parsed_observations = ADES_string_to_tables(ades_string)
+
+    assert contexts == {}
+    assert parsed_observations.rmsRACosDec.to_pylist() == [0.9659, None]
+    assert parsed_observations.rmsDec.to_pylist() == [1.0, None]
+    assert parsed_observations.rmsCorr.to_pylist() == [0.1, None]
+    assert parsed_observations.mag.to_pylist() == [20.0, None]
+    assert parsed_observations.rmsMag.to_pylist() == [0.2, None]
+
+
 def test_ADES_to_string_preserves_block_order_when_sort_disabled(ades_observations):
     observations = ades_observations.select("stn", "W84").take(pa.array([1, 0]))
 

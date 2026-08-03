@@ -5,7 +5,9 @@ checkout (no Rust work) via
 
 The Rust-dispatched public ``ADES_to_string`` / ``ADES_string_to_tables`` must
 reproduce the legacy outputs byte-for-byte: writer strings, parsed observation
-columns, parsed ObsContexts, and error messages."""
+columns, parsed ObsContexts, and error messages. The one intentional parser
+correction maps legacy writer ``nan`` tokens for missing optional numerics to
+null before validation."""
 
 import json
 import math
@@ -79,12 +81,8 @@ def assert_flat_equal(observations: ADESObservations, flat: dict, label: str):
         actual = observations.table.column(column).to_pylist()
         assert len(actual) == len(expected), f"{label}:{column}"
         for row, (a, b) in enumerate(zip(actual, expected)):
-            if (
-                isinstance(a, float)
-                and isinstance(b, float)
-                and math.isnan(a)
-                and math.isnan(b)
-            ):
+            if isinstance(b, float) and math.isnan(b):
+                assert a is None, f"{label}:{column}[{row}]: {a!r} is not null"
                 continue
             assert a == b, f"{label}:{column}[{row}]: {a!r} != {b!r}"
 
@@ -108,22 +106,36 @@ def test_writer_matches_legacy_fixture(fixture):
 def test_parser_matches_legacy_fixture(fixture):
     for panel in fixture["panels"] + fixture["raw_strings"]:
         if "parse_error_type" in panel["parsed"]:
-            # Legacy writes "nan" for missing values in precision-formatted
-            # columns and then fails quivr validation when parsing those
-            # files back; the Rust-dispatched parser must fail identically.
-            # Documented deviation: legacy validates each parsed block
-            # separately while the Rust path validates the concatenated
-            # table, so the reported failure *count/index* can differ; the
-            # exception type, column, and validator must match exactly.
-            with pytest.raises(Exception) as exc_info:
-                ADES_string_to_tables(panel["ades_string"])
-            assert (
-                type(exc_info.value).__name__ == panel["parsed"]["parse_error_type"]
-            ), panel["name"]
-            expected_prefix = panel["parsed"]["parse_error_message"].split(
-                " failed on "
-            )[0]
-            assert str(exc_info.value).startswith(expected_prefix), panel["name"]
+            # The frozen legacy reader parsed writer-emitted ``nan`` tokens as
+            # float NaNs and then failed quivr validation. The corrected Rust
+            # reader treats those missing optional numerics as null while the
+            # byte-for-byte writer parity gate above remains unchanged.
+            parsed_contexts, parsed_observations = ADES_string_to_tables(
+                panel["ades_string"]
+            )
+            assert len(parsed_observations) == len(panel["observations"]["permID"])
+            assert set(parsed_contexts) == set(panel["observations"]["stn"])
+            for column in (
+                "rmsTime",
+                "rmsRACosDec",
+                "rmsDec",
+                "rmsCorr",
+                "mag",
+                "rmsMag",
+                "logSNR",
+                "seeing",
+                "exp",
+            ):
+                expected = panel["observations"][column]
+                expected_missing = sum(
+                    value is None or (isinstance(value, float) and math.isnan(value))
+                    for value in expected
+                )
+                actual = parsed_observations.table.column(column).to_pylist()
+                assert sum(value is None for value in actual) == expected_missing
+                assert not any(
+                    isinstance(value, float) and math.isnan(value) for value in actual
+                )
             continue
         parsed_contexts, parsed_observations = ADES_string_to_tables(
             panel["ades_string"]
