@@ -576,7 +576,8 @@ handoff to orbit-determination pipelines.</p>
 <li><p>At least one of <code class="docutils literal notranslate"><span class="pre">permID</span></code>, <code class="docutils literal notranslate"><span class="pre">provID</span></code>, or <code class="docutils literal notranslate"><span class="pre">trkSub</span></code> must be present for
 serialization.</p></li>
 <li><p>Unknown ADES columns are ignored on parse (with a warning).</p></li>
-<li><p>Empty/whitespace optional fields are normalized to null values.</p></li>
+<li><p>Missing optional numeric values are serialized as empty PSV fields, and
+empty/whitespace optional fields are normalized to null values on parse.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">rmsRA</span></code> in ADES maps to <code class="docutils literal notranslate"><span class="pre">rmsRACosDec</span></code> in <code class="docutils literal notranslate"><span class="pre">ADESObservations</span></code>.</p></li>
 </ul>
 </section>
@@ -633,7 +634,7 @@ serialization.</p></li>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-17</div>
+              Last updated on 2026-08-04</div>
           </div>
           <div class="right-details">
             

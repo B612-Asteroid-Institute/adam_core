@@ -490,6 +490,17 @@ that is wrong by an integer factor would be costly, cross-check a
 <code class="docutils literal notranslate"><span class="pre">reliability_code</span></code> rather than treating it as infallible.</p>
 </dd>
 </dl>
+<p>One disclosed assumption: when the best fit is a single-peaked fold whose only
+surviving ambiguity is the half/full octave, the solver doubles the period on
+the two-peaks-per-rotation shape prior and, by default, claims
+<code class="docutils literal notranslate"><span class="pre">single_period</span></code> with the confidence flag <code class="docutils literal notranslate"><span class="pre">doubled_fold_assumed</span></code>. Measured
+on the LCDB/DAMIT standard-candle sets this raises confident claims (76 to 83
+pooled) with strict precision improving and no new wrong-family claim; on the
+Rubin survey regression it raises claims from 6 to 11 of 76, all strictly
+correct. A genuinely single-peaked (spheroidal) body would make such a claim a
+2x alias, so pass <code class="docutils literal notranslate"><span class="pre">claim_doubled_fold=False</span></code> to keep these cases as
+<code class="docutils literal notranslate"><span class="pre">period_family</span></code> (reason <code class="docutils literal notranslate"><span class="pre">single_max_alias</span></code>). Filter on the flag to treat
+them separately in bulk results.</p>
 </section>
 <section id="data-requirements">
 <h2>Data Requirements<a class="headerlink" href="#data-requirements" title="Link to this heading">¶</a></h2>
@@ -684,7 +695,7 @@ observations table (e.g. to inspect or reuse) without solving.</p></li>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-17</div>
+              Last updated on 2026-08-04</div>
           </div>
           <div class="right-details">
             

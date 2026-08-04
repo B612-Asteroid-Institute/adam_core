@@ -143,7 +143,8 @@ Important ADES Behaviors
 * At least one of ``permID``, ``provID``, or ``trkSub`` must be present for
   serialization.
 * Unknown ADES columns are ignored on parse (with a warning).
-* Empty/whitespace optional fields are normalized to null values.
+* Missing optional numeric values are serialized as empty PSV fields, and
+  empty/whitespace optional fields are normalized to null values on parse.
 * ``rmsRA`` in ADES maps to ``rmsRACosDec`` in ``ADESObservations``.
 
 When To Use

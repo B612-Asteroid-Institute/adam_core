@@ -456,9 +456,9 @@ memory-mapping implementation; musllinux is also deliberately unsupported.</p>
 </section>
 <section id="preview-versions-and-opt-in-installation">
 <h2>Preview versions and opt-in installation<a class="headerlink" href="#preview-versions-and-opt-in-installation" title="Link to this heading">¶</a></h2>
-<p>The migration preview is <code class="docutils literal notranslate"><span class="pre">adam-core==0.5.6rc1</span></code> on PyPI. The public Rust
-crates use <code class="docutils literal notranslate"><span class="pre">0.1.0-rc.1</span></code> and exact internal requirements such as
-<code class="docutils literal notranslate"><span class="pre">=0.1.0-rc.1</span></code>. Pip and Cargo exclude prereleases from ordinary resolution;
+<p>The migration preview is <code class="docutils literal notranslate"><span class="pre">adam-core==0.5.6rc2</span></code> on PyPI. The public Rust
+crates use <code class="docutils literal notranslate"><span class="pre">0.1.0-rc.2</span></code> and exact internal requirements such as
+<code class="docutils literal notranslate"><span class="pre">=0.1.0-rc.2</span></code>. Pip and Cargo exclude prereleases from ordinary resolution;
 preview consumers must opt in with an exact pin. The Python wheel contains the
 Python veneer and compiled <code class="docutils literal notranslate"><span class="pre">adam_core._rust_native</span></code> extension, so Python
 consumers do not need to install the component crates from crates.io.</p>
@@ -496,7 +496,7 @@ publishers are configured.</p>
 public index;</p></li>
 <li><p>replace adam-assist’s temporary vendored core crates with exact public RC
 dependencies and test <code class="docutils literal notranslate"><span class="pre">adam-assist==0.4.0rc1</span></code> against the public
-<code class="docutils literal notranslate"><span class="pre">adam-core==0.5.6rc1</span></code> release;</p></li>
+<code class="docutils literal notranslate"><span class="pre">adam-core==0.5.6rc2</span></code> release;</p></li>
 <li><p>publish the exact accepted <code class="docutils literal notranslate"><span class="pre">adam-assist</span></code> RC wheel set; and</p></li>
 <li><p>run the precovery-v2 clean package-manager smoke test with exact pins.</p></li>
 </ol>
@@ -543,7 +543,7 @@ validation.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-17</div>
+              Last updated on 2026-08-04</div>
           </div>
           <div class="right-details">
             

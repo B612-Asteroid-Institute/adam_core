@@ -21,9 +21,9 @@ memory-mapping implementation; musllinux is also deliberately unsupported.
 Preview versions and opt-in installation
 ----------------------------------------
 
-The migration preview is ``adam-core==0.5.6rc1`` on PyPI. The public Rust
-crates use ``0.1.0-rc.1`` and exact internal requirements such as
-``=0.1.0-rc.1``. Pip and Cargo exclude prereleases from ordinary resolution;
+The migration preview is ``adam-core==0.5.6rc2`` on PyPI. The public Rust
+crates use ``0.1.0-rc.2`` and exact internal requirements such as
+``=0.1.0-rc.2``. Pip and Cargo exclude prereleases from ordinary resolution;
 preview consumers must opt in with an exact pin. The Python wheel contains the
 Python veneer and compiled ``adam_core._rust_native`` extension, so Python
 consumers do not need to install the component crates from crates.io.
@@ -65,7 +65,7 @@ After review and approval:
    public index;
 #. replace adam-assist's temporary vendored core crates with exact public RC
    dependencies and test ``adam-assist==0.4.0rc1`` against the public
-   ``adam-core==0.5.6rc1`` release;
+   ``adam-core==0.5.6rc2`` release;
 #. publish the exact accepted ``adam-assist`` RC wheel set; and
 #. run the precovery-v2 clean package-manager smoke test with exact pins.
 

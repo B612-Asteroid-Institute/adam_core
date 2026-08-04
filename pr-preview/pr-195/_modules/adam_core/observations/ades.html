@@ -610,7 +610,7 @@
 <a class="viewcode-back" href="../../../reference/api/adam_core.observations.ades.html#adam_core.observations.ades.ADES_to_string">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">ADES_to_string</span><span class="p">(</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">ADESObservations</span><span class="p">,</span>
-    <span class="n">obs_contexts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ObsContext</span><span class="p">],</span>
+    <span class="n">obs_contexts</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">ObsContext</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">seconds_precision</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
     <span class="n">columns_precision</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">&quot;ra&quot;</span><span class="p">:</span> <span class="mi">9</span><span class="p">,</span>
@@ -624,23 +624,26 @@
         <span class="s2">&quot;logSNR&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
         <span class="s2">&quot;seeing&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
     <span class="p">},</span>
+    <span class="n">sort</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Write ADES observations to a string.</span>
 
 <span class="sd">    The observation blocks are rendered in the Rust backend (bead</span>
-<span class="sd">    personal-cmy.20), byte-identically to the legacy Python/pandas writer</span>
-<span class="sd">    (gated by the frozen legacy fixture in</span>
-<span class="sd">    ``migration/artifacts/ades_parity_fixture_2026-07-05.json``); the</span>
-<span class="sd">    ObsContext headers stay Python-rendered.</span>
+<span class="sd">    personal-cmy.20), preserving the legacy Python/pandas layout except that</span>
+<span class="sd">    missing optional numeric values use ADES-standard empty PSV fields. The</span>
+<span class="sd">    frozen legacy fixture in</span>
+<span class="sd">    ``migration/artifacts/ades_parity_fixture_2026-07-05.json`` gates all</span>
+<span class="sd">    other writer behavior; the ObsContext headers stay Python-rendered.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
 <span class="sd">    observations : ADESObservations</span>
 <span class="sd">        The observations to write to a string.</span>
-<span class="sd">    obs_contexts : dict[str, ObsContext]</span>
+<span class="sd">    obs_contexts : dict[str, ObsContext] or None, optional</span>
 <span class="sd">        A dictionary of observatory codes and their corresponding ObsContexts to use</span>
 <span class="sd">        as the context headers for the different observatory codes in the observations.</span>
+<span class="sd">        If None, omit observatory context headers. Default is None.</span>
 <span class="sd">    seconds_precision : int, optional</span>
 <span class="sd">        The precision to use for the seconds in the obsTime field, by default 3.</span>
 <span class="sd">    columns_precision : dict[str, int], optional</span>
@@ -655,6 +658,9 @@
 <span class="sd">        }</span>
 <span class="sd">        The MPC enforces strict limits on these and submitters may need permission to send</span>
 <span class="sd">        high-precision data.</span>
+<span class="sd">    sort : bool, optional</span>
+<span class="sd">        Whether to sort rows within each observatory block by identity and observation</span>
+<span class="sd">        time. Set to False to preserve upstream order within each block. Default is True.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -665,14 +671,22 @@
 
     <span class="kn">from</span><span class="w"> </span><span class="nn">.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">observations_to_ipc</span>
 
-    <span class="n">contexts_json</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="n">code</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">asdict</span><span class="p">(</span><span class="n">context</span><span class="p">))</span> <span class="k">for</span> <span class="n">code</span><span class="p">,</span> <span class="n">context</span> <span class="ow">in</span> <span class="n">obs_contexts</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
-    <span class="p">}</span>
+    <span class="n">context_free</span> <span class="o">=</span> <span class="n">obs_contexts</span> <span class="ow">is</span> <span class="kc">None</span>
+    <span class="n">contexts_json</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">{}</span>
+        <span class="k">if</span> <span class="n">context_free</span>
+        <span class="k">else</span> <span class="p">{</span>
+            <span class="n">code</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">asdict</span><span class="p">(</span><span class="n">context</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">code</span><span class="p">,</span> <span class="n">context</span> <span class="ow">in</span> <span class="n">obs_contexts</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+        <span class="p">}</span>
+    <span class="p">)</span>
     <span class="k">return</span> <span class="n">_rn</span><span class="o">.</span><span class="n">ades_to_string_fused_ipc</span><span class="p">(</span>
         <span class="n">observations_to_ipc</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span>
         <span class="n">contexts_json</span><span class="p">,</span>
         <span class="n">seconds_precision</span><span class="p">,</span>
         <span class="p">{</span><span class="n">column</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">column</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">columns_precision</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
+        <span class="n">context_free</span><span class="p">,</span>
+        <span class="n">sort</span><span class="p">,</span>
     <span class="p">)</span></div>
 
 
@@ -793,7 +807,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-17</div>
+              Last updated on 2026-08-04</div>
           </div>
           <div class="right-details">
             
