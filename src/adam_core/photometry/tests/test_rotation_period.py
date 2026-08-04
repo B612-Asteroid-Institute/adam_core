@@ -458,3 +458,73 @@ def test_hg_phase_correction_matches_magnitude_module() -> None:
         np.testing.assert_allclose(
             phase_term_rotation, phase_term_ref, rtol=0.0, atol=1e-9
         )
+
+
+def _load_committed_fixture(name: str) -> RotationPeriodObservations:
+    from pathlib import Path
+
+    import numpy as np
+    import pyarrow as pa
+
+    from ...time import Timestamp as _Timestamp
+
+    z = np.load(
+        Path(__file__).parent / "data" / name,
+        allow_pickle=True,
+    )
+    sigma = np.asarray(z["mag_sigma"], dtype=np.float64)
+    return RotationPeriodObservations.from_kwargs(
+        time=_Timestamp.from_iso8601(
+            np.asarray(z["time_iso"], dtype=object).tolist(), scale="utc"
+        ),
+        mag=np.asarray(z["mag_obs"], dtype=np.float64),
+        mag_sigma=pa.array(sigma, mask=~np.isfinite(sigma), type=pa.float64()),
+        filter=[str(v) for v in np.asarray(z["filter"], dtype=object).tolist()],
+        session_id=[str(v) for v in np.asarray(z["session_id"], dtype=object).tolist()],
+        r_au=np.asarray(z["r_au"], dtype=np.float64),
+        delta_au=np.asarray(z["delta_au"], dtype=np.float64),
+        phase_angle_deg=np.asarray(z["phase_angle_deg"], dtype=np.float64),
+    )
+
+
+def test_doubled_fold_claims_by_default_and_hedges_when_disabled():
+    # 1323 Tugela is the canonical doubled-only case: the grid best fit is the
+    # single-peaked 9.72 h fold, the solver doubles it to 19.44 h on the
+    # two-peaks-per-rotation shape prior, and no rival alias cluster survives.
+    # Default: claim single_period with the assumption disclosed via the
+    # doubled_fold_assumed flag. claim_doubled_fold=False restores the strictly
+    # agnostic period_family / single_max_alias contract. Either way the period
+    # is the same doubled fold (LCDB reference: 19.5 h).
+    import numpy as np
+
+    observations = _load_committed_fixture(
+        "rotation_period_validation_fixture_1323_Tugela.npz"
+    )
+    # The committed fixture's own search knobs (same as the validation gates):
+    # a 24 cycles/day cap keeps the grid small enough for the fast suite.
+    z_kwargs = dict(
+        search_fidelity="validated_staged",
+        exact_evaluation_backend="jax",
+        max_frequency_cycles_per_day=24.0,
+        frequency_grid_scale=30.0,
+    )
+
+    claimed = estimate_rotation_period(observations, **z_kwargs)
+    hedged = estimate_rotation_period(
+        observations, claim_doubled_fold=False, **z_kwargs
+    )
+
+    assert claimed.period_hours[0].as_py() == pytest.approx(19.444, abs=0.05)
+    assert hedged.period_hours[0].as_py() == pytest.approx(
+        claimed.period_hours[0].as_py(), rel=1e-9
+    )
+    assert claimed.is_period_doubled[0].as_py() is True
+
+    assert claimed.period_verdict[0].as_py() == "single_period"
+    assert "doubled_fold_assumed" in (claimed.confidence_flags[0].as_py() or [])
+    assert "single_max_alias" not in (claimed.insufficiency_reasons[0].as_py() or [])
+
+    assert hedged.period_verdict[0].as_py() == "period_family"
+    assert "single_max_alias" in (hedged.insufficiency_reasons[0].as_py() or [])
+    assert "doubled_fold_assumed" not in (hedged.confidence_flags[0].as_py() or [])
+    assert np.isfinite(hedged.period_hours[0].as_py())
