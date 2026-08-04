@@ -1,0 +1,7 @@
+adam\_core.dynamics.propagation module
+======================================
+
+.. automodule:: adam_core.dynamics.propagation
+   :members:
+   :show-inheritance:
+   :undoc-members:

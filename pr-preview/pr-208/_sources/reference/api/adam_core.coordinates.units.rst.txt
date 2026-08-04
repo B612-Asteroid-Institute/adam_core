@@ -1,0 +1,7 @@
+adam\_core.coordinates.units module
+===================================
+
+.. automodule:: adam_core.coordinates.units
+   :members:
+   :show-inheritance:
+   :undoc-members:
