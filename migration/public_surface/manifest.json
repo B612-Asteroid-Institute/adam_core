@@ -13777,7 +13777,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/rotation/estimator.py",
-      "line": 1519,
+      "line": 1532,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

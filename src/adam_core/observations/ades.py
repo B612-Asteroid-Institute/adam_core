@@ -224,8 +224,7 @@ def ADES_to_string(
         {}
         if context_free
         else {
-            code: json.dumps(asdict(context))
-            for code, context in obs_contexts.items()
+            code: json.dumps(asdict(context)) for code, context in obs_contexts.items()
         }
     )
     return _rn.ades_to_string_fused_ipc(

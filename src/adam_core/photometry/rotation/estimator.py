@@ -276,6 +276,7 @@ def _estimate_rotation_period_native(
     session_mode: str,
     auto_session_min_observations_per_group: int,
     auto_session_bic_improvement: float,
+    claim_doubled_fold: bool,
     apparition_gap_days: float | None = None,
     object_ids: list[str | None] | None = None,
 ) -> RotationPeriodResult | GroupedRotationPeriodResults:
@@ -295,6 +296,7 @@ def _estimate_rotation_period_native(
         session_mode,
         int(auto_session_min_observations_per_group),
         float(auto_session_bic_improvement),
+        bool(claim_doubled_fold),
     )
     if object_ids is not None:
         native_rows = _rn.rotation_period_estimate_grouped(
@@ -1657,6 +1659,7 @@ def estimate_rotation_period(
             session_mode=session_mode,
             auto_session_min_observations_per_group=auto_session_min_observations_per_group,
             auto_session_bic_improvement=auto_session_bic_improvement,
+            claim_doubled_fold=claim_doubled_fold,
         )
 
     (
@@ -1912,6 +1915,7 @@ def _solver_inputs_from_options(options: dict[str, Any]) -> tuple[Any, ...]:
         str(options["session_mode"]),
         int(options["auto_session_min_observations_per_group"]),
         float(options["auto_session_bic_improvement"]),
+        bool(options["claim_doubled_fold"]),
     )
 
 
@@ -1966,6 +1970,7 @@ def _estimate_rotation_period_grouped_native(
             options["auto_session_min_observations_per_group"]
         ),
         auto_session_bic_improvement=float(options["auto_session_bic_improvement"]),
+        claim_doubled_fold=bool(options["claim_doubled_fold"]),
         object_ids=object_ids,
     )
     assert isinstance(grouped, GroupedRotationPeriodResults)
@@ -1993,6 +1998,7 @@ def _estimate_rotation_period_best_apparition_native(
             options["auto_session_min_observations_per_group"]
         ),
         auto_session_bic_improvement=float(options["auto_session_bic_improvement"]),
+        claim_doubled_fold=bool(options["claim_doubled_fold"]),
         apparition_gap_days=apparition_gap_days,
     )
     assert isinstance(result, RotationPeriodResult)
@@ -2031,5 +2037,6 @@ def _benchmark_rotation_period_native(
         str(options["session_mode"]),
         int(options["auto_session_min_observations_per_group"]),
         float(options["auto_session_bic_improvement"]),
+        bool(options["claim_doubled_fold"]),
     )
     return [[float(sample) for sample in trial] for trial in samples]

@@ -34,7 +34,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 if __package__ in {None, ""}:
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+    project_root = Path(__file__).resolve().parents[2]
+    sys.path[:0] = [str(project_root / "src"), str(project_root)]
 
 from migration.parity import _threading
 

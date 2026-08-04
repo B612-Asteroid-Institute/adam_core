@@ -70,6 +70,7 @@ pub(crate) fn config_from_python(
     session_mode: String,
     auto_session_min_observations_per_group: usize,
     auto_session_bic_improvement: f64,
+    claim_doubled_fold: bool,
 ) -> RotationPeriodConfig {
     RotationPeriodConfig {
         search_fidelity,
@@ -83,6 +84,7 @@ pub(crate) fn config_from_python(
         session_mode,
         auto_session_min_observations_per_group,
         auto_session_bic_improvement,
+        claim_doubled_fold,
     }
 }
 
@@ -146,7 +148,8 @@ pub(crate) fn estimate_to_dict<'py>(
     phase_angle_deg, search_fidelity, fourier_orders, clip_sigma,
     min_rotations_in_span, max_frequency_cycles_per_day, frequency_grid_scale,
     max_search_period_hours, early_exit_on_insufficient, session_mode,
-    auto_session_min_observations_per_group, auto_session_bic_improvement
+    auto_session_min_observations_per_group, auto_session_bic_improvement,
+    claim_doubled_fold
 ))]
 #[allow(clippy::too_many_arguments)]
 fn rotation_period_estimate<'py>(
@@ -172,6 +175,7 @@ fn rotation_period_estimate<'py>(
     session_mode: String,
     auto_session_min_observations_per_group: usize,
     auto_session_bic_improvement: f64,
+    claim_doubled_fold: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let input = input_from_python(
         time_days,
@@ -197,6 +201,7 @@ fn rotation_period_estimate<'py>(
         session_mode,
         auto_session_min_observations_per_group,
         auto_session_bic_improvement,
+        claim_doubled_fold,
     );
     let estimate = py
         .allow_threads(|| estimate_rotation_period(&input, &config))
@@ -210,7 +215,8 @@ fn rotation_period_estimate<'py>(
     delta_au, phase_angle_deg, object_ids, search_fidelity, fourier_orders,
     clip_sigma, min_rotations_in_span, max_frequency_cycles_per_day, frequency_grid_scale,
     max_search_period_hours, early_exit_on_insufficient, session_mode,
-    auto_session_min_observations_per_group, auto_session_bic_improvement
+    auto_session_min_observations_per_group, auto_session_bic_improvement,
+    claim_doubled_fold
 ))]
 #[allow(clippy::too_many_arguments)]
 fn rotation_period_estimate_grouped<'py>(
@@ -237,6 +243,7 @@ fn rotation_period_estimate_grouped<'py>(
     session_mode: String,
     auto_session_min_observations_per_group: usize,
     auto_session_bic_improvement: f64,
+    claim_doubled_fold: bool,
 ) -> PyResult<Bound<'py, PyList>> {
     let input = input_from_python(
         time_days,
@@ -262,6 +269,7 @@ fn rotation_period_estimate_grouped<'py>(
         session_mode,
         auto_session_min_observations_per_group,
         auto_session_bic_improvement,
+        claim_doubled_fold,
     );
     let estimates = py
         .allow_threads(|| estimate_rotation_period_grouped(&input, &object_ids, &config))
@@ -279,7 +287,8 @@ fn rotation_period_estimate_grouped<'py>(
     delta_au, phase_angle_deg, apparition_gap_days, search_fidelity, fourier_orders,
     clip_sigma, min_rotations_in_span, max_frequency_cycles_per_day, frequency_grid_scale,
     max_search_period_hours, early_exit_on_insufficient, session_mode,
-    auto_session_min_observations_per_group, auto_session_bic_improvement
+    auto_session_min_observations_per_group, auto_session_bic_improvement,
+    claim_doubled_fold
 ))]
 #[allow(clippy::too_many_arguments)]
 fn rotation_period_estimate_best_apparition<'py>(
@@ -306,6 +315,7 @@ fn rotation_period_estimate_best_apparition<'py>(
     session_mode: String,
     auto_session_min_observations_per_group: usize,
     auto_session_bic_improvement: f64,
+    claim_doubled_fold: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let input = input_from_python(
         time_days,
@@ -331,6 +341,7 @@ fn rotation_period_estimate_best_apparition<'py>(
         session_mode,
         auto_session_min_observations_per_group,
         auto_session_bic_improvement,
+        claim_doubled_fold,
     );
     let (estimate, _, _) = py
         .allow_threads(|| {
@@ -347,7 +358,8 @@ fn rotation_period_estimate_best_apparition<'py>(
     fourier_orders, clip_sigma, min_rotations_in_span,
     max_frequency_cycles_per_day, frequency_grid_scale, max_search_period_hours,
     early_exit_on_insufficient, session_mode,
-    auto_session_min_observations_per_group, auto_session_bic_improvement
+    auto_session_min_observations_per_group, auto_session_bic_improvement,
+    claim_doubled_fold
 ))]
 #[allow(clippy::too_many_arguments)]
 fn benchmark_rotation_period_native(
@@ -376,6 +388,7 @@ fn benchmark_rotation_period_native(
     session_mode: String,
     auto_session_min_observations_per_group: usize,
     auto_session_bic_improvement: f64,
+    claim_doubled_fold: bool,
 ) -> PyResult<Vec<Vec<f64>>> {
     if reps == 0 || trials == 0 {
         return Err(PyValueError::new_err("reps and trials must be >= 1"));
@@ -404,6 +417,7 @@ fn benchmark_rotation_period_native(
         session_mode,
         auto_session_min_observations_per_group,
         auto_session_bic_improvement,
+        claim_doubled_fold,
     );
     py.allow_threads(|| {
         estimate_rotation_period(&input, &config).map_err(PyValueError::new_err)?;

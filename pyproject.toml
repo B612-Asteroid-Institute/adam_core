@@ -146,6 +146,9 @@ markers = [
 [tool.ruff]
 line-length = 110
 target-version = "py311"
+# Ruff 0.16 changed its implicit rule selection. Preserve the repository's
+# historical default lint contract explicitly instead of enabling every rule.
+lint.select = ["E4", "E7", "E9", "F"]
 lint.ignore = []
 exclude = ["build"]
 

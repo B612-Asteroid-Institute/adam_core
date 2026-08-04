@@ -54,6 +54,7 @@ pub struct RotationPeriodConfig {
     pub session_mode: String,
     pub auto_session_min_observations_per_group: usize,
     pub auto_session_bic_improvement: f64,
+    pub claim_doubled_fold: bool,
 }
 
 impl Default for RotationPeriodConfig {
@@ -70,6 +71,7 @@ impl Default for RotationPeriodConfig {
             session_mode: "auto".to_string(),
             auto_session_min_observations_per_group: 6,
             auto_session_bic_improvement: 10.0,
+            claim_doubled_fold: true,
         }
     }
 }
@@ -481,6 +483,7 @@ pub fn estimate_rotation_period(
         enough_observations,
         chosen.reliable,
         chosen.valid,
+        config.claim_doubled_fold,
     );
 
     if verdict == "single_period" && period * 24.0 > MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS {
@@ -1639,6 +1642,7 @@ fn classify_confidence(
     enough_observations: bool,
     reliable: bool,
     valid: bool,
+    claim_doubled_fold: bool,
 ) -> (String, String, Vec<String>, Vec<String>) {
     let mut flags = Vec::new();
     let mut reasons = Vec::new();
@@ -1673,16 +1677,21 @@ fn classify_confidence(
         flags.push("two_max_two_min".to_string());
     }
     let alias_ambiguous = aliases >= 2;
+    let doubled_fold_assumed = claim_doubled_fold && doubled && !alias_ambiguous;
+    if doubled_fold_assumed {
+        flags.push("doubled_fold_assumed".to_string());
+    }
+    let single_max_blocking = doubled && !doubled_fold_assumed;
     if alias_ambiguous {
         reasons.push("conflicting_aliases".to_string());
     }
-    if doubled {
+    if single_max_blocking {
         reasons.push("single_max_alias".to_string());
     }
-    if !good_coverage && !alias_ambiguous && !doubled {
+    if !good_coverage && !alias_ambiguous && !single_max_blocking {
         reasons.push("phase_coverage_low".to_string());
     }
-    let eligible_single = !alias_ambiguous && !doubled && good_coverage;
+    let eligible_single = !alias_ambiguous && !single_max_blocking && good_coverage;
     let verdict = if eligible_single && reliable {
         "single_period"
     } else {
@@ -1821,6 +1830,34 @@ mod tests {
         assert_eq!(alias_bucket(0.5), "1/2x");
         assert!(within_tolerance(10.1, 10.0, 0.02));
         assert!(near_day_alias(8.0, 12.0, 0.01));
+    }
+
+    #[test]
+    fn doubled_fold_claim_is_explicitly_configurable() {
+        let classify = |claim_doubled_fold| {
+            classify_confidence(
+                Some(10.0),
+                Some(1.0),
+                Some(4.0),
+                2.0,
+                1,
+                true,
+                true,
+                true,
+                true,
+                claim_doubled_fold,
+            )
+        };
+
+        let (claimed_verdict, _, claimed_flags, claimed_reasons) = classify(true);
+        assert_eq!(claimed_verdict, "single_period");
+        assert!(claimed_flags.contains(&"doubled_fold_assumed".to_string()));
+        assert!(!claimed_reasons.contains(&"single_max_alias".to_string()));
+
+        let (hedged_verdict, _, hedged_flags, hedged_reasons) = classify(false);
+        assert_eq!(hedged_verdict, "period_family");
+        assert!(!hedged_flags.contains(&"doubled_fold_assumed".to_string()));
+        assert!(hedged_reasons.contains(&"single_max_alias".to_string()));
     }
 
     #[test]

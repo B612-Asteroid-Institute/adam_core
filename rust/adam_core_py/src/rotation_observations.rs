@@ -248,7 +248,7 @@ fn rotation_period_observations_from_detections(
     search_fidelity, fourier_orders, clip_sigma, min_rotations_in_span,
     max_frequency_cycles_per_day, frequency_grid_scale, max_search_period_hours,
     early_exit_on_insufficient, session_mode, auto_session_min_observations_per_group,
-    auto_session_bic_improvement
+    auto_session_bic_improvement, claim_doubled_fold
 ))]
 #[allow(clippy::too_many_arguments)]
 fn rotation_period_estimate_from_detections<'py>(
@@ -280,6 +280,7 @@ fn rotation_period_estimate_from_detections<'py>(
     session_mode: String,
     auto_session_min_observations_per_group: usize,
     auto_session_bic_improvement: f64,
+    claim_doubled_fold: bool,
 ) -> PyResult<PyObject> {
     let prepared = prepared_from_python(
         detection_exposure_ids,
@@ -310,6 +311,7 @@ fn rotation_period_estimate_from_detections<'py>(
         session_mode,
         auto_session_min_observations_per_group,
         auto_session_bic_improvement,
+        claim_doubled_fold,
     );
     if let Some(object_ids) = object_ids {
         let estimates = py
