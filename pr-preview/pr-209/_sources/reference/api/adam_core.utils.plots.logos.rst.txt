@@ -1,0 +1,7 @@
+adam\_core.utils.plots.logos package
+====================================
+
+.. automodule:: adam_core.utils.plots.logos
+   :members:
+   :show-inheritance:
+   :undoc-members:
