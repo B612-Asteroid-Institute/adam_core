@@ -11,6 +11,3 @@ Sphinx build using ``sphinx-apidoc``. It is the canonical API reference.
    :maxdepth: 2
 
    api/modules
-   rust_benchmark_governance
-   rust_backend_contracts
-   rust_public_compatibility

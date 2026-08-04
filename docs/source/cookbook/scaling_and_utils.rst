@@ -4,13 +4,12 @@ Scaling and Utilities
 Simple Case
 -----------
 
-Rust kernels and ``adam-assist`` parallelize eligible batch work internally;
-no Python cluster needs to be initialized. To cap Rayon worker threads, set
-``RAYON_NUM_THREADS`` before starting Python:
+.. code-block:: python
 
-.. code-block:: console
+   from adam_core.ray_cluster import initialize_use_ray
 
-   $ RAYON_NUM_THREADS=8 python my_pipeline.py
+   use_ray = initialize_use_ray(num_cpus=8)
+   print("ray_enabled", use_ray)
 
 Advanced Options
 ----------------
@@ -37,12 +36,13 @@ Advanced Options
 When to Use
 -----------
 
-* Native batch kernels for in-process parallel fan-out; historical Ray
-  scheduling arguments remain compatibility no-ops.
+* ``initialize_use_ray`` for multiprocessing/distributed fan-out.
 * ``setup_SPICE`` and ``get_perturber_state`` for deterministic state lookup.
 * Iter/chunking helpers for memory-safe large-batch processing.
 
 Related Reference
 -----------------
 
+* :doc:`../reference/api/adam_core.ray_cluster`
 * :doc:`../reference/api/adam_core.utils`
+

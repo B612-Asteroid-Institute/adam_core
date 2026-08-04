@@ -1,5 +1,4 @@
 import numpy as np
-import pyarrow as pa
 import pytest
 
 from ...time import Timestamp
@@ -439,88 +438,6 @@ permID|trkSub|obsSubID|obsTime|ra|dec|rmsRA|rmsDec|mag|band|stn|mode|astCat|rema
         },
     )
     assert desired == actual
-
-
-def test_ADES_to_string_without_context(ades_observations):
-    ades_string = ADES_to_string(ades_observations, None)
-
-    assert ades_string.startswith("# version=2022\n")
-    assert "# observatory" not in ades_string
-    contexts, parsed_observations = ADES_string_to_tables(ades_string)
-    assert contexts == {}
-    assert len(parsed_observations) == len(ades_observations)
-
-    with pytest.raises(ValueError, match="not found in obs_contexts"):
-        ADES_to_string(ades_observations, {})
-
-
-def test_ADES_to_string_round_trips_mixed_null_numeric_cells():
-    observations = ADESObservations.from_kwargs(
-        permID=["3000", "3000"],
-        obsSubID=["obs01", "obs02"],
-        obsTime=Timestamp.from_mjd([60434.0, 60434.1], scale="utc"),
-        rmsTime=[0.01, None],
-        ra=[240.00, 240.05],
-        dec=[-15.00, -15.05],
-        rmsRACosDec=[0.9659, None],
-        rmsDec=[1.0, None],
-        rmsCorr=[0.1, None],
-        mag=[20.0, None],
-        rmsMag=[0.2, None],
-        stn=["W84", "W84"],
-        mode=["CCD", "CCD"],
-        astCat=["Gaia2", "Gaia2"],
-        logSNR=[5.0, None],
-        seeing=[1.2, None],
-        exp=[30.0, None],
-    )
-
-    ades_string = ADES_to_string(observations, None, sort=False)
-    lines = ades_string.splitlines()
-    header = lines[1].split("|")
-    second_row = dict(zip(header, lines[3].split("|")))
-    optional_numeric_columns = {
-        "rmsTime",
-        "rmsRA",
-        "rmsDec",
-        "rmsCorr",
-        "mag",
-        "rmsMag",
-        "logSNR",
-        "seeing",
-        "exp",
-    }
-    assert optional_numeric_columns <= second_row.keys()
-    assert all(second_row[column] == "" for column in optional_numeric_columns)
-    assert "nan" not in ades_string.lower()
-
-    contexts, parsed_observations = ADES_string_to_tables(ades_string)
-
-    assert contexts == {}
-    expected_numeric_values = {
-        "rmsTime": 0.01,
-        "rmsRACosDec": 0.9659,
-        "rmsDec": 1.0,
-        "rmsCorr": 0.1,
-        "mag": 20.0,
-        "rmsMag": 0.2,
-        "logSNR": 5.0,
-        "seeing": 1.2,
-        "exp": 30.0,
-    }
-    for column, expected in expected_numeric_values.items():
-        actual = parsed_observations.table.column(column).to_pylist()
-        assert actual[0] == pytest.approx(expected)
-        assert actual[1] is None
-
-
-def test_ADES_to_string_preserves_block_order_when_sort_disabled(ades_observations):
-    observations = ades_observations.select("stn", "W84").take(pa.array([1, 0]))
-
-    ades_string = ADES_to_string(observations, None, sort=False)
-    _contexts, parsed_observations = ADES_string_to_tables(ades_string)
-
-    assert parsed_observations.obsSubID.to_pylist() == observations.obsSubID.to_pylist()
 
 
 def test_ADES_string_to_tables(ades_observations, ades_obscontext):

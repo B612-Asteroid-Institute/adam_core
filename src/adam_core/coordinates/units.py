@@ -9,22 +9,7 @@ from typing import Union
 
 import numpy as np
 
-from ..constants import KM_P_AU, S_P_DAY  # noqa: F401  (re-exported constants)
-
-
-def _rust_scaled(values: Union[float, np.ndarray], kernel_name: str):
-    """Route a float-or-ndarray unit conversion through one Rust crossing."""
-    from adam_core import _rust_native
-
-    array = np.asarray(values, dtype=np.float64)
-    flat = np.ascontiguousarray(array.reshape(-1))
-    out = np.asarray(
-        getattr(_rust_native, kernel_name)(flat), dtype=np.float64
-    ).reshape(array.shape)
-    if isinstance(values, np.ndarray):
-        return out
-    return float(out)
-
+from ..constants import KM_P_AU, S_P_DAY
 
 __all__ = [
     "au_to_km",
@@ -52,7 +37,7 @@ def au_to_km(values_au: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
     float or np.ndarray
         Position values in km
     """
-    return _rust_scaled(values_au, "au_to_km_numpy")
+    return values_au * KM_P_AU
 
 
 def km_to_au(values_km: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
@@ -69,7 +54,7 @@ def km_to_au(values_km: Union[float, np.ndarray]) -> Union[float, np.ndarray]:
     float or np.ndarray
         Position values in AU
     """
-    return _rust_scaled(values_km, "km_to_au_numpy")
+    return values_km / KM_P_AU
 
 
 def au_per_day_to_km_per_s(
@@ -88,7 +73,7 @@ def au_per_day_to_km_per_s(
     float or np.ndarray
         Velocity values in km/s
     """
-    return _rust_scaled(values_au_day, "au_per_day_to_km_per_s_numpy")
+    return values_au_day * KM_P_AU / S_P_DAY
 
 
 def km_per_s_to_au_per_day(
@@ -107,7 +92,7 @@ def km_per_s_to_au_per_day(
     float or np.ndarray
         Velocity values in AU/day
     """
-    return _rust_scaled(values_km_s, "km_per_s_to_au_per_day_numpy")
+    return values_km_s / KM_P_AU * S_P_DAY
 
 
 def convert_cartesian_values_au_to_km(values_au: np.ndarray) -> np.ndarray:
@@ -126,14 +111,10 @@ def convert_cartesian_values_au_to_km(values_au: np.ndarray) -> np.ndarray:
         Coordinate values in km and km/s units:
         [x, y, z, vx, vy, vz] where positions are in km and velocities in km/s
     """
-    from adam_core import _rust_native
-
-    return np.asarray(
-        _rust_native.convert_cartesian_values_au_to_km_numpy(
-            np.ascontiguousarray(values_au, dtype=np.float64)
-        ),
-        dtype=np.float64,
-    )
+    values_km = values_au.copy()
+    values_km[:, :3] = au_to_km(values_au[:, :3])  # positions
+    values_km[:, 3:] = au_per_day_to_km_per_s(values_au[:, 3:])  # velocities
+    return values_km
 
 
 def convert_cartesian_values_km_to_au(values_km: np.ndarray) -> np.ndarray:
@@ -152,14 +133,10 @@ def convert_cartesian_values_km_to_au(values_km: np.ndarray) -> np.ndarray:
         Coordinate values in AU and AU/day units:
         [x, y, z, vx, vy, vz] where positions are in AU and velocities in AU/day
     """
-    from adam_core import _rust_native
-
-    return np.asarray(
-        _rust_native.convert_cartesian_values_km_to_au_numpy(
-            np.ascontiguousarray(values_km, dtype=np.float64)
-        ),
-        dtype=np.float64,
-    )
+    values_au = values_km.copy()
+    values_au[:, :3] = km_to_au(values_km[:, :3])  # positions
+    values_au[:, 3:] = km_per_s_to_au_per_day(values_km[:, 3:])  # velocities
+    return values_au
 
 
 def convert_cartesian_covariance_au_to_km(covariance_au: np.ndarray) -> np.ndarray:
@@ -183,14 +160,22 @@ def convert_cartesian_covariance_au_to_km(covariance_au: np.ndarray) -> np.ndarr
     - Position-velocity terms (AU·AU/day) → km·km/s
     - Velocity-velocity terms ((AU/day)²) → (km/s)²
     """
-    from adam_core import _rust_native
-
-    return np.asarray(
-        _rust_native.convert_cartesian_covariance_au_to_km_numpy(
-            np.ascontiguousarray(covariance_au, dtype=np.float64)
-        ),
-        dtype=np.float64,
+    # Unit conversion vector: [km, km, km, km/s, km/s, km/s]
+    unit_conversion = np.array(
+        [
+            KM_P_AU,
+            KM_P_AU,
+            KM_P_AU,
+            KM_P_AU / S_P_DAY,
+            KM_P_AU / S_P_DAY,
+            KM_P_AU / S_P_DAY,
+        ]
     )
+
+    # Create conversion matrix by outer product
+    conversion_matrix = np.outer(unit_conversion, unit_conversion)
+
+    return covariance_au * conversion_matrix
 
 
 def convert_cartesian_covariance_km_to_au(covariance_km: np.ndarray) -> np.ndarray:
@@ -214,11 +199,19 @@ def convert_cartesian_covariance_km_to_au(covariance_km: np.ndarray) -> np.ndarr
     - Position-velocity terms (km·km/s) → AU·AU/day
     - Velocity-velocity terms ((km/s)²) → (AU/day)²
     """
-    from adam_core import _rust_native
-
-    return np.asarray(
-        _rust_native.convert_cartesian_covariance_km_to_au_numpy(
-            np.ascontiguousarray(covariance_km, dtype=np.float64)
-        ),
-        dtype=np.float64,
+    # Unit conversion vector: [AU, AU, AU, AU/day, AU/day, AU/day]
+    unit_conversion = np.array(
+        [
+            1 / KM_P_AU,
+            1 / KM_P_AU,
+            1 / KM_P_AU,
+            S_P_DAY / KM_P_AU,
+            S_P_DAY / KM_P_AU,
+            S_P_DAY / KM_P_AU,
+        ]
     )
+
+    # Create conversion matrix by outer product
+    conversion_matrix = np.outer(unit_conversion, unit_conversion)
+
+    return covariance_km * conversion_matrix

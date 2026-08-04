@@ -11,10 +11,8 @@ from ...coordinates import (
 )
 from ...orbits import Orbits, VariantOrbits
 from ...propagator import Propagator
-from ...propagator.utils import ensure_input_origin_and_frame
 from ...time import Timestamp
 from ..impacts import (
-    EARTH_RADIUS_KM,
     CollisionConditions,
     CollisionEvent,
     ImpactMixin,
@@ -26,49 +24,29 @@ from ..impacts import (
 
 
 class MockImpactPropagator(Propagator, ImpactMixin):
-    """Minimal concrete propagator implementing the public single-crossing
-    contract directly (the adam_core base composition has been deleted).
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        return state
 
-    ``detect_collisions`` replicates the previous mock ``_detect_collisions``
-    hook plus the base ``ImpactMixin.detect_collisions`` behavior (default
-    conditions + ``ensure_input_origin_and_frame`` to restore the caller's
-    origin/frame), so the ``calculate_impacts`` orchestration tests are
-    unchanged.
-    """
+    def __setstate__(self, state):
+        self.__dict__.update(state)
 
-    def propagate_orbits(self, orbits: Orbits, times: Timestamp, **kwargs) -> Orbits:
+    def _propagate_orbits(self, orbits: Orbits, times: Timestamp) -> Orbits:
         return orbits
 
-    def generate_ephemeris(self, orbits, observers, **kwargs):
-        raise NotImplementedError("MockImpactPropagator does not generate ephemeris")
-
-    def detect_collisions(
-        self,
-        orbits: Orbits,
-        num_days: float,
-        conditions: CollisionConditions | None = None,
-        max_processes: int | None = 1,
-        chunk_size: int | None = 100,
+    def _detect_collisions(
+        self, orbits: Orbits, num_days: float, conditions: CollisionConditions
     ) -> Orbits:
-        if conditions is None:
-            conditions = CollisionConditions.from_kwargs(
-                condition_id=["Earth"],
-                collision_object=Origin.from_kwargs(code=["EARTH"]),
-                collision_distance=[EARTH_RADIUS_KM],
-                stopping_condition=[True],
-            )
-
         # Artificially set the orbits.coordinates.times to the end time
         # except for the orbits who impacted
-        moved = orbits.set_column(
-            "coordinates.time", orbits.coordinates.time.add_days(num_days)
-        )
+        new_times = orbits.coordinates.time.add_days(num_days)
+        orbits = orbits.set_column("coordinates.time", new_times)
 
         # Do a transform away from the input origin and frame
-        moved_transformed = moved.set_column(
+        orbits_transformed = orbits.set_column(
             "coordinates",
             transform_coordinates(
-                moved.coordinates,
+                orbits.coordinates,
                 representation_out=CartesianCoordinates,
                 origin_out=OriginCodes.EARTH,
                 frame_out="equatorial",
@@ -76,7 +54,7 @@ class MockImpactPropagator(Propagator, ImpactMixin):
         )
 
         # Pick random orbit to impact
-        variant = moved_transformed[0]
+        variant = orbits_transformed[0]
         impact = CollisionEvent.from_kwargs(
             orbit_id=variant.orbit_id,
             variant_id=variant.variant_id,
@@ -102,18 +80,7 @@ class MockImpactPropagator(Propagator, ImpactMixin):
             stopping_condition=[False],
         )
 
-        # Restore the caller's origin/frame, mirroring the deleted base
-        # ImpactMixin.detect_collisions composition.
-        propagated = ensure_input_origin_and_frame(orbits, variant)
-        return propagated, impact
-
-
-def test_default_collision_conditions_match_legacy_constants():
-    conditions = CollisionConditions.default()
-    assert conditions.condition_id.to_pylist() == ["Default"]
-    assert conditions.collision_object.code.to_pylist() == ["EARTH"]
-    assert conditions.collision_distance.to_pylist() == [EARTH_RADIUS_KM]
-    assert conditions.stopping_condition.to_pylist() == [True]
+        return variant, impact
 
 
 def test_calculate_impacts():
@@ -226,30 +193,6 @@ def test_calculate_impact_probabilities():
     )
 
     ip = calculate_impact_probabilities(variants, impacts, conditions=impact_conditions)
-
-    # Native samples contain only the pure Rust grouped reduction. PyArrow,
-    # NumPy, PyO3, and typed-table assembly stay outside the timed region.
-    from adam_core import _rust_native
-
-    samples = _rust_native.benchmark_impact_probability_stats_numpy(
-        variants.orbit_id.to_pylist(),
-        impacts.orbit_id.to_pylist(),
-        impacts.condition_id.to_pylist(),
-        np.ascontiguousarray(
-            impacts.coordinates.time.days.to_numpy(zero_copy_only=False),
-            dtype=np.int64,
-        ),
-        np.ascontiguousarray(
-            impacts.coordinates.time.nanos.to_numpy(zero_copy_only=False),
-            dtype=np.int64,
-        ),
-        impacts.coordinates.time.scale,
-        impact_conditions.condition_id.to_pylist(),
-        2,
-        2,
-        1,
-    )
-    assert all(sample > 0.0 for trial in samples for sample in trial)
 
     desired = ImpactProbabilities.from_kwargs(
         condition_id=["1", "1", "1"],

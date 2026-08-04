@@ -2,11 +2,12 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Iterable, Tuple
 
-import numpy as np
 import numpy.typing as npt
+import pyarrow.compute as pc
 import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
+from .classification import calc_orbit_class
 from .physical_parameters import PhysicalParameters
 
 if TYPE_CHECKING:
@@ -33,13 +34,10 @@ class Orbits(qv.Table):
         orbits : `~adam_core.orbits.orbits.Orbits`
             Orbits belonging to this orbit ID.
         """
-        from adam_core import _rust_native
-
-        from .arrow_bridge import orbits_from_record_batch, orbits_to_record_batch
-
-        grouped = _rust_native.group_by_orbit_id_arrow(orbits_to_record_batch(self))
-        for orbit_id, batch in grouped:
-            yield str(orbit_id), orbits_from_record_batch(batch)
+        unique_orbit_ids = self.orbit_id.unique()
+        for orbit_id in unique_orbit_ids:
+            mask = pc.equal(self.orbit_id, orbit_id)
+            yield orbit_id, self.apply_mask(mask)
 
     def dynamical_class(self) -> npt.NDArray[str]:
         """
@@ -51,12 +49,8 @@ class Orbits(qv.Table):
         dynamical_classes : `~numpy.ndarray`
             Dynamical classes of orbits.
         """
-        from adam_core import _rust_native
-
-        from .arrow_bridge import orbits_to_record_batch
-
-        classes = _rust_native.dynamical_class_arrow(orbits_to_record_batch(self))
-        return np.asarray(classes, dtype=str)
+        keplerian = self.coordinates.to_keplerian()
+        return calc_orbit_class(keplerian)
 
     def preview(self, propagator: "Propagator") -> None:
         """

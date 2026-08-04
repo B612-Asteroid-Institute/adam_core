@@ -1,9 +1,11 @@
 import cProfile
 
+import jax
 import numpy as np
 import pyarrow.compute as pc
 import pytest
 import quivr as qv
+import ray
 from astropy import units as u
 
 from ...coordinates.cartesian import CartesianCoordinates
@@ -12,7 +14,6 @@ from ...coordinates.origin import Origin
 from ...dynamics.exceptions import DynamicsNumericalError
 from ...observers import Observers
 from ...orbits import Orbits
-from ...orbits.ephemeris import Ephemeris
 from ...photometry import calculate_phase_angle
 from ...time import Timestamp
 from ...utils import spice as spice_mod
@@ -161,6 +162,8 @@ def test_profile_generate_ephemeris_2body_matrix(propagated_orbits, tmp_path):
     """Profile the generate_ephemeris_2body function with different combinations of orbits,
     observers and times. Results are saved to a stats file that can be visualized with snakeviz.
     """
+    # Clear the jax cache
+    jax.clear_caches()
     # Create profiler
     profiler = cProfile.Profile(subcalls=True, builtins=True)
     profiler.bias = 0
@@ -249,63 +252,6 @@ def test_generate_ephemeris_2body_covariance_branch_uses_input_times() -> None:
     assert eph.coordinates.covariance.to_matrix().shape == (1, 6, 6)
 
 
-def test_generate_ephemeris_2body_uses_record_batches_and_direct_wrap(
-    monkeypatch,
-) -> None:
-    time = Timestamp.from_mjd([60000.0], scale="tdb")
-    origin = Origin.from_kwargs(code=["SOLAR_SYSTEM_BARYCENTER"])
-    orbits = Orbits.from_kwargs(
-        orbit_id=["o1"],
-        object_id=["obj1"],
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=[2.0],
-            y=[0.0],
-            z=[0.0],
-            vx=[0.0],
-            vy=[0.01],
-            vz=[0.0],
-            time=time,
-            origin=origin,
-            frame="ecliptic",
-        ),
-    )
-    observers = Observers.from_kwargs(
-        code=["500"],
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=[1.0],
-            y=[0.0],
-            z=[0.0],
-            vx=[0.0],
-            vy=[0.01],
-            vz=[0.0],
-            time=time,
-            origin=origin,
-            frame="ecliptic",
-        ),
-    )
-    native = ephemeris_module.generate_ephemeris_arrow
-    called = {"value": False}
-
-    def _checked(orbit_batch, observer_batch, **kwargs):
-        import pyarrow as pa
-
-        assert isinstance(orbit_batch, pa.RecordBatch)
-        assert isinstance(observer_batch, pa.RecordBatch)
-        called["value"] = True
-        return native(orbit_batch, observer_batch, **kwargs)
-
-    def _forbid_from_kwargs(*args, **kwargs):
-        raise AssertionError("Ephemeris.from_kwargs must not rebuild Rust output")
-
-    monkeypatch.setattr(ephemeris_module, "generate_ephemeris_arrow", _checked)
-    monkeypatch.setattr(Ephemeris, "from_kwargs", _forbid_from_kwargs)
-    result = generate_ephemeris_2body(
-        orbits, observers, predict_magnitudes=False, max_processes=1
-    )
-    assert called["value"]
-    assert len(result) == 1
-
-
 def test_generate_ephemeris_2body_does_not_include_padded_rows() -> None:
     """
     `process_in_chunks` pads the final chunk to a fixed size. Ensure ephemeris generation
@@ -330,10 +276,13 @@ def test_generate_ephemeris_2body_does_not_include_padded_rows() -> None:
     np.testing.assert_allclose(out_mjd, in_mjd)
 
 
-def test_generate_ephemeris_2body_sun_to_ssb_translation_stays_in_rust(
+def test_generate_ephemeris_2body_sun_to_ssb_fast_path_reuses_translation(
     monkeypatch,
 ) -> None:
-    """The Arrow-native path must not call Python's SPICE translation helper."""
+    """
+    When both orbits and observers are heliocentric and share an aligned time grid, the
+    barycentric translation vectors should be computed once and reused.
+    """
     spice_mod.clear_spkez_cache()
 
     calls = {"n": 0}
@@ -380,7 +329,7 @@ def test_generate_ephemeris_2body_sun_to_ssb_translation_stays_in_rust(
     eph_fast = generate_ephemeris_2body(
         orbits_sun, observers_sun, predict_magnitudes=False
     )
-    assert int(calls["n"]) == 0
+    assert int(calls["n"]) == 1
 
     # Reference: pre-transform inputs to SSB so the internal origin transform is a no-op.
     from ...coordinates.origin import OriginCodes
@@ -408,15 +357,14 @@ def test_generate_ephemeris_2body_sun_to_ssb_translation_stays_in_rust(
         orbits_ssb, observers_ssb, predict_magnitudes=False
     )
 
-    # Both paths resolve the same SPICE state through Rust-owned translation.
     np.testing.assert_allclose(
-        eph_fast.coordinates.values, eph_ref.coordinates.values, rtol=0.0, atol=1e-15
+        eph_fast.coordinates.values, eph_ref.coordinates.values, rtol=0.0, atol=0.0
     )
     np.testing.assert_allclose(
         eph_fast.light_time.to_numpy(),
         eph_ref.light_time.to_numpy(),
         rtol=0.0,
-        atol=1e-15,
+        atol=0.0,
     )
 
 
@@ -607,7 +555,11 @@ def test_generate_ephemeris_2body_phase_angle_matches_calculate_phase_angle() ->
     np.testing.assert_allclose(have, expected, rtol=0.0, atol=1e-6)
 
 
-def test_generate_ephemeris_2body_process_count_compatibility_matches_default() -> None:
+def test_generate_ephemeris_2body_ray_matches_serial() -> None:
+    if ray.is_initialized():  # type: ignore[name-defined]
+        ray.shutdown()  # type: ignore[name-defined]
+    ray.init(num_cpus=2, include_dashboard=False)  # type: ignore[name-defined]
+
     orbits = make_real_orbits(3)
     base_mjd = float(
         np.median(orbits.coordinates.time.mjd().to_numpy(zero_copy_only=False))
@@ -644,6 +596,8 @@ def test_generate_ephemeris_2body_process_count_compatibility_matches_default() 
         atol=0,
     )
 
+    ray.shutdown()  # type: ignore[name-defined]
+
 
 def test_generate_ephemeris_2body_failfast_nonfinite_light_time(monkeypatch) -> None:
     t = Timestamp.from_mjd([60000.0], scale="tdb")
@@ -678,14 +632,25 @@ def test_generate_ephemeris_2body_failfast_nonfinite_light_time(monkeypatch) -> 
         ),
     )
 
-    def _bad_ephemeris_arrow(*args, **kwargs):
-        raise RuntimeError(
-            "ephemeris row failure: reason=non_finite_light_time; "
-            "output_row=0; input_orbit_index=0; observer_index=0"
-        )
+    def _bad_ephemeris_vmap(
+        propagated_chunk,
+        times_chunk,
+        observer_chunk,
+        mu_chunk,
+        lt_tol,
+        max_iter,
+        tol,
+        stellar_aberration,
+    ):
+        n = len(times_chunk)
+        eph = np.zeros((n, 6), dtype=np.float64)
+        lt = np.zeros((n,), dtype=np.float64)
+        lt[0] = np.nan
+        aberrated = np.zeros((n, 6), dtype=np.float64)
+        return eph, lt, aberrated
 
     monkeypatch.setattr(
-        ephemeris_module, "generate_ephemeris_arrow", _bad_ephemeris_arrow
+        ephemeris_module, "_generate_ephemeris_2body_vmap", _bad_ephemeris_vmap
     )
 
     with pytest.raises(DynamicsNumericalError, match="non_finite_light_time"):

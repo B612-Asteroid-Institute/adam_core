@@ -10,10 +10,7 @@ import quivr as qv
 from ..constants import KM_P_AU
 from ..time import Timestamp
 from . import cartesian
-from .covariances import (
-    CoordinateCovariances,
-    rust_covariance_transform,
-)
+from .covariances import CoordinateCovariances, transform_covariances_jacobian
 from .origin import Origin
 
 __all__ = [
@@ -124,7 +121,7 @@ class GeodeticCoordinates(qv.Table):
     def from_cartesian(
         cls, cartesian: cartesian.CartesianCoordinates
     ) -> "GeodeticCoordinates":
-        from .transform import cartesian_to_geodetic
+        from .transform import _cartesian_to_geodetic, cartesian_to_geodetic
 
         assert (
             cartesian.frame == "itrf93"
@@ -133,29 +130,15 @@ class GeodeticCoordinates(qv.Table):
             pc.equal(cartesian.origin.code, "EARTH")
         ), "Cartesian coordinates must be in Earth-centered frame"
 
-        coords_geodetic = None
-        covariances_geodetic = None
+        coords_geodetic = cartesian_to_geodetic(cartesian.values, a=WGS84.a, f=WGS84.f)
+        coords_geodetic = np.array(coords_geodetic)
 
         if not cartesian.covariance.is_all_nan():
             cartesian_covariances = cartesian.covariance.to_matrix()
-            rust_result = rust_covariance_transform(
-                cartesian.values,
-                cartesian_covariances,
-                "cartesian",
-                "geodetic",
-                a=float(WGS84.a),
-                f=float(WGS84.f),
-                frame_in=cartesian.frame,
-                frame_out=cartesian.frame,
+            covariances_geodetic = transform_covariances_jacobian(
+                cartesian.values, cartesian_covariances, _cartesian_to_geodetic
             )
-            coords_geodetic, covariances_geodetic = rust_result
-
-        if coords_geodetic is None:
-            coords_geodetic = np.array(
-                cartesian_to_geodetic(cartesian.values, a=WGS84.a, f=WGS84.f)
-            )
-
-        if covariances_geodetic is None:
+        else:
             covariances_geodetic = np.empty(
                 (len(coords_geodetic), 6, 6), dtype=np.float64
             )

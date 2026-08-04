@@ -16,8 +16,6 @@ for i, r in elements[["targetname", "a"]].iterrows():
 
 import numpy as np
 
-from .._rust import tisserand_parameter_numpy as _rust_tisserand_parameter_numpy
-
 MAJOR_BODIES = {
     "mercury": 0.3870970330236769,
     "venus": 0.723341974974844,
@@ -33,11 +31,9 @@ MAJOR_BODIES = {
 def calc_tisserand_parameter(a, e, i, third_body="jupiter"):
     """
     Calculate Tisserand's parameter used to identify potential comets.
-
-    Tp = a_p/a + 2·cos(i)·sqrt((a/a_p)·(1−e²))
-
-    Objects with Jupiter Tisserand parameter > 3 are typically asteroids;
-    Jupiter-family comets fall between 2 and 3; Damocloids are below 2.
+    For example, objects with Tisserand parameter's with respect to Jupiter greater than 3 are
+    typically asteroids, whereas Jupiter family comets may have Tisserand's parameter
+    between 2 and 3. Damocloids have Jupiter Tisserand's parameter of less than 2.
 
     Parameters
     ----------
@@ -56,20 +52,14 @@ def calc_tisserand_parameter(a, e, i, third_body="jupiter"):
     Tp : float or `~numpy.ndarray` (N)
         Tisserand's parameter.
     """
-    if third_body not in MAJOR_BODIES:
-        valid = ",".join(MAJOR_BODIES.keys())
-        raise ValueError(f"third_body should be one of {valid}")
+    i_rad = np.radians(i)
+
+    major_bodies = MAJOR_BODIES.keys()
+    if third_body not in major_bodies:
+        err = f"third_body should be one of {','.join(major_bodies)}"
+        raise ValueError(err)
 
     ap = MAJOR_BODIES[third_body]
+    Tp = ap / a + 2 * np.cos(i_rad) * np.sqrt(a / ap * (1 - e**2))
 
-    # Coerce scalar inputs to 1-element arrays so the rust kernel can be
-    # invoked uniformly; squeeze back at the end for scalar-in / scalar-out.
-    a_arr = np.atleast_1d(np.asarray(a, dtype=np.float64))
-    e_arr = np.atleast_1d(np.asarray(e, dtype=np.float64))
-    i_arr = np.atleast_1d(np.asarray(i, dtype=np.float64))
-
-    out = _rust_tisserand_parameter_numpy(a_arr, e_arr, i_arr, ap)
-
-    if np.isscalar(a) and np.isscalar(e) and np.isscalar(i):
-        return float(out[0])
-    return np.asarray(out, dtype=np.float64)
+    return Tp
