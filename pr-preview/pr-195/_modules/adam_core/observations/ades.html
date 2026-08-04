@@ -676,8 +676,7 @@
         <span class="p">{}</span>
         <span class="k">if</span> <span class="n">context_free</span>
         <span class="k">else</span> <span class="p">{</span>
-            <span class="n">code</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">asdict</span><span class="p">(</span><span class="n">context</span><span class="p">))</span>
-            <span class="k">for</span> <span class="n">code</span><span class="p">,</span> <span class="n">context</span> <span class="ow">in</span> <span class="n">obs_contexts</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+            <span class="n">code</span><span class="p">:</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">asdict</span><span class="p">(</span><span class="n">context</span><span class="p">))</span> <span class="k">for</span> <span class="n">code</span><span class="p">,</span> <span class="n">context</span> <span class="ow">in</span> <span class="n">obs_contexts</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
         <span class="p">}</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">_rn</span><span class="o">.</span><span class="n">ades_to_string_fused_ipc</span><span class="p">(</span>
