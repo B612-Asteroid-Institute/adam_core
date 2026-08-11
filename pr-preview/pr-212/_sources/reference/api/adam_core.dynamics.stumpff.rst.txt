@@ -1,0 +1,7 @@
+adam\_core.dynamics.stumpff module
+==================================
+
+.. automodule:: adam_core.dynamics.stumpff
+   :members:
+   :show-inheritance:
+   :undoc-members:

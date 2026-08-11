@@ -1,0 +1,28 @@
+adam\_core.dynamics package
+===========================
+
+.. automodule:: adam_core.dynamics
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.dynamics.aberrations
+   adam_core.dynamics.barker
+   adam_core.dynamics.chi
+   adam_core.dynamics.ephemeris
+   adam_core.dynamics.exceptions
+   adam_core.dynamics.impacts
+   adam_core.dynamics.kepler
+   adam_core.dynamics.lagrange
+   adam_core.dynamics.lambert
+   adam_core.dynamics.moid
+   adam_core.dynamics.plots
+   adam_core.dynamics.propagation
+   adam_core.dynamics.stumpff
+   adam_core.dynamics.tisserand
