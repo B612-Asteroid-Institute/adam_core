@@ -277,6 +277,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -324,6 +325,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -486,6 +488,9 @@
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">sigmas</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="n">cov_diag</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diagonal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">(),</span> <span class="n">axis1</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">axis2</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="c1"># NOTE: coordinate (6x6) block only; the non-gravitational</span>
+        <span class="c1"># (A1, A2, A3) dimensions of extended rows are not included --</span>
+        <span class="c1"># take the diagonal of `to_full_matrix` for those.</span>
         <span class="n">sigmas</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">cov_diag</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">sigmas</span>
 
@@ -588,20 +593,32 @@
             <span class="n">full</span><span class="p">[:,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
             <span class="k">return</span> <span class="n">full</span>
 
-        <span class="n">values</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
-            <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="k">continue</span>
-            <span class="n">value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">value</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="n">COORD_DIM</span> <span class="o">*</span> <span class="n">COORD_DIM</span><span class="p">:</span>
-                <span class="n">full</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">)</span>
-            <span class="k">elif</span> <span class="n">value</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="n">FULL_DIM</span> <span class="o">*</span> <span class="n">FULL_DIM</span><span class="p">:</span>
-                <span class="n">full</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">FULL_DIM</span><span class="p">,</span> <span class="n">FULL_DIM</span><span class="p">)</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">&quot;Covariance row </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> has </span><span class="si">{</span><span class="n">value</span><span class="o">.</span><span class="n">size</span><span class="si">}</span><span class="s2"> values; expected &quot;</span>
-                    <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">COORD_DIM</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">COORD_DIM</span><span class="si">}</span><span class="s2"> or </span><span class="si">{</span><span class="n">FULL_DIM</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">FULL_DIM</span><span class="si">}</span><span class="s2">.&quot;</span>
-                <span class="p">)</span>
+        <span class="n">arr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">values</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">arr</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">):</span>
+            <span class="n">arr</span> <span class="o">=</span> <span class="n">arr</span><span class="o">.</span><span class="n">combine_chunks</span><span class="p">()</span>
+        <span class="n">flat</span> <span class="o">=</span> <span class="n">arr</span><span class="o">.</span><span class="n">values</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">offsets</span> <span class="o">=</span> <span class="n">arr</span><span class="o">.</span><span class="n">offsets</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">starts</span> <span class="o">=</span> <span class="n">offsets</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">lengths</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">offsets</span><span class="p">)</span>
+        <span class="n">valid</span> <span class="o">=</span> <span class="o">~</span><span class="n">arr</span><span class="o">.</span><span class="n">is_null</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="n">is6</span> <span class="o">=</span> <span class="n">valid</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">lengths</span> <span class="o">==</span> <span class="n">COORD_DIM</span> <span class="o">*</span> <span class="n">COORD_DIM</span><span class="p">)</span>
+        <span class="n">is9</span> <span class="o">=</span> <span class="n">valid</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">lengths</span> <span class="o">==</span> <span class="n">FULL_DIM</span> <span class="o">*</span> <span class="n">FULL_DIM</span><span class="p">)</span>
+        <span class="n">bad</span> <span class="o">=</span> <span class="n">valid</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">is6</span> <span class="o">&amp;</span> <span class="o">~</span><span class="n">is9</span>
+        <span class="k">if</span> <span class="n">bad</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">i</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">bad</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Covariance row </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> has </span><span class="si">{</span><span class="n">lengths</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="si">}</span><span class="s2"> values; expected &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">COORD_DIM</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">COORD_DIM</span><span class="si">}</span><span class="s2"> or </span><span class="si">{</span><span class="n">FULL_DIM</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">FULL_DIM</span><span class="si">}</span><span class="s2">.&quot;</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">is6</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">gather</span> <span class="o">=</span> <span class="n">starts</span><span class="p">[</span><span class="n">is6</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">COORD_DIM</span> <span class="o">*</span> <span class="n">COORD_DIM</span><span class="p">)</span>
+            <span class="n">full</span><span class="p">[</span><span class="n">is6</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat</span><span class="p">[</span><span class="n">gather</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+                <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">COORD_DIM</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="n">is9</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">gather</span> <span class="o">=</span> <span class="n">starts</span><span class="p">[</span><span class="n">is9</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">FULL_DIM</span> <span class="o">*</span> <span class="n">FULL_DIM</span><span class="p">)</span>
+            <span class="n">full</span><span class="p">[</span><span class="n">is9</span><span class="p">]</span> <span class="o">=</span> <span class="n">flat</span><span class="p">[</span><span class="n">gather</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">FULL_DIM</span><span class="p">,</span> <span class="n">FULL_DIM</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">full</span></div>
 
 
@@ -655,18 +672,23 @@
                 <span class="sa">f</span><span class="s2">&quot;but got </span><span class="si">{</span><span class="n">covariances</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
             <span class="p">)</span>
 
-        <span class="n">rows</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">offsets</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="k">for</span> <span class="n">cov</span> <span class="ow">in</span> <span class="n">covariances</span><span class="p">:</span>
-            <span class="k">if</span> <span class="p">(</span>
-                <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">cov</span><span class="p">[</span><span class="n">COORD_DIM</span><span class="p">:,</span> <span class="p">:])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-                <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">cov</span><span class="p">[:,</span> <span class="n">COORD_DIM</span><span class="p">:])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
-            <span class="p">):</span>
-                <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cov</span><span class="p">[:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
-            <span class="k">else</span><span class="p">:</span>
-                <span class="n">rows</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">cov</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">))</span>
-            <span class="n">offsets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">offsets</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">rows</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
-        <span class="n">flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">rows</span><span class="p">)</span> <span class="k">if</span> <span class="n">rows</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">is6</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">covariances</span><span class="p">[:,</span> <span class="n">COORD_DIM</span><span class="p">:,</span> <span class="p">:])</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span> <span class="o">&amp;</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span>
+            <span class="n">covariances</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">COORD_DIM</span><span class="p">:]</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="n">lengths</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">is6</span><span class="p">,</span> <span class="n">COORD_DIM</span> <span class="o">*</span> <span class="n">COORD_DIM</span><span class="p">,</span> <span class="n">FULL_DIM</span> <span class="o">*</span> <span class="n">FULL_DIM</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">int64</span>
+        <span class="p">)</span>
+        <span class="n">offsets</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">covariances</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">lengths</span><span class="p">,</span> <span class="n">out</span><span class="o">=</span><span class="n">offsets</span><span class="p">[</span><span class="mi">1</span><span class="p">:])</span>
+        <span class="n">flat</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span><span class="n">offsets</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">is6</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">scatter</span> <span class="o">=</span> <span class="n">offsets</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="n">is6</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">COORD_DIM</span> <span class="o">*</span> <span class="n">COORD_DIM</span><span class="p">)</span>
+            <span class="n">flat</span><span class="p">[</span><span class="n">scatter</span><span class="p">]</span> <span class="o">=</span> <span class="n">covariances</span><span class="p">[</span><span class="n">is6</span><span class="p">][:,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">,</span> <span class="p">:</span><span class="n">COORD_DIM</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
+                <span class="n">scatter</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span>
+            <span class="p">)</span>
+        <span class="k">if</span> <span class="p">(</span><span class="o">~</span><span class="n">is6</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+            <span class="n">scatter</span> <span class="o">=</span> <span class="n">offsets</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="o">~</span><span class="n">is6</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">FULL_DIM</span> <span class="o">*</span> <span class="n">FULL_DIM</span><span class="p">)</span>
+            <span class="n">flat</span><span class="p">[</span><span class="n">scatter</span><span class="p">]</span> <span class="o">=</span> <span class="n">covariances</span><span class="p">[</span><span class="o">~</span><span class="n">is6</span><span class="p">]</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">scatter</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
             <span class="n">values</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">LargeListArray</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span>
                 <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">offsets</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">()),</span>
@@ -1171,7 +1193,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-08</div>
+              Last updated on 2026-08-11</div>
           </div>
           <div class="right-details">
             
@@ -1186,7 +1208,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=d50ca5d4"></script>
+</div><script src="../../../_static/documentation_options.js?v=af1198cc"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

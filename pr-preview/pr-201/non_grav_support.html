@@ -278,6 +278,7 @@
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -325,6 +326,7 @@
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -478,16 +480,28 @@ carry the columns.</p></li>
 </section>
 <section id="canonical-schema">
 <h2>Canonical Schema<a class="headerlink" href="#canonical-schema" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">adam_core.orbits.NonGravitationalParameters</span></code> stores only the Marsden-style
-radial/transverse/normal accelerations supported for ingestion and storage:</p>
+<p><code class="docutils literal notranslate"><span class="pre">adam_core.orbits.NonGravitationalParameters</span></code> stores the Marsden-style
+accelerations plus the fixed g(r) model constants:</p>
 <ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">source</span></code>: provenance of the solution (for example <code class="docutils literal notranslate"><span class="pre">&quot;SBDB&quot;</span></code>,
 <code class="docutils literal notranslate"><span class="pre">&quot;NEOCC&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;MPCQ&quot;</span></code>).</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">A1</span></code>, <code class="docutils literal notranslate"><span class="pre">A2</span></code>, <code class="docutils literal notranslate"><span class="pre">A3</span></code> in au / d^2.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">A1</span></code>, <code class="docutils literal notranslate"><span class="pre">A2</span></code>, <code class="docutils literal notranslate"><span class="pre">A3</span></code> in au / d^2 – the fitted accelerations. Their
+uncertainties live in the extended coordinate covariance.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">ALN</span></code>, <code class="docutils literal notranslate"><span class="pre">NK</span></code>, <code class="docutils literal notranslate"><span class="pre">NM</span></code>, <code class="docutils literal notranslate"><span class="pre">NN</span></code>, <code class="docutils literal notranslate"><span class="pre">R0</span></code> (R0 in au) – the Marsden g(r)
+constants. These are fixed per solution (sources report them without
+uncertainties and they never appear in solution covariances), so they are
+stored as plain values and are NOT covariance dimensions; they select the
+force law the propagator must apply. Null constants mean the standard
+asteroid convention g(r) = (1 au / r)^2. SBDB lists constants only when
+they differ from the classic Marsden (1973) comet standard, so the importer
+fills unlisted constants with the standard values on any solution with
+fitted accelerations.</p></li>
 </ul>
-<p>Source parameters outside this set (<code class="docutils literal notranslate"><span class="pre">DT</span></code>, <code class="docutils literal notranslate"><span class="pre">AMRAT</span></code>, <code class="docutils literal notranslate"><span class="pre">RHO</span></code>, Marsden
-<code class="docutils literal notranslate"><span class="pre">g(r)</span></code> constants, …) are not stored: importers drop their values and
-marginalize their covariance dimensions out, logging a warning.</p>
+<p>Fitted source parameters outside this set (<code class="docutils literal notranslate"><span class="pre">DT</span></code>, <code class="docutils literal notranslate"><span class="pre">AMRAT</span></code>, <code class="docutils literal notranslate"><span class="pre">RHO</span></code>) are
+not stored: importers drop their values and marginalize their covariance
+dimensions out, logging a warning. Note this makes DT-fit comet solutions an
+approximation (the asymmetric-outgassing time offset is not representable and
+ASSIST implements no equivalent force).</p>
 </section>
 <section id="extended-coordinate-covariance">
 <h2>Extended Coordinate Covariance<a class="headerlink" href="#extended-coordinate-covariance" title="Link to this heading">¶</a></h2>
@@ -547,8 +561,12 @@ release; <code class="docutils literal notranslate"><span class="pre">adam_core<
 <code class="docutils literal notranslate"><span class="pre">supports_non_gravitational_forces</span></code> log a warning when handed orbits with
 non-zero parameter values or a non-gravitational covariance block).</p>
 <ul class="simple">
-<li><p>Real regression coverage includes SBDB <code class="docutils literal notranslate"><span class="pre">99942</span></code> end-to-end propagation
-and a NEOCC <code class="docutils literal notranslate"><span class="pre">99942</span></code> parsing-to-ASSIST handoff check.</p></li>
+<li><p>Real regression coverage includes SBDB <code class="docutils literal notranslate"><span class="pre">99942</span></code> end-to-end propagation,
+a NEOCC <code class="docutils literal notranslate"><span class="pre">99942</span></code> parsing-to-ASSIST handoff check, and (in adam-assist)
+frozen JPL Horizons trajectory regressions for all three supported g(r)
+laws – inverse-square (99942), standard comet Marsden (C/2022 E3), and a
+custom tuple (1I/’Oumuamua) – accurate to tens–hundreds of metres over
++/- 300 days against km-to-million-km gravity-only controls.</p></li>
 </ul>
 </section>
 </section>
@@ -580,7 +598,7 @@ and a NEOCC <code class="docutils literal notranslate"><span class="pre">99942</
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-08</div>
+              Last updated on 2026-08-11</div>
           </div>
           <div class="right-details">
             
@@ -623,7 +641,7 @@ and a NEOCC <code class="docutils literal notranslate"><span class="pre">99942</
       
     </aside>
   </div>
-</div><script src="_static/documentation_options.js?v=d50ca5d4"></script>
+</div><script src="_static/documentation_options.js?v=af1198cc"></script>
     <script src="_static/doctools.js?v=9bcbadda"></script>
     <script src="_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="_static/scripts/furo.js?v=46bd48cc"></script>

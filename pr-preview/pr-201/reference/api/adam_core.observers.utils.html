@@ -278,6 +278,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -325,6 +326,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -436,14 +438,14 @@
 <span id="adam-core-observers-utils-module"></span><h1>adam_core.observers.utils module<a class="headerlink" href="#module-adam_core.observers.utils" title="Link to this heading">¶</a></h1>
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.observers.utils.calculate_observing_night">
-<span class="sig-prename descclassname"><span class="pre">adam_core.observers.utils.</span></span><span class="sig-name descname"><span class="pre">calculate_observing_night</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">codes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v24.0.0)"><span class="pre">Array</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">times</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.time.time.html#adam_core.time.time.Timestamp" title="adam_core.time.time.Timestamp"><span class="pre">Timestamp</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v24.0.0)"><span class="pre">Array</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/observers/utils.html#calculate_observing_night"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observers.utils.calculate_observing_night" title="Link to this definition">¶</a></dt>
+<span class="sig-prename descclassname"><span class="pre">adam_core.observers.utils.</span></span><span class="sig-name descname"><span class="pre">calculate_observing_night</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">codes</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.1)"><span class="pre">Array</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">times</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.time.time.html#adam_core.time.time.Timestamp" title="adam_core.time.time.Timestamp"><span class="pre">Timestamp</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.1)"><span class="pre">Array</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/observers/utils.html#calculate_observing_night"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observers.utils.calculate_observing_night" title="Link to this definition">¶</a></dt>
 <dd><p>Compute the observing night for a given set of observatory codes and times. An observing night is defined as the night
 during which the observation is made, in the local time of the observatory +- 12 hours. The observing night is defined
 as the integer MJD of the night in the local time of the observatory.</p>
 <dl class="field-list simple">
 <dt class="field-odd">Parameters<span class="colon">:</span></dt>
 <dd class="field-odd"><ul class="simple">
-<li><p><strong>codes</strong> (<a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v24.0.0)"><em>pyarrow.Array</em></a><em> (</em><em>N</em><em>)</em>) – An array of observatory codes.</p></li>
+<li><p><strong>codes</strong> (<a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.1)"><em>pyarrow.Array</em></a><em> (</em><em>N</em><em>)</em>) – An array of observatory codes.</p></li>
 <li><p><strong>times</strong> (<a class="reference internal" href="adam_core.time.html#adam_core.time.Timestamp" title="adam_core.time.Timestamp"><em>Timestamp</em></a><em> (</em><em>N</em><em>)</em>) – An array of times.</p></li>
 </ul>
 </dd>
@@ -451,7 +453,7 @@ as the integer MJD of the night in the local time of the observatory.</p>
 <dd class="field-even"><p><strong>observing_night</strong> – An array of observing nights.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v24.0.0)">pyarrow.Array</a> (N)</p>
+<dd class="field-odd"><p><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Array.html#pyarrow.Array" title="(in Apache Arrow v25.0.1)">pyarrow.Array</a> (N)</p>
 </dd>
 </dl>
 </dd></dl>
@@ -493,7 +495,7 @@ as the integer MJD of the night in the local time of the observatory.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-08</div>
+              Last updated on 2026-08-11</div>
           </div>
           <div class="right-details">
             
@@ -527,7 +529,7 @@ as the integer MJD of the night in the local time of the observatory.</p>
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=d50ca5d4"></script>
+</div><script src="../../_static/documentation_options.js?v=af1198cc"></script>
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

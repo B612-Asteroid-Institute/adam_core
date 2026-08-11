@@ -278,6 +278,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -325,6 +326,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -436,14 +438,21 @@
 <span id="adam-core-orbits-non-gravitational-parameters-module"></span><h1>adam_core.orbits.non_gravitational_parameters module<a class="headerlink" href="#module-adam_core.orbits.non_gravitational_parameters" title="Link to this heading">¶</a></h1>
 <dl class="py class">
 <dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.orbits.non_gravitational_parameters.</span></span><span class="sig-name descname"><span class="pre">NonGravitationalParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v24.0.0)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/orbits/non_gravitational_parameters.html#NonGravitationalParameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.orbits.non_gravitational_parameters.</span></span><span class="sig-name descname"><span class="pre">NonGravitationalParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v25.0.1)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/orbits/non_gravitational_parameters.html#NonGravitationalParameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/tables.html#quivr.Table" title="(in quivr v0.7.6.dev5+g5e130d9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
 <p>Non-gravitational parameters attached to an orbit solution.</p>
 <p>Only the Marsden-style radial/transverse/normal accelerations (A1, A2, A3)
-are supported, stored in au / d^2. Their uncertainties and cross
-covariances with the orbital state live in the orbit’s coordinate
-covariance, which is extended to 9x9 for orbits with a non-gravitational
-solution (see <cite>~adam_core.coordinates.covariances.CoordinateCovariances</cite>).</p>
+are supported as fitted parameters, stored in au / d^2. Their
+uncertainties and cross covariances with the orbital state live in the
+orbit’s coordinate covariance, which is extended to 9x9 for orbits with a
+non-gravitational solution (see
+<cite>~adam_core.coordinates.covariances.CoordinateCovariances</cite>).</p>
+<p>The Marsden g(r) constants (ALN, NK, NM, NN, R0; R0 in au, the rest
+dimensionless) are fixed model constants, not fitted parameters: they
+carry no uncertainty and are not covariance dimensions, but they select
+the force law under which A1/A2/A3 were fit and must be fed to the
+propagator. Null constants mean the standard asteroid convention
+g(r) = (1 au / r)^2.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.source">
 <span class="sig-name descname"><span class="pre">source</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.source" title="Link to this definition">¶</a></dt>
@@ -469,20 +478,60 @@ variable-length chunks.</p>
 <dd><p>A column for storing 64-bit floating point numbers.</p>
 </dd></dl>
 
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.ALN">
+<span class="sig-name descname"><span class="pre">ALN</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.ALN" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NK">
+<span class="sig-name descname"><span class="pre">NK</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NK" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NM">
+<span class="sig-name descname"><span class="pre">NM</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NM" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NN">
+<span class="sig-name descname"><span class="pre">NN</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NN" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.R0">
+<span class="sig-name descname"><span class="pre">R0</span></span><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.R0" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
 <dl class="py method">
 <dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.has_values">
 <span class="sig-name descname"><span class="pre">has_values</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/non_gravitational_parameters.html#NonGravitationalParameters.has_values"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.has_values" title="Link to this definition">¶</a></dt>
-<dd><p>Return True if any row has a non-zero non-gravitational parameter value.</p>
+<dd><p>Return True if any row has a non-zero non-gravitational acceleration
+value (A1, A2, A3).</p>
 <p>Parameters that are explicitly solved to zero are treated as absent:
 they exert no force, so a gravity-only propagation of such an orbit is
-still exact.</p>
+still exact. The g(r) constants are not considered: without a non-zero
+acceleration they select a force law that is never applied.</p>
 </dd></dl>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.to_array">
 <span class="sig-name descname"><span class="pre">to_array</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/non_gravitational_parameters.html#NonGravitationalParameters.to_array"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.to_array" title="Link to this definition">¶</a></dt>
-<dd><p>Return the parameter values as an (N, 3) array in (A1, A2, A3) order,
-with nulls replaced by 0.0 (no force).</p>
+<dd><p>Return the acceleration values as an (N, 3) array in (A1, A2, A3)
+order, with nulls replaced by 0.0 (no force).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.marsden_constants_array">
+<span class="sig-name descname"><span class="pre">marsden_constants_array</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/non_gravitational_parameters.html#NonGravitationalParameters.marsden_constants_array"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.marsden_constants_array" title="Link to this definition">¶</a></dt>
+<dd><p>Return the g(r) constants as an (N, 5) array in (ALN, NK, NM, NN, R0)
+order, with nulls replaced by the standard asteroid convention
+(g(r) = (1 au / r)^2).</p>
 </dd></dl>
 
 <dl class="py method">
@@ -505,7 +554,7 @@ for all columns, while also setting the Table’s attributes.</p>
 
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.schema">
-<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">source:</span> <span class="pre">large_string</span> <span class="pre">A1:</span> <span class="pre">double</span> <span class="pre">A2:</span> <span class="pre">double</span> <span class="pre">A3:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.schema" title="Link to this definition">¶</a></dt>
+<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">source:</span> <span class="pre">large_string</span> <span class="pre">A1:</span> <span class="pre">double</span> <span class="pre">A2:</span> <span class="pre">double</span> <span class="pre">A3:</span> <span class="pre">double</span> <span class="pre">ALN:</span> <span class="pre">double</span> <span class="pre">NK:</span> <span class="pre">double</span> <span class="pre">NM:</span> <span class="pre">double</span> <span class="pre">NN:</span> <span class="pre">double</span> <span class="pre">R0:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.schema" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py attribute">
@@ -552,7 +601,7 @@ for all columns, while also setting the Table’s attributes.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-08</div>
+              Last updated on 2026-08-11</div>
           </div>
           <div class="right-details">
             
@@ -579,8 +628,14 @@ for all columns, while also setting the Table’s attributes.</p>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A1"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A1</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A2"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A2</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.A3"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.A3</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.ALN"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.ALN</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NK"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NK</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NM"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NM</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.NN"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.NN</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.R0"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.R0</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.has_values"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.has_values()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.to_array"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.to_array()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.marsden_constants_array"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.marsden_constants_array()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.nulls"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.nulls()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.schema"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.schema</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.non_gravitational_parameters.NonGravitationalParameters.table"><code class="docutils literal notranslate"><span class="pre">NonGravitationalParameters.table</span></code></a></li>
@@ -597,7 +652,7 @@ for all columns, while also setting the Table’s attributes.</p>
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=d50ca5d4"></script>
+</div><script src="../../_static/documentation_options.js?v=af1198cc"></script>
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>

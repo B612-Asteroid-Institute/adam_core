@@ -278,6 +278,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -325,6 +326,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -485,6 +487,17 @@ that is wrong by an integer factor would be costly, cross-check a
 <code class="docutils literal notranslate"><span class="pre">reliability_code</span></code> rather than treating it as infallible.</p>
 </dd>
 </dl>
+<p>One disclosed assumption: when the best fit is a single-peaked fold whose only
+surviving ambiguity is the half/full octave, the solver doubles the period on
+the two-peaks-per-rotation shape prior and, by default, claims
+<code class="docutils literal notranslate"><span class="pre">single_period</span></code> with the confidence flag <code class="docutils literal notranslate"><span class="pre">doubled_fold_assumed</span></code>. Measured
+on the LCDB/DAMIT standard-candle sets this raises confident claims (76 to 83
+pooled) with strict precision improving and no new wrong-family claim; on the
+Rubin survey regression it raises claims from 6 to 11 of 76, all strictly
+correct. A genuinely single-peaked (spheroidal) body would make such a claim a
+2x alias, so pass <code class="docutils literal notranslate"><span class="pre">claim_doubled_fold=False</span></code> to keep these cases as
+<code class="docutils literal notranslate"><span class="pre">period_family</span></code> (reason <code class="docutils literal notranslate"><span class="pre">single_max_alias</span></code>). Filter on the flag to treat
+them separately in bulk results.</p>
 </section>
 <section id="data-requirements">
 <h2>Data Requirements<a class="headerlink" href="#data-requirements" title="Link to this heading">¶</a></h2>
@@ -578,6 +591,33 @@ expected bad/insufficient data comes back as an <code class="docutils literal no
 id. Unexpected (programmer/contract) errors are re-raised with the offending object
 id attached rather than swallowed.</p>
 </section>
+<section id="multiple-apparitions-solve-each-keep-the-most-confident">
+<h2>Multiple Apparitions: Solve Each, Keep the Most Confident<a class="headerlink" href="#multiple-apparitions-solve-each-keep-the-most-confident" title="Link to this heading">¶</a></h2>
+<p>If your photometry spans more than one apparition (observing seasons separated
+by months), do not pool it into a single solve. Apparitions differ in viewing
+aspect, noise, and nightly cadence, so each has its own alias structure – and
+one of them often samples the rotation cleanly where the densest one locks onto
+a sampling alias or hedges. <code class="docutils literal notranslate"><span class="pre">estimate_rotation_period_best_apparition</span></code>
+partitions the observations at gaps longer than <code class="docutils literal notranslate"><span class="pre">apparition_gap_days</span></code>
+(default 120), solves each apparition independently, and returns the most
+confident result (verdict rank, then amplitude SNR; the rule never sees any
+reference answer).</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.photometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">estimate_rotation_period_best_apparition</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">estimate_rotation_period_best_apparition</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+<span class="c1"># result.confidence_flags[0] includes &quot;apparition_selected_&lt;k&gt;_of_&lt;n&gt;&quot;</span>
+</pre></div>
+</div>
+<p>Measured on the 118-object LCDB standard-candle calibration set, this policy
+raised confident (<code class="docutils literal notranslate"><span class="pre">single_period</span></code>) results from 35 to 43 objects while the
+strict precision of those claims <em>improved</em> (0.80 to 0.84) and no new
+wrong-family claim appeared. The safety is measured on that set, not
+structural: a clean apparition can still be an alias, so the verdict semantics
+are unchanged. Requiring a second apparition to corroborate before claiming was
+also tested and is deliberately <strong>not</strong> applied: on the calibration set it only
+removed correct claims, because an object’s systematic harmonic aliases repeat
+across apparitions and corroboration therefore does not catch them.</p>
+</section>
 <section id="performance">
 <h2>Performance<a class="headerlink" href="#performance" title="Link to this heading">¶</a></h2>
 <p>The defaults are validated and correct out of the box. The solver has an optional
@@ -601,6 +641,8 @@ are handled; the default decides per object whether to fit per-session offsets.<
 exposures / heliocentric coordinates.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period_from_detections_grouped</span></code>: many objects; guarantees one
 result row per id.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">estimate_rotation_period_best_apparition</span></code>: multi-apparition photometry of one
+object; solves each apparition and keeps the most confident result.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">RotationPeriodObservations.from_point_source_observations</span></code>: build the
 observations table (e.g. to inspect or reuse) without solving.</p></li>
 </ul>
@@ -650,7 +692,7 @@ observations table (e.g. to inspect or reuse) without solving.</p></li>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-08</div>
+              Last updated on 2026-08-11</div>
           </div>
           <div class="right-details">
             
@@ -678,6 +720,7 @@ observations table (e.g. to inspect or reuse) without solving.</p></li>
 <li><a class="reference internal" href="#estimating-from-arrays">Estimating From Arrays</a></li>
 <li><a class="reference internal" href="#estimating-from-detections-and-exposures">Estimating From Detections and Exposures</a></li>
 <li><a class="reference internal" href="#survey-scale-one-row-per-object">Survey Scale: One Row Per Object</a></li>
+<li><a class="reference internal" href="#multiple-apparitions-solve-each-keep-the-most-confident">Multiple Apparitions: Solve Each, Keep the Most Confident</a></li>
 <li><a class="reference internal" href="#performance">Performance</a></li>
 <li><a class="reference internal" href="#entry-points">Entry Points</a></li>
 <li><a class="reference internal" href="#related-documentation">Related Documentation</a></li>
@@ -692,7 +735,7 @@ observations table (e.g. to inspect or reuse) without solving.</p></li>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=d50ca5d4"></script>
+</div><script src="../_static/documentation_options.js?v=af1198cc"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>

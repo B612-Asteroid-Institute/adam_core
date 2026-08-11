@@ -16,5 +16,6 @@ Submodules
    adam_core.observations.associations
    adam_core.observations.detections
    adam_core.observations.exposures
+   adam_core.observations.obs80
    adam_core.observations.photometry
    adam_core.observations.source_catalog

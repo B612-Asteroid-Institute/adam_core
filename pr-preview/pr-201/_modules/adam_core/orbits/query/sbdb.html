@@ -277,6 +277,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -324,6 +325,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -447,6 +449,8 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">...coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">...time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..non_gravitational_parameters</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MARSDEN_CONSTANT_FIELDS</span><span class="p">,</span>
+    <span class="n">MARSDEN_STANDARD_CONSTANTS</span><span class="p">,</span>
     <span class="n">NON_GRAVITATIONAL_VALUE_FIELDS</span><span class="p">,</span>
     <span class="n">NonGravitationalParameters</span><span class="p">,</span>
 <span class="p">)</span>
@@ -973,12 +977,15 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_empty_nongrav_row</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
-    <span class="k">return</span> <span class="p">{</span>
+    <span class="n">row</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">&quot;source&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
         <span class="s2">&quot;A1&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
         <span class="s2">&quot;A2&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
         <span class="s2">&quot;A3&quot;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">}</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">MARSDEN_CONSTANT_FIELDS</span><span class="p">:</span>
+        <span class="n">row</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">row</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_sbdb_nongrav_row</span><span class="p">(</span><span class="n">obj_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">payload</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
@@ -997,15 +1004,26 @@
         <span class="k">if</span> <span class="n">name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">continue</span>
         <span class="n">name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">NON_GRAVITATIONAL_VALUE_FIELDS</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">NON_GRAVITATIONAL_VALUE_FIELDS</span> <span class="ow">or</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">MARSDEN_CONSTANT_FIELDS</span><span class="p">:</span>
             <span class="n">row</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">_sbdb_phys_par_value</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="n">unsupported</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
 
+    <span class="c1"># SBDB lists g(r) constants only when they differ from the classic</span>
+    <span class="c1"># Marsden, Sekanina &amp; Yeomans (1973) standard, so for a solution with</span>
+    <span class="c1"># fitted accelerations any unlisted constants take the standard values</span>
+    <span class="c1"># (e.g. comet solutions list none; asteroid solutions list ALN=1, NK=0,</span>
+    <span class="c1"># NM=2, R0=1 and inherit the standard NN).</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">row</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">NON_GRAVITATIONAL_VALUE_FIELDS</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">MARSDEN_CONSTANT_FIELDS</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">row</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">row</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">MARSDEN_STANDARD_CONSTANTS</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+
     <span class="k">if</span> <span class="n">unsupported</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
             <span class="s2">&quot;SBDB model parameters </span><span class="si">%s</span><span class="s2"> for object </span><span class="si">%s</span><span class="s2"> are not supported for &quot;</span>
-            <span class="s2">&quot;storage (only A1, A2, A3); dropping their values.&quot;</span><span class="p">,</span>
+            <span class="s2">&quot;storage (only A1, A2, A3 and the Marsden g(r) constants); &quot;</span>
+            <span class="s2">&quot;dropping their values.&quot;</span><span class="p">,</span>
             <span class="n">unsupported</span><span class="p">,</span>
             <span class="n">obj_id</span><span class="p">,</span>
         <span class="p">)</span>
@@ -1068,48 +1086,71 @@
 
         <span class="n">cov</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;covariance&quot;</span><span class="p">)</span>
         <span class="n">cov_matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">cov_usable</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cov</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="n">cov</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;data&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">labels</span> <span class="o">=</span> <span class="n">cov</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;labels&quot;</span><span class="p">)</span>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
                 <span class="n">labels6</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">[:</span><span class="mi">6</span><span class="p">]]</span>
                 <span class="k">if</span> <span class="n">labels6</span> <span class="o">!=</span> <span class="n">expected_labels</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                        <span class="sa">f</span><span class="s2">&quot;Expected covariance matrix labels to be </span><span class="si">{</span><span class="n">expected_labels</span><span class="si">}</span><span class="s2"> &quot;</span>
-                        <span class="sa">f</span><span class="s2">&quot;in the first 6 entries, got </span><span class="si">{</span><span class="n">labels6</span><span class="si">}</span><span class="s2">.&quot;</span>
-                    <span class="p">)</span>
-
-            <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">cov</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span> <span class="ow">or</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">6</span> <span class="ow">or</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">6</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Expected SBDB covariance matrix to be at least 6x6.&quot;</span><span class="p">)</span>
-            <span class="n">cov_matrix</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:</span><span class="mi">6</span><span class="p">,</span> <span class="p">:</span><span class="mi">6</span><span class="p">]</span>
-            <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">6</span><span class="p">:</span>
-                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span> <span class="o">==</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
-                    <span class="n">covariance_full</span><span class="p">,</span> <span class="n">dropped</span> <span class="o">=</span> <span class="n">_convert_sbdb_full_covariance</span><span class="p">(</span>
-                        <span class="n">data</span><span class="p">,</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">label</span><span class="p">)</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">]</span>
-                    <span class="p">)</span>
-                    <span class="k">if</span> <span class="n">dropped</span><span class="p">:</span>
-                        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                            <span class="s2">&quot;SBDB covariance for object </span><span class="si">%s</span><span class="s2"> includes estimated &quot;</span>
-                            <span class="s2">&quot;parameters </span><span class="si">%s</span><span class="s2"> that are not supported for storage &quot;</span>
-                            <span class="s2">&quot;(only A1, A2, A3); marginalizing them out.&quot;</span><span class="p">,</span>
-                            <span class="n">obj_id</span><span class="p">,</span>
-                            <span class="n">dropped</span><span class="p">,</span>
-                        <span class="p">)</span>
-                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">dropped</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">6</span><span class="p">:</span>
-                        <span class="n">covariances_full</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">covariance_full</span>
-                <span class="k">else</span><span class="p">:</span>
                     <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
-                        <span class="s2">&quot;SBDB covariance labels for object </span><span class="si">%s</span><span class="s2"> are missing or do &quot;</span>
-                        <span class="s2">&quot;not match the matrix size; discarding the &quot;</span>
-                        <span class="s2">&quot;non-gravitational covariance block.&quot;</span><span class="p">,</span>
+                        <span class="s2">&quot;SBDB covariance labels for object </span><span class="si">%s</span><span class="s2"> start with </span><span class="si">%s</span><span class="s2">, &quot;</span>
+                        <span class="s2">&quot;expected </span><span class="si">%s</span><span class="s2">; discarding the covariance and falling &quot;</span>
+                        <span class="s2">&quot;back to per-element sigmas.&quot;</span><span class="p">,</span>
                         <span class="n">obj_id</span><span class="p">,</span>
+                        <span class="n">labels6</span><span class="p">,</span>
+                        <span class="n">expected_labels</span><span class="p">,</span>
                     <span class="p">)</span>
+                    <span class="n">cov_usable</span> <span class="o">=</span> <span class="kc">False</span>
 
-            <span class="c1"># If covariance provides elements, prefer them (and the covariance epoch).</span>
-            <span class="k">if</span> <span class="s2">&quot;elements&quot;</span> <span class="ow">in</span> <span class="n">cov</span> <span class="ow">and</span> <span class="n">cov</span><span class="p">[</span><span class="s2">&quot;elements&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">elements_list</span> <span class="o">=</span> <span class="n">cov</span><span class="p">[</span><span class="s2">&quot;elements&quot;</span><span class="p">]</span>
-                <span class="k">if</span> <span class="n">cov</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;epoch&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                    <span class="n">epoch_jd</span> <span class="o">=</span> <span class="n">_sbdb_float</span><span class="p">(</span><span class="n">cov</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;epoch&quot;</span><span class="p">))</span>
+            <span class="k">if</span> <span class="n">cov_usable</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">cov</span><span class="p">[</span><span class="s2">&quot;data&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+                <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+                    <span class="n">data</span> <span class="o">=</span> <span class="kc">None</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span>
+                    <span class="ow">or</span> <span class="n">data</span><span class="o">.</span><span class="n">ndim</span> <span class="o">!=</span> <span class="mi">2</span>
+                    <span class="ow">or</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">6</span>
+                    <span class="ow">or</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="mi">6</span>
+                <span class="p">):</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="s2">&quot;SBDB covariance matrix for object </span><span class="si">%s</span><span class="s2"> has shape </span><span class="si">%s</span><span class="s2">, &quot;</span>
+                        <span class="s2">&quot;expected at least 6x6; discarding the covariance &quot;</span>
+                        <span class="s2">&quot;record and falling back to per-element sigmas.&quot;</span><span class="p">,</span>
+                        <span class="n">obj_id</span><span class="p">,</span>
+                        <span class="kc">None</span> <span class="k">if</span> <span class="n">data</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span>
+                    <span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">cov_matrix</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:</span><span class="mi">6</span><span class="p">,</span> <span class="p">:</span><span class="mi">6</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">6</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">labels</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">labels</span><span class="p">)</span> <span class="o">==</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+                            <span class="n">covariance_full</span><span class="p">,</span> <span class="n">dropped</span> <span class="o">=</span> <span class="n">_convert_sbdb_full_covariance</span><span class="p">(</span>
+                                <span class="n">data</span><span class="p">,</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">label</span><span class="p">)</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">]</span>
+                            <span class="p">)</span>
+                            <span class="k">if</span> <span class="n">dropped</span><span class="p">:</span>
+                                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                                    <span class="s2">&quot;SBDB covariance for object </span><span class="si">%s</span><span class="s2"> includes estimated &quot;</span>
+                                    <span class="s2">&quot;parameters </span><span class="si">%s</span><span class="s2"> that are not supported for storage &quot;</span>
+                                    <span class="s2">&quot;(only A1, A2, A3); marginalizing them out.&quot;</span><span class="p">,</span>
+                                    <span class="n">obj_id</span><span class="p">,</span>
+                                    <span class="n">dropped</span><span class="p">,</span>
+                                <span class="p">)</span>
+                            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">dropped</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="mi">6</span><span class="p">:</span>
+                                <span class="n">covariances_full</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">covariance_full</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                                <span class="s2">&quot;SBDB covariance labels for object </span><span class="si">%s</span><span class="s2"> are missing or do &quot;</span>
+                                <span class="s2">&quot;not match the matrix size; discarding the &quot;</span>
+                                <span class="s2">&quot;non-gravitational covariance block.&quot;</span><span class="p">,</span>
+                                <span class="n">obj_id</span><span class="p">,</span>
+                            <span class="p">)</span>
+
+                    <span class="c1"># If covariance provides elements, prefer them (and the</span>
+                    <span class="c1"># covariance epoch).</span>
+                    <span class="k">if</span> <span class="s2">&quot;elements&quot;</span> <span class="ow">in</span> <span class="n">cov</span> <span class="ow">and</span> <span class="n">cov</span><span class="p">[</span><span class="s2">&quot;elements&quot;</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                        <span class="n">elements_list</span> <span class="o">=</span> <span class="n">cov</span><span class="p">[</span><span class="s2">&quot;elements&quot;</span><span class="p">]</span>
+                        <span class="k">if</span> <span class="n">cov</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;epoch&quot;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                            <span class="n">epoch_jd</span> <span class="o">=</span> <span class="n">_sbdb_float</span><span class="p">(</span><span class="n">cov</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;epoch&quot;</span><span class="p">))</span>
 
         <span class="k">if</span> <span class="n">elements_list</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;SBDB payload for </span><span class="si">{</span><span class="n">obj_id</span><span class="si">!r}</span><span class="s2"> missing orbit elements.&quot;</span><span class="p">)</span>
@@ -1354,7 +1395,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-08</div>
+              Last updated on 2026-08-11</div>
           </div>
           <div class="right-details">
             
@@ -1369,7 +1410,7 @@
       
     </aside>
   </div>
-</div><script src="../../../../_static/documentation_options.js?v=d50ca5d4"></script>
+</div><script src="../../../../_static/documentation_options.js?v=af1198cc"></script>
     <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>

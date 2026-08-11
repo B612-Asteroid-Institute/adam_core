@@ -277,6 +277,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -324,6 +325,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -1406,6 +1408,7 @@
     <span class="n">observation_count_sufficient</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
     <span class="n">is_reliable</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
     <span class="n">is_valid</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">claim_doubled_fold</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Single deterministic verdict from the confidence classifier&#39;s decision tree.</span>
 
@@ -1465,19 +1468,27 @@
     <span class="n">n_aliases</span> <span class="o">=</span> <span class="mi">0</span> <span class="k">if</span> <span class="n">n_significant_aliases</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">n_significant_aliases</span><span class="p">)</span>
     <span class="n">alias_ambiguous</span> <span class="o">=</span> <span class="n">n_aliases</span> <span class="o">&gt;=</span> <span class="mi">2</span>
     <span class="n">single_max_ambiguous</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">is_period_doubled</span><span class="p">)</span>
+    <span class="c1"># A doubled (single-peaked) fold whose only remaining ambiguity is the</span>
+    <span class="c1"># half/full octave may claim under the two-peaks-per-rotation shape prior</span>
+    <span class="c1"># when ``claim_doubled_fold`` allows it; the assumption is disclosed via the</span>
+    <span class="c1"># ``doubled_fold_assumed`` confidence flag rather than hidden.</span>
+    <span class="n">doubled_fold_assumed</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">claim_doubled_fold</span> <span class="ow">and</span> <span class="n">single_max_ambiguous</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">alias_ambiguous</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">doubled_fold_assumed</span><span class="p">:</span>
+        <span class="n">flags</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;doubled_fold_assumed&quot;</span><span class="p">)</span>
+    <span class="n">single_max_blocking</span> <span class="o">=</span> <span class="n">single_max_ambiguous</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">doubled_fold_assumed</span>
     <span class="n">eligible_single</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="p">(</span><span class="ow">not</span> <span class="n">alias_ambiguous</span><span class="p">)</span>
-        <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">single_max_ambiguous</span><span class="p">)</span>
-        <span class="ow">and</span> <span class="n">good_coverage_for_single</span>
+        <span class="p">(</span><span class="ow">not</span> <span class="n">alias_ambiguous</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="ow">not</span> <span class="n">single_max_blocking</span><span class="p">)</span> <span class="ow">and</span> <span class="n">good_coverage_for_single</span>
     <span class="p">)</span>
 
     <span class="n">alias_gate</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">bool</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
         <span class="p">(</span><span class="n">alias_ambiguous</span><span class="p">,</span> <span class="s2">&quot;conflicting_aliases&quot;</span><span class="p">),</span>
-        <span class="p">(</span><span class="n">single_max_ambiguous</span><span class="p">,</span> <span class="s2">&quot;single_max_alias&quot;</span><span class="p">),</span>
+        <span class="p">(</span><span class="n">single_max_blocking</span><span class="p">,</span> <span class="s2">&quot;single_max_alias&quot;</span><span class="p">),</span>
         <span class="p">(</span>
             <span class="ow">not</span> <span class="n">good_coverage_for_single</span>
             <span class="ow">and</span> <span class="ow">not</span> <span class="n">alias_ambiguous</span>
-            <span class="ow">and</span> <span class="ow">not</span> <span class="n">single_max_ambiguous</span><span class="p">,</span>
+            <span class="ow">and</span> <span class="ow">not</span> <span class="n">single_max_blocking</span><span class="p">,</span>
             <span class="s2">&quot;phase_coverage_low&quot;</span><span class="p">,</span>
         <span class="p">),</span>
     <span class="p">)</span>
@@ -1571,6 +1582,7 @@
     <span class="n">span_days</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">min_rotations_in_span</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
     <span class="n">residual_sigma_mag</span><span class="p">:</span> <span class="nb">float</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">claim_doubled_fold</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">_PrimaryResult</span><span class="p">:</span>
     <span class="n">observation_count_sufficient</span> <span class="o">=</span> <span class="n">_observation_count_sufficient</span><span class="p">(</span><span class="n">filter_labels</span><span class="p">)</span>
     <span class="n">n_fourier_aliases</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">clusters</span><span class="p">))</span>
@@ -1595,6 +1607,7 @@
             <span class="n">observation_count_sufficient</span><span class="o">=</span><span class="n">observation_count_sufficient</span><span class="p">,</span>
             <span class="n">is_reliable</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">is_reliable</span><span class="p">),</span>
             <span class="n">is_valid</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">is_valid</span><span class="p">),</span>
+            <span class="n">claim_doubled_fold</span><span class="o">=</span><span class="n">claim_doubled_fold</span><span class="p">,</span>
         <span class="p">)</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">_primary_result</span><span class="p">(</span>
@@ -1812,6 +1825,7 @@
     <span class="n">session_mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;auto&quot;</span><span class="p">,</span>
     <span class="n">auto_session_min_observations_per_group</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
     <span class="n">auto_session_bic_improvement</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+    <span class="n">claim_doubled_fold</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RotationPeriodResult</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">&quot;&quot;&quot;Estimate an asteroid rotation period with a measured confidence verdict.</span>
 
@@ -1836,6 +1850,20 @@
 <span class="sd">    session_mode : {&quot;ignore&quot;, &quot;use&quot;, &quot;auto&quot;}, default &quot;auto&quot;</span>
 <span class="sd">        Per-session magnitude-offset handling. ``&quot;auto&quot;`` adopts offsets only when</span>
 <span class="sd">        a BIC test clears ``auto_session_bic_improvement``.</span>
+<span class="sd">    claim_doubled_fold : bool, default True</span>
+<span class="sd">        When the ONLY remaining ambiguity is the half/full octave of a</span>
+<span class="sd">        single-peaked fold (the solver has already doubled the period on the</span>
+<span class="sd">        two-peaks-per-rotation shape prior and no rival alias cluster survives),</span>
+<span class="sd">        allow the verdict ``single_period`` and append the confidence flag</span>
+<span class="sd">        ``doubled_fold_assumed`` disclosing the assumption. Measured on the</span>
+<span class="sd">        LCDB/DAMIT standard-candle sets this raises confident claims (76 -&gt; 83</span>
+<span class="sd">        pooled) with strict precision improving (0.895 -&gt; 0.904) and no new</span>
+<span class="sd">        wrong-family claim; on the Rubin survey regression it raises claims</span>
+<span class="sd">        from 6 to 11 of 76, all strictly correct. A genuinely single-peaked</span>
+<span class="sd">        (spheroidal) body would make such a claim a 2x alias, so set False to</span>
+<span class="sd">        restore the strictly agnostic behavior (verdict ``period_family`` with</span>
+<span class="sd">        reason ``single_max_alias``). The long-period and sub-harmonic</span>
+<span class="sd">        guardrails still apply to these claims.</span>
 <span class="sd">    exact_evaluation_backend : {&quot;numpy&quot;, &quot;jax&quot;}, default &quot;numpy&quot;</span>
 <span class="sd">        Backend for exact frequency fits; ``&quot;jax&quot;`` is faster on large grids and</span>
 <span class="sd">        gives identical results (imported lazily, so ``&quot;numpy&quot;`` needs no JAX).</span>
@@ -2021,6 +2049,7 @@
         <span class="n">span_days</span><span class="o">=</span><span class="n">span_days</span><span class="p">,</span>
         <span class="n">min_rotations_in_span</span><span class="o">=</span><span class="n">min_rotations_in_span</span><span class="p">,</span>
         <span class="n">residual_sigma_mag</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">fourier_solution</span><span class="o">.</span><span class="n">fit_summary</span><span class="o">.</span><span class="n">residual_sigma</span><span class="p">),</span>
+        <span class="n">claim_doubled_fold</span><span class="o">=</span><span class="n">claim_doubled_fold</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">period_days</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">primary</span><span class="o">.</span><span class="n">period_days</span><span class="p">)</span>
     <span class="n">period_hours</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">period_days</span> <span class="o">*</span> <span class="mf">24.0</span><span class="p">)</span>
@@ -2128,7 +2157,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-08</div>
+              Last updated on 2026-08-11</div>
           </div>
           <div class="right-details">
             
@@ -2143,7 +2172,7 @@
       
     </aside>
   </div>
-</div><script src="../../../../_static/documentation_options.js?v=d50ca5d4"></script>
+</div><script src="../../../../_static/documentation_options.js?v=af1198cc"></script>
     <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>

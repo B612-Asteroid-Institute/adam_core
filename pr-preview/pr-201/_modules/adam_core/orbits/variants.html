@@ -277,6 +277,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -324,6 +325,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -449,6 +451,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.chunking</span><span class="w"> </span><span class="kn">import</span> <span class="n">process_in_chunks</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.ephemeris</span><span class="w"> </span><span class="kn">import</span> <span class="n">Ephemeris</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.non_gravitational_parameters</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">MARSDEN_CONSTANT_FIELDS</span><span class="p">,</span>
     <span class="n">NON_GRAVITATIONAL_VALUE_FIELDS</span><span class="p">,</span>
     <span class="n">NonGravitationalParameters</span><span class="p">,</span>
 <span class="p">)</span>
@@ -620,6 +623,14 @@
             <span class="n">A1</span><span class="o">=</span><span class="n">sample_array</span><span class="p">[:,</span> <span class="mi">6</span><span class="p">],</span>
             <span class="n">A2</span><span class="o">=</span><span class="n">sample_array</span><span class="p">[:,</span> <span class="mi">7</span><span class="p">],</span>
             <span class="n">A3</span><span class="o">=</span><span class="n">sample_array</span><span class="p">[:,</span> <span class="mi">8</span><span class="p">],</span>
+            <span class="c1"># The Marsden g(r) constants are fixed model constants, not</span>
+            <span class="c1"># sampled dimensions: each variant inherits its parent&#39;s values.</span>
+            <span class="o">**</span><span class="p">{</span>
+                <span class="n">name</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">orbits</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span><span class="o">.</span><span class="n">take</span><span class="p">(</span>
+                    <span class="n">repeated_indices</span>
+                <span class="p">)</span>
+                <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">MARSDEN_CONSTANT_FIELDS</span>
+            <span class="p">},</span>
         <span class="p">),</span>
     <span class="p">)</span>
 
@@ -968,6 +979,12 @@
                         <span class="n">A1</span><span class="o">=</span><span class="p">[</span><span class="n">mean</span><span class="p">[</span><span class="mi">6</span><span class="p">]],</span>
                         <span class="n">A2</span><span class="o">=</span><span class="p">[</span><span class="n">mean</span><span class="p">[</span><span class="mi">7</span><span class="p">]],</span>
                         <span class="n">A3</span><span class="o">=</span><span class="p">[</span><span class="n">mean</span><span class="p">[</span><span class="mi">8</span><span class="p">]],</span>
+                        <span class="o">**</span><span class="p">{</span>
+                            <span class="n">name</span><span class="p">:</span> <span class="nb">getattr</span><span class="p">(</span>
+                                <span class="n">object_variants</span><span class="o">.</span><span class="n">non_gravitational_parameters</span><span class="p">,</span> <span class="n">name</span>
+                            <span class="p">)</span><span class="o">.</span><span class="n">take</span><span class="p">([</span><span class="mi">0</span><span class="p">])</span>
+                            <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">MARSDEN_CONSTANT_FIELDS</span>
+                        <span class="p">},</span>
                     <span class="p">),</span>
                 <span class="p">)</span>
             <span class="k">else</span><span class="p">:</span>
@@ -1713,7 +1730,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-08</div>
+              Last updated on 2026-08-11</div>
           </div>
           <div class="right-details">
             
@@ -1728,7 +1745,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=d50ca5d4"></script>
+</div><script src="../../../_static/documentation_options.js?v=af1198cc"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>

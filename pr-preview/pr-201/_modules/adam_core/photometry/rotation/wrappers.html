@@ -277,6 +277,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -324,6 +325,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -448,6 +450,7 @@
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">&quot;build_rotation_period_observations_from_detections&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;estimate_rotation_period_best_apparition&quot;</span><span class="p">,</span>
     <span class="s2">&quot;estimate_rotation_period_from_detections&quot;</span><span class="p">,</span>
     <span class="s2">&quot;estimate_rotation_period_from_detections_grouped&quot;</span><span class="p">,</span>
 <span class="p">]</span>
@@ -736,6 +739,131 @@
         <span class="n">object_id</span><span class="o">=</span><span class="n">out_object_id</span><span class="p">,</span> <span class="n">result</span><span class="o">=</span><span class="n">result</span>
     <span class="p">)</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_apparition_index_groups</span><span class="p">(</span>
+    <span class="n">mjd</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+    <span class="n">gap_days</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Group observation indices into apparitions.</span>
+
+<span class="sd">    An apparition is a maximal run of (time-sorted) observations in which no</span>
+<span class="sd">    consecutive pair is separated by more than ``gap_days``. Returns one int64</span>
+<span class="sd">    index array per apparition, in chronological order; indices refer to the</span>
+<span class="sd">    ORIGINAL (unsorted) observation order.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">order</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mjd</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span> <span class="n">kind</span><span class="o">=</span><span class="s2">&quot;stable&quot;</span><span class="p">)</span>
+    <span class="n">sorted_t</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mjd</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)[</span><span class="n">order</span><span class="p">]</span>
+    <span class="n">breaks</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nonzero</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">diff</span><span class="p">(</span><span class="n">sorted_t</span><span class="p">)</span> <span class="o">&gt;</span> <span class="nb">float</span><span class="p">(</span><span class="n">gap_days</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">group</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span> <span class="k">for</span> <span class="n">group</span> <span class="ow">in</span> <span class="n">np</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="n">breaks</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span>
+
+
+<span class="n">_VERDICT_RANK</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;single_period&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;period_family&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;insufficient_data&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>
+
+
+<div class="viewcode-block" id="estimate_rotation_period_best_apparition">
+<a class="viewcode-back" href="../../../../reference/api/adam_core.photometry.rotation.wrappers.html#adam_core.photometry.estimate_rotation_period_best_apparition">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">estimate_rotation_period_best_apparition</span><span class="p">(</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">RotationPeriodObservations</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">apparition_gap_days</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">120.0</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">solver_kwargs</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RotationPeriodResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Solve each apparition separately and keep the highest-confidence result.</span>
+
+<span class="sd">    Ground-based lightcurves of the same asteroid from different apparitions</span>
+<span class="sd">    differ in viewing aspect (and therefore amplitude), photometric noise, and</span>
+<span class="sd">    nightly cadence, so the diurnal-alias structure of each apparition differs</span>
+<span class="sd">    too. An apparition that happens to sample the rotation cleanly can yield a</span>
+<span class="sd">    confident, correct period where the densest apparition -- or all</span>
+<span class="sd">    apparitions pooled -- locks onto a sampling alias or hedges. This helper</span>
+<span class="sd">    partitions the observations into apparitions (separated by more than</span>
+<span class="sd">    ``apparition_gap_days``), runs :func:`estimate_rotation_period` on each</span>
+<span class="sd">    independently, and returns the result of the most confident apparition.</span>
+
+<span class="sd">    The selection rule uses no knowledge of any reference answer: rank the</span>
+<span class="sd">    verdicts ``single_period`` &gt; ``period_family`` &gt; ``insufficient_data``,</span>
+<span class="sd">    tie-break on higher ``amplitude_snr``, then on more observations, then on</span>
+<span class="sd">    the earlier apparition. Measured on the 118-object LCDB standard-candle</span>
+<span class="sd">    calibration set, this policy raised confident (``single_period``) claims</span>
+<span class="sd">    from 35 to 43 while the strict precision of those claims improved (0.800 -&gt;</span>
+<span class="sd">    0.837) and the wrong-family count was unchanged -- selection shopping did</span>
+<span class="sd">    not introduce false confidence on that set, but the guarantee is</span>
+<span class="sd">    empirical, not structural.</span>
+
+<span class="sd">    The chosen row is returned with a ``apparition_selected_&lt;k&gt;_of_&lt;n&gt;``</span>
+<span class="sd">    confidence flag appended (1-based, chronological). An apparition whose</span>
+<span class="sd">    solve fails with an expected ``ValueError`` participates as an</span>
+<span class="sd">    ``insufficient_data`` candidate flagged ``solve_error``; an unexpected</span>
+<span class="sd">    error is re-raised with the apparition attached. Apparitions solve</span>
+<span class="sd">    serially; for large batches, parallelize per apparition yourself.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">n_obs</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+    <span class="n">mjd</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+        <span class="n">observations</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">&quot;tdb&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="kc">False</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
+    <span class="p">)</span>
+    <span class="n">groups</span> <span class="o">=</span> <span class="n">_apparition_index_groups</span><span class="p">(</span><span class="n">mjd</span><span class="p">,</span> <span class="n">apparition_gap_days</span><span class="p">)</span>
+
+    <span class="c1"># Lazy import keeps this wrapper module importable without the solver kernel.</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.estimator</span><span class="w"> </span><span class="kn">import</span> <span class="n">estimate_rotation_period</span> <span class="k">as</span> <span class="n">_estimate_rotation_period</span>
+
+    <span class="k">if</span> <span class="n">n_obs</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">groups</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="c1"># Single apparition (or empty, where the solver raises its canonical</span>
+        <span class="c1"># error): delegate wholesale so behavior matches the direct call.</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">_estimate_rotation_period</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="o">**</span><span class="n">solver_kwargs</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_with_apparition_flag</span><span class="p">(</span><span class="n">result</span><span class="p">,</span> <span class="n">selected</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="n">candidates</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">RotationPeriodResult</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">indices</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">groups</span><span class="p">):</span>
+        <span class="n">subset</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">indices</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">()))</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">result_k</span> <span class="o">=</span> <span class="n">_estimate_rotation_period</span><span class="p">(</span><span class="n">subset</span><span class="p">,</span> <span class="o">**</span><span class="n">solver_kwargs</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
+            <span class="c1"># Expected per-apparition data failure: keep it as a candidate so</span>
+            <span class="c1"># a fully-unsolvable object still returns one insufficient row.</span>
+            <span class="n">result_k</span> <span class="o">=</span> <span class="n">RotationPeriodResult</span><span class="o">.</span><span class="n">single_insufficient</span><span class="p">(</span>
+                <span class="n">reasons</span><span class="o">=</span><span class="p">[</span><span class="sa">f</span><span class="s2">&quot;solve_error: </span><span class="si">{</span><span class="n">exc</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">],</span>
+                <span class="n">confidence_flags</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;solve_error&quot;</span><span class="p">],</span>
+                <span class="n">n_observations</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">indices</span><span class="p">)),</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>  <span class="c1"># noqa: BLE001 - attach apparition context</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;rotation-period solve failed for apparition </span><span class="si">{</span><span class="n">k</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s2"> of &quot;</span>
+                <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">groups</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
+        <span class="n">candidates</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">k</span><span class="p">,</span> <span class="n">result_k</span><span class="p">))</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_score</span><span class="p">(</span>
+        <span class="n">item</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">RotationPeriodResult</span><span class="p">],</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+        <span class="n">k</span><span class="p">,</span> <span class="n">result_k</span> <span class="o">=</span> <span class="n">item</span>
+        <span class="n">verdict</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">result_k</span><span class="o">.</span><span class="n">period_verdict</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">())</span>
+        <span class="n">snr</span> <span class="o">=</span> <span class="n">result_k</span><span class="o">.</span><span class="n">amplitude_snr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">_VERDICT_RANK</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">verdict</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="s2">&quot;-inf&quot;</span><span class="p">)</span> <span class="k">if</span> <span class="n">snr</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">float</span><span class="p">(</span><span class="n">snr</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">result_k</span><span class="o">.</span><span class="n">n_observations</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span> <span class="ow">or</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="o">-</span><span class="nb">float</span><span class="p">(</span><span class="n">k</span><span class="p">),</span>
+        <span class="p">)</span>
+
+    <span class="n">best_k</span><span class="p">,</span> <span class="n">best</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">candidates</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="n">_score</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_with_apparition_flag</span><span class="p">(</span><span class="n">best</span><span class="p">,</span> <span class="n">selected</span><span class="o">=</span><span class="n">best_k</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">total</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">groups</span><span class="p">))</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_with_apparition_flag</span><span class="p">(</span>
+    <span class="n">result</span><span class="p">:</span> <span class="n">RotationPeriodResult</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">selected</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">total</span><span class="p">:</span> <span class="nb">int</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">RotationPeriodResult</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Append an ``apparition_selected_&lt;k&gt;_of_&lt;n&gt;`` confidence flag to a row.&quot;&quot;&quot;</span>
+    <span class="n">flags</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">result</span><span class="o">.</span><span class="n">confidence_flags</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span> <span class="ow">or</span> <span class="p">[])</span>
+    <span class="n">flags</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;apparition_selected_</span><span class="si">{</span><span class="n">selected</span><span class="si">}</span><span class="s2">_of_</span><span class="si">{</span><span class="n">total</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+    <span class="n">column_index</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">get_field_index</span><span class="p">(</span><span class="s2">&quot;confidence_flags&quot;</span><span class="p">)</span>
+    <span class="n">table</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
+        <span class="n">column_index</span><span class="p">,</span>
+        <span class="n">result</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="s2">&quot;confidence_flags&quot;</span><span class="p">),</span>
+        <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">flags</span><span class="p">],</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_list</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">())),</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">RotationPeriodResult</span><span class="o">.</span><span class="n">from_pyarrow</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
 </pre></div>
         </article>
       </div>
@@ -754,7 +882,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-08</div>
+              Last updated on 2026-08-11</div>
           </div>
           <div class="right-details">
             
@@ -769,7 +897,7 @@
       
     </aside>
   </div>
-</div><script src="../../../../_static/documentation_options.js?v=d50ca5d4"></script>
+</div><script src="../../../../_static/documentation_options.js?v=af1198cc"></script>
     <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../../_static/scripts/furo.js?v=46bd48cc"></script>

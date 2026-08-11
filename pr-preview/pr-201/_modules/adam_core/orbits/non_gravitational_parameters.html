@@ -277,6 +277,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
 </ul>
@@ -324,6 +325,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
 </ul>
 </li>
@@ -436,6 +438,45 @@
     <span class="s2">&quot;A3&quot;</span><span class="p">,</span>
 <span class="p">)</span>
 
+<span class="c1"># Marsden g(r) model constants. These are fixed per solution -- sources report</span>
+<span class="c1"># them without uncertainties and they never appear in solution covariances --</span>
+<span class="c1"># so they are stored as plain values and are NOT dimensions of the extended</span>
+<span class="c1"># coordinate covariance. They select the force law under which the A1/A2/A3</span>
+<span class="c1"># accelerations were fit:</span>
+<span class="c1">#</span>
+<span class="c1">#     g(r) = ALN * (r/R0)^-NM * (1 + (r/R0)^NN)^-NK</span>
+<span class="c1">#</span>
+<span class="c1"># Null constants mean the standard asteroid convention g(r) = (1 au / r)^2</span>
+<span class="c1"># (ALN=1, NK=0, NM=2, NN=5.093, R0=1 -- the defaults ASSIST applies).</span>
+<span class="n">MARSDEN_CONSTANT_FIELDS</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s2">&quot;ALN&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;NK&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;NM&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;NN&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;R0&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># The classic Marsden, Sekanina &amp; Yeomans (1973) water-ice sublimation</span>
+<span class="c1"># constants -- the convention comet solutions are fit under. JPL/SBDB lists</span>
+<span class="c1"># g(r) constants on a solution only when they differ from this standard set,</span>
+<span class="c1"># so absent constants on a solution with fitted A parameters mean these values.</span>
+<span class="n">MARSDEN_STANDARD_CONSTANTS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;ALN&quot;</span><span class="p">:</span> <span class="mf">0.1112620426</span><span class="p">,</span>
+    <span class="s2">&quot;NK&quot;</span><span class="p">:</span> <span class="mf">4.6142</span><span class="p">,</span>
+    <span class="s2">&quot;NM&quot;</span><span class="p">:</span> <span class="mf">2.15</span><span class="p">,</span>
+    <span class="s2">&quot;NN&quot;</span><span class="p">:</span> <span class="mf">5.093</span><span class="p">,</span>
+    <span class="s2">&quot;R0&quot;</span><span class="p">:</span> <span class="mf">2.808</span><span class="p">,</span>
+<span class="p">}</span>
+
+<span class="c1"># The asteroid (Yarkovsky-style) convention: g(r) degrades to (1 au / r)^2.</span>
+<span class="n">ASTEROID_MARSDEN_CONSTANTS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;ALN&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="s2">&quot;NK&quot;</span><span class="p">:</span> <span class="mf">0.0</span><span class="p">,</span>
+    <span class="s2">&quot;NM&quot;</span><span class="p">:</span> <span class="mf">2.0</span><span class="p">,</span>
+    <span class="s2">&quot;NN&quot;</span><span class="p">:</span> <span class="mf">5.093</span><span class="p">,</span>
+    <span class="s2">&quot;R0&quot;</span><span class="p">:</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">}</span>
+
 
 <div class="viewcode-block" id="NonGravitationalParameters">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.NonGravitationalParameters">[docs]</a>
@@ -444,10 +485,18 @@
 <span class="sd">    Non-gravitational parameters attached to an orbit solution.</span>
 
 <span class="sd">    Only the Marsden-style radial/transverse/normal accelerations (A1, A2, A3)</span>
-<span class="sd">    are supported, stored in au / d^2. Their uncertainties and cross</span>
-<span class="sd">    covariances with the orbital state live in the orbit&#39;s coordinate</span>
-<span class="sd">    covariance, which is extended to 9x9 for orbits with a non-gravitational</span>
-<span class="sd">    solution (see `~adam_core.coordinates.covariances.CoordinateCovariances`).</span>
+<span class="sd">    are supported as fitted parameters, stored in au / d^2. Their</span>
+<span class="sd">    uncertainties and cross covariances with the orbital state live in the</span>
+<span class="sd">    orbit&#39;s coordinate covariance, which is extended to 9x9 for orbits with a</span>
+<span class="sd">    non-gravitational solution (see</span>
+<span class="sd">    `~adam_core.coordinates.covariances.CoordinateCovariances`).</span>
+
+<span class="sd">    The Marsden g(r) constants (ALN, NK, NM, NN, R0; R0 in au, the rest</span>
+<span class="sd">    dimensionless) are fixed model constants, not fitted parameters: they</span>
+<span class="sd">    carry no uncertainty and are not covariance dimensions, but they select</span>
+<span class="sd">    the force law under which A1/A2/A3 were fit and must be fed to the</span>
+<span class="sd">    propagator. Null constants mean the standard asteroid convention</span>
+<span class="sd">    g(r) = (1 au / r)^2.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="n">source</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -456,15 +505,23 @@
     <span class="n">A2</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">A3</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
+    <span class="n">ALN</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">NK</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">NM</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">NN</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">R0</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
 <div class="viewcode-block" id="NonGravitationalParameters.has_values">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.NonGravitationalParameters.has_values">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">has_values</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Return True if any row has a non-zero non-gravitational parameter value.</span>
+<span class="sd">        Return True if any row has a non-zero non-gravitational acceleration</span>
+<span class="sd">        value (A1, A2, A3).</span>
 
 <span class="sd">        Parameters that are explicitly solved to zero are treated as absent:</span>
 <span class="sd">        they exert no force, so a gravity-only propagation of such an orbit is</span>
-<span class="sd">        still exact.</span>
+<span class="sd">        still exact. The g(r) constants are not considered: without a non-zero</span>
+<span class="sd">        acceleration they select a force law that is never applied.</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
             <span class="k">return</span> <span class="kc">False</span>
@@ -479,12 +536,29 @@
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.NonGravitationalParameters.to_array">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">to_array</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
 <span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        Return the parameter values as an (N, 3) array in (A1, A2, A3) order,</span>
-<span class="sd">        with nulls replaced by 0.0 (no force).</span>
+<span class="sd">        Return the acceleration values as an (N, 3) array in (A1, A2, A3)</span>
+<span class="sd">        order, with nulls replaced by 0.0 (no force).</span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">columns</span> <span class="o">=</span> <span class="p">[</span>
             <span class="n">pc</span><span class="o">.</span><span class="n">fill_null</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
             <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">NON_GRAVITATIONAL_VALUE_FIELDS</span>
+        <span class="p">]</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">columns</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NonGravitationalParameters.marsden_constants_array">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbits.non_gravitational_parameters.html#adam_core.orbits.NonGravitationalParameters.marsden_constants_array">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">marsden_constants_array</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Return the g(r) constants as an (N, 5) array in (ALN, NK, NM, NN, R0)</span>
+<span class="sd">        order, with nulls replaced by the standard asteroid convention</span>
+<span class="sd">        (g(r) = (1 au / r)^2).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">columns</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="n">pc</span><span class="o">.</span><span class="n">fill_null</span><span class="p">(</span>
+                <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">field</span><span class="p">),</span> <span class="n">ASTEROID_MARSDEN_CONSTANTS</span><span class="p">[</span><span class="n">field</span><span class="p">]</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">MARSDEN_CONSTANT_FIELDS</span>
         <span class="p">]</span>
         <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span><span class="n">columns</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span></div>
 
@@ -500,6 +574,11 @@
             <span class="n">A1</span><span class="o">=</span><span class="n">null_float</span><span class="p">,</span>
             <span class="n">A2</span><span class="o">=</span><span class="n">null_float</span><span class="p">,</span>
             <span class="n">A3</span><span class="o">=</span><span class="n">null_float</span><span class="p">,</span>
+            <span class="n">ALN</span><span class="o">=</span><span class="n">null_float</span><span class="p">,</span>
+            <span class="n">NK</span><span class="o">=</span><span class="n">null_float</span><span class="p">,</span>
+            <span class="n">NM</span><span class="o">=</span><span class="n">null_float</span><span class="p">,</span>
+            <span class="n">NN</span><span class="o">=</span><span class="n">null_float</span><span class="p">,</span>
+            <span class="n">R0</span><span class="o">=</span><span class="n">null_float</span><span class="p">,</span>
         <span class="p">)</span></div>
 </div>
 
@@ -521,7 +600,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-07-08</div>
+              Last updated on 2026-08-11</div>
           </div>
           <div class="right-details">
             
@@ -536,7 +615,7 @@
       
     </aside>
   </div>
-</div><script src="../../../_static/documentation_options.js?v=d50ca5d4"></script>
+</div><script src="../../../_static/documentation_options.js?v=af1198cc"></script>
     <script src="../../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
