@@ -105,10 +105,9 @@ def _add_light_time(
     t0_aberrated = p[1]  # noqa: F841
     lt = p[2]
     dlt = p[3]
-    iterations = p[4]
     # Return NaN light-time when convergence was not reached so host-side callers
     # can fail fast with row-level context.
-    lt = jnp.where((dlt > lt_tol) | (iterations >= max_lt_iter), jnp.nan, lt)
+    lt = jnp.where(dlt > lt_tol, jnp.nan, lt)
     return orbit_aberrated, lt
 
 

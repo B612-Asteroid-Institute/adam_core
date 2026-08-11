@@ -18,6 +18,7 @@ from ...photometry import calculate_phase_angle
 from ...time import Timestamp
 from ...utils import spice as spice_mod
 from ...utils.helpers.orbits import make_real_orbits
+from ..aberrations import _add_light_time
 from .. import ephemeris as ephemeris_module
 from ..ephemeris import generate_ephemeris_2body
 from ..propagation import propagate_2body
@@ -657,3 +658,30 @@ def test_generate_ephemeris_2body_failfast_nonfinite_light_time(monkeypatch) -> 
         generate_ephemeris_2body(
             orbits, observers, predict_magnitudes=False, max_processes=1
         )
+
+
+def test_first_non_finite_returns_row_index_for_matrix() -> None:
+    values = np.array(
+        [
+            [1.0, 2.0, 3.0],
+            [4.0, np.nan, 6.0],
+        ],
+        dtype=np.float64,
+    )
+    bad_row = ephemeris_module._first_non_finite(values)
+    assert bad_row == 1
+
+
+def test_add_light_time_converged_at_iteration_cap_is_not_nan() -> None:
+    orbit = np.array([1.2, 0.4, 0.1, 0.0, 0.0, 0.0], dtype=np.float64)
+    observer_position = np.array([0.0, 0.0, 0.0], dtype=np.float64)
+
+    _, lt = _add_light_time(
+        orbit,
+        t0=60000.0,
+        observer_position=observer_position,
+        lt_tol=1e29,
+        max_lt_iter=2,
+    )
+
+    assert np.isfinite(float(lt))
