@@ -959,6 +959,168 @@ because windows are half-open <code class="docutils literal notranslate"><span c
 </dd></dl>
 
 <dl class="py class">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.orbits.</span></span><span class="sig-name descname"><span class="pre">VariantEphemeris</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v25.0.1)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/tables.html#quivr.Table" title="(in quivr v0.7.6.dev5+g5e130d9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.aberrated_coordinates">
+<span class="sig-name descname"><span class="pre">aberrated_coordinates</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.aberrated_coordinates" title="Link to this definition">¶</a></dt>
+<dd><p>A column which represents an embedded quivr table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table_type</strong> – The type of the table to embed.</p></li>
+<li><p><strong>nullable</strong> – Whether the column can contain null values.</p></li>
+<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.alpha">
+<span class="sig-name descname"><span class="pre">alpha</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.alpha" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.collapse">
+<span class="sig-name descname"><span class="pre">collapse</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ephemeris</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris.collapse"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.collapse" title="Link to this definition">¶</a></dt>
+<dd><p>Collapse the variants and recalculate the covariance matrix for each
+each ephemeris at each epoch. The mean state is taken from the ephemeris class and
+is not calculate from the variants.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ephemeris</strong> (<cite>~adam_core.orbits.ephemeris.Ephemeris</cite>) – Ephemeris for which the variants were generated.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>collapsed_ephemeris</strong> – The collapsed ephemeris (with covariance matrices calculated based
+on the samples).</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><cite>~adam_core.orbits.ephemeris.Ephemeris</cite></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.collapse_by_object_id">
+<span class="sig-name descname"><span class="pre">collapse_by_object_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">aberration_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'recompute'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'collapse'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'none'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'recompute'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_chunk_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200000</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris.collapse_by_object_id"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.collapse_by_object_id" title="Link to this definition">¶</a></dt>
+<dd><p>Collapse the variant ephemerides into mean ephemerides and covariance matrices
+grouped by object_id, time, and observatory (origin code).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>collapsed_ephemeris</strong> – The collapsed ephemeris.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><cite>~adam_core.orbits.ephemeris.Ephemeris</cite></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.collapse_sigma_points_orbit_major">
+<span class="sig-name descname"><span class="pre">collapse_sigma_points_orbit_major</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_times</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_variants</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">13</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris.collapse_sigma_points_orbit_major"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.collapse_sigma_points_orbit_major" title="Link to this definition">¶</a></dt>
+<dd><p>Fast sigma-point collapse for the common layout produced by:
+<cite>VariantOrbits.create(method=”sigma-point”)</cite> + <cite>propagate_2body(variants, times)</cite>.</p>
+<section id="assumptions">
+<h2>Assumptions<a class="headerlink" href="#assumptions" title="Link to this heading">¶</a></h2>
+<ul class="simple">
+<li><p>The variant ephemeris rows are ordered in <em>base-variant-major</em> blocks, where each
+base variant has a contiguous block of <cite>n_times</cite> rows in time order.</p></li>
+<li><p>Base variants are ordered in <em>orbit-major</em> order, with <cite>variant_id</cite> cycling
+as “0”..”n_variants-1” for each orbit.</p></li>
+</ul>
+<p>This method avoids the expensive <cite>sort_by</cite> in <cite>collapse_by_object_id()</cite> and computes
+UT mean + covariance directly via reshaping and vectorized numpy operations.</p>
+</section>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.coordinates">
+<span class="sig-name descname"><span class="pre">coordinates</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.coordinates" title="Link to this definition">¶</a></dt>
+<dd><p>A column which represents an embedded quivr table.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>table_type</strong> – The type of the table to embed.</p></li>
+<li><p><strong>nullable</strong> – Whether the column can contain null values.</p></li>
+<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.light_time">
+<span class="sig-name descname"><span class="pre">light_time</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.light_time" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.link_to_ephemeris">
+<span class="sig-name descname"><span class="pre">link_to_ephemeris</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ephemeris</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/linkages.html#quivr.MultiKeyLinkage" title="(in quivr v0.7.6.dev5+g5e130d9)"><span class="pre">MultiKeyLinkage</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris" title="adam_core.orbits.variants.VariantEphemeris"><span class="pre">VariantEphemeris</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris.link_to_ephemeris"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.link_to_ephemeris" title="Link to this definition">¶</a></dt>
+<dd><p>Link variants to the ephemeris for which they were generated.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ephemeris</strong> (<cite>~adam_core.orbits.ephemeris.Ephemeris</cite>) – Ephemeris for which the variants were generated.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>linkage</strong> – Linkage between variants and ephemeris.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><cite>~quivr.MultiKeyLinkage[Ephemeris, EphemerisVariants]</cite></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.object_id">
+<span class="sig-name descname"><span class="pre">object_id</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.object_id" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.orbit_id">
+<span class="sig-name descname"><span class="pre">orbit_id</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.orbit_id" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.predicted_magnitude_v">
+<span class="sig-name descname"><span class="pre">predicted_magnitude_v</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.predicted_magnitude_v" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.schema">
+<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">orbit_id:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">object_id:</span> <span class="pre">large_string</span> <span class="pre">variant_id:</span> <span class="pre">large_string</span> <span class="pre">weights:</span> <span class="pre">double</span> <span class="pre">weights_cov:</span> <span class="pre">double</span> <span class="pre">coordinates:</span> <span class="pre">struct&lt;rho:</span> <span class="pre">double,</span> <span class="pre">lon:</span> <span class="pre">double,</span> <span class="pre">lat:</span> <span class="pre">double,</span> <span class="pre">vrho:</span> <span class="pre">double,</span> <span class="pre">vlon:</span> <span class="pre">double,</span> <span class="pre">vlat:</span> <span class="pre">double,</span> <span class="pre">time:</span> <span class="pre">struct</span> <span class="pre">(...</span> <span class="pre">118</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">rho:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">lon:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">lat:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">vrho:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">vlon:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">vlat:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">covariance:</span> <span class="pre">struct&lt;values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">origin:</span> <span class="pre">struct&lt;code:</span> <span class="pre">large_string&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">code:</span> <span class="pre">large_string</span> <span class="pre">aberrated_coordinates:</span> <span class="pre">struct&lt;x:</span> <span class="pre">double,</span> <span class="pre">y:</span> <span class="pre">double,</span> <span class="pre">z:</span> <span class="pre">double,</span> <span class="pre">vx:</span> <span class="pre">double,</span> <span class="pre">vy:</span> <span class="pre">double,</span> <span class="pre">vz:</span> <span class="pre">double,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64</span> <span class="pre">(...</span> <span class="pre">106</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">x:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">y:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">z:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">vx:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">vy:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">vz:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">covariance:</span> <span class="pre">struct&lt;values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">origin:</span> <span class="pre">struct&lt;code:</span> <span class="pre">large_string&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">code:</span> <span class="pre">large_string</span> <span class="pre">predicted_magnitude_v:</span> <span class="pre">double</span> <span class="pre">alpha:</span> <span class="pre">double</span> <span class="pre">light_time:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.schema" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.variant_id">
+<span class="sig-name descname"><span class="pre">variant_id</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.variant_id" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
+variable-length chunks.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.weights">
+<span class="sig-name descname"><span class="pre">weights</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.weights" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.weights_cov">
+<span class="sig-name descname"><span class="pre">weights_cov</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.weights_cov" title="Link to this definition">¶</a></dt>
+<dd><p>A column for storing 64-bit floating point numbers.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
 <dt class="sig sig-object py" id="adam_core.orbits.VariantOrbits">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.orbits.</span></span><span class="sig-name descname"><span class="pre">VariantOrbits</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v25.0.1)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantOrbits"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantOrbits" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/tables.html#quivr.Table" title="(in quivr v0.7.6.dev5+g5e130d9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
@@ -1153,168 +1315,6 @@ variable-length chunks.</p>
 <span class="sig-name descname"><span class="pre">without_non_gravitational_parameters</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantOrbits" title="adam_core.orbits.variants.VariantOrbits"><span class="pre">VariantOrbits</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantOrbits.without_non_gravitational_parameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantOrbits.without_non_gravitational_parameters" title="Link to this definition">¶</a></dt>
 <dd><p>Return a copy with the non-gravitational parameters nulled and the
 coordinate covariance reduced to its 6x6 coordinate block.</p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="py class">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.orbits.</span></span><span class="sig-name descname"><span class="pre">VariantEphemeris</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v25.0.1)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/tables.html#quivr.Table" title="(in quivr v0.7.6.dev5+g5e130d9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.aberrated_coordinates">
-<span class="sig-name descname"><span class="pre">aberrated_coordinates</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.aberrated_coordinates" title="Link to this definition">¶</a></dt>
-<dd><p>A column which represents an embedded quivr table.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>table_type</strong> – The type of the table to embed.</p></li>
-<li><p><strong>nullable</strong> – Whether the column can contain null values.</p></li>
-<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.alpha">
-<span class="sig-name descname"><span class="pre">alpha</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.alpha" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.collapse">
-<span class="sig-name descname"><span class="pre">collapse</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ephemeris</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris.collapse"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.collapse" title="Link to this definition">¶</a></dt>
-<dd><p>Collapse the variants and recalculate the covariance matrix for each
-each ephemeris at each epoch. The mean state is taken from the ephemeris class and
-is not calculate from the variants.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>ephemeris</strong> (<cite>~adam_core.orbits.ephemeris.Ephemeris</cite>) – Ephemeris for which the variants were generated.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>collapsed_ephemeris</strong> – The collapsed ephemeris (with covariance matrices calculated based
-on the samples).</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><cite>~adam_core.orbits.ephemeris.Ephemeris</cite></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.collapse_by_object_id">
-<span class="sig-name descname"><span class="pre">collapse_by_object_id</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">aberration_mode</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'recompute'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'collapse'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'none'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'recompute'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">group_chunk_size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">200000</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris.collapse_by_object_id"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.collapse_by_object_id" title="Link to this definition">¶</a></dt>
-<dd><p>Collapse the variant ephemerides into mean ephemerides and covariance matrices
-grouped by object_id, time, and observatory (origin code).</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>collapsed_ephemeris</strong> – The collapsed ephemeris.</p>
-</dd>
-<dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><cite>~adam_core.orbits.ephemeris.Ephemeris</cite></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.collapse_sigma_points_orbit_major">
-<span class="sig-name descname"><span class="pre">collapse_sigma_points_orbit_major</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="keyword-only-separator o"><abbr title="Keyword-only parameters separator (PEP 3102)"><span class="pre">*</span></abbr></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_times</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_variants</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">13</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris.collapse_sigma_points_orbit_major"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.collapse_sigma_points_orbit_major" title="Link to this definition">¶</a></dt>
-<dd><p>Fast sigma-point collapse for the common layout produced by:
-<cite>VariantOrbits.create(method=”sigma-point”)</cite> + <cite>propagate_2body(variants, times)</cite>.</p>
-<section id="assumptions">
-<h2>Assumptions<a class="headerlink" href="#assumptions" title="Link to this heading">¶</a></h2>
-<ul class="simple">
-<li><p>The variant ephemeris rows are ordered in <em>base-variant-major</em> blocks, where each
-base variant has a contiguous block of <cite>n_times</cite> rows in time order.</p></li>
-<li><p>Base variants are ordered in <em>orbit-major</em> order, with <cite>variant_id</cite> cycling
-as “0”..”n_variants-1” for each orbit.</p></li>
-</ul>
-<p>This method avoids the expensive <cite>sort_by</cite> in <cite>collapse_by_object_id()</cite> and computes
-UT mean + covariance directly via reshaping and vectorized numpy operations.</p>
-</section>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.coordinates">
-<span class="sig-name descname"><span class="pre">coordinates</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.coordinates" title="Link to this definition">¶</a></dt>
-<dd><p>A column which represents an embedded quivr table.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>table_type</strong> – The type of the table to embed.</p></li>
-<li><p><strong>nullable</strong> – Whether the column can contain null values.</p></li>
-<li><p><strong>metadata</strong> – A dictionary of metadata to attach to the column.</p></li>
-</ul>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.light_time">
-<span class="sig-name descname"><span class="pre">light_time</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.light_time" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py method">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.link_to_ephemeris">
-<span class="sig-name descname"><span class="pre">link_to_ephemeris</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ephemeris</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/linkages.html#quivr.MultiKeyLinkage" title="(in quivr v0.7.6.dev5+g5e130d9)"><span class="pre">MultiKeyLinkage</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="adam_core.orbits.ephemeris.html#adam_core.orbits.ephemeris.Ephemeris" title="adam_core.orbits.ephemeris.Ephemeris"><span class="pre">Ephemeris</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbits.variants.html#adam_core.orbits.variants.VariantEphemeris" title="adam_core.orbits.variants.VariantEphemeris"><span class="pre">VariantEphemeris</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/variants.html#VariantEphemeris.link_to_ephemeris"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.link_to_ephemeris" title="Link to this definition">¶</a></dt>
-<dd><p>Link variants to the ephemeris for which they were generated.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>ephemeris</strong> (<cite>~adam_core.orbits.ephemeris.Ephemeris</cite>) – Ephemeris for which the variants were generated.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>linkage</strong> – Linkage between variants and ephemeris.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><cite>~quivr.MultiKeyLinkage[Ephemeris, EphemerisVariants]</cite></p>
-</dd>
-</dl>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.object_id">
-<span class="sig-name descname"><span class="pre">object_id</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.object_id" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
-variable-length chunks.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.orbit_id">
-<span class="sig-name descname"><span class="pre">orbit_id</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.orbit_id" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
-variable-length chunks.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.predicted_magnitude_v">
-<span class="sig-name descname"><span class="pre">predicted_magnitude_v</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.predicted_magnitude_v" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.schema">
-<span class="sig-name descname"><span class="pre">schema</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">ClassVar</span><span class="p"><span class="pre">[</span></span><span class="pre">pa.Schema</span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">orbit_id:</span> <span class="pre">large_string</span> <span class="pre">not</span> <span class="pre">null</span> <span class="pre">object_id:</span> <span class="pre">large_string</span> <span class="pre">variant_id:</span> <span class="pre">large_string</span> <span class="pre">weights:</span> <span class="pre">double</span> <span class="pre">weights_cov:</span> <span class="pre">double</span> <span class="pre">coordinates:</span> <span class="pre">struct&lt;rho:</span> <span class="pre">double,</span> <span class="pre">lon:</span> <span class="pre">double,</span> <span class="pre">lat:</span> <span class="pre">double,</span> <span class="pre">vrho:</span> <span class="pre">double,</span> <span class="pre">vlon:</span> <span class="pre">double,</span> <span class="pre">vlat:</span> <span class="pre">double,</span> <span class="pre">time:</span> <span class="pre">struct</span> <span class="pre">(...</span> <span class="pre">118</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">rho:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">lon:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">lat:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">vrho:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">vlon:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">vlat:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">covariance:</span> <span class="pre">struct&lt;values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">origin:</span> <span class="pre">struct&lt;code:</span> <span class="pre">large_string&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">code:</span> <span class="pre">large_string</span> <span class="pre">aberrated_coordinates:</span> <span class="pre">struct&lt;x:</span> <span class="pre">double,</span> <span class="pre">y:</span> <span class="pre">double,</span> <span class="pre">z:</span> <span class="pre">double,</span> <span class="pre">vx:</span> <span class="pre">double,</span> <span class="pre">vy:</span> <span class="pre">double,</span> <span class="pre">vz:</span> <span class="pre">double,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64</span> <span class="pre">(...</span> <span class="pre">106</span> <span class="pre">chars</span> <span class="pre">omitted)</span>&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">x:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">y:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">2,</span> <span class="pre">z:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">3,</span> <span class="pre">vx:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">4,</span> <span class="pre">vy:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">5,</span> <span class="pre">vz:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">6,</span> <span class="pre">time:</span> <span class="pre">struct&lt;days:</span> <span class="pre">int64,</span> <span class="pre">nanos:</span> <span class="pre">int64&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">days:</span> <span class="pre">int64</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">1,</span> <span class="pre">nanos:</span> <span class="pre">int64</span>&#160;&#160; <span class="pre">child</span> <span class="pre">7,</span> <span class="pre">covariance:</span> <span class="pre">struct&lt;values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">values:</span> <span class="pre">large_list&lt;item:</span> <span class="pre">double&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">item:</span> <span class="pre">double</span>&#160;&#160; <span class="pre">child</span> <span class="pre">8,</span> <span class="pre">origin:</span> <span class="pre">struct&lt;code:</span> <span class="pre">large_string&gt;</span>&#160;&#160;&#160;&#160;&#160;&#160; <span class="pre">child</span> <span class="pre">0,</span> <span class="pre">code:</span> <span class="pre">large_string</span> <span class="pre">predicted_magnitude_v:</span> <span class="pre">double</span> <span class="pre">alpha:</span> <span class="pre">double</span> <span class="pre">light_time:</span> <span class="pre">double</span></em><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.schema" title="Link to this definition">¶</a></dt>
-<dd></dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.variant_id">
-<span class="sig-name descname"><span class="pre">variant_id</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.variant_id" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing large strings (over 2<sup>31</sup> bytes long). Large string data is stored in
-variable-length chunks.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.weights">
-<span class="sig-name descname"><span class="pre">weights</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.weights" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
-</dd></dl>
-
-<dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.orbits.VariantEphemeris.weights_cov">
-<span class="sig-name descname"><span class="pre">weights_cov</span></span><a class="headerlink" href="#adam_core.orbits.VariantEphemeris.weights_cov" title="Link to this definition">¶</a></dt>
-<dd><p>A column for storing 64-bit floating point numbers.</p>
 </dd></dl>
 
 </dd></dl>
@@ -1691,24 +1691,6 @@ variable-length chunks.</p>
 <li><a class="reference internal" href="#adam_core.orbits.Trajectory.validate_coverage"><code class="docutils literal notranslate"><span class="pre">Trajectory.validate_coverage()</span></code></a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits"><code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code></a><ul>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.collapse"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.collapse()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.collapse_by_object_id"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.collapse_by_object_id()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.coordinates"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.coordinates</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.create"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.create()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.has_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.has_non_gravitational_parameters()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.link_to_orbits"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.link_to_orbits()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.non_gravitational_parameters</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.object_id"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.object_id</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.orbit_id"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.orbit_id</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.physical_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.physical_parameters</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.schema"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.schema</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.variant_id"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.variant_id</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.weights"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.weights</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.weights_cov"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.weights_cov</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.without_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.without_non_gravitational_parameters()</span></code></a></li>
-</ul>
-</li>
 <li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris</span></code></a><ul>
 <li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.aberrated_coordinates"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.aberrated_coordinates</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.alpha"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.alpha</span></code></a></li>
@@ -1727,6 +1709,24 @@ variable-length chunks.</p>
 <li><a class="reference internal" href="#adam_core.orbits.VariantEphemeris.weights_cov"><code class="docutils literal notranslate"><span class="pre">VariantEphemeris.weights_cov</span></code></a></li>
 </ul>
 </li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits"><code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code></a><ul>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.collapse"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.collapse()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.collapse_by_object_id"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.collapse_by_object_id()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.coordinates"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.coordinates</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.create"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.create()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.has_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.has_non_gravitational_parameters()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.link_to_orbits"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.link_to_orbits()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.non_gravitational_parameters</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.object_id"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.object_id</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.orbit_id"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.orbit_id</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.physical_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.physical_parameters</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.schema"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.schema</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.variant_id"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.variant_id</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.weights"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.weights</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.weights_cov"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.weights_cov</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.orbits.VariantOrbits.without_non_gravitational_parameters"><code class="docutils literal notranslate"><span class="pre">VariantOrbits.without_non_gravitational_parameters()</span></code></a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#subpackages">Subpackages</a></li>
 <li><a class="reference internal" href="#submodules">Submodules</a></li>
 </ul>
@@ -1740,7 +1740,7 @@ variable-length chunks.</p>
       
     </aside>
   </div>
-</div><script src="../../_static/documentation_options.js?v=af1198cc"></script>
+</div><script src="../../_static/documentation_options.js?v=8fbcca00"></script>
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
     <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
