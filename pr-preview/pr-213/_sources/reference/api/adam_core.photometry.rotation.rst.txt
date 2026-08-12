@@ -1,0 +1,18 @@
+adam\_core.photometry.rotation package
+======================================
+
+.. automodule:: adam_core.photometry.rotation
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.photometry.rotation.core
+   adam_core.photometry.rotation.estimator
+   adam_core.photometry.rotation.jax_backend
+   adam_core.photometry.rotation.wrappers

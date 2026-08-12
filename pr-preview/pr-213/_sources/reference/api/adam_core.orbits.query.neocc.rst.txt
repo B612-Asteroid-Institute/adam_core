@@ -1,0 +1,7 @@
+adam\_core.orbits.query.neocc module
+====================================
+
+.. automodule:: adam_core.orbits.query.neocc
+   :members:
+   :show-inheritance:
+   :undoc-members:

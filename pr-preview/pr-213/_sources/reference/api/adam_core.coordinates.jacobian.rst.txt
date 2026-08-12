@@ -1,0 +1,7 @@
+adam\_core.coordinates.jacobian module
+======================================
+
+.. automodule:: adam_core.coordinates.jacobian
+   :members:
+   :show-inheritance:
+   :undoc-members:
