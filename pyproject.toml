@@ -134,6 +134,10 @@ norecursedirs = ["__pypackages__"]
 [tool.ruff]
 line-length = 110
 target-version = "py311"
+# Pin the rule set to ruff's pre-0.16 defaults: newer ruff enables the UP/RUF
+# modernization rules by default, which flag ~770 pre-existing sites. Adopt
+# those deliberately in a dedicated PR rather than through a default change.
+lint.select = ["E4", "E7", "E9", "F"]
 lint.ignore = []
 exclude = ["build"]
 
