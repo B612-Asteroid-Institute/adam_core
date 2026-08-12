@@ -140,11 +140,139 @@ predict magnitudes per exposure.
        composition="NEO",
    )
 
+Supported Canonical Filters
+---------------------------
+
+``convert_magnitude`` accepts the following canonical filter IDs as either the
+source or target. These filters have vendored throughput curves from the SVO
+Filter Profile Service. ``V`` is the canonical Bessell V filter retained for
+backwards compatibility.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 82
+
+   * - System or instrument
+     - Canonical filter IDs
+   * - Bessell
+     - ``V``, ``Bessell_U``, ``Bessell_B``, ``Bessell_R``, ``Bessell_I``
+   * - Rubin/LSST
+     - ``LSST_u``, ``LSST_g``, ``LSST_r``, ``LSST_i``, ``LSST_z``, ``LSST_y``
+   * - SDSS
+     - ``SDSS_u``, ``SDSS_g``, ``SDSS_r``, ``SDSS_i``, ``SDSS_z``
+   * - Pan-STARRS1
+     - ``PS1_g``, ``PS1_r``, ``PS1_i``, ``PS1_z``, ``PS1_y``, ``PS1_w``
+   * - ZTF
+     - ``ZTF_g``, ``ZTF_r``, ``ZTF_i``
+   * - DECam
+     - ``DECam_u``, ``DECam_g``, ``DECam_r``, ``DECam_i``, ``DECam_z``,
+       ``DECam_Y``, ``DECam_VR``
+   * - Mosaic3
+     - ``Mosaic3_z``
+   * - BASS/Bok 90Prime
+     - ``BASS_g``, ``BASS_r``
+   * - SkyMapper
+     - ``SkyMapper_u``, ``SkyMapper_v``, ``SkyMapper_g``, ``SkyMapper_r``,
+       ``SkyMapper_i``, ``SkyMapper_z``
+   * - ATLAS
+     - ``ATLAS_c``, ``ATLAS_o``
+
+Reported-Band Resolution
+------------------------
+
+``map_to_canonical_filter_bands`` first passes through an already-canonical
+filter ID. Otherwise it uses the MPC observatory code and reported band to apply
+the following explicit mappings. The observatory code is needed only to resolve
+a reported band; once both source and target are canonical,
+``convert_magnitude`` does not use observatory metadata.
+
+.. list-table:: Explicit observatory mappings
+   :header-rows: 1
+   :widths: 18 62 20
+
+   * - MPC observatory code
+     - Reported band → canonical filter
+     - Instrument
+   * - ``W84``
+     - ``u`` → ``DECam_u``; ``g`` → ``DECam_g``; ``r`` → ``DECam_r``;
+       ``i`` → ``DECam_i``; ``z`` → ``DECam_z``; ``Y`` → ``DECam_Y``;
+       ``y`` → ``DECam_Y``; ``VR`` → ``DECam_VR``; ``vr`` → ``DECam_VR``
+     - DECam
+   * - ``695``
+     - ``z`` → ``Mosaic3_z``
+     - Mosaic3/MzLS
+   * - ``I41``
+     - ``g`` → ``ZTF_g``; ``r`` → ``ZTF_r``; ``i`` → ``ZTF_i``
+     - ZTF
+   * - ``Q55``
+     - ``u`` → ``SkyMapper_u``; ``v`` → ``SkyMapper_v``;
+       ``g`` → ``SkyMapper_g``; ``r`` → ``SkyMapper_r``;
+       ``i`` → ``SkyMapper_i``; ``z`` → ``SkyMapper_z``
+     - SkyMapper
+   * - ``X05``
+     - ``u`` → ``LSST_u``; ``g`` → ``LSST_g``; ``r`` → ``LSST_r``;
+       ``i`` → ``LSST_i``; ``z`` → ``LSST_z``; ``y`` → ``LSST_y``;
+       ``Y`` → ``LSST_y``
+     - Rubin/LSST
+   * - ``T05``, ``T08``, ``M22``, ``W68``
+     - ``c`` → ``ATLAS_c``; ``Ac`` → ``ATLAS_c``; ``o`` → ``ATLAS_o``;
+       ``Ao`` → ``ATLAS_o``
+     - ATLAS
+   * - ``V00``
+     - ``g`` → ``BASS_g``; ``r`` → ``BASS_r``
+     - BASS/Bok 90Prime
+   * - ``F51``, ``F52``
+     - ``w`` → ``PS1_w``; ``Pw`` → ``PS1_w``
+     - Pan-STARRS1
+
+For ``X05``, MPC/ADES forms ``Lu``, ``Lg``, ``Lr``, ``Li``, ``Lz``, ``Ly``
+(and their uppercase variants), ``LSST_<band>``, and ``Y`` are also normalized
+to the corresponding LSST filter.
+
+If no explicit observatory mapping exists and ``allow_fallback_filters=True``,
+the following conservative generic fallbacks are available:
+
+.. list-table:: Generic reported-band fallbacks
+   :header-rows: 1
+   :widths: 40 60
+
+   * - Generic reported band
+     - Canonical filter ID
+   * - ``u``
+     - ``SDSS_u``
+   * - ``g``
+     - ``SDSS_g``
+   * - ``r``
+     - ``SDSS_r``
+   * - ``i``
+     - ``SDSS_i``
+   * - ``z``
+     - ``SDSS_z``
+   * - ``y``
+     - ``PS1_y``
+
+Generic fallback matching is currently case-insensitive, so an unresolved
+uppercase label such as ``U``, ``R``, ``I``, or ``Y`` would also select the
+corresponding lowercase fallback above. Because uppercase labels can represent
+different photometric systems, use a canonical ID such as ``Bessell_U``,
+``Bessell_R``, or ``Bessell_I`` directly when that is the intended filter. Set
+``allow_fallback_filters=False`` whenever an exact instrument mapping is
+required. Canonical IDs and explicit observatory mappings still resolve in this
+strict mode, while rows that would need a generic fallback raise. Combine strict
+mode with ``on_unknown="skip"`` to retain those rows as ``None`` instead.
+
+Generic ``c``, ``o``, and ``w`` labels, clear/unfiltered or blank labels, and
+other unknown bands are intentionally not assigned a canonical response. The
+explicit ATLAS and Pan-STARRS1 mappings above remain supported because their
+observatory codes disambiguate those bands. Unknowns raise by default or can be
+retained as ``None`` with ``on_unknown="skip"``.
+
 Bandpass Conversion and Color Terms
 -----------------------------------
 
 Use these when you already have magnitudes in one canonical filter and need
-another.
+another. The conversion is a composition-dependent synthetic color term, not an
+empirical observatory or catalog debiasing correction.
 
 .. code-block:: python
 
@@ -153,14 +281,35 @@ another.
    from adam_core.photometry.bandpasses import (
        bandpass_color_terms,
        bandpass_delta_mag,
+       map_to_canonical_filter_bands,
        register_custom_template,
    )
 
-   m_v = np.array([20.1, 20.4, 20.8], dtype=float)
-   m_r = convert_magnitude(
-       magnitude=m_v,
-       source_filter_id=np.array(["V", "V", "V"], dtype=object),
-       target_filter_id=np.array(["LSST_r", "LSST_r", "LSST_r"], dtype=object),
+   m_ztf_r = np.array([20.1, 20.4], dtype=float)
+
+   # Resolve I41/r to the canonical ZTF_r filter, then convert to Bessell V.
+   ztf_r = map_to_canonical_filter_bands(
+       ["I41", "I41"],
+       ["r", "r"],
+       allow_fallback_filters=False,
+   )
+   m_v = convert_magnitude(
+       magnitude=m_ztf_r,
+       source_filter_id=ztf_r,
+       target_filter_id=np.array(["V", "V"], dtype=object),
+       composition="NEO",
+   )
+
+   # Resolve X05/i to LSST_i and convert the same ZTF measurements directly.
+   lsst_i = map_to_canonical_filter_bands(
+       ["X05", "X05"],
+       ["i", "i"],
+       allow_fallback_filters=False,
+   )
+   m_lsst_i = convert_magnitude(
+       magnitude=m_ztf_r,
+       source_filter_id=ztf_r,
+       target_filter_id=lsst_i,
        composition="NEO",
    )
 

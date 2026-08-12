@@ -567,23 +567,217 @@ predict magnitudes per exposure.</p>
 </pre></div>
 </div>
 </section>
+<section id="supported-canonical-filters">
+<h2>Supported Canonical Filters<a class="headerlink" href="#supported-canonical-filters" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">convert_magnitude</span></code> accepts the following canonical filter IDs as either the
+source or target. These filters have vendored throughput curves from the SVO
+Filter Profile Service. <code class="docutils literal notranslate"><span class="pre">V</span></code> is the canonical Bessell V filter retained for
+backwards compatibility.</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 18.0%" />
+<col style="width: 82.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>System or instrument</p></th>
+<th class="head"><p>Canonical filter IDs</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Bessell</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">V</span></code>, <code class="docutils literal notranslate"><span class="pre">Bessell_U</span></code>, <code class="docutils literal notranslate"><span class="pre">Bessell_B</span></code>, <code class="docutils literal notranslate"><span class="pre">Bessell_R</span></code>, <code class="docutils literal notranslate"><span class="pre">Bessell_I</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Rubin/LSST</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">LSST_u</span></code>, <code class="docutils literal notranslate"><span class="pre">LSST_g</span></code>, <code class="docutils literal notranslate"><span class="pre">LSST_r</span></code>, <code class="docutils literal notranslate"><span class="pre">LSST_i</span></code>, <code class="docutils literal notranslate"><span class="pre">LSST_z</span></code>, <code class="docutils literal notranslate"><span class="pre">LSST_y</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>SDSS</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SDSS_u</span></code>, <code class="docutils literal notranslate"><span class="pre">SDSS_g</span></code>, <code class="docutils literal notranslate"><span class="pre">SDSS_r</span></code>, <code class="docutils literal notranslate"><span class="pre">SDSS_i</span></code>, <code class="docutils literal notranslate"><span class="pre">SDSS_z</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Pan-STARRS1</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PS1_g</span></code>, <code class="docutils literal notranslate"><span class="pre">PS1_r</span></code>, <code class="docutils literal notranslate"><span class="pre">PS1_i</span></code>, <code class="docutils literal notranslate"><span class="pre">PS1_z</span></code>, <code class="docutils literal notranslate"><span class="pre">PS1_y</span></code>, <code class="docutils literal notranslate"><span class="pre">PS1_w</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>ZTF</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ZTF_g</span></code>, <code class="docutils literal notranslate"><span class="pre">ZTF_r</span></code>, <code class="docutils literal notranslate"><span class="pre">ZTF_i</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>DECam</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">DECam_u</span></code>, <code class="docutils literal notranslate"><span class="pre">DECam_g</span></code>, <code class="docutils literal notranslate"><span class="pre">DECam_r</span></code>, <code class="docutils literal notranslate"><span class="pre">DECam_i</span></code>, <code class="docutils literal notranslate"><span class="pre">DECam_z</span></code>,
+<code class="docutils literal notranslate"><span class="pre">DECam_Y</span></code>, <code class="docutils literal notranslate"><span class="pre">DECam_VR</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Mosaic3</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">Mosaic3_z</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>BASS/Bok 90Prime</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">BASS_g</span></code>, <code class="docutils literal notranslate"><span class="pre">BASS_r</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>SkyMapper</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SkyMapper_u</span></code>, <code class="docutils literal notranslate"><span class="pre">SkyMapper_v</span></code>, <code class="docutils literal notranslate"><span class="pre">SkyMapper_g</span></code>, <code class="docutils literal notranslate"><span class="pre">SkyMapper_r</span></code>,
+<code class="docutils literal notranslate"><span class="pre">SkyMapper_i</span></code>, <code class="docutils literal notranslate"><span class="pre">SkyMapper_z</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>ATLAS</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">ATLAS_c</span></code>, <code class="docutils literal notranslate"><span class="pre">ATLAS_o</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="reported-band-resolution">
+<h2>Reported-Band Resolution<a class="headerlink" href="#reported-band-resolution" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">map_to_canonical_filter_bands</span></code> first passes through an already-canonical
+filter ID. Otherwise it uses the MPC observatory code and reported band to apply
+the following explicit mappings. The observatory code is needed only to resolve
+a reported band; once both source and target are canonical,
+<code class="docutils literal notranslate"><span class="pre">convert_magnitude</span></code> does not use observatory metadata.</p>
+<div class="table-wrapper colwidths-given docutils container" id="id1">
+<table class="docutils align-default" id="id1">
+<caption><span class="caption-text">Explicit observatory mappings</span><a class="headerlink" href="#id1" title="Link to this table">¶</a></caption>
+<colgroup>
+<col style="width: 18.0%" />
+<col style="width: 62.0%" />
+<col style="width: 20.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>MPC observatory code</p></th>
+<th class="head"><p>Reported band → canonical filter</p></th>
+<th class="head"><p>Instrument</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">W84</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">u</span></code> → <code class="docutils literal notranslate"><span class="pre">DECam_u</span></code>; <code class="docutils literal notranslate"><span class="pre">g</span></code> → <code class="docutils literal notranslate"><span class="pre">DECam_g</span></code>; <code class="docutils literal notranslate"><span class="pre">r</span></code> → <code class="docutils literal notranslate"><span class="pre">DECam_r</span></code>;
+<code class="docutils literal notranslate"><span class="pre">i</span></code> → <code class="docutils literal notranslate"><span class="pre">DECam_i</span></code>; <code class="docutils literal notranslate"><span class="pre">z</span></code> → <code class="docutils literal notranslate"><span class="pre">DECam_z</span></code>; <code class="docutils literal notranslate"><span class="pre">Y</span></code> → <code class="docutils literal notranslate"><span class="pre">DECam_Y</span></code>;
+<code class="docutils literal notranslate"><span class="pre">y</span></code> → <code class="docutils literal notranslate"><span class="pre">DECam_Y</span></code>; <code class="docutils literal notranslate"><span class="pre">VR</span></code> → <code class="docutils literal notranslate"><span class="pre">DECam_VR</span></code>; <code class="docutils literal notranslate"><span class="pre">vr</span></code> → <code class="docutils literal notranslate"><span class="pre">DECam_VR</span></code></p></td>
+<td><p>DECam</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">695</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">z</span></code> → <code class="docutils literal notranslate"><span class="pre">Mosaic3_z</span></code></p></td>
+<td><p>Mosaic3/MzLS</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">I41</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">g</span></code> → <code class="docutils literal notranslate"><span class="pre">ZTF_g</span></code>; <code class="docutils literal notranslate"><span class="pre">r</span></code> → <code class="docutils literal notranslate"><span class="pre">ZTF_r</span></code>; <code class="docutils literal notranslate"><span class="pre">i</span></code> → <code class="docutils literal notranslate"><span class="pre">ZTF_i</span></code></p></td>
+<td><p>ZTF</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">Q55</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">u</span></code> → <code class="docutils literal notranslate"><span class="pre">SkyMapper_u</span></code>; <code class="docutils literal notranslate"><span class="pre">v</span></code> → <code class="docutils literal notranslate"><span class="pre">SkyMapper_v</span></code>;
+<code class="docutils literal notranslate"><span class="pre">g</span></code> → <code class="docutils literal notranslate"><span class="pre">SkyMapper_g</span></code>; <code class="docutils literal notranslate"><span class="pre">r</span></code> → <code class="docutils literal notranslate"><span class="pre">SkyMapper_r</span></code>;
+<code class="docutils literal notranslate"><span class="pre">i</span></code> → <code class="docutils literal notranslate"><span class="pre">SkyMapper_i</span></code>; <code class="docutils literal notranslate"><span class="pre">z</span></code> → <code class="docutils literal notranslate"><span class="pre">SkyMapper_z</span></code></p></td>
+<td><p>SkyMapper</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">X05</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">u</span></code> → <code class="docutils literal notranslate"><span class="pre">LSST_u</span></code>; <code class="docutils literal notranslate"><span class="pre">g</span></code> → <code class="docutils literal notranslate"><span class="pre">LSST_g</span></code>; <code class="docutils literal notranslate"><span class="pre">r</span></code> → <code class="docutils literal notranslate"><span class="pre">LSST_r</span></code>;
+<code class="docutils literal notranslate"><span class="pre">i</span></code> → <code class="docutils literal notranslate"><span class="pre">LSST_i</span></code>; <code class="docutils literal notranslate"><span class="pre">z</span></code> → <code class="docutils literal notranslate"><span class="pre">LSST_z</span></code>; <code class="docutils literal notranslate"><span class="pre">y</span></code> → <code class="docutils literal notranslate"><span class="pre">LSST_y</span></code>;
+<code class="docutils literal notranslate"><span class="pre">Y</span></code> → <code class="docutils literal notranslate"><span class="pre">LSST_y</span></code></p></td>
+<td><p>Rubin/LSST</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">T05</span></code>, <code class="docutils literal notranslate"><span class="pre">T08</span></code>, <code class="docutils literal notranslate"><span class="pre">M22</span></code>, <code class="docutils literal notranslate"><span class="pre">W68</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">c</span></code> → <code class="docutils literal notranslate"><span class="pre">ATLAS_c</span></code>; <code class="docutils literal notranslate"><span class="pre">Ac</span></code> → <code class="docutils literal notranslate"><span class="pre">ATLAS_c</span></code>; <code class="docutils literal notranslate"><span class="pre">o</span></code> → <code class="docutils literal notranslate"><span class="pre">ATLAS_o</span></code>;
+<code class="docutils literal notranslate"><span class="pre">Ao</span></code> → <code class="docutils literal notranslate"><span class="pre">ATLAS_o</span></code></p></td>
+<td><p>ATLAS</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">V00</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">g</span></code> → <code class="docutils literal notranslate"><span class="pre">BASS_g</span></code>; <code class="docutils literal notranslate"><span class="pre">r</span></code> → <code class="docutils literal notranslate"><span class="pre">BASS_r</span></code></p></td>
+<td><p>BASS/Bok 90Prime</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">F51</span></code>, <code class="docutils literal notranslate"><span class="pre">F52</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">w</span></code> → <code class="docutils literal notranslate"><span class="pre">PS1_w</span></code>; <code class="docutils literal notranslate"><span class="pre">Pw</span></code> → <code class="docutils literal notranslate"><span class="pre">PS1_w</span></code></p></td>
+<td><p>Pan-STARRS1</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>For <code class="docutils literal notranslate"><span class="pre">X05</span></code>, MPC/ADES forms <code class="docutils literal notranslate"><span class="pre">Lu</span></code>, <code class="docutils literal notranslate"><span class="pre">Lg</span></code>, <code class="docutils literal notranslate"><span class="pre">Lr</span></code>, <code class="docutils literal notranslate"><span class="pre">Li</span></code>, <code class="docutils literal notranslate"><span class="pre">Lz</span></code>, <code class="docutils literal notranslate"><span class="pre">Ly</span></code>
+(and their uppercase variants), <code class="docutils literal notranslate"><span class="pre">LSST_&lt;band&gt;</span></code>, and <code class="docutils literal notranslate"><span class="pre">Y</span></code> are also normalized
+to the corresponding LSST filter.</p>
+<p>If no explicit observatory mapping exists and <code class="docutils literal notranslate"><span class="pre">allow_fallback_filters=True</span></code>,
+the following conservative generic fallbacks are available:</p>
+<div class="table-wrapper colwidths-given docutils container" id="id2">
+<table class="docutils align-default" id="id2">
+<caption><span class="caption-text">Generic reported-band fallbacks</span><a class="headerlink" href="#id2" title="Link to this table">¶</a></caption>
+<colgroup>
+<col style="width: 40.0%" />
+<col style="width: 60.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Generic reported band</p></th>
+<th class="head"><p>Canonical filter ID</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">u</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SDSS_u</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">g</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SDSS_g</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">r</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SDSS_r</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">i</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SDSS_i</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">z</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SDSS_z</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">y</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">PS1_y</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Generic fallback matching is currently case-insensitive, so an unresolved
+uppercase label such as <code class="docutils literal notranslate"><span class="pre">U</span></code>, <code class="docutils literal notranslate"><span class="pre">R</span></code>, <code class="docutils literal notranslate"><span class="pre">I</span></code>, or <code class="docutils literal notranslate"><span class="pre">Y</span></code> would also select the
+corresponding lowercase fallback above. Because uppercase labels can represent
+different photometric systems, use a canonical ID such as <code class="docutils literal notranslate"><span class="pre">Bessell_U</span></code>,
+<code class="docutils literal notranslate"><span class="pre">Bessell_R</span></code>, or <code class="docutils literal notranslate"><span class="pre">Bessell_I</span></code> directly when that is the intended filter. Set
+<code class="docutils literal notranslate"><span class="pre">allow_fallback_filters=False</span></code> whenever an exact instrument mapping is
+required. Canonical IDs and explicit observatory mappings still resolve in this
+strict mode, while rows that would need a generic fallback raise. Combine strict
+mode with <code class="docutils literal notranslate"><span class="pre">on_unknown=&quot;skip&quot;</span></code> to retain those rows as <code class="docutils literal notranslate"><span class="pre">None</span></code> instead.</p>
+<p>Generic <code class="docutils literal notranslate"><span class="pre">c</span></code>, <code class="docutils literal notranslate"><span class="pre">o</span></code>, and <code class="docutils literal notranslate"><span class="pre">w</span></code> labels, clear/unfiltered or blank labels, and
+other unknown bands are intentionally not assigned a canonical response. The
+explicit ATLAS and Pan-STARRS1 mappings above remain supported because their
+observatory codes disambiguate those bands. Unknowns raise by default or can be
+retained as <code class="docutils literal notranslate"><span class="pre">None</span></code> with <code class="docutils literal notranslate"><span class="pre">on_unknown=&quot;skip&quot;</span></code>.</p>
+</section>
 <section id="bandpass-conversion-and-color-terms">
 <h2>Bandpass Conversion and Color Terms<a class="headerlink" href="#bandpass-conversion-and-color-terms" title="Link to this heading">¶</a></h2>
 <p>Use these when you already have magnitudes in one canonical filter and need
-another.</p>
+another. The conversion is a composition-dependent synthetic color term, not an
+empirical observatory or catalog debiasing correction.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.photometry</span><span class="w"> </span><span class="kn">import</span> <span class="n">convert_magnitude</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.photometry.bandpasses</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">bandpass_color_terms</span><span class="p">,</span>
     <span class="n">bandpass_delta_mag</span><span class="p">,</span>
+    <span class="n">map_to_canonical_filter_bands</span><span class="p">,</span>
     <span class="n">register_custom_template</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="n">m_v</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">20.1</span><span class="p">,</span> <span class="mf">20.4</span><span class="p">,</span> <span class="mf">20.8</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
-<span class="n">m_r</span> <span class="o">=</span> <span class="n">convert_magnitude</span><span class="p">(</span>
-    <span class="n">magnitude</span><span class="o">=</span><span class="n">m_v</span><span class="p">,</span>
-    <span class="n">source_filter_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">&quot;V&quot;</span><span class="p">,</span> <span class="s2">&quot;V&quot;</span><span class="p">,</span> <span class="s2">&quot;V&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">),</span>
-    <span class="n">target_filter_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">&quot;LSST_r&quot;</span><span class="p">,</span> <span class="s2">&quot;LSST_r&quot;</span><span class="p">,</span> <span class="s2">&quot;LSST_r&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">),</span>
+<span class="n">m_ztf_r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">20.1</span><span class="p">,</span> <span class="mf">20.4</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">float</span><span class="p">)</span>
+
+<span class="c1"># Resolve I41/r to the canonical ZTF_r filter, then convert to Bessell V.</span>
+<span class="n">ztf_r</span> <span class="o">=</span> <span class="n">map_to_canonical_filter_bands</span><span class="p">(</span>
+    <span class="p">[</span><span class="s2">&quot;I41&quot;</span><span class="p">,</span> <span class="s2">&quot;I41&quot;</span><span class="p">],</span>
+    <span class="p">[</span><span class="s2">&quot;r&quot;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">],</span>
+    <span class="n">allow_fallback_filters</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">m_v</span> <span class="o">=</span> <span class="n">convert_magnitude</span><span class="p">(</span>
+    <span class="n">magnitude</span><span class="o">=</span><span class="n">m_ztf_r</span><span class="p">,</span>
+    <span class="n">source_filter_id</span><span class="o">=</span><span class="n">ztf_r</span><span class="p">,</span>
+    <span class="n">target_filter_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="s2">&quot;V&quot;</span><span class="p">,</span> <span class="s2">&quot;V&quot;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">object</span><span class="p">),</span>
+    <span class="n">composition</span><span class="o">=</span><span class="s2">&quot;NEO&quot;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Resolve X05/i to LSST_i and convert the same ZTF measurements directly.</span>
+<span class="n">lsst_i</span> <span class="o">=</span> <span class="n">map_to_canonical_filter_bands</span><span class="p">(</span>
+    <span class="p">[</span><span class="s2">&quot;X05&quot;</span><span class="p">,</span> <span class="s2">&quot;X05&quot;</span><span class="p">],</span>
+    <span class="p">[</span><span class="s2">&quot;i&quot;</span><span class="p">,</span> <span class="s2">&quot;i&quot;</span><span class="p">],</span>
+    <span class="n">allow_fallback_filters</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">m_lsst_i</span> <span class="o">=</span> <span class="n">convert_magnitude</span><span class="p">(</span>
+    <span class="n">magnitude</span><span class="o">=</span><span class="n">m_ztf_r</span><span class="p">,</span>
+    <span class="n">source_filter_id</span><span class="o">=</span><span class="n">ztf_r</span><span class="p">,</span>
+    <span class="n">target_filter_id</span><span class="o">=</span><span class="n">lsst_i</span><span class="p">,</span>
     <span class="n">composition</span><span class="o">=</span><span class="s2">&quot;NEO&quot;</span><span class="p">,</span>
 <span class="p">)</span>
 
@@ -732,7 +926,7 @@ production light-curve generation.</p></li>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-08-11</div>
+              Last updated on 2026-08-12</div>
           </div>
           <div class="right-details">
             
@@ -759,6 +953,8 @@ production light-curve generation.</p></li>
 <li><a class="reference internal" href="#ephemeris-level-photometry-and-phase-angle">Ephemeris-Level Photometry and Phase Angle</a></li>
 <li><a class="reference internal" href="#light-curve-construction">Light-Curve Construction</a></li>
 <li><a class="reference internal" href="#bandpass-aware-prediction">Bandpass-Aware Prediction</a></li>
+<li><a class="reference internal" href="#supported-canonical-filters">Supported Canonical Filters</a></li>
+<li><a class="reference internal" href="#reported-band-resolution">Reported-Band Resolution</a></li>
 <li><a class="reference internal" href="#bandpass-conversion-and-color-terms">Bandpass Conversion and Color Terms</a></li>
 <li><a class="reference internal" href="#inspecting-vendored-bandpass-data">Inspecting Vendored Bandpass Data</a></li>
 <li><a class="reference internal" href="#estimating-h-v-from-detections">Estimating <code class="docutils literal notranslate"><span class="pre">H_v</span></code> From Detections</a></li>
@@ -776,7 +972,7 @@ production light-curve generation.</p></li>
       
     </aside>
   </div>
-</div><script src="../_static/documentation_options.js?v=9c0b6831"></script>
+</div><script src="../_static/documentation_options.js?v=f8fc5727"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
     <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
     <script src="../_static/scripts/furo.js?v=46bd48cc"></script>
