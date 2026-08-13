@@ -4,14 +4,16 @@ from __future__ import annotations
 
 import sys
 from email.parser import Parser
+from email.utils import collapse_rfc2231_value
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
 
 NATIVE_MODULE_PREFIX = "adam_core/_rust_native"
 VERSION_MODULE = "adam_core/_version.py"
+FORBIDDEN_RUNTIME_DEPENDENCIES = {"pdm"}
 
 
-def _wheel_metadata(archive: ZipFile, wheel: Path) -> tuple[str, str]:
+def _wheel_metadata(archive: ZipFile, wheel: Path) -> tuple[str, str, list[str]]:
     metadata_files = [
         name for name in archive.namelist() if name.endswith(".dist-info/METADATA")
     ]
@@ -27,7 +29,8 @@ def _wheel_metadata(archive: ZipFile, wheel: Path) -> tuple[str, str]:
     version = metadata.get("Version")
     if name is None or version is None:
         raise SystemExit(f"{wheel} METADATA is missing Name or Version")
-    return name, version
+    requirements = metadata.get_all("Requires-Dist", [])
+    return name, version, requirements
 
 
 def _runtime_version(archive: ZipFile, wheel: Path) -> str:
@@ -44,7 +47,7 @@ def _runtime_version(archive: ZipFile, wheel: Path) -> str:
 def _inspect_wheel(wheel: Path) -> str:
     try:
         with ZipFile(wheel) as archive:
-            name, metadata_version = _wheel_metadata(archive, wheel)
+            name, metadata_version, requirements = _wheel_metadata(archive, wheel)
             runtime_version = _runtime_version(archive, wheel)
             if name not in {"adam_core", "adam-core"}:
                 raise SystemExit(f"{wheel} has unexpected package name {name!r}")
@@ -52,6 +55,38 @@ def _inspect_wheel(wheel: Path) -> str:
                 raise SystemExit(
                     f"{wheel} runtime version {runtime_version!r} does not match "
                     f"METADATA version {metadata_version!r}"
+                )
+            runtime_names = {
+                requirement.split(";", 1)[0]
+                .split("[", 1)[0]
+                .split("=", 1)[0]
+                .split("<", 1)[0]
+                .split(">", 1)[0]
+                .strip()
+                .lower()
+                for raw_requirement in requirements
+                for requirement in [
+                    collapse_rfc2231_value(raw_requirement)
+                    if isinstance(raw_requirement, tuple)
+                    else str(raw_requirement)
+                ]
+                if ";" not in requirement
+            }
+            forbidden = sorted(runtime_names & FORBIDDEN_RUNTIME_DEPENDENCIES)
+            if forbidden:
+                raise SystemExit(
+                    f"{wheel} includes build-only runtime dependencies: "
+                    + ", ".join(forbidden)
+                )
+            packaged_tests = [
+                member
+                for member in archive.namelist()
+                if member.startswith("adam_core/")
+                and ("/tests/" in member or Path(member).name.startswith("test_"))
+            ]
+            if packaged_tests:
+                raise SystemExit(
+                    f"{wheel} includes test modules, for example {packaged_tests[0]}"
                 )
             has_native_extension = any(
                 name.startswith(NATIVE_MODULE_PREFIX)

@@ -16,6 +16,17 @@ def _load(path: Path) -> Any:
     return json.loads(path.read_text())
 
 
+def _core_validation_summary(path: Path) -> tuple[int, int, int]:
+    artifact = _load(path)
+    api_results = artifact.get("parity_fuzz", {}).get("apis")
+    if not isinstance(api_results, list) or artifact.get("all_passed") is not True:
+        raise ValueError(f"{path} is not a complete passing parity_main artifact")
+    api_count = len(api_results)
+    seed_count = sum(len(api["seeds"]) for api in api_results)
+    fixed_count = len(artifact.get("fixed_fixtures", {}).get("apis", []))
+    return api_count, seed_count, fixed_count
+
+
 def _format_number(value: float) -> str:
     return f"{value:.3e}"
 
@@ -118,8 +129,17 @@ def _assist_table() -> str:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--core", type=Path, default=DEFAULT_CORE)
+    parser.add_argument(
+        "--validation-artifact",
+        type=Path,
+        required=True,
+        help="Complete passing parity_main artifact used for the disclosure.",
+    )
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     args = parser.parse_args()
+    api_count, seed_count, fixed_count = _core_validation_summary(
+        args.validation_artifact
+    )
     report = "\n\n".join(
         [
             "# Complete registered computational parity matrix",
@@ -131,11 +151,13 @@ def main() -> int:
                 "in their public-surface manifests."
             ),
             (
-                "**Fresh-run disclosure:** the latest full core 8×128 run passed "
-                "43/44. `coordinates.transform_coordinates` seed 20260429 observed "
-                "3.5284529e-08 against atol 3e-08. The table below retains the "
-                "previously accepted transform row in the canonical joined artifact; "
-                "no tolerance was relaxed."
+                "**Candidate validation:** the latest complete core 8×128 run passed "
+                f"{api_count}/{api_count} registered APIs, all {seed_count} seeded runs, "
+                f"and all {fixed_count} supplemental "
+                "fixed-fixture APIs. `coordinates.transform_coordinates` passed 8/8; "
+                "its worst absolute difference was 1.800e-12 degrees (about 6.48 "
+                "nanoarcseconds), accepted for high-precision use without relaxing "
+                "the transform tolerance."
             ),
             _core_table(_load(args.core)),
             _assist_table(),

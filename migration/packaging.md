@@ -1,12 +1,12 @@
 # adam-core Rust Packaging Notes
 
-Last updated: 2026-04-28.
+Last updated: 2026-08-13.
 
 ## Supported Build Path
 
 - `pdm run wheel-build` is the authoritative local and CI wheel build command.
 - `pdm run wheel-build` runs `pdm run wheel-version`, then `pdm build --no-sdist --dest dist`.
-- `pdm run wheel-inspect` must pass before uploading or using `dist/*.whl` as a release artifact.
+- `pdm run wheel-inspect` must pass before uploading or using `dist/*.whl` as a release artifact. It rejects build-only runtime dependencies and packaged test modules as well as version/native-extension errors.
 - `pdm run rust-build` is an alias for `pdm run wheel-build`.
 
 ## Version Source
@@ -17,7 +17,7 @@ Last updated: 2026-04-28.
 - Stable versions are identical in both systems. Supported Cargo prereleases are normalized explicitly, for example `0.5.6-rc.1` to PEP 440 `0.5.6rc1`.
 - `pyproject.toml` does not declare `[tool.pdm.version]`; PDM SCM versioning is not part of the native wheel path.
 - If the checkout is exactly on a `vX.Y.Z` or prerelease tag, `write_maturin_version.py` fails when the normalized tag and Cargo versions differ.
-- `migration/scripts/verify_preview_versions.py` requires all six public Rust crates to share the candidate version (`0.1.0-rc.3`) and every internal prerelease dependency to use the exact requirement `=0.1.0-rc.3`.
+- `migration/scripts/verify_preview_versions.py` requires all six public Rust crates to share the candidate version (`0.1.0-rc.4`) and every internal prerelease dependency to use the exact requirement `=0.1.0-rc.4`.
 
 ## uv Status
 
@@ -29,7 +29,6 @@ Last updated: 2026-04-28.
 ## Expected Validation Shape
 
 - `pdm run test-rust-full` currently runs under Python 3.13 in this checkout.
-- The observed full-suite shape after the baseline merge is `708 passed, 144 skipped, 2 deselected`.
-- The 144 skips are expected for the current command: 139 benchmark cases skipped by `--benchmark-skip`, two explicitly skipped Lambert scenarios, and three optional PYOORB cases.
-- The two deselected tests are profile-marked tests excluded by `-m 'not profile'`.
+- The RC4 precommit full-suite validation passed `1189` tests with `36` skipped, `6` deselected, and one expected xfail after excluding the benchmark modules from the correctness invocation.
+- Profile-marked tests remain excluded from this correctness gate; current-only performance is exercised separately through `benchmark-current`.
 - To inspect skip reasons, run `pdm run test-rust-full -- -rs`.

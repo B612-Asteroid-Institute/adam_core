@@ -17,6 +17,8 @@ the oracle via subprocess because both repositories export the same
 ``adam_core`` package name and cannot coexist in one venv.
 
 Do not use this package to time current-branch Python fallbacks as "legacy".
-For post-legacy performance regression tracking, use
-``migration/scripts/rust_backend_benchmark_gate.py``.
+For post-legacy correctness and public/native performance tracking, use
+``migration/scripts/current_regression.py`` and
+``migration/scripts/benchmark_current.py``. The narrower pinned-hardware
+latency regression gate remains ``migration/scripts/rust_backend_benchmark_gate.py``.
 """

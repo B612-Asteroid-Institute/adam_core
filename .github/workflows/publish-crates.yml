@@ -10,7 +10,7 @@ on:
       expected_version:
         description: Exact prerelease shared by all six crates
         required: true
-        default: 0.1.0-rc.2
+        default: 0.1.0-rc.4
         type: string
       authentication:
         description: crates.io OIDC trusted publishing (bootstrap token was revoked after rc.1)
@@ -30,7 +30,7 @@ permissions:
   id-token: write
 
 env:
-  PYTHON_PREVIEW_VERSION: "0.5.6rc2"
+  PYTHON_PREVIEW_VERSION: "0.5.6rc4"
 
 jobs:
   publish:

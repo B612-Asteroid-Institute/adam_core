@@ -1,13 +1,14 @@
-"""Legacy-frozen branch parity for transform_coordinates.
+"""Checked-in transform_coordinates branch regression fixture.
 
-Fixture generated from the untouched legacy checkout with:
+The fixture was originally generated from the accepted frozen implementation with:
 
     .legacy-venv/bin/python migration/scripts/generate_transform_coordinates_branch_fixture.py
 
-This complements randomized parity fuzz by pinning every public dispatcher
-branch, including branches that are too specific for random fuzz: identity
-returns, validation errors, geodetic output, mixed origins, observatory origins,
-ITRF93+covariance, and intentional fallbacks.
+Normal CI reads only the checked-in bytes; it never starts the frozen runtime.
+This complements the current-only registry fixture by pinning every public
+dispatcher branch, including branches that are too specific for random fuzz:
+identity returns, validation errors, geodetic output, mixed origins, observatory
+origins, ITRF93+covariance, and intentional fallbacks.
 """
 
 from __future__ import annotations

@@ -24,7 +24,7 @@ from typing import Optional
 
 import numpy as np
 
-from . import _inputs, _oracle, _rust_runner, tolerances
+from . import _inputs, _rust_runner, tolerances
 
 
 @dataclass
@@ -144,6 +144,11 @@ def _check_output(
 
 
 def fuzz_one(api_id: str, seeds: int, n: int, base_seed: int = 0) -> ApiResult:
+    # The frozen subprocess oracle is needed only for actual parity runs. Keep
+    # the reusable output checker importable by normal current-only CI without
+    # initializing legacy-runtime infrastructure.
+    from . import _oracle
+
     spec = tolerances.get(api_id)
     api = ApiResult(
         api_id=api_id,

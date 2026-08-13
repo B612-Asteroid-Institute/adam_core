@@ -671,6 +671,146 @@ fn transform_coordinates_with_covariance_numpy<'py>(
 }
 
 #[pyfunction]
+#[pyo3(signature = (coords, covariances, representation_in, representation_out, t0=None, mu=None, a=None, f=None, reps=1, trials=1, warmup_reps=1, max_iter=100, tol=1e-15, frame_in=None, frame_out=None, translation_vectors=None))]
+#[allow(clippy::too_many_arguments)]
+fn benchmark_transform_coordinates_with_covariance_native(
+    coords: PyReadonlyArray2<'_, f64>,
+    covariances: PyReadonlyArray2<'_, f64>,
+    representation_in: &str,
+    representation_out: &str,
+    t0: Option<PyReadonlyArray1<'_, f64>>,
+    mu: Option<PyReadonlyArray1<'_, f64>>,
+    a: Option<f64>,
+    f: Option<f64>,
+    reps: usize,
+    trials: usize,
+    warmup_reps: usize,
+    max_iter: usize,
+    tol: f64,
+    frame_in: Option<&str>,
+    frame_out: Option<&str>,
+    translation_vectors: Option<PyReadonlyArray2<'_, f64>>,
+) -> PyResult<Vec<Vec<f64>>> {
+    let coords_arr = coords.as_array();
+    let cov_arr = covariances.as_array();
+    if coords_arr.ncols() != 6 {
+        return Err(PyValueError::new_err("coords must have shape (N, 6)"));
+    }
+    let n = coords_arr.nrows();
+    let covariance_dimension = match cov_arr.ncols() {
+        36 => 6,
+        81 => 9,
+        _ => {
+            return Err(PyValueError::new_err(
+                "covariances must have shape (N, 36) or (N, 81)",
+            ));
+        }
+    };
+    if cov_arr.nrows() != n {
+        return Err(PyValueError::new_err(
+            "covariance rows must match coordinate rows",
+        ));
+    }
+    let rep_in_parsed = parse_representation(representation_in)?;
+    let rep_out_parsed = parse_representation(representation_out)?;
+    if rep_in_parsed == Representation::Geodetic {
+        return Err(PyValueError::new_err(
+            "geodetic input is not supported by transform_coordinates_with_covariance_numpy",
+        ));
+    }
+    if covariance_transform_requires_t0(rep_in_parsed, rep_out_parsed) && t0.is_none() {
+        return Err(PyValueError::new_err(
+            "t0 is required for Keplerian/Cometary covariance transforms",
+        ));
+    }
+    if covariance_transform_requires_mu(rep_in_parsed, rep_out_parsed) && mu.is_none() {
+        return Err(PyValueError::new_err(
+            "mu is required for Keplerian/Cometary covariance transforms",
+        ));
+    }
+    if rep_out_parsed == Representation::Geodetic && a.is_none() {
+        return Err(PyValueError::new_err(
+            "a is required for geodetic covariance transforms",
+        ));
+    }
+    if rep_out_parsed == Representation::Geodetic && f.is_none() {
+        return Err(PyValueError::new_err(
+            "f is required for geodetic covariance transforms",
+        ));
+    }
+    let coords_flat = coords_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("coords must be contiguous"))?;
+    let cov_flat = cov_arr
+        .as_slice()
+        .ok_or_else(|| PyValueError::new_err("covariances must be contiguous"))?;
+    let t0_view = t0.as_ref().map(|array| array.as_array());
+    let t0_fallback = vec![0.0_f64; n];
+    let t0_slice = match t0_view.as_ref() {
+        Some(view) if view.len() == n => view
+            .as_slice()
+            .ok_or_else(|| PyValueError::new_err("t0 must be contiguous"))?,
+        Some(_) => {
+            return Err(PyValueError::new_err(
+                "t0 must have length N for coords shape (N, 6)",
+            ));
+        }
+        None => t0_fallback.as_slice(),
+    };
+    let mu_view = mu.as_ref().map(|array| array.as_array());
+    let mu_fallback = vec![0.0_f64; n];
+    let mu_slice = match mu_view.as_ref() {
+        Some(view) if view.len() == n => view
+            .as_slice()
+            .ok_or_else(|| PyValueError::new_err("mu must be contiguous"))?,
+        Some(_) => {
+            return Err(PyValueError::new_err(
+                "mu must have length N for coords shape (N, 6)",
+            ));
+        }
+        None => mu_fallback.as_slice(),
+    };
+    let translation_view = translation_vectors.as_ref().map(|array| array.as_array());
+    let translation_slice = match translation_view.as_ref() {
+        Some(view) if view.nrows() == n && view.ncols() == 6 => Some(
+            view.as_slice()
+                .ok_or_else(|| PyValueError::new_err("translation_vectors must be contiguous"))?,
+        ),
+        Some(_) => {
+            return Err(PyValueError::new_err(
+                "translation_vectors must have shape (N, 6)",
+            ));
+        }
+        None => None,
+    };
+    let rep_in = to_coords_rep(rep_in_parsed);
+    let rep_out = to_coords_rep(rep_out_parsed);
+    let frame_in_value = parse_frame(frame_in.unwrap_or("ecliptic"))?;
+    let frame_out_value = parse_frame(frame_out.unwrap_or(frame_in.unwrap_or("ecliptic")))?;
+    let a_value = a.unwrap_or(0.0);
+    let f_value = f.unwrap_or(0.0);
+    benchmark_trials(reps, trials, warmup_reps, || {
+        Ok(transform_with_covariance_flat(
+            coords_flat,
+            cov_flat,
+            covariance_dimension,
+            rep_in,
+            rep_out,
+            frame_in_value,
+            frame_out_value,
+            t0_slice,
+            mu_slice,
+            mu_slice,
+            a_value,
+            f_value,
+            max_iter,
+            tol,
+            translation_slice,
+        ))
+    })
+}
+
+#[pyfunction]
 #[pyo3(signature = (coords, time_index, matrices, covariances=None))]
 fn rotate_cartesian_time_varying_numpy<'py>(
     py: Python<'py>,
@@ -7133,6 +7273,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(transform_coordinates_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(
         transform_coordinates_with_covariance_numpy,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        benchmark_transform_coordinates_with_covariance_native,
         m
     )?)?;
     m.add_function(wrap_pyfunction!(rotate_cartesian_time_varying_numpy, m)?)?;

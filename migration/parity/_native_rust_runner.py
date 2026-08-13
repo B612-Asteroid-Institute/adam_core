@@ -157,6 +157,54 @@ def _transform_coordinates(
     )
 
 
+def _transform_coordinates_with_covariance(
+    *,
+    cases: list[dict[str, Any]],
+    reps: int,
+    warmup: int,
+    trials: int,
+) -> NativeRustTiming:
+    from adam_core import _rust_native
+
+    sample_trials = [[0.0] * reps for _ in range(trials)]
+    for case in cases:
+        coords = _f64(case["coords"])
+        n = coords.shape[0]
+        covariances = _f64(case["covariance"]).reshape(n, -1)
+        case_samples = _rust_native.benchmark_transform_coordinates_with_covariance_native(
+            coords,
+            covariances,
+            str(case["representation_in"]),
+            str(case["representation_out"]),
+            _f64(case["time_mjd"]),
+            _f64(case["mu"]),
+            None,
+            None,
+            reps,
+            trials,
+            warmup,
+            1000,
+            1e-15,
+            str(case["frame_in"]),
+            str(case["frame_out"]),
+            None,
+        )
+        for trial_index, samples in enumerate(case_samples):
+            if len(samples) != reps:
+                raise ValueError("native covariance transform returned wrong sample count")
+            for sample_index, value in enumerate(samples):
+                sample_trials[trial_index][sample_index] += float(value)
+    return NativeRustTiming(
+        status="measured",
+        sample_trials_s=sample_trials,
+        entrypoint="adam_core_rs_coords::transform_with_covariance_flat",
+        timing_boundary=(
+            "Rust std::time::Instant around direct transform_with_covariance_flat "
+            "calls; NumPy input ownership and outer Python/PyO3 launch excluded"
+        ),
+    )
+
+
 def _propagate_2body(
     *,
     reps: int,
@@ -1434,6 +1482,9 @@ def _observers_from_codes(
 
 _ADAPTERS: dict[str, Callable[..., NativeRustTiming]] = {
     "coordinates.transform_coordinates": _transform_coordinates,
+    "coordinates.transform_coordinates_with_covariance": (
+        _transform_coordinates_with_covariance
+    ),
     "coordinates.cartesian_to_spherical": _cartesian_to_spherical,
     "coordinates.spherical.to_cartesian": _spherical_to_cartesian,
     "coordinates.cartesian_to_geodetic": _cartesian_to_geodetic,

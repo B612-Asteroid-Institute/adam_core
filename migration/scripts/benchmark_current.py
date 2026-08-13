@@ -276,6 +276,11 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--large-reps", type=int, default=7)
     parser.add_argument("--large-warmup", type=int, default=1)
     parser.add_argument(
+        "--require-native",
+        action="store_true",
+        help="Fail if any selected row lacks genuine Rust-owned timing.",
+    )
+    parser.add_argument(
         "--quick",
         action="store_true",
         help="Use three repetitions and one warmup per lane for local smoke runs.",
@@ -317,6 +322,9 @@ def main(argv: list[str] | None = None) -> int:
         "native_measured_count": sum(
             row["native_rust"].get("status") == "measured" for row in rows
         ),
+        "native_unavailable_count": sum(
+            row["native_rust"].get("status") != "measured" for row in rows
+        ),
         "rows": rows,
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -325,7 +333,10 @@ def main(argv: list[str] | None = None) -> int:
     args.markdown.write_text(_markdown(payload))
     print(args.output)
     print(args.markdown)
-    return 1 if payload["error_count"] else 0
+    failed = payload["error_count"] > 0 or (
+        args.require_native and payload["native_unavailable_count"] > 0
+    )
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":

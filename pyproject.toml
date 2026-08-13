@@ -27,7 +27,6 @@ keywords = ["astronomy", "orbital mechanics", "propagation"]
 
 dependencies = [
   "numpy>=2.0.0",
-  "pdm",
   "pyarrow>=13.0.0",
   "pandas",
   "requests",
@@ -155,6 +154,7 @@ exclude = ["build"]
 [tool.pdm.build]
 includes = ["src/adam_core/"]
 excludes = [
+  "**/tests/**",
   "**/__pycache__/**",
   "**/*.py[cod]",
   "**/*.nbc",
@@ -196,6 +196,8 @@ test = "pytest --benchmark-skip -m 'not profile' {args}"
 doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only {args}"
 benchmark-current = "python -m migration.scripts.benchmark_current {args}"
+benchmark-current-ci = "python -m migration.scripts.benchmark_current --quick --lanes tiny --trials 1 --require-native --output migration/artifacts/benchmark_current_core_ci.json --markdown migration/artifacts/benchmark_current_core_ci.md"
+test-current-regression = "python -m migration.scripts.current_regression"
 coverage = "pytest --benchmark-skip --cov=adam_core --cov-report=xml -m 'not profile' {args}"
 docs = { cmd = "sphinx-build -b html docs/source docs/build", env = { LC_ALL = "C", LANG = "C" } }
 docs-check = { cmd = "sphinx-build -E -b html -W --keep-going docs/source docs/build_ci", env = { LC_ALL = "C", LANG = "C" } }
@@ -254,6 +256,7 @@ dev-loop = { composite = [
 manifest-path = "rust/adam_core_py/Cargo.toml"
 module-name = "adam_core._rust_native"
 python-source = "src"
+exclude = ["adam_core/**/tests/**", "adam_core/**/test_*.py"]
 # Maturin uses rust/adam_core_py/Cargo.toml [package].version for wheel
 # metadata. `pdm run wheel-version` mirrors that value into adam_core._version.
 include = [{ path = "adam_core/_version.py", format = "wheel" }]

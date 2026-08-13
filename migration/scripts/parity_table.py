@@ -638,6 +638,22 @@ def _format_speed_metadata(metadata: dict[str, Any]) -> str:
         f"**Thread mode**: warm p50/p95 `{warm}`; cold `{cold}`.{trial_text}",
         "Single-thread mode caps thread pools only; SIMD/ILP remain enabled within each CPU core.",
     ]
+    cache_metadata = metadata.get("legacy_timing_cache")
+    legacy_identity = (
+        cache_metadata.get("legacy_identity")
+        if isinstance(cache_metadata, dict)
+        else None
+    )
+    if isinstance(legacy_identity, dict):
+        source_hash = legacy_identity.get("benchmark_source_hash")
+        process_hash = legacy_identity.get("timing_process_hash")
+        if source_hash and process_hash:
+            lines.append(
+                "Canonical timing identity: "
+                f"benchmark source `{source_hash}`; timing process `{process_hash}`. "
+                "The accepted source predates only shared-SPICE-kernel parity setup; "
+                "timed workload shapes and timing process are unchanged."
+            )
     if timing_policy:
         lines.append(f"Timing policy: {timing_policy}")
     columns = metadata.get("performance_columns")

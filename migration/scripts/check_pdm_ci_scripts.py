@@ -29,7 +29,6 @@ STALE_REFERENCES = (
     "rust-parity-randomized",
     "rust-od-benchmark",
     "--max-rust-over-legacy",
-    "--trials",
     "migration/artifacts/rust_benchmark_gate.json",
     "migration/artifacts/ephemeris_wide_observer_bench.json",
     "migration/artifacts/rust_orbit_determination_benchmark.json",
@@ -40,12 +39,14 @@ REQUIRED_SCRIPT_OUTPUTS = {
     "rust-parity-speed-cold": "migration/artifacts/parity_speed_cold_warm.json",
     "rust-latency-gate": "migration/artifacts/rust_latency_current.json",
     "rust-latency-gate-ci": "migration/artifacts/rust_latency_current.json",
+    "benchmark-current-ci": "migration/artifacts/benchmark_current_core_ci.json",
 }
 
 LEGACY_SPEED_CACHE = "migration/artifacts/parity_legacy_speed_baseline.json"
 
 REQUIRED_WORKFLOW_ARTIFACTS = {
     "rust-latency-current": "migration/artifacts/rust_latency_current.json",
+    "current-only-benchmark": "migration/artifacts/benchmark_current_core_ci.json",
 }
 
 PATH_PREFIXES = (
@@ -284,6 +285,31 @@ def _speed_script_policy_failures(scripts: dict[str, Any]) -> list[str]:
 
 def _required_script_output_failures(scripts: dict[str, Any]) -> list[str]:
     failures: list[str] = []
+    regression_commands = _script_commands(scripts.get("test-current-regression"))
+    if not regression_commands:
+        failures.append(
+            "pyproject.toml: required PDM script `test-current-regression` missing"
+        )
+    else:
+        import_smoke = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import sys; import migration.scripts.current_regression; "
+                "assert 'migration.parity._oracle' not in sys.modules; "
+                "assert 'migration.parity._legacy_runner' not in sys.modules",
+            ],
+            cwd=REPO_ROOT,
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        if import_smoke.returncode != 0:
+            failures.append(
+                "pyproject.toml: `test-current-regression` import must not load "
+                "legacy oracle modules"
+            )
     for script, expected_output in REQUIRED_SCRIPT_OUTPUTS.items():
         commands = _script_commands(scripts.get(script))
         if not commands:
@@ -306,7 +332,7 @@ def _required_workflow_artifact_failures(
     for artifact_name, expected_path in REQUIRED_WORKFLOW_ARTIFACTS.items():
         if f"name: {artifact_name}" not in workflow_text:
             failures.append(f"workflows: artifact `{artifact_name}` is not uploaded")
-        if f"path: {expected_path}" not in workflow_text:
+        if expected_path not in workflow_text:
             failures.append(
                 f"workflows: artifact `{artifact_name}` must upload `{expected_path}`"
             )

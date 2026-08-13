@@ -215,8 +215,20 @@ jobs:
           path: dist/*.whl
       - name: Rust smoke checks
         run: pdm run rust-smoke
+      - name: Current-only correctness regression
+        run: pdm run test-current-regression
+      - name: Current public/native benchmark smoke
+        run: pdm run benchmark-current-ci
       - name: Rust latency regression gate
         run: pdm run rust-latency-gate-ci
+      - name: Upload current-only benchmark artifact
+        if: always() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: current-only-benchmark
+          path: |
+            migration/artifacts/benchmark_current_core_ci.json
+            migration/artifacts/benchmark_current_core_ci.md
       - name: Upload Rust latency artifact
         if: always() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@v4

@@ -472,6 +472,21 @@ def test_github_actions_latency_baseline_matches_benchmark_scope() -> None:
         assert baseline[name]["rust_seconds_p95"] > 0.0
 
 
+def test_current_ci_scripts_are_normal_ci_legacy_free_gates() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    pyproject = (repo_root / "pyproject.toml").read_text()
+    workflow = (
+        repo_root / ".github" / "workflows" / "pip-build-lint-test-coverage.yml"
+    ).read_text()
+
+    assert "benchmark-current-ci" in pyproject
+    assert "test-current-regression" in pyproject
+    assert "--require-native" in pyproject
+    assert "pdm run benchmark-current-ci" in workflow
+    assert "pdm run test-current-regression" in workflow
+    assert "current-only-benchmark" in workflow
+
+
 def test_current_benchmark_reuses_registry_and_canonical_lane_shapes() -> None:
     parser = benchmark_current._build_arg_parser()
     args = parser.parse_args(["--quick"])
@@ -825,17 +840,20 @@ def test_native_rust_timer_is_internal_and_missing_surfaces_are_blank(
     transform_sample = _inputs.make(
         "coordinates.transform_coordinates_with_covariance", rng, 4
     )
-    missing = _native_rust_runner.measure(
+    transform_native = _native_rust_runner.measure(
         "coordinates.transform_coordinates_with_covariance",
         transform_sample.rust_kwargs,
         reps=3,
         warmup=1,
         trials=3,
     )
-    assert missing.status == "unavailable"
-    assert missing.sample_trials_s == []
-    assert missing.todo == "personal-98v.1"
-    assert "PyO3 call is not accepted" in missing.reason
+    assert transform_native.status == "measured"
+    assert len(transform_native.sample_trials_s) == 3
+    assert all(len(trial) == 3 for trial in transform_native.sample_trials_s)
+    assert "Instant" in transform_native.timing_boundary
+    assert transform_native.entrypoint == (
+        "adam_core_rs_coords::transform_with_covariance_flat"
+    )
 
 
 @pytest.mark.integration
