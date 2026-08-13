@@ -129,7 +129,7 @@ class SphericalCoordinates(qv.Table):
         from .transform import spherical_to_cartesian
 
         if not self.covariance.is_all_nan():
-            covariances_spherical = self.covariance.to_matrix()
+            covariances_spherical = self.covariance.to_transform_matrix()
             rust_result = rust_covariance_transform(
                 self.values,
                 covariances_spherical,
@@ -169,7 +169,7 @@ class SphericalCoordinates(qv.Table):
         covariances_spherical = None
 
         if not cartesian.covariance.is_all_nan():
-            cartesian_covariances = cartesian.covariance.to_matrix()
+            cartesian_covariances = cartesian.covariance.to_transform_matrix()
             rust_result = rust_covariance_transform(
                 cartesian.values,
                 cartesian_covariances,

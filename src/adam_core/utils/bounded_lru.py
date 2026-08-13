@@ -7,8 +7,10 @@ from typing import TypeVar
 K = TypeVar("K", bound=Hashable)
 V = TypeVar("V")
 
+__all__ = ["bounded_lru_get", "bounded_lru_put"]
 
-def _bounded_lru_get(cache: "OrderedDict[K, V]", key: K, *, maxsize: int) -> V | None:
+
+def bounded_lru_get(cache: "OrderedDict[K, V]", key: K, *, maxsize: int) -> V | None:
     """
     Get a value from a bounded LRU cache.
 
@@ -24,7 +26,7 @@ def _bounded_lru_get(cache: "OrderedDict[K, V]", key: K, *, maxsize: int) -> V |
     return v
 
 
-def _bounded_lru_put(
+def bounded_lru_put(
     cache: "OrderedDict[K, V]", key: K, value: V, *, maxsize: int
 ) -> None:
     """

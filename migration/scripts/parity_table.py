@@ -44,11 +44,10 @@ DEFAULT_LATEST_MAIN_ARTIFACT = Path(
     "migration/artifacts/latest_main_additions_parity.json"
 )
 
-# GPL ASSIST lane artifacts. These compare the Rust GPL backend
-# (downstream adam-assist over assist-rs + adam-core contracts) against the current
-# Python adam_assist.ASSISTPropagator public semantics. The legacy checkout has
-# no ASSIST surface, so this lane is current-Python vs current-Rust rather than
-# legacy-vs-current. Both sides load the same DE440/SB441 kernels from the
+# GPL ASSIST lane artifacts. Refreshed artifacts compare the Rust GPL backend
+# against frozen updated-upstream adam-assist in the isolated oracle runtime;
+# older tracked artifacts retain their historical current-Python comparison
+# metadata. Both sides load the same DE440/SB441 kernels from the
 # PyPI data packages installed with the package dependencies (naif-de440,
 # jpl-small-bodies-de441-n16); the Rust side receives the resolved
 # site-packages paths via ADAM_CORE_RS_ASSIST_{PLANETS,ASTEROIDS}_PATH. The
@@ -172,6 +171,16 @@ def _is_backend_candidate_row(row: dict[str, Any]) -> bool:
     )
 
 
+def _correctness_classification(
+    *, api_id: str, output: str, tol: tolerances.OutputTol
+) -> str:
+    if api_id == "orbits.VariantOrbits.create":
+        return "bitwise" if output in {"weights", "weights_cov"} else "tolerance-based"
+    if tol.atol == 0.0 and tol.rtol == 0.0:
+        return "bitwise"
+    return "tolerance-based"
+
+
 def _build_rows(
     fuzz_results: list[parity_fuzz.ApiResult],
     fixed_results: list[parity_fixed.ApiResult] | None = None,
@@ -226,6 +235,9 @@ def _build_rows(
                 {
                     "api_id": api_id,
                     "output": out_name,
+                    "correctness_classification": _correctness_classification(
+                        api_id=api_id, output=out_name, tol=tol
+                    ),
                     "atol": tol.atol,
                     "rtol": tol.rtol,
                     "worst_abs": worst_abs,
@@ -291,6 +303,11 @@ def _build_rows(
                 {
                     "api_id": api_id,
                     "output": out_name,
+                    "correctness_classification": _correctness_classification(
+                        api_id=api_id,
+                        output=out_name,
+                        tol=tolerances.OutputTol(atol=atol, rtol=rtol),
+                    ),
                     "atol": atol,
                     "rtol": rtol,
                     "worst_abs": worst_abs,
@@ -349,6 +366,9 @@ def _build_rows(
                 {
                     "api_id": api_id,
                     "output": out_name,
+                    "correctness_classification": _correctness_classification(
+                        api_id=api_id, output=out_name, tol=tol
+                    ),
                     "atol": tol.atol,
                     "rtol": tol.rtol,
                     "worst_abs": None,
@@ -375,9 +395,9 @@ def _build_rows(
 def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
     lines = []
     lines.append(
-        "| API | mode | output | atol | rtol | worst_abs | worst_rel | rel_above_floor | nan_mismatch | result | rationale | physical | root cause | verdict |"
+        "| API | mode | correctness | output | atol | rtol | worst_abs | worst_rel | rel_above_floor | nan_mismatch | result | rationale | physical | root cause | verdict |"
     )
-    lines.append("|---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|---|")
+    lines.append("|---|---|---|---|---:|---:|---:|---:|---:|---:|---|---|---|---|---|")
     for r in rows:
         observed = r["state"] in {
             "measured",
@@ -451,6 +471,7 @@ def _format_parity_markdown(rows: list[dict], *, max_text: int | None) -> str:
         lines.append(
             f"| {api_label}{flag} "
             f"| {_comparison_mode_label(r)} "
+            f"| {r['correctness_classification']} "
             f"| {r['output']} "
             f"| {r['atol']:.0e} | {rtol_s} "
             f"| {wa} | {wr} | {wr_floor} | {nan_mismatch} | {result} "

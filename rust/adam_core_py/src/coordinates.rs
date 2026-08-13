@@ -4,22 +4,23 @@ use adam_core_rs_coords::propagation::{
     PropagationOptions, PropagationRequest, Propagator, TwoBodyPropagator, TwoBodyPropagatorConfig,
 };
 use adam_core_rs_coords::{
-    apply_cosine_latitude_correction_flat, bound_longitude_residuals_flat, bound_longitude_value,
-    calculate_chi2_flat, cartesian_to_cometary_flat6, cartesian_to_geodetic_flat6,
-    cartesian_to_keplerian_flat6, cartesian_to_spherical_flat6, cartesian_to_spherical_row,
-    chi2_survival, classify_orbits_flat, cometary_to_cartesian_flat6, compute_residuals_chi2_flat,
-    create_sampled_orbit_variants, fit_orbit_2body_least_squares, generate_ephemeris_2body_flat6,
-    keplerian_to_cartesian_flat6, origin_mu_au3_day2, porkchop_grid_flat,
-    rotate_cartesian_time_varying_flat6, rotate_coordinates_to_frame, spherical_to_cartesian_flat6,
-    spherical_to_cartesian_row, tisserand_parameter_flat, transform_values_flat6,
-    transform_with_covariance_flat6, weighted_covariance_flat, weighted_mean_flat,
-    ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch,
+    apply_cosine_latitude_correction_flat, apply_linear_covariance_transform_flat,
+    bound_longitude_residuals_flat, bound_longitude_value, calculate_chi2_flat,
+    cartesian_to_cometary_flat6, cartesian_to_geodetic_flat6, cartesian_to_keplerian_flat6,
+    cartesian_to_spherical_flat6, cartesian_to_spherical_row, chi2_survival, classify_orbits_flat,
+    cometary_to_cartesian_flat6, compute_residuals_chi2_flat,
+    create_sampled_orbit_variants_with_nongrav, fit_orbit_2body_least_squares,
+    generate_ephemeris_2body_flat6, keplerian_to_cartesian_flat6, origin_mu_au3_day2,
+    porkchop_grid_flat, rotate_cartesian_time_varying_flat6, rotate_coordinates_to_frame,
+    spherical_to_cartesian_flat6, spherical_to_cartesian_row, tisserand_parameter_flat,
+    transform_values_flat6, transform_with_covariance_flat, weighted_covariance_flat,
+    weighted_mean_flat, ArrowSchemaExport, CoordinateBatch as DataCoordinateBatch,
     CoordinateRepresentation as DataRepresentation, CoordinateValues, CovarianceBatch,
     CovarianceUnits, DataFrame, Epoch, Frame, IntoNestedRecordBatch, LeastSquaresConfig,
-    ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch,
-    OrbitVariantBatch as DataOrbitVariantBatch, OrbitVariantSamplingMethod, OriginArray, OriginId,
-    Representation as CoordsRepresentation, TimeArray, TimeScale, TimeScaleProvider,
-    TryFromNestedRecordBatch,
+    NonGravitationalParametersBatch as DataNonGravBatch, ObserverBatch as DataObserverBatch,
+    OrbitBatch as DataOrbitBatch, OrbitVariantBatch as DataOrbitVariantBatch,
+    OrbitVariantSamplingMethod, OriginArray, OriginId, Representation as CoordsRepresentation,
+    TimeArray, TimeScale, TimeScaleProvider, TryFromNestedRecordBatch,
 };
 use adam_core_rs_spice::global_backend;
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
@@ -536,9 +537,18 @@ fn transform_coordinates_with_covariance_numpy<'py>(
         return Err(PyValueError::new_err("coords must have shape (N, 6)"));
     }
     let n = coords_arr.nrows();
-    if cov_arr.nrows() != n || cov_arr.ncols() != 36 {
+    let covariance_dimension = match cov_arr.ncols() {
+        36 => 6,
+        81 => 9,
+        _ => {
+            return Err(PyValueError::new_err(
+                "covariances must have shape (N, 36) or (N, 81)",
+            ));
+        }
+    };
+    if cov_arr.nrows() != n {
         return Err(PyValueError::new_err(
-            "covariances must have shape (N, 36) with row-major 6x6 per row",
+            "covariance rows must match coordinate rows",
         ));
     }
 
@@ -632,9 +642,10 @@ fn transform_coordinates_with_covariance_numpy<'py>(
         None
     };
 
-    let (coords_out_flat, cov_out_flat) = transform_with_covariance_flat6(
+    let (coords_out_flat, cov_out_flat) = transform_with_covariance_flat(
         coords_flat,
         cov_flat,
+        covariance_dimension,
         rep_in,
         rep_out,
         frame_in_value,
@@ -651,8 +662,11 @@ fn transform_coordinates_with_covariance_numpy<'py>(
 
     let coords_shaped = ndarray::Array2::from_shape_vec((n, 6), coords_out_flat)
         .map_err(|e| PyValueError::new_err(format!("failed to shape coords output: {e}")))?;
-    let cov_shaped = ndarray::Array2::from_shape_vec((n, 36), cov_out_flat)
-        .map_err(|e| PyValueError::new_err(format!("failed to shape covariance output: {e}")))?;
+    let cov_shaped = ndarray::Array2::from_shape_vec(
+        (n, covariance_dimension * covariance_dimension),
+        cov_out_flat,
+    )
+    .map_err(|e| PyValueError::new_err(format!("failed to shape covariance output: {e}")))?;
     Ok((coords_shaped.into_pyarray(py), cov_shaped.into_pyarray(py)))
 }
 
@@ -1008,6 +1022,53 @@ fn compute_residuals_chi2_numpy<'py>(
 }
 
 #[pyfunction]
+fn apply_linear_covariance_transform_numpy<'py>(
+    py: Python<'py>,
+    matrices: PyReadonlyArray3<'py, f64>,
+    covariances: PyReadonlyArray3<'py, f64>,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    let matrices = matrices.as_array();
+    if matrices.shape()[1..] != [6, 6] {
+        return Err(PyValueError::new_err(
+            "transform_matrices must have shape (6, 6) or (N, 6, 6)",
+        ));
+    }
+    let covariances = covariances.as_array();
+    let rows = covariances.shape()[0];
+    let dimension = covariances.shape()[1];
+    if covariances.shape()[2] != dimension || !matches!(dimension, 6 | 9) {
+        return Err(PyValueError::new_err(
+            "Covariance matrices should have shape (N, 6, 6) or (N, 9, 9)",
+        ));
+    }
+    let matrix_rows = matrices.shape()[0];
+    if !matches!(matrix_rows, 1) && matrix_rows != rows {
+        return Err(PyValueError::new_err(
+            "Number of transform matrices must be 1 or match the number of covariances.",
+        ));
+    }
+    let time_index = if matrix_rows == 1 {
+        vec![0; rows]
+    } else {
+        (0..rows).collect()
+    };
+    let output = apply_linear_covariance_transform_flat(
+        covariances
+            .as_slice()
+            .ok_or_else(|| PyValueError::new_err("covariances must be contiguous"))?,
+        dimension,
+        &time_index,
+        matrices
+            .as_slice()
+            .ok_or_else(|| PyValueError::new_err("transform_matrices must be contiguous"))?,
+    )
+    .map_err(PyValueError::new_err)?;
+    let output = ndarray::Array3::from_shape_vec((rows, dimension, dimension), output)
+        .map_err(|error| PyValueError::new_err(format!("failed to shape output: {error}")))?;
+    Ok(output.into_pyarray(py))
+}
+
+#[pyfunction]
 fn weighted_mean_numpy<'py>(
     py: Python<'py>,
     samples: PyReadonlyArray2<'py, f64>,
@@ -1241,7 +1302,7 @@ fn parse_variant_method(method: &str) -> PyResult<OrbitVariantSamplingMethod> {
 /// `OrbitVariantBatch` carries them since bead personal-cmy.13.2); the source
 /// indices remain available for diagnostics and other per-orbit columns.
 #[pyfunction]
-#[pyo3(signature = (ipc_bytes, method, num_samples=10000, seed=None, alpha=1.0, beta=0.0, kappa=0.0))]
+#[pyo3(signature = (ipc_bytes, method, num_samples=10000, seed=None, alpha=1.0, beta=0.0, kappa=0.0, include_nongrav=true))]
 fn orbits_sample_variants_ipc<'py>(
     py: Python<'py>,
     ipc_bytes: &Bound<'py, PyBytes>,
@@ -1251,11 +1312,12 @@ fn orbits_sample_variants_ipc<'py>(
     alpha: f64,
     beta: f64,
     kappa: f64,
+    include_nongrav: bool,
 ) -> PyResult<(Bound<'py, PyBytes>, Bound<'py, PyArray1<i64>>)> {
     let batch = read_orbit_ipc(ipc_bytes.as_bytes())?;
     let orbits = DataOrbitBatch::try_from_nested_record_batch(&batch)
         .map_err(|err| PyValueError::new_err(format!("failed to decode OrbitBatch: {err}")))?;
-    let samples = create_sampled_orbit_variants(
+    let samples = create_sampled_orbit_variants_with_nongrav(
         &orbits,
         parse_variant_method(method)?,
         num_samples,
@@ -1263,6 +1325,7 @@ fn orbits_sample_variants_ipc<'py>(
         alpha,
         beta,
         kappa,
+        include_nongrav,
     )
     .map_err(|err| PyValueError::new_err(format!("failed to sample variants: {err}")))?;
     let source_indices: Vec<i64> = samples
@@ -1290,10 +1353,11 @@ fn sample_orbit_variants_record_batch(
     alpha: f64,
     beta: f64,
     kappa: f64,
+    include_nongrav: bool,
 ) -> Result<RecordBatch, String> {
     let orbits = DataOrbitBatch::try_from_nested_record_batch(orbit_batch)
         .map_err(|err| format!("failed to decode OrbitBatch: {err}"))?;
-    let samples = create_sampled_orbit_variants(
+    let samples = create_sampled_orbit_variants_with_nongrav(
         &orbits,
         parse_variant_method(method).map_err(|err| err.to_string())?,
         num_samples,
@@ -1301,6 +1365,7 @@ fn sample_orbit_variants_record_batch(
         alpha,
         beta,
         kappa,
+        include_nongrav,
     )
     .map_err(|err| format!("failed to sample variants: {err}"))?;
     samples
@@ -1311,7 +1376,7 @@ fn sample_orbit_variants_record_batch(
 
 /// Arrow-native public `VariantOrbits.create` surface.
 #[pyfunction]
-#[pyo3(signature = (orbit_batch, method, num_samples=10000, seed=None, alpha=1.0, beta=0.0, kappa=0.0))]
+#[pyo3(signature = (orbit_batch, method, num_samples=10000, seed=None, alpha=1.0, beta=0.0, kappa=0.0, include_nongrav=true))]
 fn sample_orbit_variants_arrow<'py>(
     py: Python<'py>,
     orbit_batch: &Bound<'py, PyAny>,
@@ -1321,6 +1386,7 @@ fn sample_orbit_variants_arrow<'py>(
     alpha: f64,
     beta: f64,
     kappa: f64,
+    include_nongrav: bool,
 ) -> PyResult<PyObject> {
     let orbits = RecordBatch::from_pyarrow_bound(orbit_batch)
         .map_err(|err| PyValueError::new_err(format!("invalid Orbits RecordBatch: {err}")))?;
@@ -1334,6 +1400,7 @@ fn sample_orbit_variants_arrow<'py>(
                 alpha,
                 beta,
                 kappa,
+                include_nongrav,
             )
         })
         .map_err(PyValueError::new_err)?;
@@ -1344,7 +1411,7 @@ fn sample_orbit_variants_arrow<'py>(
 
 /// Rust-owned Instant timer for the Arrow-native variant sampler.
 #[pyfunction]
-#[pyo3(signature = (orbit_batch, method, reps, trials, warmup_reps=1, num_samples=10000, seed=None, alpha=1.0, beta=0.0, kappa=0.0))]
+#[pyo3(signature = (orbit_batch, method, reps, trials, warmup_reps=1, num_samples=10000, seed=None, alpha=1.0, beta=0.0, kappa=0.0, include_nongrav=true))]
 #[allow(clippy::too_many_arguments)]
 fn benchmark_sample_orbit_variants_arrow(
     orbit_batch: &Bound<'_, PyAny>,
@@ -1357,6 +1424,7 @@ fn benchmark_sample_orbit_variants_arrow(
     alpha: f64,
     beta: f64,
     kappa: f64,
+    include_nongrav: bool,
 ) -> PyResult<Vec<Vec<f64>>> {
     if reps == 0 || trials == 0 {
         return Err(PyValueError::new_err("reps and trials must be >= 1"));
@@ -1372,6 +1440,7 @@ fn benchmark_sample_orbit_variants_arrow(
             alpha,
             beta,
             kappa,
+            include_nongrav,
         )
         .map_err(PyRuntimeError::new_err)?;
         black_box(output);
@@ -4715,9 +4784,13 @@ fn transform_coordinates_record_batch(
     )?;
     let covariance = match output.covariance {
         Some(values) => {
+            let dimension = coordinates
+                .covariance
+                .as_ref()
+                .map_or(6, |input| input.dimension);
             let mut covariance = CovarianceBatch::new(
                 rows,
-                6,
+                dimension,
                 values,
                 CovarianceUnits::Coordinate(config.representation_out),
             )
@@ -6540,13 +6613,49 @@ fn collapse_variant_orbits_record_batch(
     if orbit_times.scale != variant_times.scale {
         return Err("assertion failed: orbit and variant time scales must match".to_string());
     }
-    let orbit_values = cartesian_samples(&orbits.coordinates.values, "orbit")?;
-    let variant_values = cartesian_samples(&variants.coordinates.values, "variant")?;
+    let orbit_coordinate_values = cartesian_samples(&orbits.coordinates.values, "orbit")?;
+    let variant_coordinate_values = cartesian_samples(&variants.coordinates.values, "variant")?;
+    let dimension = orbits
+        .coordinates
+        .covariance
+        .as_ref()
+        .map_or(6, |covariance| covariance.dimension);
+    if !matches!(dimension, 6 | 9) {
+        return Err(format!(
+            "covariance collapse supports dimensions 6 or 9, got {dimension}"
+        ));
+    }
+    let orbit_nongrav = if dimension == 9 {
+        Some(
+            orbits
+                .non_gravitational_parameters
+                .as_ref()
+                .ok_or_else(|| {
+                    "9D covariance collapse requires nominal non-gravitational parameters"
+                        .to_string()
+                })?,
+        )
+    } else {
+        None
+    };
+    let variant_nongrav = if dimension == 9 {
+        Some(
+            variants
+                .non_gravitational_parameters
+                .as_ref()
+                .ok_or_else(|| {
+                    "9D covariance collapse requires variant non-gravitational parameters"
+                        .to_string()
+                })?,
+        )
+    } else {
+        None
+    };
     let groups = variant_linkage_groups(&variants, variant_times);
 
     let rows = orbits.len();
-    let mut covariance_values = vec![0.0_f64; rows * 36];
-    for row in 0..rows {
+    let mut covariance_values = vec![0.0_f64; rows * dimension * dimension];
+    for (row, coordinate_mean) in orbit_coordinate_values.iter().enumerate() {
         let epoch = orbit_times.epochs[row];
         let key = (
             orbits.orbit_id[row].0.as_str(),
@@ -6554,21 +6663,40 @@ fn collapse_variant_orbits_record_batch(
             epoch.nanos / 1_000_000,
         );
         let indices: &[usize] = groups.get(&key).map_or(&[], Vec::as_slice);
+        let mut nominal = coordinate_mean.to_vec();
+        if let Some(nongrav) = orbit_nongrav {
+            nominal.extend([
+                nongrav.a1[row].unwrap_or(0.0),
+                nongrav.a2[row].unwrap_or(0.0),
+                nongrav.a3[row].unwrap_or(0.0),
+            ]);
+        }
         let samples: Vec<f64> = indices
             .iter()
-            .flat_map(|&index| variant_values[index].iter().copied())
+            .flat_map(|&index| {
+                let mut sample = variant_coordinate_values[index].to_vec();
+                if let Some(nongrav) = variant_nongrav {
+                    sample.extend([
+                        nongrav.a1[index].unwrap_or(0.0),
+                        nongrav.a2[index].unwrap_or(0.0),
+                        nongrav.a3[index].unwrap_or(0.0),
+                    ]);
+                }
+                sample
+            })
             .collect();
         let weights: Vec<f64> = indices
             .iter()
             .map(|&index| variants.weights_cov[index].unwrap_or(f64::NAN))
             .collect();
         let covariance =
-            weighted_covariance_flat(&orbit_values[row], &samples, &weights, indices.len(), 6);
-        covariance_values[row * 36..(row + 1) * 36].copy_from_slice(&covariance);
+            weighted_covariance_flat(&nominal, &samples, &weights, indices.len(), dimension);
+        let start = row * dimension * dimension;
+        covariance_values[start..start + dimension * dimension].copy_from_slice(&covariance);
     }
     let covariance = CovarianceBatch::new(
         rows,
-        6,
+        dimension,
         covariance_values,
         CovarianceUnits::Coordinate(DataRepresentation::Cartesian),
     )
@@ -6593,6 +6721,11 @@ fn collapse_variant_orbits_by_object_id_record_batch(
         .as_ref()
         .ok_or_else(|| "variant coordinates require times".to_string())?;
     let variant_values = cartesian_samples(&variants.coordinates.values, "variant")?;
+    let variant_nongrav = variants
+        .non_gravitational_parameters
+        .as_ref()
+        .filter(|parameters| parameters.has_values());
+    let dimension = if variant_nongrav.is_some() { 9 } else { 6 };
 
     let mut lookup: HashMap<Option<&str>, usize> = HashMap::new();
     let mut groups: Vec<(Option<String>, Vec<usize>)> = Vec::new();
@@ -6616,7 +6749,8 @@ fn collapse_variant_orbits_by_object_id_record_batch(
 
     let n_groups = groups.len();
     let mut means = Vec::with_capacity(n_groups);
-    let mut covariance_values = vec![0.0_f64; n_groups * 36];
+    let mut nongrav_means = Vec::with_capacity(n_groups);
+    let mut covariance_values = vec![0.0_f64; n_groups * dimension * dimension];
     let mut epochs = Vec::with_capacity(n_groups);
     let mut origins = Vec::with_capacity(n_groups);
     let mut object_ids = Vec::with_capacity(n_groups);
@@ -6641,13 +6775,27 @@ fn collapse_variant_orbits_by_object_id_record_batch(
         let n = rows.len();
         let samples: Vec<f64> = rows
             .iter()
-            .flat_map(|&row| variant_values[row].iter().copied())
+            .flat_map(|&row| {
+                let mut sample = variant_values[row].to_vec();
+                if let Some(nongrav) = variant_nongrav {
+                    sample.extend([
+                        nongrav.a1[row].unwrap_or(0.0),
+                        nongrav.a2[row].unwrap_or(0.0),
+                        nongrav.a3[row].unwrap_or(0.0),
+                    ]);
+                }
+                sample
+            })
             .collect();
         let uniform = vec![1.0 / n as f64; n];
-        let mean = weighted_mean_flat(&samples, &uniform, n, 6);
-        let covariance = weighted_covariance_flat(&mean, &samples, &uniform, n, 6);
-        covariance_values[group * 36..(group + 1) * 36].copy_from_slice(&covariance);
+        let mean = weighted_mean_flat(&samples, &uniform, n, dimension);
+        let covariance = weighted_covariance_flat(&mean, &samples, &uniform, n, dimension);
+        let start = group * dimension * dimension;
+        covariance_values[start..start + dimension * dimension].copy_from_slice(&covariance);
         means.push([mean[0], mean[1], mean[2], mean[3], mean[4], mean[5]]);
+        if variant_nongrav.is_some() {
+            nongrav_means.push([mean[6], mean[7], mean[8]]);
+        }
         let first = rows[0];
         first_rows.push(first);
         epochs.push(times.epochs[first]);
@@ -6657,7 +6805,7 @@ fn collapse_variant_orbits_by_object_id_record_batch(
 
     let covariance = CovarianceBatch::new(
         n_groups,
-        6,
+        dimension,
         covariance_values,
         CovarianceUnits::Coordinate(DataRepresentation::Cartesian),
     )
@@ -6686,6 +6834,17 @@ fn collapse_variant_orbits_by_object_id_record_batch(
         collapsed = collapsed
             .with_physical_parameters(physical_parameters.take(&first_rows))
             .map_err(|err| format!("failed to attach physical parameters: {err}"))?;
+    }
+    if let Some(nongrav) = variant_nongrav {
+        let mut collapsed_nongrav: DataNonGravBatch = nongrav.take(&first_rows);
+        for (group, mean) in nongrav_means.iter().enumerate() {
+            collapsed_nongrav.a1[group] = Some(mean[0]);
+            collapsed_nongrav.a2[group] = Some(mean[1]);
+            collapsed_nongrav.a3[group] = Some(mean[2]);
+        }
+        collapsed = collapsed
+            .with_non_gravitational_parameters(collapsed_nongrav)
+            .map_err(|err| format!("failed to attach non-gravitational parameters: {err}"))?;
     }
     collapsed
         .into_nested_record_batch()
@@ -6986,6 +7145,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(apply_cosine_latitude_correction_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(calculate_chi2_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(compute_residuals_chi2_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        apply_linear_covariance_transform_numpy,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(weighted_mean_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(weighted_covariance_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(classify_orbits_numpy, m)?)?;

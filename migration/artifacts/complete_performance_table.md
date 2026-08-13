@@ -1,175 +1,205 @@
-# Complete registered-parity performance table
+# Complete registered computational performance matrix
 
-> **Scope warning:** this is complete only for the 44 APIs explicitly registered in the parity harness plus 26 adam-assist benchmark lanes. It is **not** an inventory of the complete adam-core public Python surface; class methods such as `Orbits.group_by_orbit_id`, `VariantOrbits.collapse`, and `Ephemeris.link_to_observers` were not registered and therefore do not appear below. That broader audit is tracked by `personal-cmy.37`.
+> **Scope:** Complete for all 44 computational work units in `API_MIGRATIONS` across tiny/small/large lanes, plus every ASSIST numerical public work unit with equivalent frozen updated-upstream timing evidence. It is not a claim that all 629 core public symbols are benchmarkable computations. Compatibility constants, schemas, data veneers, provider boundaries, and class utilities outside the computational registry are governed by `migration/public_surface/manifest.json` plus its domain audits. The complete-surface audit `personal-cmy.37` is closed; this report does not silently treat its 629 symbol rows as 629 independent benchmark workloads.
 
-Generated from the canonical `rm-p1-023-canonical-variant-create-v1` artifacts. Ratios are **legacy / implementation**, so larger is faster. p50/p95 are shown together. “—” means no qualifying Rust-owned `Instant` adapter exists; a PyO3 call is not mislabeled as native Rust.
+**Workload convention:** a workload is the exact benchmark input shape and options shown in each row—for example `orbits=400 × epochs=50`, not an informal size adjective. Tiny rows measure one-off call overhead, small rows preserve the historical promotion scale, and large rows use API-shaped production axes.
 
-## adam-core
+**Coverage count:** 135 core timing rows: 132 canonical rows (44 APIs × 3 lanes) plus 3 focused 9D `VariantOrbits.create` rows.
 
-| Surface | Lane / workload | Python veneer vs legacy (p50 / p95) | Native Rust vs legacy (p50 / p95) | Native evidence |
-|---|---|---:|---:|---|
-| `coordinates.cartesian_to_spherical` | tiny-n: rows=10 | 9.69× / 10.74× | — / — | unavailable (personal-98v.1) |
-| `coordinates.transform_coordinates` | tiny-n: rows=12 | 5.52× / 5.12× | 351.24× / 393.46× | measured |
-| `coordinates.transform_coordinates_with_covariance` | tiny-n: rows=4 | 392.22× / 416.64× | — / — | unavailable (personal-98v.1) |
-| `coordinates.cartesian_to_geodetic` | tiny-n: rows=10 | 16.43× / 16.50× | — / — | unavailable (personal-98v.1) |
-| `coordinates.cartesian_to_keplerian` | tiny-n: rows=10 | 20.86× / 39.89× | — / — | unavailable (personal-98v.1) |
-| `coordinates.keplerian.to_cartesian` | tiny-n: rows=10 | 3.29× / 2.70× | — / — | unavailable (personal-98v.1) |
-| `coordinates.cartesian_to_cometary` | tiny-n: rows=10 | 2.64× / 2.50× | — / — | unavailable (personal-98v.1) |
-| `coordinates.cometary.to_cartesian` | tiny-n: rows=10 | 4.80× / 3.42× | — / — | unavailable (personal-98v.1) |
-| `coordinates.spherical.to_cartesian` | tiny-n: rows=10 | 9.66× / 10.78× | — / — | unavailable (personal-98v.1) |
-| `coordinates.rotate_cartesian_time_varying` | tiny-n: rows=10 | 0.72× / 0.54× | — / — | unavailable (personal-98v.1) |
-| `coordinates.residuals.Residuals.calculate` | tiny-n: rows=10 | 1.49× / 1.23× | 77.99× / 92.49× | measured |
-| `coordinates.residuals.calculate_chi2` | tiny-n: rows=10 | 9.09× / 9.56× | — / — | unavailable (personal-98v.1) |
-| `coordinates.residuals.bound_longitude_residuals` | tiny-n: rows=10 | 7.21× / 7.57× | — / — | unavailable (personal-98v.1) |
-| `coordinates.residuals.apply_cosine_latitude_correction` | tiny-n: rows=10 | 6.11× / 6.11× | — / — | unavailable (personal-98v.1) |
-| `statistics.weighted_mean` | tiny-n: rows=10 | 0.60× / 0.61× | — / — | unavailable (personal-98v.1) |
-| `statistics.weighted_covariance` | tiny-n: rows=10 | 1.58× / 1.63× | — / — | unavailable (personal-98v.1) |
-| `dynamics.calc_mean_motion` | tiny-n: rows=10 | 1.65× / 1.70× | — / — | unavailable (personal-98v.1) |
-| `dynamics.tisserand_parameter` | tiny-n: rows=10 | 1.55× / 1.59× | — / — | unavailable (personal-98v.1) |
-| `orbits.classify_orbits` | tiny-n: rows=10 | 10.23× / 10.22× | — / — | unavailable (personal-98v.1) |
-| `dynamics.calculate_moid` | tiny-n: rows=1 | 93.81× / 101.52× | — / — | unavailable (personal-98v.1) |
-| `dynamics.calculate_moid_batch` | tiny-n: rows=1 | 100.45× / 109.18× | — / — | unavailable (personal-98v.1) |
-| `dynamics.calculate_perturber_moids` | tiny-n: rows=1 | 171.56× / 126.76× | 1332.36× / 1423.97× | measured |
-| `missions.porkchop_grid` | tiny-n: departures=2 × arrivals=2 (4 rows) | 21.89× / 22.74× | — / — | unavailable (personal-98v.1) |
-| `dynamics.generate_porkchop_data` | tiny-n: departures=2 × arrivals=2 (4 rows) | 2.30× / 1.92× | 243.83× / 271.50× | measured |
-| `dynamics.propagate_2body` | tiny-n: rows=10 | 2.31× / 2.11× | 97.28× / 112.94× | measured |
-| `dynamics.propagate_2body_along_arc` | tiny-n: rows=10 | 12.76× / 17.58× | — / — | unavailable (personal-98v.1) |
-| `dynamics.propagate_2body_arc_batch` | tiny-n: orbits=2 × epochs=5 (10 rows) | 1.77× / 1.61× | — / — | unavailable (personal-98v.1) |
-| `dynamics.propagate_2body_with_covariance` | tiny-n: rows=10 | 495.68× / 257.61× | — / — | unavailable (personal-98v.1) |
-| `dynamics.generate_ephemeris_2body` | tiny-n: rows=10 | 5.17× / 4.83× | 57.89× / 41.95× | measured |
-| `dynamics.generate_ephemeris_2body_with_covariance` | tiny-n: rows=10 | 8.37× / 7.66× | 85.34× / 63.90× | measured |
-| `dynamics.solve_lambert` | tiny-n: rows=10 | 2.71× / 2.45× | — / — | unavailable (personal-98v.1) |
-| `dynamics.add_light_time` | tiny-n: rows=10 | 1.70× / 1.25× | — / — | unavailable (personal-cmy.36.5) |
-| `photometry.calculate_phase_angle` | tiny-n: rows=10 | 6.38× / 6.82× | — / — | unavailable (personal-98v.1) |
-| `photometry.calculate_apparent_magnitude_v` | tiny-n: rows=10 | 5.11× / 5.68× | — / — | unavailable (personal-98v.1) |
-| `photometry.calculate_apparent_magnitude_v_and_phase_angle` | tiny-n: rows=10 | 5.19× / 5.17× | — / — | unavailable (personal-98v.1) |
-| `photometry.predict_magnitudes` | tiny-n: rows=10 | 5.15× / 5.93× | — / — | unavailable (personal-98v.1) |
-| `photometry.fit_absolute_magnitude_rows` | tiny-n: rows=10 | 11.12× / 11.97× | — / — | unavailable (personal-98v.1) |
-| `photometry.fit_absolute_magnitude_grouped` | tiny-n: rows=10 | 3.14× / 1.83× | — / — | unavailable (personal-98v.1) |
-| `orbit_determination.calcGibbs` | tiny-n: rows=10 | 41.84× / 41.47× | — / — | unavailable (personal-98v.1) |
-| `orbit_determination.calcHerrickGibbs` | tiny-n: rows=10 | 3.87× / 3.90× | — / — | unavailable (personal-98v.1) |
-| `orbit_determination.calcGauss` | tiny-n: rows=10 | 2.30× / 2.36× | — / — | unavailable (personal-98v.1) |
-| `orbit_determination.gaussIOD` | tiny-n: triplets=1 (1 rows) | 7.55× / 6.87× | 155.51× / 179.26× | measured |
-| `orbits.VariantOrbits.create` | tiny-n: rows=10 | 14.65× / 10.76× | 315.80× / 328.04× | measured |
-| `observers.Observers.from_codes` | tiny-n: rows=10 | 54.05× / 43.52× | 848.01× / 906.13× | measured |
-| `coordinates.cartesian_to_spherical` | small-n: rows=2000 | 1.70× / 2.18× | — / — | unavailable (personal-98v.1) |
-| `coordinates.transform_coordinates` | small-n: rows=2000 | 5.65× / 5.79× | 29.85× / 28.44× | measured |
-| `coordinates.transform_coordinates_with_covariance` | small-n: rows=2000 | 157.41× / 124.39× | — / — | unavailable (personal-98v.1) |
-| `coordinates.cartesian_to_geodetic` | small-n: rows=2000 | 4.35× / 2.60× | — / — | unavailable (personal-98v.1) |
-| `coordinates.cartesian_to_keplerian` | small-n: rows=2000 | 3.41× / 3.11× | — / — | unavailable (personal-98v.1) |
-| `coordinates.keplerian.to_cartesian` | small-n: rows=2000 | 31.88× / 21.03× | — / — | unavailable (personal-98v.1) |
-| `coordinates.cartesian_to_cometary` | small-n: rows=2000 | 3.34× / 3.71× | — / — | unavailable (personal-98v.1) |
-| `coordinates.cometary.to_cartesian` | small-n: rows=2000 | 30.16× / 16.91× | — / — | unavailable (personal-98v.1) |
-| `coordinates.spherical.to_cartesian` | small-n: rows=2000 | 2.14× / 1.91× | — / — | unavailable (personal-98v.1) |
-| `coordinates.rotate_cartesian_time_varying` | small-n: rows=2000 | 14.53× / 9.23× | — / — | unavailable (personal-98v.1) |
-| `coordinates.residuals.Residuals.calculate` | small-n: rows=2000 | 2.34× / 2.42× | 5.84× / 6.10× | measured |
-| `coordinates.residuals.calculate_chi2` | small-n: rows=2000 | 3.02× / 2.50× | — / — | unavailable (personal-98v.1) |
-| `coordinates.residuals.bound_longitude_residuals` | small-n: rows=2000 | 4.15× / 4.26× | — / — | unavailable (personal-98v.1) |
-| `coordinates.residuals.apply_cosine_latitude_correction` | small-n: rows=2000 | 5.27× / 5.86× | — / — | unavailable (personal-98v.1) |
-| `statistics.weighted_mean` | small-n: rows=2000 | 0.15× / 0.13× | — / — | unavailable (personal-98v.1) |
-| `statistics.weighted_covariance` | small-n: rows=2000 | 0.53× / 0.54× | — / — | unavailable (personal-98v.1) |
-| `dynamics.calc_mean_motion` | small-n: rows=2000 | 7.59× / 7.64× | — / — | unavailable (personal-98v.1) |
-| `dynamics.tisserand_parameter` | small-n: rows=2000 | 2.24× / 2.41× | — / — | unavailable (personal-98v.1) |
-| `orbits.classify_orbits` | small-n: rows=2000 | 9.56× / 9.62× | — / — | unavailable (personal-98v.1) |
-| `dynamics.calculate_moid` | small-n: rows=8 | 94.37× / 97.00× | — / — | unavailable (personal-98v.1) |
-| `dynamics.calculate_moid_batch` | small-n: rows=8 | 204.00× / 161.50× | — / — | unavailable (personal-98v.1) |
-| `dynamics.calculate_perturber_moids` | small-n: rows=8 | 332.07× / 269.00× | 2613.12× / 1906.50× | measured |
-| `missions.porkchop_grid` | small-n: departures=44 × arrivals=44 (1936 rows) | 6.63× / 3.99× | — / — | unavailable (personal-98v.1) |
-| `dynamics.generate_porkchop_data` | small-n: departures=44 × arrivals=44 (1936 rows) | 2.20× / 2.22× | 18.24× / 16.34× | measured |
-| `dynamics.propagate_2body` | small-n: rows=2000 | 1.38× / 1.36× | 3.24× / 3.23× | measured |
-| `dynamics.propagate_2body_along_arc` | small-n: rows=100 | 2.98× / 4.29× | — / — | unavailable (personal-98v.1) |
-| `dynamics.propagate_2body_arc_batch` | small-n: orbits=40 × epochs=50 (2000 rows) | 17.53× / 15.17× | — / — | unavailable (personal-98v.1) |
-| `dynamics.propagate_2body_with_covariance` | small-n: rows=2000 | 17983.12× / 12019.77× | — / — | unavailable (personal-98v.1) |
-| `dynamics.generate_ephemeris_2body` | small-n: rows=2000 | 8.66× / 8.30× | 11.99× / 11.47× | measured |
-| `dynamics.generate_ephemeris_2body_with_covariance` | small-n: rows=2000 | 8.31× / 7.80× | 10.48× / 9.74× | measured |
-| `dynamics.solve_lambert` | small-n: rows=2000 | 30.25× / 19.55× | — / — | unavailable (personal-98v.1) |
-| `dynamics.add_light_time` | small-n: rows=2000 | 3.22× / 3.08× | — / — | unavailable (personal-cmy.36.5) |
-| `photometry.calculate_phase_angle` | small-n: rows=2000 | 3.74× / 5.36× | — / — | unavailable (personal-98v.1) |
-| `photometry.calculate_apparent_magnitude_v` | small-n: rows=2000 | 4.08× / 3.47× | — / — | unavailable (personal-98v.1) |
-| `photometry.calculate_apparent_magnitude_v_and_phase_angle` | small-n: rows=2000 | 4.00× / 4.89× | — / — | unavailable (personal-98v.1) |
-| `photometry.predict_magnitudes` | small-n: rows=2000 | 3.52× / 4.04× | — / — | unavailable (personal-98v.1) |
-| `photometry.fit_absolute_magnitude_rows` | small-n: rows=2000 | 3.37× / 3.60× | — / — | unavailable (personal-98v.1) |
-| `photometry.fit_absolute_magnitude_grouped` | small-n: rows=2000 | 112.64× / 101.60× | — / — | unavailable (personal-98v.1) |
-| `orbit_determination.calcGibbs` | small-n: rows=2000 | 43.87× / 42.68× | — / — | unavailable (personal-98v.1) |
-| `orbit_determination.calcHerrickGibbs` | small-n: rows=2000 | 3.96× / 3.78× | — / — | unavailable (personal-98v.1) |
-| `orbit_determination.calcGauss` | small-n: rows=2000 | 2.39× / 2.31× | — / — | unavailable (personal-98v.1) |
-| `orbit_determination.gaussIOD` | small-n: triplets=16 (16 rows) | 8.65× / 7.66× | 169.60× / 177.05× | measured |
-| `orbits.VariantOrbits.create` | small-n: rows=2000 | 248.48× / 217.97× | 343.85× / 318.55× | measured |
-| `observers.Observers.from_codes` | small-n: rows=2000 | 44.74× / 34.80× | 55.06× / 40.72× | measured |
-| `coordinates.cartesian_to_spherical` | large-n: rows=20000 | 3.44× / 2.93× | — / — | unavailable (personal-98v.1) |
-| `coordinates.transform_coordinates` | large-n: rows=12000 | 8.40× / 8.22× | 18.70× / 16.93× | measured |
-| `coordinates.transform_coordinates_with_covariance` | large-n: rows=4000 | 156.54× / 108.00× | — / — | unavailable (personal-98v.1) |
-| `coordinates.cartesian_to_geodetic` | large-n: rows=20000 | 11.68× / 7.37× | — / — | unavailable (personal-98v.1) |
-| `coordinates.cartesian_to_keplerian` | large-n: rows=20000 | 2.75× / 2.78× | — / — | unavailable (personal-98v.1) |
-| `coordinates.keplerian.to_cartesian` | large-n: rows=20000 | 33.40× / 27.49× | — / — | unavailable (personal-98v.1) |
-| `coordinates.cartesian_to_cometary` | large-n: rows=20000 | 3.93× / 4.07× | — / — | unavailable (personal-98v.1) |
-| `coordinates.cometary.to_cartesian` | large-n: rows=20000 | 32.08× / 28.86× | — / — | unavailable (personal-98v.1) |
-| `coordinates.spherical.to_cartesian` | large-n: rows=20000 | 5.77× / 4.86× | — / — | unavailable (personal-98v.1) |
-| `coordinates.rotate_cartesian_time_varying` | large-n: rows=50000 | 36.35× / 32.61× | — / — | unavailable (personal-98v.1) |
-| `coordinates.residuals.Residuals.calculate` | large-n: rows=20000 | 2.95× / 2.88× | 6.08× / 5.72× | measured |
-| `coordinates.residuals.calculate_chi2` | large-n: rows=50000 | 11.48× / 8.17× | — / — | unavailable (personal-98v.1) |
-| `coordinates.residuals.bound_longitude_residuals` | large-n: rows=100000 | 1.58× / 1.51× | — / — | unavailable (personal-98v.1) |
-| `coordinates.residuals.apply_cosine_latitude_correction` | large-n: rows=50000 | 12.06× / 11.71× | — / — | unavailable (personal-98v.1) |
-| `statistics.weighted_mean` | large-n: rows=50000 | 0.12× / 0.12× | — / — | unavailable (personal-98v.1) |
-| `statistics.weighted_covariance` | large-n: rows=50000 | 0.73× / 0.97× | — / — | unavailable (personal-98v.1) |
-| `dynamics.calc_mean_motion` | large-n: rows=50000 | 13.15× / 13.39× | — / — | unavailable (personal-98v.1) |
-| `dynamics.tisserand_parameter` | large-n: rows=100000 | 3.32× / 2.30× | — / — | unavailable (personal-98v.1) |
-| `orbits.classify_orbits` | large-n: rows=50000 | 3.75× / 2.93× | — / — | unavailable (personal-98v.1) |
-| `dynamics.calculate_moid` | large-n: rows=64 | 93.65× / 89.84× | — / — | unavailable (personal-98v.1) |
-| `dynamics.calculate_moid_batch` | large-n: rows=64 | 397.63× / 347.38× | — / — | unavailable (personal-98v.1) |
-| `dynamics.calculate_perturber_moids` | large-n: rows=64 | 1602.69× / 1456.03× | 4386.02× / 3862.77× | measured |
-| `missions.porkchop_grid` | large-n: departures=64 × arrivals=64 (4096 rows) | 8.58× / 7.20× | — / — | unavailable (personal-98v.1) |
-| `dynamics.generate_porkchop_data` | large-n: departures=64 × arrivals=64 (4096 rows) | 2.49× / 2.19× | 16.91× / 13.33× | measured |
-| `dynamics.propagate_2body` | large-n: orbits=1000 × epochs=20 (20000 rows) | 2.85× / 2.73× | 3.82× / 3.72× | measured |
-| `dynamics.propagate_2body_along_arc` | large-n: rows=400 | 1.34× / 2.04× | — / — | unavailable (personal-98v.1) |
-| `dynamics.propagate_2body_arc_batch` | large-n: orbits=400 × epochs=50 (20000 rows) | 22.42× / 20.60× | — / — | unavailable (personal-98v.1) |
-| `dynamics.propagate_2body_with_covariance` | large-n: orbits=200 × epochs=20 (4000 rows) | 17960.46× / 13735.45× | — / — | unavailable (personal-98v.1) |
-| `dynamics.generate_ephemeris_2body` | large-n: orbits=400 × epochs=50 (20000 rows) | 1.50× / 1.49× | 1.63× / 1.67× | measured |
-| `dynamics.generate_ephemeris_2body_with_covariance` | large-n: orbits=200 × epochs=20 (4000 rows) | 3.18× / 3.34× | 3.98× / 4.20× | measured |
-| `dynamics.solve_lambert` | large-n: rows=12000 | 34.34× / 23.81× | — / — | unavailable (personal-98v.1) |
-| `dynamics.add_light_time` | large-n: orbits=400 × observers=50 (20000 rows) | 3.85× / 2.96× | — / — | unavailable (personal-cmy.36.5) |
-| `photometry.calculate_phase_angle` | large-n: orbits=1000 × observers=50 (50000 rows) | 3.10× / 2.35× | — / — | unavailable (personal-98v.1) |
-| `photometry.calculate_apparent_magnitude_v` | large-n: orbits=1000 × observers=50 (50000 rows) | 1.93× / 1.53× | — / — | unavailable (personal-98v.1) |
-| `photometry.calculate_apparent_magnitude_v_and_phase_angle` | large-n: orbits=1000 × observers=50 (50000 rows) | 2.33× / 1.59× | — / — | unavailable (personal-98v.1) |
-| `photometry.predict_magnitudes` | large-n: orbits=1000 × observers=50 (50000 rows) | 1.37× / 1.45× | — / — | unavailable (personal-98v.1) |
-| `photometry.fit_absolute_magnitude_rows` | large-n: rows=50000 | 2.65× / 2.15× | — / — | unavailable (personal-98v.1) |
-| `photometry.fit_absolute_magnitude_grouped` | large-n: rows=50000 | 251.97× / 225.17× | — / — | unavailable (personal-98v.1) |
-| `orbit_determination.calcGibbs` | large-n: triplets=5000 (5000 rows) | 43.37× / 42.60× | — / — | unavailable (personal-98v.1) |
-| `orbit_determination.calcHerrickGibbs` | large-n: triplets=5000 (5000 rows) | 3.91× / 3.81× | — / — | unavailable (personal-98v.1) |
-| `orbit_determination.calcGauss` | large-n: triplets=5000 (5000 rows) | 2.33× / 2.40× | — / — | unavailable (personal-98v.1) |
-| `orbit_determination.gaussIOD` | large-n: triplets=128 (128 rows) | 7.75× / 7.99× | 164.60× / 164.27× | measured |
-| `orbits.VariantOrbits.create` | large-n: rows=5000 | 230.72× / 219.22× | 320.33× / 284.79× | measured |
-| `observers.Observers.from_codes` | large-n: rows=50000 | 22.48× / 19.64× | 25.34× / 25.89× | measured |
+**Ratio convention:** updated-upstream Python / implementation; larger is faster. Each cell is p50 / p95. Native values appear only for genuine Rust-owned `std::time::Instant` adapters.
 
-## adam-assist
+**Gate outcome:** all 105 enforced rows (35 APIs × 3 lanes) pass the 1.3× policy with no waivers; tiny-n p95 remains report-only by policy. 6 raw-kernel diagnostic rows miss: `coordinates.rotate_cartesian_time_varying` tiny-n; `statistics.weighted_mean` tiny-n; `statistics.weighted_mean` small-n; `statistics.weighted_covariance` small-n; `statistics.weighted_mean` large-n; `statistics.weighted_covariance` large-n. These do not affect promotion governance. No waiver or threshold change was applied. ASSIST rows are a performance matrix rather than the canonical 1.3× gate; rows below 1.0× are reported explicitly, not labeled PASS.
 
-These are the latest committed two-runtime artifacts for the same Rust implementation now owned by downstream `adam-assist` (`rust-migration-assist`, commit `1ffda5a`). The compatible public method was timed against pinned legacy adam-assist; Rust-internal adapters have not yet been implemented, so native values are honestly blank.
+## adam-core computational registry
 
-| Surface | Lane / workload | Python veneer vs legacy (p50 / p95) | Native Rust vs legacy (p50 / p95) | Native evidence |
-|---|---|---:|---:|---|
-| `ASSISTPropagator.propagate_orbits` | tiny: `tiny_sun_ecliptic_tdb_2x2_fixture_shape` (n_orbits=2, n_target_times=2, output_rows=4) | 5.75× / 6.07× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | tiny: `tiny_sun_ecliptic_tdb_8x8_same_epoch` (n_orbits=8, n_target_times=8, output_rows=64) | 5.91× / 6.15× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | tiny: `tiny_ssb_equatorial_utc_8x8_same_epoch` (n_orbits=8, n_target_times=8, output_rows=64) | 6.06× / 6.48× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | tiny: `tiny_variant_sun_ecliptic_tdb_8x4` (n_orbits=8, n_target_times=4, output_rows=32) | 7.07× / 7.07× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | small: `small_sun_ecliptic_tdb_40x50` (n_orbits=40, n_target_times=50, output_rows=2000) | 2.58× / 2.68× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | small: `small_ssb_equatorial_utc_40x50` (n_orbits=40, n_target_times=50, output_rows=2000) | 2.07× / 2.54× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | small: `small_variant_sun_ecliptic_tdb_40x50` (n_orbits=40, n_target_times=50, output_rows=2000) | 2.48× / 2.33× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | large: `large_sun_ecliptic_tdb_1000x20` (n_orbits=1000, n_target_times=20, output_rows=20000) | 1.93× / 1.99× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | large: `large_sun_ecliptic_tdb_400x50_arc_shape` (n_orbits=400, n_target_times=50, output_rows=20000) | 1.68× / 1.50× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | large: `large_ssb_equatorial_utc_400x50_arc_shape` (n_orbits=400, n_target_times=50, output_rows=20000) | 1.46× / 1.33× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | large: `large_variant_sun_ecliptic_tdb_400x50` (n_orbits=400, n_target_times=50, output_rows=20000) | 1.52× / 1.66× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | large: `large_sun_ecliptic_tdb_200x100_1yr` (n_orbits=200, n_target_times=100, output_rows=20000) | 1.46× / 1.45× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | large: `large_sun_ecliptic_tdb_400x50_unique_input_epochs` (n_orbits=400, n_target_times=50, output_rows=20000) | 2.26× / 2.26× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | large: `large_ssb_equatorial_utc_400x50_unique_input_epochs` (n_orbits=400, n_target_times=50, output_rows=20000) | 2.59× / 2.40× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | large: `large_ssb_equatorial_utc_200x100_1yr` (n_orbits=200, n_target_times=100, output_rows=20000) | 1.26× / 1.30× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | large: `large_sun_ecliptic_tdb_200x100_1yr_unique_input_epochs` (n_orbits=200, n_target_times=100, output_rows=20000) | 1.57× / 1.71× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits` | large: `large_variant_sun_ecliptic_tdb_200x100_1yr` (n_orbits=200, n_target_times=100, output_rows=20000) | 1.41× / 1.42× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits(covariance=True)` | tiny: `tiny_cov_sigma_point_sun_ecliptic_tdb_4x3` (n_orbits=4, n_target_times=3, output_rows=12) | 12.78× / 11.36× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits(covariance=True)` | small: `small_cov_sigma_point_sun_ecliptic_tdb_25x20` (n_orbits=25, n_target_times=20, output_rows=500) | 12.11× / 11.62× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits(covariance=True)` | small: `small_cov_auto_sun_ecliptic_tdb_25x20` (n_orbits=25, n_target_times=20, output_rows=500) | 12.44× / 12.52× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits(covariance=True)` | small: `small_cov_monte_carlo_sun_ecliptic_tdb_10x10` (n_orbits=10, n_target_times=10, output_rows=100) | 9.96× / 11.03× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits(covariance=True)` | large: `large_cov_sigma_point_sun_ecliptic_tdb_100x50_1yr` (n_orbits=100, n_target_times=50, output_rows=5000) | 11.04× / 10.86× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.propagate_orbits(covariance=True)` | large: `large_cov_sigma_point_unique_input_epochs_50x25_1yr` (n_orbits=50, n_target_times=25, output_rows=1250) | 8.95× / 8.74× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.detect_collisions` | orbits=10, days=30, impacts=2 | 6.71× / 6.50× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.detect_collisions` | orbits=50, days=30, impacts=10 | 3.95× / 3.92× | — / — | unavailable (personal-98v.1) |
-| `ASSISTPropagator.detect_collisions` | orbits=200, days=30, impacts=40 | 2.17× / 2.16× | — / — | unavailable (personal-98v.1) |
+| Surface | Lane and concrete workload | Updated-upstream Python p50/p95 | Current public facade p50/p95 | Native Rust p50/p95 | Updated/current | Updated/native | Native evidence |
+|---|---|---:|---:|---:|---:|---:|---|
+| `coordinates.cartesian_to_spherical` | `tiny-n`: rows=10 | 10.8 µs / 11.9 µs | 1.1 µs / 1.2 µs | 0.2 µs / 0.2 µs | 9.96× / 10.17× | 43.17× / 47.50× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.transform_coordinates` | `tiny-n`: rows=12 | 20.20 ms / 25.20 ms | 3.94 ms / 4.63 ms | 62.3 µs / 64.1 µs | 5.13× / 5.44× | 324.29× / 393.20× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.transform_coordinates_with_covariance` | `tiny-n`: rows=4 | 4.67 ms / 4.97 ms | 12.3 µs / 13.1 µs | — / — | 381.57× / 378.70× | — / — | unavailable (personal-98v.1); gate PASS |
+| `coordinates.cartesian_to_geodetic` | `tiny-n`: rows=10 | 23.8 µs / 26.2 µs | 1.9 µs / 2.2 µs | 0.8 µs / 0.8 µs | 12.70× / 11.89× | 31.72× / 33.14× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.cartesian_to_keplerian` | `tiny-n`: rows=10 | 47.6 µs / 71.4 µs | 2.3 µs / 2.4 µs | 1.0 µs / 1.0 µs | 20.77× / 30.08× | 49.71× / 74.42× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.keplerian.to_cartesian` | `tiny-n`: rows=10 | 68.1 µs / 77.5 µs | 25.7 µs / 44.1 µs | 24.5 µs / 44.9 µs | 2.65× / 1.76× | 2.79× / 1.73× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.cartesian_to_cometary` | `tiny-n`: rows=10 | 46.8 µs / 71.3 µs | 23.9 µs / 61.3 µs | 19.5 µs / 44.1 µs | 1.96× / 1.16× | 2.40× / 1.62× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.cometary.to_cartesian` | `tiny-n`: rows=10 | 79.4 µs / 99.7 µs | 22.7 µs / 47.0 µs | 21.3 µs / 53.6 µs | 3.49× / 2.12× | 3.73× / 1.86× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.spherical.to_cartesian` | `tiny-n`: rows=10 | 10.0 µs / 11.4 µs | 1.0 µs / 1.1 µs | 0.2 µs / 0.2 µs | 9.61× / 10.09× | 48.05× / 45.50× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.rotate_cartesian_time_varying` | `tiny-n`: rows=10 | 23.0 µs / 24.7 µs | 41.9 µs / 92.1 µs | 38.0 µs / 104.9 µs | 0.55× / 0.27× | 0.60× / 0.24× | measured (`std::time::Instant`); gate DIAG FAIL |
+| `coordinates.residuals.Residuals.calculate` | `tiny-n`: rows=10 | 588.2 µs / 764.0 µs | 362.1 µs / 446.0 µs | 9.1 µs / 9.2 µs | 1.62× / 1.71× | 64.76× / 82.97× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.residuals.calculate_chi2` | `tiny-n`: rows=10 | 12.5 µs / 13.7 µs | 1.5 µs / 1.5 µs | 0.3 µs / 0.3 µs | 8.55× / 8.89× | 42.66× / 41.05× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.residuals.bound_longitude_residuals` | `tiny-n`: rows=10 | 8.4 µs / 8.7 µs | 1.2 µs / 1.3 µs | 0.1 µs / 0.1 µs | 6.93× / 6.96× | 100.90× / 103.67× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.residuals.apply_cosine_latitude_correction` | `tiny-n`: rows=10 | 12.7 µs / 13.3 µs | 2.2 µs / 2.3 µs | 0.5 µs / 0.5 µs | 5.76× / 5.72× | 25.41× / 24.60× | measured (`std::time::Instant`); gate PASS |
+| `statistics.weighted_mean` | `tiny-n`: rows=10 | 0.8 µs / 0.8 µs | 1.2 µs / 1.3 µs | 0.1 µs / 0.1 µs | 0.62× / 0.65× | 8.94× / 6.68× | measured (`std::time::Instant`); gate DIAG FAIL |
+| `statistics.weighted_covariance` | `tiny-n`: rows=10 | 2.6 µs / 2.9 µs | 1.7 µs / 1.7 µs | 0.3 µs / 0.3 µs | 1.57× / 1.64× | 7.88× / 8.60× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.calc_mean_motion` | `tiny-n`: rows=10 | 1.7 µs / 1.8 µs | 1.1 µs / 1.2 µs | 0.0 µs / 0.0 µs | 1.52× / 1.47× | 40.71× / 43.64× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.tisserand_parameter` | `tiny-n`: rows=10 | 4.6 µs / 4.8 µs | 3.0 µs / 3.2 µs | 0.1 µs / 0.1 µs | 1.54× / 1.49× | 55.72× / 57.54× | measured (`std::time::Instant`); gate PASS |
+| `orbits.classify_orbits` | `tiny-n`: rows=10 | 19.8 µs / 20.9 µs | 2.0 µs / 2.1 µs | 0.0 µs / 0.1 µs | 10.09× / 10.02× | 471.25× / 251.48× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.calculate_moid` | `tiny-n`: rows=1 | 1.37 ms / 1.52 ms | 13.9 µs / 15.3 µs | 12.2 µs / 12.9 µs | 98.56× / 98.99× | 111.64× / 117.52× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.calculate_moid_batch` | `tiny-n`: rows=1 | 1.36 ms / 1.50 ms | 14.0 µs / 14.8 µs | 12.3 µs / 12.8 µs | 96.81× / 101.01× | 110.23× / 116.77× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.calculate_perturber_moids` | `tiny-n`: rows=1 | 108.14 ms / 120.63 ms | 669.5 µs / 794.3 µs | 79.2 µs / 84.8 µs | 161.54× / 151.88× | 1366.01× / 1422.66× | measured (`std::time::Instant`); gate PASS |
+| `missions.porkchop_grid` | `tiny-n`: departures=2 × arrivals=2 (4 rows) | 100.5 µs / 128.3 µs | 4.3 µs / 4.3 µs | 1.2 µs / 1.2 µs | 23.63× / 29.88× | 83.09× / 102.63× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.generate_porkchop_data` | `tiny-n`: departures=2 × arrivals=2 (4 rows) | 2.67 ms / 2.98 ms | 1.34 ms / 1.55 ms | 11.5 µs / 11.9 µs | 1.99× / 1.91× | 233.34× / 249.74× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.propagate_2body` | `tiny-n`: rows=10 | 1.46 ms / 1.64 ms | 700.8 µs / 855.5 µs | 18.3 µs / 19.1 µs | 2.08× / 1.91× | 79.67× / 85.78× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.propagate_2body_along_arc` | `tiny-n`: rows=10 | 39.5 µs / 57.1 µs | 3.1 µs / 3.2 µs | 1.8 µs / 1.8 µs | 12.64× / 17.78× | 22.06× / 31.14× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.propagate_2body_arc_batch` | `tiny-n`: orbits=2 × epochs=5 (10 rows) | 40.8 µs / 53.7 µs | 24.7 µs / 46.5 µs | 18.5 µs / 44.8 µs | 1.65× / 1.15× | 2.21× / 1.20× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.propagate_2body_with_covariance` | `tiny-n`: rows=10 | 10.55 ms / 12.31 ms | 29.1 µs / 57.5 µs | 23.7 µs / 43.4 µs | 362.12× / 214.13× | 444.84× / 283.59× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.generate_ephemeris_2body` | `tiny-n`: rows=10 | 3.29 ms / 3.66 ms | 560.2 µs / 676.3 µs | 64.8 µs / 140.8 µs | 5.88× / 5.41× | 50.85× / 25.99× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.generate_ephemeris_2body_with_covariance` | `tiny-n`: rows=10 | 5.32 ms / 6.30 ms | 672.5 µs / 822.7 µs | 62.7 µs / 90.8 µs | 7.91× / 7.66× | 84.93× / 69.37× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.solve_lambert` | `tiny-n`: rows=10 | 98.6 µs / 155.3 µs | 26.0 µs / 47.6 µs | 20.8 µs / 31.8 µs | 3.79× / 3.26× | 4.73× / 4.89× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.add_light_time` | `tiny-n`: rows=10 | 57.7 µs / 85.0 µs | 25.4 µs / 39.3 µs | 20.3 µs / 32.4 µs | 2.27× / 2.16× | 2.84× / 2.62× | measured (`std::time::Instant`); gate PASS |
+| `photometry.calculate_phase_angle` | `tiny-n`: rows=10 | 10.7 µs / 11.7 µs | 1.8 µs / 1.9 µs | 0.2 µs / 0.2 µs | 6.09× / 6.22× | 63.88× / 55.82× | measured (`std::time::Instant`); gate PASS |
+| `photometry.calculate_apparent_magnitude_v` | `tiny-n`: rows=10 | 14.9 µs / 15.8 µs | 2.6 µs / 2.7 µs | 0.5 µs / 0.6 µs | 5.68× / 5.85× | 27.52× / 25.33× | measured (`std::time::Instant`); gate PASS |
+| `photometry.calculate_apparent_magnitude_v_and_phase_angle` | `tiny-n`: rows=10 | 17.2 µs / 18.5 µs | 3.5 µs / 4.0 µs | 0.7 µs / 0.7 µs | 4.85× / 4.58× | 25.74× / 27.74× | measured (`std::time::Instant`); gate PASS |
+| `photometry.predict_magnitudes` | `tiny-n`: rows=10 | 16.8 µs / 18.6 µs | 3.3 µs / 3.4 µs | 0.6 µs / 0.6 µs | 5.10× / 5.52× | 28.75× / 29.80× | measured (`std::time::Instant`); gate PASS |
+| `photometry.fit_absolute_magnitude_rows` | `tiny-n`: rows=10 | 33.9 µs / 37.0 µs | 3.0 µs / 3.0 µs | 0.3 µs / 0.3 µs | 11.45× / 12.16× | 116.01× / 126.71× | measured (`std::time::Instant`); gate PASS |
+| `photometry.fit_absolute_magnitude_grouped` | `tiny-n`: rows=10 | 62.0 µs / 82.2 µs | 25.7 µs / 60.1 µs | 15.2 µs / 29.2 µs | 2.41× / 1.37× | 4.08× / 2.81× | measured (`std::time::Instant`); gate PASS |
+| `orbit_determination.calcGibbs` | `tiny-n`: rows=10 | 559.1 µs / 592.7 µs | 14.1 µs / 14.5 µs | 0.3 µs / 0.4 µs | 39.59× / 40.75× | 1674.03× / 1580.45× | measured (`std::time::Instant`); gate PASS |
+| `orbit_determination.calcHerrickGibbs` | `tiny-n`: rows=10 | 56.5 µs / 61.1 µs | 16.2 µs / 17.0 µs | 0.1 µs / 0.1 µs | 3.49× / 3.59× | 681.21× / 727.67× | measured (`std::time::Instant`); gate PASS |
+| `orbit_determination.calcGauss` | `tiny-n`: rows=10 | 36.0 µs / 41.0 µs | 16.0 µs / 17.0 µs | 0.0 µs / 0.1 µs | 2.24× / 2.41× | 857.17× / 488.08× | measured (`std::time::Instant`); gate PASS |
+| `orbit_determination.gaussIOD` | `tiny-n`: triplets=1 (1 rows) | 1.78 ms / 2.16 ms | 252.4 µs / 308.2 µs | 13.3 µs / 14.1 µs | 7.04× / 7.01× | 133.24× / 152.88× | measured (`std::time::Instant`); gate PASS |
+| `orbits.VariantOrbits.create` | `tiny-n`: rows=10 | 2.51 ms / 2.79 ms | 909.5 µs / 1.14 ms | 99.4 µs / 110.5 µs | 2.76× / 2.45× | 25.29× / 25.26× | measured (`std::time::Instant`); gate PASS |
+| `observers.Observers.from_codes` | `tiny-n`: rows=10 | 9.77 ms / 11.17 ms | 186.0 µs / 280.2 µs | 12.1 µs / 12.3 µs | 52.51× / 39.85× | 808.47× / 908.43× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.cartesian_to_spherical` | `small-n`: rows=2000 | 117.4 µs / 169.6 µs | 70.0 µs / 76.1 µs | 69.5 µs / 75.0 µs | 1.68× / 2.23× | 1.69× / 2.26× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.transform_coordinates` | `small-n`: rows=2000 | 43.34 ms / 46.08 ms | 6.55 ms / 7.41 ms | 1.51 ms / 1.73 ms | 6.62× / 6.21× | 28.64× / 26.71× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.transform_coordinates_with_covariance` | `small-n`: rows=2000 | 71.95 ms / 73.87 ms | 391.1 µs / 498.1 µs | — / — | 183.95× / 148.30× | — / — | unavailable (personal-98v.1); gate PASS |
+| `coordinates.cartesian_to_geodetic` | `small-n`: rows=2000 | 659.5 µs / 753.6 µs | 92.0 µs / 175.4 µs | 73.9 µs / 184.4 µs | 7.17× / 4.30× | 8.92× / 4.09× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.cartesian_to_keplerian` | `small-n`: rows=2000 | 691.6 µs / 789.4 µs | 185.8 µs / 244.1 µs | 182.0 µs / 198.0 µs | 3.72× / 3.23× | 3.80× / 3.99× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.keplerian.to_cartesian` | `small-n`: rows=2000 | 5.11 ms / 5.26 ms | 110.3 µs / 129.0 µs | 124.8 µs / 248.1 µs | 46.34× / 40.74× | 40.95× / 21.19× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.cartesian_to_cometary` | `small-n`: rows=2000 | 749.2 µs / 840.8 µs | 201.2 µs / 208.8 µs | 192.2 µs / 236.5 µs | 3.72× / 4.03× | 3.90× / 3.56× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.cometary.to_cartesian` | `small-n`: rows=2000 | 5.14 ms / 5.29 ms | 140.2 µs / 196.8 µs | 123.1 µs / 231.8 µs | 36.63× / 26.89× | 41.71× / 22.84× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.spherical.to_cartesian` | `small-n`: rows=2000 | 205.6 µs / 238.8 µs | 65.1 µs / 97.4 µs | 49.0 µs / 81.2 µs | 3.16× / 2.45× | 4.19× / 2.94× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.rotate_cartesian_time_varying` | `small-n`: rows=2000 | 3.38 ms / 3.54 ms | 147.5 µs / 252.6 µs | 153.3 µs / 284.5 µs | 22.89× / 14.00× | 22.03× / 12.44× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.residuals.Residuals.calculate` | `small-n`: rows=2000 | 6.56 ms / 6.93 ms | 3.07 ms / 3.32 ms | 1.54 ms / 1.69 ms | 2.14× / 2.09× | 4.26× / 4.10× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.residuals.calculate_chi2` | `small-n`: rows=2000 | 427.0 µs / 493.1 µs | 132.6 µs / 201.9 µs | 128.5 µs / 202.2 µs | 3.22× / 2.44× | 3.32× / 2.44× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.residuals.bound_longitude_residuals` | `small-n`: rows=2000 | 22.9 µs / 25.2 µs | 5.5 µs / 6.4 µs | 3.9 µs / 3.9 µs | 4.16× / 3.92× | 5.90× / 6.42× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.residuals.apply_cosine_latitude_correction` | `small-n`: rows=2000 | 577.5 µs / 753.4 µs | 101.5 µs / 114.5 µs | 105.6 µs / 110.2 µs | 5.69× / 6.58× | 5.47× / 6.84× | measured (`std::time::Instant`); gate PASS |
+| `statistics.weighted_mean` | `small-n`: rows=2000 | 3.5 µs / 3.9 µs | 22.3 µs / 22.4 µs | 20.9 µs / 21.2 µs | 0.16× / 0.17× | 0.17× / 0.18× | measured (`std::time::Instant`); gate DIAG FAIL |
+| `statistics.weighted_covariance` | `small-n`: rows=2000 | 30.2 µs / 35.9 µs | 54.0 µs / 57.5 µs | 54.1 µs / 56.3 µs | 0.56× / 0.62× | 0.56× / 0.64× | measured (`std::time::Instant`); gate DIAG FAIL |
+| `dynamics.calc_mean_motion` | `small-n`: rows=2000 | 17.9 µs / 18.5 µs | 2.4 µs / 2.6 µs | 1.4 µs / 1.8 µs | 7.39× / 7.06× | 12.62× / 10.35× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.tisserand_parameter` | `small-n`: rows=2000 | 19.1 µs / 20.3 µs | 8.8 µs / 8.9 µs | 5.0 µs / 5.0 µs | 2.18× / 2.28× | 3.85× / 4.07× | measured (`std::time::Instant`); gate PASS |
+| `orbits.classify_orbits` | `small-n`: rows=2000 | 65.9 µs / 69.9 µs | 7.1 µs / 7.2 µs | 4.5 µs / 4.5 µs | 9.30× / 9.65× | 14.79× / 15.54× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.calculate_moid` | `small-n`: rows=8 | 13.22 ms / 13.65 ms | 128.8 µs / 142.6 µs | 117.2 µs / 117.3 µs | 102.70× / 95.74× | 112.78× / 116.34× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.calculate_moid_batch` | `small-n`: rows=8 | 13.46 ms / 14.21 ms | 54.9 µs / 69.4 µs | 52.9 µs / 59.8 µs | 245.31× / 204.66× | 254.60× / 237.77× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.calculate_perturber_moids` | `small-n`: rows=8 | 370.97 ms / 382.55 ms | 872.7 µs / 1.02 ms | 106.7 µs / 153.8 µs | 425.08× / 376.73× | 3477.90× / 2486.77× | measured (`std::time::Instant`); gate PASS |
+| `missions.porkchop_grid` | `small-n`: departures=44 × arrivals=44 (1936 rows) | 2.38 ms / 2.50 ms | 289.5 µs / 364.7 µs | 267.2 µs / 294.4 µs | 8.23× / 6.86× | 8.92× / 8.50× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.generate_porkchop_data` | `small-n`: departures=44 × arrivals=44 (1936 rows) | 8.53 ms / 8.88 ms | 3.63 ms / 3.94 ms | 449.4 µs / 557.0 µs | 2.35× / 2.26× | 18.98× / 15.95× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.propagate_2body` | `small-n`: rows=2000 | 3.54 ms / 4.17 ms | 2.52 ms / 2.71 ms | 986.0 µs / 1.09 ms | 1.40× / 1.54× | 3.59× / 3.84× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.propagate_2body_along_arc` | `small-n`: rows=100 | 75.2 µs / 95.8 µs | 27.9 µs / 29.5 µs | 26.2 µs / 28.9 µs | 2.69× / 3.25× | 2.87× / 3.31× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.propagate_2body_arc_batch` | `small-n`: orbits=40 × epochs=50 (2000 rows) | 4.51 ms / 4.72 ms | 232.3 µs / 325.9 µs | 205.8 µs / 259.2 µs | 19.41× / 14.49× | 21.91× / 18.21× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.propagate_2body_with_covariance` | `small-n`: rows=2000 | 5.693 s / 6.029 s | 224.3 µs / 365.8 µs | 215.6 µs / 249.7 µs | 25377.19× / 16479.09× | 26407.22× / 24142.69× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.generate_ephemeris_2body` | `small-n`: rows=2000 | 22.78 ms / 23.50 ms | 2.10 ms / 2.35 ms | 1.51 ms / 1.63 ms | 10.86× / 9.99× | 15.04× / 14.44× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.generate_ephemeris_2body_with_covariance` | `small-n`: rows=2000 | 30.40 ms / 31.21 ms | 3.57 ms / 3.79 ms | 2.92 ms / 3.14 ms | 8.51× / 8.23× | 10.42× / 9.93× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.solve_lambert` | `small-n`: rows=2000 | 8.83 ms / 9.03 ms | 247.5 µs / 322.4 µs | 154.3 µs / 273.3 µs | 35.65× / 28.01× | 57.20× / 33.04× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.add_light_time` | `small-n`: rows=2000 | 562.2 µs / 622.8 µs | 120.0 µs / 210.1 µs | 105.9 µs / 210.2 µs | 4.68× / 2.96× | 5.31× / 2.96× | measured (`std::time::Instant`); gate PASS |
+| `photometry.calculate_phase_angle` | `small-n`: rows=2000 | 63.5 µs / 76.7 µs | 18.1 µs / 18.2 µs | 7.2 µs / 7.3 µs | 3.51× / 4.22× | 8.76× / 10.46× | measured (`std::time::Instant`); gate PASS |
+| `photometry.calculate_apparent_magnitude_v` | `small-n`: rows=2000 | 146.6 µs / 176.2 µs | 34.2 µs / 37.1 µs | 22.3 µs / 22.4 µs | 4.29× / 4.75× | 6.56× / 7.86× | measured (`std::time::Instant`); gate PASS |
+| `photometry.calculate_apparent_magnitude_v_and_phase_angle` | `small-n`: rows=2000 | 162.0 µs / 202.1 µs | 37.6 µs / 40.8 µs | 25.8 µs / 25.9 µs | 4.31× / 4.95× | 6.27× / 7.80× | measured (`std::time::Instant`); gate PASS |
+| `photometry.predict_magnitudes` | `small-n`: rows=2000 | 136.4 µs / 165.6 µs | 34.7 µs / 34.8 µs | 23.0 µs / 23.0 µs | 3.94× / 4.76× | 5.94× / 7.20× | measured (`std::time::Instant`); gate PASS |
+| `photometry.fit_absolute_magnitude_rows` | `small-n`: rows=2000 | 67.0 µs / 73.2 µs | 19.6 µs / 20.2 µs | 17.1 µs / 17.9 µs | 3.42× / 3.62× | 3.92× / 4.10× | measured (`std::time::Instant`); gate PASS |
+| `photometry.fit_absolute_magnitude_grouped` | `small-n`: rows=2000 | 7.94 ms / 8.13 ms | 65.6 µs / 154.1 µs | 59.0 µs / 144.1 µs | 121.14× / 52.79× | 134.66× / 56.44× | measured (`std::time::Instant`); gate PASS |
+| `orbit_determination.calcGibbs` | `small-n`: rows=2000 | 114.19 ms / 116.29 ms | 2.64 ms / 2.73 ms | 72.2 µs / 75.5 µs | 43.18× / 42.62× | 1582.29× / 1539.40× | measured (`std::time::Instant`); gate PASS |
+| `orbit_determination.calcHerrickGibbs` | `small-n`: rows=2000 | 11.54 ms / 11.84 ms | 2.94 ms / 3.05 ms | 11.5 µs / 12.2 µs | 3.93× / 3.88× | 1007.55× / 966.87× | measured (`std::time::Instant`); gate PASS |
+| `orbit_determination.calcGauss` | `small-n`: rows=2000 | 7.25 ms / 7.45 ms | 2.92 ms / 2.96 ms | 9.2 µs / 9.2 µs | 2.48× / 2.52× | 791.28× / 808.56× | measured (`std::time::Instant`); gate PASS |
+| `orbit_determination.gaussIOD` | `small-n`: triplets=16 (16 rows) | 31.26 ms / 33.39 ms | 3.80 ms / 4.03 ms | 214.1 µs / 223.5 µs | 8.23× / 8.28× | 146.02× / 149.39× | measured (`std::time::Instant`); gate PASS |
+| `orbits.VariantOrbits.create` | `small-n`: rows=2000 | 213.48 ms / 218.99 ms | 21.84 ms / 23.28 ms | 19.26 ms / 19.66 ms | 9.78× / 9.40× | 11.08× / 11.14× | measured (`std::time::Instant`); gate PASS |
+| `observers.Observers.from_codes` | `small-n`: rows=2000 | 67.08 ms / 70.02 ms | 1.37 ms / 1.44 ms | 1.10 ms / 1.14 ms | 48.90× / 48.55× | 60.92× / 61.42× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.cartesian_to_spherical` | `large-n`: rows=20000 | 1.22 ms / 1.45 ms | 219.5 µs / 346.0 µs | 191.9 µs / 249.8 µs | 5.53× / 4.20× | 6.33× / 5.81× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.transform_coordinates` | `large-n`: rows=12000 | 115.62 ms / 119.85 ms | 11.91 ms / 12.40 ms | 5.49 ms / 5.95 ms | 9.71× / 9.66× | 21.07× / 20.13× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.transform_coordinates_with_covariance` | `large-n`: rows=4000 | 113.38 ms / 114.35 ms | 541.6 µs / 884.0 µs | — / — | 209.36× / 129.36× | — / — | unavailable (personal-98v.1); gate PASS |
+| `coordinates.cartesian_to_geodetic` | `large-n`: rows=20000 | 7.11 ms / 7.36 ms | 371.9 µs / 616.1 µs | 366.1 µs / 481.1 µs | 19.11× / 11.95× | 19.42× / 15.30× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.cartesian_to_keplerian` | `large-n`: rows=20000 | 3.87 ms / 4.23 ms | 1.14 ms / 1.36 ms | 1.12 ms / 1.18 ms | 3.39× / 3.12× | 3.46× / 3.59× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.keplerian.to_cartesian` | `large-n`: rows=20000 | 40.40 ms / 40.78 ms | 746.3 µs / 1.14 ms | 676.0 µs / 841.7 µs | 54.14× / 35.87× | 59.76× / 48.45× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.cartesian_to_cometary` | `large-n`: rows=20000 | 4.17 ms / 4.73 ms | 1.01 ms / 1.03 ms | 994.8 µs / 1.03 ms | 4.11× / 4.58× | 4.19× / 4.58× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.cometary.to_cartesian` | `large-n`: rows=20000 | 40.46 ms / 41.66 ms | 694.4 µs / 806.9 µs | 684.0 µs / 872.4 µs | 58.26× / 51.63× | 59.15× / 47.75× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.spherical.to_cartesian` | `large-n`: rows=20000 | 1.69 ms / 1.83 ms | 158.2 µs / 278.1 µs | 132.0 µs / 185.3 µs | 10.67× / 6.57× | 12.79× / 9.85× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.rotate_cartesian_time_varying` | `large-n`: rows=50000 | 84.52 ms / 87.11 ms | 1.38 ms / 1.58 ms | 1.18 ms / 1.25 ms | 61.19× / 55.09× | 71.92× / 69.57× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.residuals.Residuals.calculate` | `large-n`: rows=20000 | 74.00 ms / 76.41 ms | 27.25 ms / 29.33 ms | 16.14 ms / 17.23 ms | 2.72× / 2.61× | 4.59× / 4.43× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.residuals.calculate_chi2` | `large-n`: rows=50000 | 11.18 ms / 11.38 ms | 560.6 µs / 706.9 µs | 530.7 µs / 595.4 µs | 19.94× / 16.10× | 21.07× / 19.12× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.residuals.bound_longitude_residuals` | `large-n`: rows=100000 | 1.35 ms / 1.74 ms | 513.4 µs / 551.5 µs | 504.8 µs / 518.4 µs | 2.64× / 3.15× | 2.68× / 3.35× | measured (`std::time::Instant`); gate PASS |
+| `coordinates.residuals.apply_cosine_latitude_correction` | `large-n`: rows=50000 | 16.97 ms / 17.88 ms | 1.42 ms / 1.49 ms | 1.21 ms / 1.34 ms | 11.97× / 12.00× | 14.00× / 13.38× | measured (`std::time::Instant`); gate PASS |
+| `statistics.weighted_mean` | `large-n`: rows=50000 | 67.5 µs / 72.5 µs | 530.7 µs / 543.0 µs | 533.1 µs / 554.7 µs | 0.13× / 0.13× | 0.13× / 0.13× | measured (`std::time::Instant`); gate DIAG FAIL |
+| `statistics.weighted_covariance` | `large-n`: rows=50000 | 994.9 µs / 1.13 ms | 1.36 ms / 1.38 ms | 1.32 ms / 1.40 ms | 0.73× / 0.82× | 0.75× / 0.81× | measured (`std::time::Instant`); gate DIAG FAIL |
+| `dynamics.calc_mean_motion` | `large-n`: rows=50000 | 415.0 µs / 436.1 µs | 30.0 µs / 30.0 µs | 28.7 µs / 34.9 µs | 13.85× / 14.52× | 14.48× / 12.51× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.tisserand_parameter` | `large-n`: rows=100000 | 1.39 ms / 1.49 ms | 285.4 µs / 444.8 µs | 298.5 µs / 523.4 µs | 4.86× / 3.34× | 4.65× / 2.84× | measured (`std::time::Instant`); gate PASS |
+| `orbits.classify_orbits` | `large-n`: rows=50000 | 1.41 ms / 1.51 ms | 228.5 µs / 303.1 µs | 150.6 µs / 220.5 µs | 6.16× / 4.97× | 9.34× / 6.84× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.calculate_moid` | `large-n`: rows=64 | 123.60 ms / 127.03 ms | 1.21 ms / 1.27 ms | 1.15 ms / 1.17 ms | 102.48× / 100.09× | 107.42× / 108.53× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.calculate_moid_batch` | `large-n`: rows=64 | 122.30 ms / 125.87 ms | 228.2 µs / 248.8 µs | 217.9 µs / 353.0 µs | 535.93× / 505.99× | 561.35× / 356.60× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.calculate_perturber_moids` | `large-n`: rows=64 | 3.713 s / 3.782 s | 1.34 ms / 1.48 ms | 492.3 µs / 559.9 µs | 2764.05× / 2564.03× | 7541.96× / 6754.73× | measured (`std::time::Instant`); gate PASS |
+| `missions.porkchop_grid` | `large-n`: departures=64 × arrivals=64 (4096 rows) | 5.02 ms / 5.18 ms | 365.5 µs / 492.8 µs | 336.1 µs / 476.6 µs | 13.73× / 10.51× | 14.94× / 10.87× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.generate_porkchop_data` | `large-n`: departures=64 × arrivals=64 (4096 rows) | 14.29 ms / 14.83 ms | 5.29 ms / 5.79 ms | 530.4 µs / 653.1 µs | 2.70× / 2.56× | 26.95× / 22.71× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.propagate_2body` | `large-n`: orbits=1000 × epochs=20 (20000 rows) | 19.24 ms / 19.67 ms | 7.28 ms / 8.58 ms | 5.67 ms / 6.20 ms | 2.64× / 2.29× | 3.39× / 3.17× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.propagate_2body_along_arc` | `large-n`: rows=400 | 166.7 µs / 209.7 µs | 83.2 µs / 85.0 µs | 83.9 µs / 86.1 µs | 2.00× / 2.47× | 1.99× / 2.43× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.propagate_2body_arc_batch` | `large-n`: orbits=400 × epochs=50 (20000 rows) | 46.78 ms / 47.79 ms | 1.27 ms / 1.36 ms | 1.28 ms / 1.39 ms | 36.86× / 35.08× | 36.46× / 34.39× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.propagate_2body_with_covariance` | `large-n`: orbits=200 × epochs=20 (4000 rows) | 11.654 s / 12.279 s | 418.8 µs / 541.0 µs | 394.8 µs / 611.6 µs | 27829.75× / 22698.18× | 29521.78× / 20075.97× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.generate_ephemeris_2body` | `large-n`: orbits=400 × epochs=50 (20000 rows) | 21.81 ms / 22.75 ms | 12.97 ms / 14.05 ms | 11.30 ms / 12.18 ms | 1.68× / 1.62× | 1.93× / 1.87× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.generate_ephemeris_2body_with_covariance` | `large-n`: orbits=200 × epochs=20 (4000 rows) | 19.13 ms / 20.11 ms | 7.21 ms / 8.35 ms | 6.30 ms / 7.05 ms | 2.65× / 2.41× | 3.04× / 2.85× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.solve_lambert` | `large-n`: rows=12000 | 50.84 ms / 51.04 ms | 986.6 µs / 1.19 ms | 621.4 µs / 763.7 µs | 51.53× / 42.77× | 81.81× / 66.83× | measured (`std::time::Instant`); gate PASS |
+| `dynamics.add_light_time` | `large-n`: orbits=400 × observers=50 (20000 rows) | 4.54 ms / 4.77 ms | 733.3 µs / 897.8 µs | 720.5 µs / 904.9 µs | 6.20× / 5.32× | 6.31× / 5.28× | measured (`std::time::Instant`); gate PASS |
+| `photometry.calculate_phase_angle` | `large-n`: orbits=1000 × observers=50 (50000 rows) | 249.2 µs / 318.1 µs | 109.3 µs / 177.3 µs | 87.9 µs / 134.3 µs | 2.28× / 1.79× | 2.84× / 2.37× | measured (`std::time::Instant`); gate PASS |
+| `photometry.calculate_apparent_magnitude_v` | `large-n`: orbits=1000 × observers=50 (50000 rows) | 686.8 µs / 724.2 µs | 200.1 µs / 272.4 µs | 154.2 µs / 257.1 µs | 3.43× / 2.66× | 4.46× / 2.82× | measured (`std::time::Instant`); gate PASS |
+| `photometry.calculate_apparent_magnitude_v_and_phase_angle` | `large-n`: orbits=1000 × observers=50 (50000 rows) | 843.0 µs / 966.5 µs | 196.4 µs / 282.7 µs | 191.9 µs / 267.2 µs | 4.29× / 3.42× | 4.39× / 3.62× | measured (`std::time::Instant`); gate PASS |
+| `photometry.predict_magnitudes` | `large-n`: orbits=1000 × observers=50 (50000 rows) | 569.1 µs / 614.5 µs | 230.5 µs / 293.2 µs | 192.4 µs / 257.6 µs | 2.47× / 2.10× | 2.96× / 2.39× | measured (`std::time::Instant`); gate PASS |
+| `photometry.fit_absolute_magnitude_rows` | `large-n`: rows=50000 | 1.09 ms / 1.18 ms | 434.6 µs / 464.6 µs | 445.8 µs / 473.6 µs | 2.51× / 2.55× | 2.45× / 2.50× | measured (`std::time::Instant`); gate PASS |
+| `photometry.fit_absolute_magnitude_grouped` | `large-n`: rows=50000 | 195.44 ms / 196.89 ms | 490.7 µs / 642.4 µs | 451.4 µs / 545.4 µs | 398.32× / 306.50× | 432.95× / 360.99× | measured (`std::time::Instant`); gate PASS |
+| `orbit_determination.calcGibbs` | `large-n`: triplets=5000 (5000 rows) | 289.36 ms / 290.87 ms | 6.70 ms / 7.28 ms | 185.8 µs / 189.4 µs | 43.22× / 39.94× | 1557.10× / 1536.02× | measured (`std::time::Instant`); gate PASS |
+| `orbit_determination.calcHerrickGibbs` | `large-n`: triplets=5000 (5000 rows) | 28.81 ms / 29.29 ms | 7.37 ms / 7.42 ms | 28.3 µs / 28.3 µs | 3.91× / 3.95× | 1018.31× / 1033.64× | measured (`std::time::Instant`); gate PASS |
+| `orbit_determination.calcGauss` | `large-n`: triplets=5000 (5000 rows) | 17.70 ms / 18.24 ms | 7.27 ms / 7.35 ms | 21.2 µs / 21.3 µs | 2.43× / 2.48× | 836.31× / 858.38× | measured (`std::time::Instant`); gate PASS |
+| `orbit_determination.gaussIOD` | `large-n`: triplets=128 (128 rows) | 225.91 ms / 229.97 ms | 30.57 ms / 30.78 ms | 1.75 ms / 1.85 ms | 7.39× / 7.47× | 129.14× / 124.15× | measured (`std::time::Instant`); gate PASS |
+| `orbits.VariantOrbits.create` | `large-n`: rows=5000 | 517.82 ms / 525.68 ms | 57.93 ms / 61.70 ms | 50.97 ms / 52.33 ms | 8.94× / 8.52× | 10.16× / 10.05× | measured (`std::time::Instant`); gate PASS |
+| `observers.Observers.from_codes` | `large-n`: rows=50000 | 813.23 ms / 865.40 ms | 32.58 ms / 34.25 ms | 27.03 ms / 31.21 ms | 24.96× / 25.26× | 30.09× / 27.73× | measured (`std::time::Instant`); gate PASS |
+| `orbits.VariantOrbits.create` | `supplemental-9d-tiny-n`: rows=10 | 3.04 ms / 3.17 ms | 1.04 ms / 1.19 ms | 109.7 µs / 114.7 µs | 2.93× / 2.66× | 27.68× / 27.69× | measured (`std::time::Instant`); gate PASS |
+| `orbits.VariantOrbits.create` | `supplemental-9d-small-n`: rows=100 | 21.91 ms / 23.57 ms | 3.87 ms / 8.42 ms | 918.4 µs / 989.6 µs | 5.66× / 2.80× | 23.86× / 23.82× | measured (`std::time::Instant`); gate PASS |
+| `orbits.VariantOrbits.create` | `supplemental-9d-large-n`: rows=1000 | 219.43 ms / 282.44 ms | 12.37 ms / 14.35 ms | 12.32 ms / 12.34 ms | 17.73× / 19.68× | 17.81× / 22.88× | measured (`std::time::Instant`); gate PASS |
+
+ASSIST matrix contains 39 measured workload rows across propagation, covariance, ephemeris, impact/collision, and OD/least-squares.
+ASSIST p50 regressions (<1.0× updated/current): none.
+
+## adam-assist numerical work units
+
+| Surface | Lane and concrete workload | Updated-upstream Python p50/p95 | Current public facade p50/p95 | Native Rust p50/p95 | Updated/current | Updated/native | Native evidence |
+|---|---|---:|---:|---:|---:|---:|---|
+| `ASSISTPropagator.propagate_orbits` | tiny: `tiny_sun_ecliptic_tdb_2x2_fixture_shape` (n_orbits=2, n_target_times=2, output_rows=4, chunk_size=1, covariance=False, max_processes=1) | 9.18 ms / 9.42 ms | 2.17 ms / 2.38 ms | 874.7 µs / 888.2 µs | 4.22× / 3.95× | 10.49× / 10.60× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | tiny: `tiny_sun_ecliptic_tdb_8x8_same_epoch` (n_orbits=8, n_target_times=8, output_rows=64, chunk_size=8, covariance=False, max_processes=1) | 7.74 ms / 7.82 ms | 3.41 ms / 3.60 ms | 2.06 ms / 2.12 ms | 2.27× / 2.17× | 3.76× / 3.68× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | tiny: `tiny_ssb_equatorial_utc_8x8_same_epoch` (n_orbits=8, n_target_times=8, output_rows=64, chunk_size=8, covariance=False, max_processes=1) | 5.97 ms / 7.02 ms | 3.47 ms / 3.47 ms | 2.06 ms / 2.14 ms | 1.72× / 2.02× | 2.89× / 3.28× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | tiny: `tiny_variant_sun_ecliptic_tdb_8x4` (n_orbits=8, n_target_times=4, output_rows=32, chunk_size=8, covariance=False, max_processes=1) | 7.11 ms / 7.32 ms | 2.85 ms / 2.85 ms | 1.33 ms / 1.35 ms | 2.50× / 2.57× | 5.32× / 5.42× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | small: `small_sun_ecliptic_tdb_40x50` (n_orbits=40, n_target_times=50, output_rows=2000, chunk_size=40, covariance=False, max_processes=1) | 45.69 ms / 50.23 ms | 30.93 ms / 35.59 ms | 28.19 ms / 28.48 ms | 1.48× / 1.41× | 1.62× / 1.76× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | small: `small_ssb_equatorial_utc_40x50` (n_orbits=40, n_target_times=50, output_rows=2000, chunk_size=40, covariance=False, max_processes=1) | 37.70 ms / 38.75 ms | 30.20 ms / 30.74 ms | 27.75 ms / 28.06 ms | 1.25× / 1.26× | 1.36× / 1.38× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | small: `small_variant_sun_ecliptic_tdb_40x50` (n_orbits=40, n_target_times=50, output_rows=2000, chunk_size=40, covariance=False, max_processes=1) | 39.90 ms / 40.13 ms | 30.53 ms / 30.66 ms | 27.90 ms / 28.64 ms | 1.31× / 1.31× | 1.43× / 1.40× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | large: `large_sun_ecliptic_tdb_1000x20` (n_orbits=1000, n_target_times=20, output_rows=20000, chunk_size=1000, covariance=False, max_processes=1) | 468.55 ms / 473.40 ms | 411.48 ms / 412.86 ms | 392.33 ms / 404.05 ms | 1.14× / 1.15× | 1.19× / 1.17× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | large: `large_sun_ecliptic_tdb_400x50_arc_shape` (n_orbits=400, n_target_times=50, output_rows=20000, chunk_size=400, covariance=False, max_processes=1) | 376.21 ms / 376.41 ms | 313.57 ms / 313.65 ms | 294.31 ms / 294.46 ms | 1.20× / 1.20× | 1.28× / 1.28× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | large: `large_ssb_equatorial_utc_400x50_arc_shape` (n_orbits=400, n_target_times=50, output_rows=20000, chunk_size=400, covariance=False, max_processes=1) | 366.30 ms / 367.32 ms | 308.58 ms / 311.50 ms | 299.48 ms / 305.43 ms | 1.19× / 1.18× | 1.22× / 1.20× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | large: `large_variant_sun_ecliptic_tdb_400x50` (n_orbits=400, n_target_times=50, output_rows=20000, chunk_size=400, covariance=False, max_processes=1) | 388.86 ms / 406.28 ms | 321.44 ms / 322.43 ms | 298.73 ms / 301.54 ms | 1.21× / 1.26× | 1.30× / 1.35× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | large: `large_sun_ecliptic_tdb_200x100_1yr` (n_orbits=200, n_target_times=100, output_rows=20000, chunk_size=200, covariance=False, max_processes=1) | 530.03 ms / 534.14 ms | 419.44 ms / 443.93 ms | 423.49 ms / 426.71 ms | 1.26× / 1.20× | 1.25× / 1.25× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | large: `large_sun_ecliptic_tdb_400x50_unique_input_epochs` (n_orbits=400, n_target_times=50, output_rows=20000, chunk_size=400, covariance=False, max_processes=1) | 1.938 s / 1.950 s | 738.94 ms / 740.62 ms | 729.33 ms / 737.44 ms | 2.62× / 2.63× | 2.66× / 2.64× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | large: `large_ssb_equatorial_utc_400x50_unique_input_epochs` (n_orbits=400, n_target_times=50, output_rows=20000, chunk_size=400, covariance=False, max_processes=1) | 2.045 s / 2.076 s | 749.51 ms / 758.16 ms | 730.74 ms / 733.36 ms | 2.73× / 2.74× | 2.80× / 2.83× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | large: `large_ssb_equatorial_utc_200x100_1yr` (n_orbits=200, n_target_times=100, output_rows=20000, chunk_size=200, covariance=False, max_processes=1) | 506.77 ms / 508.64 ms | 425.47 ms / 427.76 ms | 417.76 ms / 418.03 ms | 1.19× / 1.19× | 1.21× / 1.22× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | large: `large_sun_ecliptic_tdb_200x100_1yr_unique_input_epochs` (n_orbits=200, n_target_times=100, output_rows=20000, chunk_size=200, covariance=False, max_processes=1) | 1.655 s / 1.721 s | 969.83 ms / 972.67 ms | 957.14 ms / 958.57 ms | 1.71× / 1.77× | 1.73× / 1.80× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits` | large: `large_variant_sun_ecliptic_tdb_200x100_1yr` (n_orbits=200, n_target_times=100, output_rows=20000, chunk_size=200, covariance=False, max_processes=1) | 526.50 ms / 528.91 ms | 423.43 ms / 428.15 ms | 408.67 ms / 416.73 ms | 1.24× / 1.24× | 1.29× / 1.27× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits(non-gravitational)` | tiny: `nongrav_5x2` (n_orbits=5, n_target_times=2, output_rows=10, unique_input_epochs=1, marsden_models=1, covariance=False, chunk_size=5, max_processes=1, include_nongrav=True) | 7.28 ms / 7.73 ms | 2.26 ms / 2.52 ms | 750.8 µs / 803.6 µs | 3.22× / 3.07× | 9.70× / 9.62× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits(non-gravitational)` | small: `nongrav_40x50` (n_orbits=40, n_target_times=50, output_rows=2000, unique_input_epochs=1, marsden_models=1, covariance=False, chunk_size=40, max_processes=1, include_nongrav=True) | 56.21 ms / 57.60 ms | 44.46 ms / 45.28 ms | 41.82 ms / 42.93 ms | 1.26× / 1.27× | 1.34× / 1.34× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits(non-gravitational)` | large: `nongrav_200x50_1yr` (n_orbits=200, n_target_times=50, output_rows=10000, unique_input_epochs=1, marsden_models=1, covariance=False, chunk_size=200, max_processes=1, include_nongrav=True) | 335.69 ms / 339.15 ms | 270.30 ms / 277.16 ms | 265.44 ms / 271.17 ms | 1.24× / 1.22× | 1.26× / 1.25× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits(covariance=True)` | tiny: `tiny_cov_sigma_point_sun_ecliptic_tdb_4x3` (n_orbits=4, n_target_times=3, output_rows=12, chunk_size=100, covariance=True, max_processes=1) | 32.31 ms / 32.48 ms | 7.64 ms / 7.82 ms | 6.34 ms / 6.44 ms | 4.23× / 4.15× | 5.10× / 5.04× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits(covariance=True)` | small: `small_cov_sigma_point_sun_ecliptic_tdb_25x20` (n_orbits=25, n_target_times=20, output_rows=500, chunk_size=200, covariance=True, max_processes=1) | 607.68 ms / 614.22 ms | 118.12 ms / 119.83 ms | 120.10 ms / 120.46 ms | 5.14× / 5.13× | 5.06× / 5.10× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits(covariance=True)` | small: `small_cov_auto_sun_ecliptic_tdb_25x20` (n_orbits=25, n_target_times=20, output_rows=500, chunk_size=200, covariance=True, max_processes=1) | 598.95 ms / 607.66 ms | 122.27 ms / 123.99 ms | 119.83 ms / 119.87 ms | 4.90× / 4.90× | 5.00× / 5.07× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits(covariance=True)` | small: `small_cov_monte_carlo_sun_ecliptic_tdb_10x10` (n_orbits=10, n_target_times=10, output_rows=100, chunk_size=200, covariance=True, max_processes=1) | 1.840 s / 1.845 s | 1.050 s / 1.054 s | 1.051 s / 1.053 s | 1.75× / 1.75× | 1.75× / 1.75× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits(covariance=True)` | large: `large_cov_sigma_point_sun_ecliptic_tdb_100x50_1yr` (n_orbits=100, n_target_times=50, output_rows=5000, chunk_size=200, covariance=True, max_processes=1) | 6.491 s / 6.507 s | 1.609 s / 1.611 s | 1.604 s / 1.609 s | 4.03× / 4.04× | 4.05× / 4.04× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.propagate_orbits(covariance=True)` | large: `large_cov_sigma_point_unique_input_epochs_50x25_1yr` (n_orbits=50, n_target_times=25, output_rows=1250, chunk_size=200, covariance=True, max_processes=1) | 1.978 s / 1.988 s | 555.98 ms / 1.738 s | 537.21 ms / 551.78 ms | 3.56× / 1.14× | 3.68× / 3.60× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.generate_ephemeris` | tiny: `gravity_5x2` (n_orbits=5, n_observers=2, output_rows=10, covariance_dimension=None, covariance=False, max_processes=1, include_nongrav=True) | 13.89 ms / 14.13 ms | 1.90 ms / 2.15 ms | 759.0 µs / 782.9 µs | 7.33× / 6.56× | 18.31× / 18.04× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.generate_ephemeris` | small: `gravity_40x20` (n_orbits=40, n_observers=20, output_rows=800, covariance_dimension=None, covariance=False, max_processes=1, include_nongrav=True) | 40.34 ms / 40.91 ms | 17.25 ms / 17.71 ms | 16.26 ms / 17.43 ms | 2.34× / 2.31× | 2.48× / 2.35× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.generate_ephemeris` | large: `gravity_200x50_1yr` (n_orbits=200, n_observers=50, output_rows=10000, covariance_dimension=None, covariance=False, max_processes=1, include_nongrav=True) | 354.82 ms / 371.80 ms | 219.34 ms / 221.66 ms | 212.84 ms / 216.53 ms | 1.62× / 1.68× | 1.67× / 1.72× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.generate_ephemeris` | small: `nongrav_40x20` (n_orbits=40, n_observers=20, output_rows=800, covariance_dimension=None, covariance=False, max_processes=1, include_nongrav=True) | 43.31 ms / 44.30 ms | 21.27 ms / 21.64 ms | 19.54 ms / 19.82 ms | 2.04× / 2.05× | 2.22× / 2.24× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.generate_ephemeris` | large: `nongrav_200x50_1yr` (n_orbits=200, n_observers=50, output_rows=10000, covariance_dimension=None, covariance=False, max_processes=1, include_nongrav=True) | 400.49 ms / 405.83 ms | 271.41 ms / 274.33 ms | 262.65 ms / 265.56 ms | 1.48× / 1.48× | 1.52× / 1.53× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.generate_ephemeris` | small: `covariance_6d_sigma_point_10x10` (n_orbits=10, n_observers=10, output_rows=100, covariance_dimension=6, covariance=True, max_processes=1, include_nongrav=True, covariance_method=sigma-point, num_samples=1000, seed=None) | 224.37 ms / 225.40 ms | 32.22 ms / 32.88 ms | 30.61 ms / 32.03 ms | 6.96× / 6.85× | 7.33× / 7.04× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.generate_ephemeris` | small: `covariance_9d_nongrav_sigma_point_10x10` (n_orbits=10, n_observers=10, output_rows=100, covariance_dimension=9, covariance=True, max_processes=1, include_nongrav=True, covariance_method=sigma-point, num_samples=1000, seed=None) | 254.22 ms / 254.75 ms | 44.67 ms / 45.41 ms | 41.82 ms / 42.83 ms | 5.69× / 5.61× | 6.08× / 5.95× | measured (`std::time::Instant`) |
+| `ASSISTPropagator OD/least-squares` | small: `fit_least_squares` (n_starting_orbits=1, n_observations=8, arc_days=21.0, state_parameters=6) | 5.996 s / 6.006 s | 38.49 ms / 38.52 ms | 36.62 ms / 36.70 ms | 155.75× / 155.91× | 163.73× / 163.63× | measured (`std::time::Instant`) |
+| `ASSISTPropagator OD/least-squares` | small: `od_fit` (n_starting_orbits=1, n_observations=8, arc_days=21.0, state_parameters=6) | 196.17 ms / 201.36 ms | 5.03 ms / 5.30 ms | 4.26 ms / 4.85 ms | 39.03× / 37.99× | 46.01× / 41.50× | measured (`std::time::Instant`) |
+| `ASSISTPropagator OD/least-squares` | small: `vallado_least_squares` (n_starting_orbits=1, n_observations=8, arc_days=21.0, state_parameters=6) | 2.867 s / 2.887 s | 45.14 ms / 45.45 ms | 45.36 ms / 52.40 ms | 63.52× / 63.52× | 63.22× / 55.09× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.detect_collisions` | orbits=10, days=30, impacts=2 | 107.01 ms / 108.28 ms | 12.87 ms / 13.06 ms | 7.87 ms / 7.92 ms | 8.31× / 8.29× | 13.60× / 13.67× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.detect_collisions` | orbits=50, days=30, impacts=10 | 266.02 ms / 266.37 ms | 62.09 ms / 63.17 ms | 57.90 ms / 58.59 ms | 4.28× / 4.22× | 4.59× / 4.55× | measured (`std::time::Instant`) |
+| `ASSISTPropagator.detect_collisions` | orbits=200, days=30, impacts=40 | 1.119 s / 1.141 s | 579.26 ms / 619.46 ms | 707.44 ms / 792.06 ms | 1.93× / 1.84× | 1.58× / 1.44× | measured (`std::time::Instant`) |
+
+### Explicitly unmeasured ASSIST public numerical rows
+
+| Surface | Status | Reason |
+|---|---|---|
+| `ASSISTPropagator.initial_orbit_determination` | parity and native-timing tests pass; no cross-runtime performance row | Frozen updated-upstream oracle has no equivalent IOD request/timer; no non-equivalent composition is mislabeled as apples-to-apples. |
+| `ASSISTPropagator.fit_least_squares_evaluated` | native parity/composition and timing-hook tests pass; no updated-upstream performance row | Frozen updated-upstream has no fused evaluated work unit. |

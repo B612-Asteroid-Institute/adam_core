@@ -5,8 +5,9 @@ use super::diagnostics::{
 use super::request::{CovariancePropagation, EpochPolicy, PropagationInput, PropagationRequest};
 use super::{PropagationError, PropagationResultValue};
 use crate::{
-    CoordinateBatch, CovarianceBatch, CovarianceUnits, Epoch, ObjectId, OrbitBatch, OrbitId,
-    OrbitVariantBatch, OriginArray, OriginId, TimeArray, Validity, VariantId,
+    CoordinateBatch, CovarianceBatch, CovarianceUnits, Epoch, NonGravitationalParametersRow,
+    ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId, TimeArray, Validity,
+    VariantId,
 };
 
 #[derive(Debug, Clone, PartialEq)]
@@ -26,6 +27,7 @@ pub struct OrbitRow<'a> {
     pub variant_id: Option<&'a VariantId>,
     pub weight: Option<f64>,
     pub weight_cov: Option<f64>,
+    pub non_gravitational_parameters: Option<NonGravitationalParametersRow>,
     pub state: [f64; 6],
     pub origin: &'a OriginId,
     pub mu: f64,
@@ -92,6 +94,9 @@ pub(super) fn orbit_row<'a>(
         weight_cov: input
             .weights_cov()
             .and_then(|weights_cov| weights_cov[orbit_index]),
+        non_gravitational_parameters: input
+            .non_gravitational_parameters()
+            .map(|parameters| parameters.row(orbit_index)),
         state: states[orbit_index],
         origin: &input.coordinates().origins.origins[orbit_index],
         mu: mus[orbit_index],
@@ -132,6 +137,7 @@ pub(super) fn assemble_result(
     let input_weights = request.input.weights();
     let input_weights_cov = request.input.weights_cov();
     let input_physical_parameters = request.input.physical_parameters();
+    let input_non_gravitational_parameters = request.input.non_gravitational_parameters();
     let mut source_orbit_indices = Vec::with_capacity(output_rows);
 
     let output_has_covariance = request.options.covariance == CovariancePropagation::Linearized
@@ -230,9 +236,14 @@ pub(super) fn assemble_result(
                 weights_cov,
                 coordinates.clone(),
             )?;
-            Some(match input_physical_parameters {
+            let variants = match input_physical_parameters {
                 Some(physical_parameters) => variants
                     .with_physical_parameters(physical_parameters.take(&source_orbit_indices))?,
+                None => variants,
+            };
+            Some(match input_non_gravitational_parameters {
+                Some(parameters) => variants
+                    .with_non_gravitational_parameters(parameters.take(&source_orbit_indices))?,
                 None => variants,
             })
         }
@@ -247,6 +258,12 @@ pub(super) fn assemble_result(
     let orbits = match input_physical_parameters {
         Some(physical_parameters) => {
             orbits.with_physical_parameters(physical_parameters.take(&source_orbit_indices))?
+        }
+        None => orbits,
+    };
+    let orbits = match input_non_gravitational_parameters {
+        Some(parameters) => {
+            orbits.with_non_gravitational_parameters(parameters.take(&source_orbit_indices))?
         }
         None => orbits,
     };

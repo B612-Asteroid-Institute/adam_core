@@ -40,6 +40,121 @@ _IO_TOKENS = (
     ".from_parquet(",
 )
 
+_FROZEN_UPDATED_UPSTREAM_COMMIT = "757c09fca86adf9e3d5899952db3d379e09413f6"
+_FROZEN_UPDATED_UPSTREAM_SYMBOLS = 600
+_FROZEN_UPDATED_UPSTREAM_RETIREMENTS: tuple[tuple[str, str, str], ...] = (
+    (
+        "adam_core.coordinates.covariances:transform_covariances_jacobian",
+        "retired_reference_only_jax_provider",
+        "migration/public_surface/coordinates_time_observers.md",
+    ),
+    (
+        "adam_core.coordinates.jacobian:calc_jacobian",
+        "retired_reference_only_jax_provider",
+        "migration/public_surface/coordinates_time_observers.md",
+    ),
+    (
+        "adam_core.dynamics.ephemeris:ephemeris_2body_worker_ray",
+        "retired_ray_worker_fused_rust_public_workflow",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.dynamics.moid:calculate_distance_from_point_to_ellipse",
+        "retired_scalar_moid_implementation_helper_fused_rust_surface",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.dynamics.moid:calculate_moid_for_dt",
+        "retired_scalar_moid_implementation_helper_fused_rust_surface",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.dynamics.moid:coplanar_distance_to_ellipse",
+        "retired_scalar_moid_implementation_helper_fused_rust_surface",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.dynamics.moid:distance_from_point_to_ellipse",
+        "retired_scalar_moid_implementation_helper_fused_rust_surface",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.dynamics.moid:minimize_distance_from_coplanar_point_to_ellipse",
+        "retired_scalar_moid_implementation_helper_fused_rust_surface",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.dynamics.moid:moid_worker",
+        "retired_scalar_moid_implementation_helper_fused_rust_surface",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.dynamics.moid:project_point_on_plane",
+        "retired_scalar_moid_implementation_helper_fused_rust_surface",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.dynamics.propagation:propagate_2body_worker_ray",
+        "retired_ray_worker_fused_rust_public_workflow",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.missions.porkchop:lambert_worker",
+        "retired_scalar_worker_fused_rust_grid",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.orbit_determination.gauss:approxLangrangeCoeffs",
+        "retired_gauss_implementation_helper_public_solver_rust",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.orbit_determination.iod:iod_worker_remote",
+        "retired_ray_worker_fused_rust_public_workflow",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.orbit_determination.od:od_worker_remote",
+        "retired_ray_worker_fused_rust_public_workflow",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.propagator.propagator:attach_magnitude_or_phase",
+        "retired_python_composition_backend_owns_crossing",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.propagator.propagator:ephemeris_worker_ray",
+        "retired_python_composition_backend_owns_crossing",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.propagator.propagator:propagation_worker",
+        "retired_python_composition_backend_owns_crossing",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.propagator.propagator:propagation_worker_ray",
+        "retired_python_composition_backend_owns_crossing",
+        "migration/public_surface/dynamics_od.md",
+    ),
+    (
+        "adam_core.ray_cluster:initialize_use_ray",
+        "retired_optional_ray_dependency",
+        "migration/public_surface/io_queries_utilities.md",
+    ),
+    (
+        "adam_core.utils.chunking:pad_to_fixed_size",
+        "retired_unused_jax_chunking_helper",
+        "migration/public_surface/io_queries_utilities.md",
+    ),
+    (
+        "adam_core.utils.chunking:process_in_chunks",
+        "retired_unused_jax_chunking_helper",
+        "migration/public_surface/io_queries_utilities.md",
+    ),
+)
+
 _DOMAIN_AUDITS: dict[str, tuple[str, str]] = {
     "constants": (
         "migration/public_surface/photometry_constants.md",
@@ -363,6 +478,28 @@ def collect() -> dict[str, Any]:
             "unreviewed": sum(
                 item["review_status"] == "unreviewed" for item in symbols
             ),
+        },
+        "frozen_updated_upstream_reconciliation": {
+            "commit": _FROZEN_UPDATED_UPSTREAM_COMMIT,
+            "upstream_symbols": _FROZEN_UPDATED_UPSTREAM_SYMBOLS,
+            "current_symbols": len(symbols),
+            "upstream_only_symbols": len(_FROZEN_UPDATED_UPSTREAM_RETIREMENTS),
+            "all_upstream_only_symbols_classified": True,
+            "disposition": (
+                "The listed upstream implementation helpers are intentionally "
+                "retired; their useful public workflows are Rust-backed or are "
+                "explicit provider boundaries in the referenced domain audit."
+            ),
+            "retirements": [
+                {
+                    "id": symbol_id,
+                    "classification": classification,
+                    "audit_document": audit_document,
+                }
+                for symbol_id, classification, audit_document in (
+                    _FROZEN_UPDATED_UPSTREAM_RETIREMENTS
+                )
+            ],
         },
         "parse_errors": parse_errors,
         "duplicate_ids": duplicate_ids,

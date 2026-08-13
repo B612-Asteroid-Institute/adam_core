@@ -63,10 +63,11 @@ def _ensure_venv() -> None:
             f"Legacy adam_assist oracle Python not found at "
             f"{LEGACY_ASSIST_VENV_PYTHON}. Build it per migration/parity/README:\n"
             f"  python3.13 -m venv .legacy-assist-venv\n"
-            f"  .legacy-assist-venv/bin/pip install assist==1.2.3 rebound\n"
+            f"  .legacy-assist-venv/bin/pip install assist==1.2.3 rebound==4.6.0 timezonefinder==8.0.0\n"
             f"  .legacy-assist-venv/bin/pip install -e "
             f"/Users/aleck/Code/adam-core-legacy-main\n"
-            f"  .legacy-assist-venv/bin/pip install adam-assist==0.3.9 --no-deps"
+            f"  .legacy-assist-venv/bin/pip install -e "
+            f"/Users/aleck/Code/adam-assist-upstream-oracle --no-deps"
         )
 
 

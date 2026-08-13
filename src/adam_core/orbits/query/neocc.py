@@ -1,12 +1,26 @@
 import json
+import logging
 from typing import Any, Dict, List, Literal, Union
 
 import numpy as np
 import numpy.typing as npt
 
+from ...coordinates.covariances import COORD_DIM, FULL_DIM
 from ...orbits import Orbits
 from ...utils.http import _raise_compatible_http_error
+from ..non_gravitational_parameters import (
+    NON_GRAVITATIONAL_VALUE_FIELDS,
+    NonGravitationalParameters,
+)
 from ..physical_parameters import PhysicalParameters
+
+logger = logging.getLogger(__name__)
+
+_NEOCC_UNIT_FACTORS = {
+    "AMRAT": 1e-3,
+    "A2": 1e-10,
+}
+_NEOCC_SUPPORTED_SOLVE_FOR = frozenset(_NEOCC_UNIT_FACTORS)
 
 
 def _parse_oef(data: str) -> Dict[str, Any]:
@@ -67,11 +81,17 @@ def _parse_oef(data: str) -> Dict[str, Any]:
     from adam_core import _rust_native as _rn
 
     result = json.loads(_rn.query_neocc_parse_oef(data))
+    solved_dimension = int((result.get("nongrav") or {}).get("dimension", COORD_DIM))
     for matrix_name in ("covariance", "correlation"):
         if matrix_name in result:
             result[matrix_name] = np.asarray(
                 result[matrix_name], dtype=np.float64
-            ).reshape(6, 6)
+            ).reshape(COORD_DIM, COORD_DIM)
+        full_name = f"{matrix_name}_full"
+        if full_name in result:
+            result[full_name] = np.asarray(result[full_name], dtype=np.float64).reshape(
+                solved_dimension, solved_dimension
+            )
     return result
 
 
@@ -100,10 +120,130 @@ def _physical_parameters_from_neocc(data: Dict[str, Any]) -> PhysicalParameters:
     )
 
 
+def _upper_triangular_to_full_dimension(
+    upper_triangular: npt.NDArray[np.float64], dimension: int
+) -> npt.NDArray[np.float64]:
+    expected = dimension * (dimension + 1) // 2
+    if len(upper_triangular) != expected:
+        raise ValueError(
+            f"Upper triangular matrix for dimension {dimension} should have "
+            f"{expected} elements, got {len(upper_triangular)}"
+        )
+    full = np.zeros((dimension, dimension), dtype=np.float64)
+    full[np.triu_indices(dimension)] = upper_triangular
+    full[np.tril_indices(dimension, -1)] = full.T[np.tril_indices(dimension, -1)]
+    return full
+
+
+def _full_covariance_dimension(n_elements: int) -> int:
+    dimension = int((np.sqrt(8 * n_elements + 1) - 1) // 2)
+    if dimension * (dimension + 1) // 2 != n_elements:
+        raise ValueError(
+            f"Covariance upper-triangular length {n_elements} is not a valid "
+            "triangular number."
+        )
+    return dimension
+
+
+def _full_covariance_from_upper_triangular(
+    upper_triangular: List[float], solved_dimension: int
+) -> npt.NDArray[np.float64]:
+    full = _upper_triangular_to_full_dimension(
+        np.asarray(upper_triangular, dtype=np.float64),
+        _full_covariance_dimension(len(upper_triangular)),
+    )
+    return full[:solved_dimension, :solved_dimension]
+
+
+def _solve_for_codes_to_names(codes: list[int]) -> list[str]:
+    mapping = {1: "AMRAT", 2: "A2", 3: "A1", 4: "A3", 5: "DT"}
+    return [mapping[code] for code in codes if code in mapping]
+
+
+def _neocc_nongrav_solution_is_decodable(data: Dict[str, Any]) -> bool:
+    info = data.get("nongrav") or {}
+    codes = info.get("solve_for_parameter_codes") or []
+    solve_for = _solve_for_codes_to_names(codes)
+    if len(solve_for) != len(codes):
+        return False
+    dimension = info.get("dimension") or COORD_DIM
+    if dimension - COORD_DIM != len(solve_for):
+        return False
+    if info.get("model_used") not in (None, 0, 1):
+        return False
+    vector = info.get("vector") or []
+    if vector and len(vector) != 2:
+        return False
+    return all(name in _NEOCC_SUPPORTED_SOLVE_FOR for name in solve_for)
+
+
+def _non_gravitational_parameters_from_neocc(
+    data: Dict[str, Any],
+) -> NonGravitationalParameters:
+    info = data.get("nongrav") or {}
+    if not info:
+        return NonGravitationalParameters.nulls(1)
+    solve_for = _solve_for_codes_to_names(info.get("solve_for_parameter_codes") or [])
+    vector = info.get("vector") or []
+    a2 = None
+    if _neocc_nongrav_solution_is_decodable(data):
+        if len(vector) > 1:
+            a2 = float(vector[1]) * _NEOCC_UNIT_FACTORS["A2"]
+        if "AMRAT" in solve_for or (vector and float(vector[0]) != 0.0):
+            logger.warning(
+                "NEOCC solution for object %s includes an area-to-mass ratio "
+                "(AMRAT), which is not supported for storage (only A1, A2, "
+                "A3); dropping its value and marginalizing it out of the "
+                "covariance.",
+                data.get("object_id"),
+            )
+    elif vector:
+        logger.warning(
+            "NEOCC non-grav solution for object %s uses an unsupported model or "
+            "solve-for parameters (%s); the nominal values and the "
+            "non-gravitational covariance block are left null.",
+            data.get("object_id"),
+            ",".join(solve_for) if solve_for else "unknown",
+        )
+    return NonGravitationalParameters.from_kwargs(
+        source=["NEOCC"], A1=[None], A2=[a2], A3=[None]
+    )
+
+
+def _neocc_extended_covariance(
+    data: Dict[str, Any],
+) -> npt.NDArray[np.float64] | None:
+    covariance_native = data.get("covariance_full")
+    if covariance_native is None or covariance_native.shape[0] <= COORD_DIM:
+        return None
+    if not _neocc_nongrav_solution_is_decodable(data):
+        return None
+    info = data.get("nongrav") or {}
+    solve_for = _solve_for_codes_to_names(info.get("solve_for_parameter_codes") or [])
+    source_indices = list(range(COORD_DIM))
+    target_indices = list(range(COORD_DIM))
+    factors = np.ones(FULL_DIM, dtype=np.float64)
+    for offset, name in enumerate(NON_GRAVITATIONAL_VALUE_FIELDS):
+        if name in solve_for:
+            source_indices.append(COORD_DIM + solve_for.index(name))
+            target_indices.append(COORD_DIM + offset)
+            factors[COORD_DIM + offset] = _NEOCC_UNIT_FACTORS[name]
+    if len(target_indices) == COORD_DIM:
+        return None
+    full = np.zeros((FULL_DIM, FULL_DIM), dtype=np.float64)
+    full[np.ix_(target_indices, target_indices)] = covariance_native[
+        np.ix_(source_indices, source_indices)
+    ]
+    full *= np.outer(factors, factors)
+    return full
+
+
 def query_neocc(
     object_ids: Union[List, npt.ArrayLike],
     orbit_type: Literal["ke", "eq"] = "ke",
     orbit_epoch: Literal["middle", "present-day"] = "present-day",
+    *,
+    include_nongrav: bool = True,
 ) -> Orbits:
     """
     Query ESA's Near-Earth Object Coordination Centre (NEOCC) database for orbital elements of the specified NEOs.
@@ -127,9 +267,15 @@ def query_neocc(
     from ..._rust.arrow import table_from_record_batch
 
     try:
-        batch = _rust_native.query_neocc_arrow(
-            [str(value) for value in object_ids], orbit_type, orbit_epoch
+        batch, warnings = _rust_native.query_neocc_arrow(
+            [str(value) for value in object_ids],
+            orbit_type,
+            orbit_epoch,
+            None,
+            include_nongrav,
         )
     except RuntimeError as error:
         _raise_compatible_http_error(error)
+    for warning in warnings:
+        logger.warning("%s", warning)
     return table_from_record_batch(Orbits, batch)

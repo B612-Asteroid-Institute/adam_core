@@ -17,7 +17,7 @@ import numpy as np
 
 TWO_RUNTIME_COMPARISON_MODE = "gpl_rust_assist_backend_vs_legacy_python_adam_assist"
 PERFORMANCE_COLUMNS = {
-    "legacy_adam_core": "legacy adam_assist over pinned legacy adam_core",
+    "legacy_adam_core": "frozen updated-upstream adam_assist over frozen adam_core",
     "current_python": "current adam_assist public Python method",
     "native_rust": "direct Rust call timed inside Rust with std::time::Instant",
     "gate": "legacy/current_python; native_rust is diagnostic",

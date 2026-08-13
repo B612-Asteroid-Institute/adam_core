@@ -21,6 +21,9 @@ from ..time import Timestamp
 logger = logging.getLogger(__name__)
 
 C = c.C
+# Ray is intentionally absent from default artifacts; keep the upstream
+# capability sentinel for import compatibility.
+RAY_INSTALLED = False
 
 # Use the Earth's equatorial radius as used in DE4XX ephemerides
 # adam_core defines it in au but we need it in km

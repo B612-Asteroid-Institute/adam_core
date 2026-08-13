@@ -21,6 +21,7 @@ SPEC.loader.exec_module(MODULE)
         ("0.5.6-beta.2", "0.5.6b2"),
         ("0.5.6-rc.1", "0.5.6rc1"),
         ("0.5.6-rc.2", "0.5.6rc2"),
+        ("0.5.6-rc.3", "0.5.6rc3"),
     ],
 )
 def test_cargo_version_to_pep440(cargo: str, python: str) -> None:

@@ -36,6 +36,16 @@ fn rows3(values: &PyReadonlyArray2<'_, f64>, label: &str) -> PyResult<Vec<f64>> 
         .ok_or_else(|| PyValueError::new_err(format!("{label} must be contiguous")))
 }
 
+fn rows(values: &PyReadonlyArray2<'_, f64>, label: &str) -> PyResult<(Vec<f64>, usize)> {
+    let view = values.as_array();
+    let dimension = view.ncols();
+    let values = view
+        .as_slice()
+        .map(<[f64]>::to_vec)
+        .ok_or_else(|| PyValueError::new_err(format!("{label} must be contiguous")))?;
+    Ok((values, dimension))
+}
+
 fn rows6(values: &PyReadonlyArray2<'_, f64>, label: &str) -> PyResult<Vec<f64>> {
     let view = values.as_array();
     if view.ncols() != 6 {
@@ -1524,11 +1534,11 @@ fn sample_coordinate_variants_numpy<'py>(
     beta: f64,
     kappa: f64,
 ) -> PyResult<SamplingResult<'py>> {
-    let means = rows6(&means, "means")?;
+    let (means, mean_dim) = rows(&means, "means")?;
     let (covariances, _, dim) = covariance_rows(&covariances, "covariances")?;
-    if dim != 6 {
+    if mean_dim != dim || !matches!(dim, 6 | 9) {
         return Err(PyValueError::new_err(
-            "covariances must have shape (N, 6, 6)",
+            "means and covariances must have shapes (N, D) and (N, D, D), where D is 6 or 9",
         ));
     }
     let method = parse_sampling_method(method)?;
@@ -1537,6 +1547,7 @@ fn sample_coordinate_variants_numpy<'py>(
             sample_coordinate_covariances_flat(
                 &means,
                 &covariances,
+                dim,
                 method,
                 num_samples,
                 seed,
@@ -1548,7 +1559,7 @@ fn sample_coordinate_variants_numpy<'py>(
         .map_err(|err| PyValueError::new_err(err.to_string()))?;
     let rows = weights.len();
     Ok((
-        array2(py, samples, rows, 6)?,
+        array2(py, samples, rows, dim)?,
         array1(py, weights),
         array1(py, weights_cov),
         source_rows.into_pyarray(py),
@@ -1571,13 +1582,19 @@ fn benchmark_sample_coordinate_variants_numpy(
     beta: f64,
     kappa: f64,
 ) -> PyResult<Vec<Vec<f64>>> {
-    let means = rows6(&means, "means")?;
-    let (covariances, _, _) = covariance_rows(&covariances, "covariances")?;
+    let (means, mean_dim) = rows(&means, "means")?;
+    let (covariances, _, dim) = covariance_rows(&covariances, "covariances")?;
+    if mean_dim != dim || !matches!(dim, 6 | 9) {
+        return Err(PyValueError::new_err(
+            "means and covariances must have shapes (N, D) and (N, D, D), where D is 6 or 9",
+        ));
+    }
     let method = parse_sampling_method(method)?;
     bench(reps, trials, warmup_reps, || {
         sample_coordinate_covariances_flat(
             &means,
             &covariances,
+            dim,
             method,
             num_samples,
             seed,
@@ -1609,9 +1626,10 @@ fn sample_covariance_sigma_points_numpy<'py>(
     let flat = view
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("covariance must be contiguous"))?;
-    if mean.len() != 6 || view.shape() != [6, 6] {
+    let dimension = mean.len();
+    if view.shape() != [dimension, dimension] || !matches!(dimension, 6 | 9) {
         return Err(PyValueError::new_err(
-            "mean must have shape (6,) and covariance (6, 6)",
+            "mean and covariance must have shapes (D,) and (D, D), where D is 6 or 9",
         ));
     }
     let (samples, weights, weights_cov) =
@@ -1619,7 +1637,7 @@ fn sample_covariance_sigma_points_numpy<'py>(
             .map_err(|err| PyValueError::new_err(err.to_string()))?;
     let rows = weights.len();
     Ok((
-        array2(py, samples, rows, 6)?,
+        array2(py, samples, rows, dimension)?,
         array1(py, weights),
         array1(py, weights_cov),
     ))
@@ -1639,9 +1657,10 @@ fn sample_covariance_random_numpy<'py>(
     let flat = view
         .as_slice()
         .ok_or_else(|| PyValueError::new_err("covariance must be contiguous"))?;
-    if mean.len() != 6 || view.shape() != [6, 6] {
+    let dimension = mean.len();
+    if view.shape() != [dimension, dimension] || !matches!(dimension, 6 | 9) {
         return Err(PyValueError::new_err(
-            "mean must have shape (6,) and covariance (6, 6)",
+            "mean and covariance must have shapes (D,) and (D, D), where D is 6 or 9",
         ));
     }
     let (samples, weights, weights_cov) =
@@ -1649,7 +1668,7 @@ fn sample_covariance_random_numpy<'py>(
             .map_err(|err| PyValueError::new_err(err.to_string()))?;
     let rows = weights.len();
     Ok((
-        array2(py, samples, rows, 6)?,
+        array2(py, samples, rows, dimension)?,
         array1(py, weights),
         array1(py, weights_cov),
     ))

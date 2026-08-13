@@ -13,6 +13,7 @@ from ..constants import Constants as c
 from ._rust_compat import require_rust
 
 MU = c.MU
+C = c.C
 
 
 def _require_rust_light_time(

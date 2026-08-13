@@ -232,7 +232,7 @@ class KeplerianCoordinates(qv.Table):
         mu = self.origin.mu()
 
         if not self.covariance.is_all_nan():
-            covariances_keplerian = self.covariance.to_matrix()
+            covariances_keplerian = self.covariance.to_transform_matrix()
             rust_result = rust_covariance_transform(
                 self.values,
                 covariances_keplerian,
@@ -277,7 +277,7 @@ class KeplerianCoordinates(qv.Table):
         t0_np = cartesian.time.to_numpy()
 
         if not cartesian.covariance.is_all_nan():
-            cartesian_covariances = cartesian.covariance.to_matrix()
+            cartesian_covariances = cartesian.covariance.to_transform_matrix()
             rust_result = rust_covariance_transform(
                 cartesian.values,
                 cartesian_covariances,

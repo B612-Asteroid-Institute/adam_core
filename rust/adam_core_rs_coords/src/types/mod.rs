@@ -439,6 +439,26 @@ impl CovarianceBatch {
         let start = row * stride;
         &self.values_row_major[start..start + stride]
     }
+
+    /// Return the stored solved-state dimension for one row. Mixed 6D/9D
+    /// Arrow batches are normalized to width nine with NaN padding around
+    /// coordinate-only rows; those rows retain their semantic dimension six.
+    pub fn row_dimension(&self, row: usize) -> usize {
+        if self.dimension != 9 {
+            return self.dimension;
+        }
+        let values = self.row_values(row);
+        let coordinate_only = (0..9).all(|index| {
+            (6..9).all(|parameter| {
+                values[index * 9 + parameter].is_nan() && values[parameter * 9 + index].is_nan()
+            })
+        });
+        if coordinate_only {
+            6
+        } else {
+            9
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -601,7 +621,7 @@ impl CoordinateBatch {
                     actual: covariance.rows,
                 });
             }
-            if covariance.dimension != 6 {
+            if covariance.dimension != 6 && covariance.dimension != 9 {
                 return Err(SchemaError::InvalidCovarianceShape {
                     rows: covariance.rows,
                     dimension: covariance.dimension,
@@ -689,12 +709,123 @@ impl PhysicalParametersBatch {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct NonGravitationalParametersRow {
+    pub a1: Option<f64>,
+    pub a2: Option<f64>,
+    pub a3: Option<f64>,
+    pub aln: Option<f64>,
+    pub nk: Option<f64>,
+    pub nm: Option<f64>,
+    pub nn: Option<f64>,
+    pub r0: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct NonGravitationalParametersBatch {
+    pub source: Vec<Option<String>>,
+    pub a1: Vec<Option<f64>>,
+    pub a2: Vec<Option<f64>>,
+    pub a3: Vec<Option<f64>>,
+    pub aln: Vec<Option<f64>>,
+    pub nk: Vec<Option<f64>>,
+    pub nm: Vec<Option<f64>>,
+    pub nn: Vec<Option<f64>>,
+    pub r0: Vec<Option<f64>>,
+}
+
+impl NonGravitationalParametersBatch {
+    pub fn len(&self) -> usize {
+        self.a1.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.a1.is_empty()
+    }
+
+    pub fn is_all_null(&self) -> bool {
+        self.source.iter().all(Option::is_none)
+            && [
+                &self.a1, &self.a2, &self.a3, &self.aln, &self.nk, &self.nm, &self.nn, &self.r0,
+            ]
+            .into_iter()
+            .all(|column| column.iter().all(Option::is_none))
+    }
+
+    pub fn has_values(&self) -> bool {
+        [&self.a1, &self.a2, &self.a3]
+            .into_iter()
+            .flatten()
+            .flatten()
+            .any(|value| *value != 0.0)
+    }
+
+    pub fn row(&self, index: usize) -> NonGravitationalParametersRow {
+        NonGravitationalParametersRow {
+            a1: self.a1[index],
+            a2: self.a2[index],
+            a3: self.a3[index],
+            aln: self.aln[index],
+            nk: self.nk[index],
+            nm: self.nm[index],
+            nn: self.nn[index],
+            r0: self.r0[index],
+        }
+    }
+
+    pub fn take(&self, indices: &[usize]) -> Self {
+        let gather = |column: &Vec<Option<f64>>| -> Vec<Option<f64>> {
+            indices.iter().map(|&index| column[index]).collect()
+        };
+        Self {
+            source: indices
+                .iter()
+                .map(|&index| self.source[index].clone())
+                .collect(),
+            a1: gather(&self.a1),
+            a2: gather(&self.a2),
+            a3: gather(&self.a3),
+            aln: gather(&self.aln),
+            nk: gather(&self.nk),
+            nm: gather(&self.nm),
+            nn: gather(&self.nn),
+            r0: gather(&self.r0),
+        }
+    }
+
+    pub fn validate(&self, rows: usize) -> SchemaResult<()> {
+        validate_len(
+            "non_gravitational_parameters.source",
+            rows,
+            self.source.len(),
+        )?;
+        for (field, column) in [
+            ("A1", &self.a1),
+            ("A2", &self.a2),
+            ("A3", &self.a3),
+            ("ALN", &self.aln),
+            ("NK", &self.nk),
+            ("NM", &self.nm),
+            ("NN", &self.nn),
+            ("R0", &self.r0),
+        ] {
+            validate_len(
+                &format!("non_gravitational_parameters.{field}"),
+                rows,
+                column.len(),
+            )?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrbitBatch {
     pub orbit_id: Vec<OrbitId>,
     pub object_id: Vec<Option<ObjectId>>,
     pub coordinates: CoordinateBatch,
     pub physical_parameters: Option<PhysicalParametersBatch>,
+    pub non_gravitational_parameters: Option<NonGravitationalParametersBatch>,
 }
 
 impl OrbitBatch {
@@ -708,6 +839,7 @@ impl OrbitBatch {
             object_id,
             coordinates,
             physical_parameters: None,
+            non_gravitational_parameters: None,
         };
         out.validate()?;
         Ok(out)
@@ -723,6 +855,15 @@ impl OrbitBatch {
         Ok(self)
     }
 
+    pub fn with_non_gravitational_parameters(
+        mut self,
+        non_gravitational_parameters: NonGravitationalParametersBatch,
+    ) -> SchemaResult<Self> {
+        non_gravitational_parameters.validate(self.coordinates.len())?;
+        self.non_gravitational_parameters = Some(non_gravitational_parameters);
+        Ok(self)
+    }
+
     pub fn len(&self) -> usize {
         self.coordinates.len()
     }
@@ -735,6 +876,9 @@ impl OrbitBatch {
         validate_orbit_metadata(&self.orbit_id, &self.object_id, &self.coordinates)?;
         if let Some(physical_parameters) = &self.physical_parameters {
             physical_parameters.validate(self.coordinates.len())?;
+        }
+        if let Some(non_gravitational_parameters) = &self.non_gravitational_parameters {
+            non_gravitational_parameters.validate(self.coordinates.len())?;
         }
         Ok(())
     }
@@ -753,6 +897,9 @@ pub struct OrbitVariantBatch {
     /// through sampling and propagation so Python boundaries no longer
     /// reattach them from source-row indices.
     pub physical_parameters: Option<PhysicalParametersBatch>,
+    /// Optional per-variant solved A1/A2/A3 values. Present for 9D samples and
+    /// carried through propagation/collapse as part of the solved state.
+    pub non_gravitational_parameters: Option<NonGravitationalParametersBatch>,
 }
 
 impl OrbitVariantBatch {
@@ -772,6 +919,7 @@ impl OrbitVariantBatch {
             weights_cov,
             coordinates,
             physical_parameters: None,
+            non_gravitational_parameters: None,
         };
         out.validate()?;
         Ok(out)
@@ -784,6 +932,15 @@ impl OrbitVariantBatch {
     ) -> SchemaResult<Self> {
         physical_parameters.validate(self.coordinates.len())?;
         self.physical_parameters = Some(physical_parameters);
+        Ok(self)
+    }
+
+    pub fn with_non_gravitational_parameters(
+        mut self,
+        non_gravitational_parameters: NonGravitationalParametersBatch,
+    ) -> SchemaResult<Self> {
+        non_gravitational_parameters.validate(self.coordinates.len())?;
+        self.non_gravitational_parameters = Some(non_gravitational_parameters);
         Ok(self)
     }
 
@@ -801,8 +958,12 @@ impl OrbitVariantBatch {
             self.object_id.clone(),
             self.coordinates.clone(),
         )?;
-        match self.physical_parameters.clone() {
-            Some(physical_parameters) => orbits.with_physical_parameters(physical_parameters),
+        let orbits = match self.physical_parameters.clone() {
+            Some(physical_parameters) => orbits.with_physical_parameters(physical_parameters)?,
+            None => orbits,
+        };
+        match self.non_gravitational_parameters.clone() {
+            Some(parameters) => orbits.with_non_gravitational_parameters(parameters),
             None => Ok(orbits),
         }
     }
@@ -817,6 +978,9 @@ impl OrbitVariantBatch {
         validate_optional_finite("weights_cov", &self.weights_cov)?;
         if let Some(physical_parameters) = &self.physical_parameters {
             physical_parameters.validate(rows)?;
+        }
+        if let Some(non_gravitational_parameters) = &self.non_gravitational_parameters {
+            non_gravitational_parameters.validate(rows)?;
         }
         Ok(())
     }

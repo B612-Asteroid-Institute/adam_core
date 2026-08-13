@@ -7,9 +7,9 @@
 
 use super::{
     CoordinateBatch, CoordinateRepresentation, CoordinateValues, CovarianceBatch, CovarianceUnits,
-    EphemerisBatch, Epoch, Frame, ObjectId, ObservatoryCode, ObserverBatch, OrbitBatch, OrbitId,
-    OrbitVariantBatch, OriginArray, OriginId, PhysicalParametersBatch, SchemaError, SchemaResult,
-    TimeArray, TimeScale, Validity, VariantId,
+    EphemerisBatch, Epoch, Frame, NonGravitationalParametersBatch, ObjectId, ObservatoryCode,
+    ObserverBatch, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
+    PhysicalParametersBatch, SchemaError, SchemaResult, TimeArray, TimeScale, Validity, VariantId,
 };
 use arrow_array::builder::{Float64Builder, LargeListBuilder, LargeStringBuilder};
 use arrow_array::{
@@ -195,7 +195,7 @@ fn nested_covariance_struct(
     rows: usize,
 ) -> SchemaResult<StructArray> {
     if let Some(covariance) = coordinates.covariance.as_ref() {
-        if covariance.dimension != 6 {
+        if covariance.dimension != 6 && covariance.dimension != 9 {
             return Err(SchemaError::InvalidCovarianceShape {
                 rows: covariance.rows,
                 dimension: covariance.dimension,
@@ -209,10 +209,26 @@ fn nested_covariance_struct(
             let mut builder = LargeListBuilder::new(Float64Builder::new());
             for (row, valid) in validity.iter_mut().enumerate() {
                 if covariance.is_row_valid(row) {
-                    for element in 0..36 {
-                        builder
-                            .values()
-                            .append_value(covariance.values_row_major[row * 36 + element]);
+                    let values = covariance.row_values(row);
+                    let coordinate_only = covariance.dimension == 9
+                        && (0..9).all(|index| {
+                            (6..9).all(|nongrav| {
+                                values[index * 9 + nongrav].is_nan()
+                                    && values[nongrav * 9 + index].is_nan()
+                            })
+                        });
+                    if coordinate_only {
+                        for coordinate_row in 0..6 {
+                            for coordinate_column in 0..6 {
+                                builder
+                                    .values()
+                                    .append_value(values[coordinate_row * 9 + coordinate_column]);
+                            }
+                        }
+                    } else {
+                        for value in values {
+                            builder.values().append_value(*value);
+                        }
                     }
                     builder.append(true);
                     *valid = true;
@@ -352,6 +368,10 @@ fn orbit_to_nested_record_batch(orbits: &OrbitBatch) -> SchemaResult<RecordBatch
         .map_err(|err| SchemaError::Arrow(err.to_string()))?;
     let physical_parameters =
         nested_physical_parameters_struct(orbits.physical_parameters.as_ref(), orbits.len())?;
+    let non_gravitational_parameters = nested_non_gravitational_parameters_struct(
+        orbits.non_gravitational_parameters.as_ref(),
+        orbits.len(),
+    )?;
 
     let fields = vec![
         Field::new("orbit_id", DataType::LargeUtf8, false),
@@ -362,10 +382,16 @@ fn orbit_to_nested_record_batch(orbits: &OrbitBatch) -> SchemaResult<RecordBatch
             physical_parameters.data_type().clone(),
             true,
         ),
+        Field::new(
+            "non_gravitational_parameters",
+            non_gravitational_parameters.data_type().clone(),
+            true,
+        ),
     ];
     let mut arrays = orbit_metadata_arrays(&orbits.orbit_id, &orbits.object_id);
     arrays.push(Arc::new(coordinates) as ArrayRef);
     arrays.push(Arc::new(physical_parameters) as ArrayRef);
+    arrays.push(Arc::new(non_gravitational_parameters) as ArrayRef);
     let schema = Schema::new_with_metadata(
         fields,
         coordinate_metadata(
@@ -396,6 +422,10 @@ fn orbit_variant_to_nested_record_batch(variants: &OrbitVariantBatch) -> SchemaR
         .map_err(|err| SchemaError::Arrow(err.to_string()))?;
     let physical_parameters =
         nested_physical_parameters_struct(variants.physical_parameters.as_ref(), rows)?;
+    let non_gravitational_parameters = nested_non_gravitational_parameters_struct(
+        variants.non_gravitational_parameters.as_ref(),
+        rows,
+    )?;
 
     let fields = vec![
         Field::new("orbit_id", DataType::LargeUtf8, false),
@@ -407,6 +437,11 @@ fn orbit_variant_to_nested_record_batch(variants: &OrbitVariantBatch) -> SchemaR
         Field::new(
             "physical_parameters",
             physical_parameters.data_type().clone(),
+            true,
+        ),
+        Field::new(
+            "non_gravitational_parameters",
+            non_gravitational_parameters.data_type().clone(),
             true,
         ),
     ];
@@ -430,6 +465,7 @@ fn orbit_variant_to_nested_record_batch(variants: &OrbitVariantBatch) -> SchemaR
         Arc::new(Float64Array::from(variants.weights_cov.clone())) as ArrayRef,
         Arc::new(coordinates) as ArrayRef,
         Arc::new(physical_parameters) as ArrayRef,
+        Arc::new(non_gravitational_parameters) as ArrayRef,
     ];
     let schema = Schema::new_with_metadata(
         fields,
@@ -798,6 +834,13 @@ fn orbit_variant_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<O
         .map(|physical_parameters| parse_nested_physical_parameters(physical_parameters, rows))
         .transpose()?
         .flatten();
+    let non_gravitational_parameters = batch
+        .column_by_name("non_gravitational_parameters")
+        .map(|column| array_as_struct(column, "non_gravitational_parameters"))
+        .transpose()?
+        .map(|parameters| parse_nested_non_gravitational_parameters(parameters, rows))
+        .transpose()?
+        .flatten();
     let variants = OrbitVariantBatch::new(
         orbit_id,
         object_id,
@@ -806,8 +849,12 @@ fn orbit_variant_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<O
         weights_cov,
         coordinates,
     )?;
-    match physical_parameters {
-        Some(physical_parameters) => variants.with_physical_parameters(physical_parameters),
+    let variants = match physical_parameters {
+        Some(physical_parameters) => variants.with_physical_parameters(physical_parameters)?,
+        None => variants,
+    };
+    match non_gravitational_parameters {
+        Some(parameters) => variants.with_non_gravitational_parameters(parameters),
         None => Ok(variants),
     }
 }
@@ -834,9 +881,20 @@ fn orbit_from_nested_record_batch(batch: &RecordBatch) -> SchemaResult<OrbitBatc
         })
         .transpose()?
         .flatten();
+    let non_gravitational_parameters = batch
+        .column_by_name("non_gravitational_parameters")
+        .map(|column| array_as_struct(column, "non_gravitational_parameters"))
+        .transpose()?
+        .map(|parameters| parse_nested_non_gravitational_parameters(parameters, batch.num_rows()))
+        .transpose()?
+        .flatten();
     let orbits = OrbitBatch::new(orbit_id, object_id, coordinates)?;
-    match physical_parameters {
-        Some(physical_parameters) => orbits.with_physical_parameters(physical_parameters),
+    let orbits = match physical_parameters {
+        Some(physical_parameters) => orbits.with_physical_parameters(physical_parameters)?,
+        None => orbits,
+    };
+    match non_gravitational_parameters {
+        Some(parameters) => orbits.with_non_gravitational_parameters(parameters),
         None => Ok(orbits),
     }
 }
@@ -856,12 +914,13 @@ fn parse_nested_covariance(
         .ok_or_else(|| {
             SchemaError::InvalidRecordBatch("covariance.values must be LargeList".to_string())
         })?;
-    let mut values = vec![f64::NAN; rows * 36];
+    let mut entries = Vec::with_capacity(rows);
     let mut row_validity = vec![true; rows];
-    let mut any_present = false;
-    for row in 0..rows {
+    let mut dimension = 6;
+    for (row, row_is_valid) in row_validity.iter_mut().enumerate() {
         if covariance.is_null(row) || list.is_null(row) {
-            row_validity[row] = false;
+            *row_is_valid = false;
+            entries.push(None);
             continue;
         }
         let entry = list.value(row);
@@ -873,31 +932,50 @@ fn parse_nested_covariance(
                     "covariance.values items must be Float64".to_string(),
                 )
             })?;
-        if entry.len() != 36 {
+        if entry.len() != 36 && entry.len() != 81 {
             return Err(SchemaError::InvalidRecordBatch(format!(
-                "covariance row {row} must have 36 elements, got {}",
+                "covariance row {row} must have 36 or 81 elements, got {}",
                 entry.len()
             )));
         }
-        // quivr may encode an explicit all-NaN covariance as a valid list
-        // whose 36 Float64 children are all null. Treat that as the same absent
-        // row represented by a null struct/list, while still rejecting partial
-        // element nulls below.
-        if entry.null_count() == 36 {
-            row_validity[row] = false;
+        if entry.null_count() == entry.len() {
+            *row_is_valid = false;
+            entries.push(None);
             continue;
         }
-        for element in 0..36 {
-            values[row * 36 + element] = non_null_f64(entry, "covariance.values", element)?;
+        if entry.len() == 81 {
+            dimension = 9;
         }
-        any_present = true;
+        let row_values = (0..entry.len())
+            .map(|element| non_null_f64(entry, "covariance.values", element))
+            .collect::<SchemaResult<Vec<_>>>()?;
+        entries.push(Some(row_values));
     }
-    if !any_present {
+    if entries.iter().all(Option::is_none) {
         return Ok(None);
     }
-    CovarianceBatch::new(rows, 6, values, CovarianceUnits::Coordinate(representation))
-        .and_then(|covariance| covariance.with_row_validity(Validity::from_bools(&row_validity)))
-        .map(Some)
+    let stride = dimension * dimension;
+    let mut values = vec![f64::NAN; rows * stride];
+    for (row, entry) in entries.into_iter().enumerate() {
+        let Some(entry) = entry else { continue };
+        if entry.len() == stride {
+            values[row * stride..(row + 1) * stride].copy_from_slice(&entry);
+        } else {
+            for coordinate_row in 0..6 {
+                let source = &entry[coordinate_row * 6..(coordinate_row + 1) * 6];
+                let start = row * stride + coordinate_row * dimension;
+                values[start..start + 6].copy_from_slice(source);
+            }
+        }
+    }
+    CovarianceBatch::new(
+        rows,
+        dimension,
+        values,
+        CovarianceUnits::Coordinate(representation),
+    )
+    .and_then(|covariance| covariance.with_row_validity(Validity::from_bools(&row_validity)))
+    .map(Some)
 }
 
 fn array_as_f64<'a>(array: &'a ArrayRef, name: &str) -> SchemaResult<&'a Float64Array> {
@@ -999,6 +1077,108 @@ fn parse_nested_physical_parameters(
         g_sigma: read("G_sigma")?,
         sigma_eff: read("sigma_eff")?,
         chi2_red: read("chi2_red")?,
+    };
+    if batch.is_all_null() {
+        Ok(None)
+    } else {
+        Ok(Some(batch))
+    }
+}
+
+fn nested_non_gravitational_parameters_struct(
+    parameters: Option<&NonGravitationalParametersBatch>,
+    rows: usize,
+) -> SchemaResult<StructArray> {
+    let source = parameters
+        .map(|parameters| parameters.source.clone())
+        .unwrap_or_else(|| vec![None; rows]);
+    let columns: [(&str, Vec<Option<f64>>); 8] = match parameters {
+        Some(parameters) => [
+            ("A1", parameters.a1.clone()),
+            ("A2", parameters.a2.clone()),
+            ("A3", parameters.a3.clone()),
+            ("ALN", parameters.aln.clone()),
+            ("NK", parameters.nk.clone()),
+            ("NM", parameters.nm.clone()),
+            ("NN", parameters.nn.clone()),
+            ("R0", parameters.r0.clone()),
+        ],
+        None => std::array::from_fn(|index| {
+            (
+                ["A1", "A2", "A3", "ALN", "NK", "NM", "NN", "R0"][index],
+                vec![None; rows],
+            )
+        }),
+    };
+    let mut validity = source.iter().map(Option::is_some).collect::<Vec<_>>();
+    for (_, values) in &columns {
+        for (row, value) in values.iter().enumerate() {
+            validity[row] |= value.is_some();
+        }
+    }
+    let mut fields = Vec::with_capacity(9);
+    let mut arrays: Vec<ArrayRef> = Vec::with_capacity(9);
+    fields.push(Field::new("source", DataType::LargeUtf8, true));
+    arrays.push(Arc::new(LargeStringArray::from(source)) as ArrayRef);
+    for (name, values) in columns {
+        fields.push(Field::new(name, DataType::Float64, true));
+        arrays.push(Arc::new(Float64Array::from(values)) as ArrayRef);
+    }
+    StructArray::try_new(
+        Fields::from(fields),
+        arrays,
+        Some(NullBuffer::from_iter(validity)),
+    )
+    .map_err(|err| SchemaError::Arrow(err.to_string()))
+}
+
+fn parse_nested_non_gravitational_parameters(
+    parameters: &StructArray,
+    rows: usize,
+) -> SchemaResult<Option<NonGravitationalParametersBatch>> {
+    if parameters.null_count() == rows {
+        return Ok(None);
+    }
+    let read_float = |name: &str| -> SchemaResult<Vec<Option<f64>>> {
+        let array_ref = sliced_struct_field(parameters, name)?;
+        let array = array_ref
+            .as_any()
+            .downcast_ref::<Float64Array>()
+            .ok_or_else(|| SchemaError::InvalidRecordBatch(format!("{name} must be Float64")))?;
+        Ok((0..rows)
+            .map(|row| {
+                if parameters.is_null(row) || array.is_null(row) {
+                    None
+                } else {
+                    Some(array.value(row))
+                }
+            })
+            .collect())
+    };
+    let source_ref = sliced_struct_field(parameters, "source")?;
+    let source_array = source_ref
+        .as_any()
+        .downcast_ref::<LargeStringArray>()
+        .ok_or_else(|| SchemaError::InvalidRecordBatch("source must be LargeUtf8".to_string()))?;
+    let source = (0..rows)
+        .map(|row| {
+            if parameters.is_null(row) || source_array.is_null(row) {
+                None
+            } else {
+                Some(source_array.value(row).to_string())
+            }
+        })
+        .collect();
+    let batch = NonGravitationalParametersBatch {
+        source,
+        a1: read_float("A1")?,
+        a2: read_float("A2")?,
+        a3: read_float("A3")?,
+        aln: read_float("ALN")?,
+        nk: read_float("NK")?,
+        nm: read_float("NM")?,
+        nn: read_float("NN")?,
+        r0: read_float("R0")?,
     };
     if batch.is_all_null() {
         Ok(None)
@@ -1718,7 +1898,7 @@ mod tests {
         )
         .unwrap();
         let batch = orbits.into_nested_record_batch().unwrap();
-        assert_eq!(batch.num_columns(), 4);
+        assert_eq!(batch.num_columns(), 5);
         let schema = batch.schema();
         assert_eq!(
             schema.metadata().get(SCHEMA_METADATA_KEY).unwrap(),
@@ -1779,9 +1959,62 @@ mod tests {
         .with_physical_parameters(physical_parameters.clone())
         .unwrap();
         let batch = orbits.into_nested_record_batch().unwrap();
-        assert_eq!(batch.num_columns(), 4);
+        assert_eq!(batch.num_columns(), 5);
         let round_tripped = OrbitBatch::try_from_nested_record_batch(&batch).unwrap();
         assert_eq!(round_tripped.physical_parameters, Some(physical_parameters));
+    }
+
+    #[test]
+    fn orbit_nested_round_trip_preserves_extended_covariance_and_nongrav() {
+        let covariance = CovarianceBatch::new(
+            2,
+            9,
+            (0..162).map(|value| value as f64).collect(),
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap();
+        let coordinates = CoordinateBatch::cartesian(
+            vec![
+                [1.0, 2.0, 3.0, 0.1, 0.2, 0.3],
+                [4.0, 5.0, 6.0, 0.4, 0.5, 0.6],
+            ],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::SolarSystemBarycenter, 2),
+            Some(TimeArray::from_parts(TimeScale::Tdb, vec![60000, 60001], vec![0, 0]).unwrap()),
+            Some(covariance),
+        )
+        .unwrap();
+        let nongrav = NonGravitationalParametersBatch {
+            source: vec![Some("SBDB".to_string()), Some("NEOCC".to_string())],
+            a1: vec![Some(1.0e-10), None],
+            a2: vec![Some(-2.0e-11), Some(-3.0e-11)],
+            a3: vec![None, Some(4.0e-12)],
+            aln: vec![Some(1.0), None],
+            nk: vec![Some(0.0), None],
+            nm: vec![Some(2.0), None],
+            nn: vec![Some(5.093), None],
+            r0: vec![Some(1.0), None],
+        };
+        let orbits = OrbitBatch::new(
+            vec![
+                OrbitId("orbit-1".to_string()),
+                OrbitId("orbit-2".to_string()),
+            ],
+            vec![
+                Some(ObjectId("object-1".to_string())),
+                Some(ObjectId("object-2".to_string())),
+            ],
+            coordinates,
+        )
+        .unwrap()
+        .with_non_gravitational_parameters(nongrav.clone())
+        .unwrap();
+
+        let round_tripped =
+            OrbitBatch::try_from_nested_record_batch(&orbits.into_nested_record_batch().unwrap())
+                .unwrap();
+        assert_eq!(round_tripped.coordinates.covariance.unwrap().dimension, 9);
+        assert_eq!(round_tripped.non_gravitational_parameters, Some(nongrav));
     }
 
     #[test]
@@ -1809,7 +2042,7 @@ mod tests {
         .with_physical_parameters(physical_parameters.clone())
         .unwrap();
         let batch = variants.into_nested_record_batch().unwrap();
-        assert_eq!(batch.num_columns(), 7);
+        assert_eq!(batch.num_columns(), 8);
         let round_tripped = OrbitVariantBatch::try_from_nested_record_batch(&batch).unwrap();
         assert_eq!(round_tripped.physical_parameters, Some(physical_parameters));
         assert_eq!(round_tripped.weights, vec![Some(0.75), Some(0.25)]);

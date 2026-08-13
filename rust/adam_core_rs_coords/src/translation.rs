@@ -11,8 +11,7 @@
 //! origin shift needs ephemeris body states, so that is what this trait owns.
 
 use crate::types::{
-    CoordinateBatch, CovarianceBatch, Epoch, Frame, OriginArray, OriginId, SchemaError,
-    SchemaResult, TimeArray,
+    CoordinateBatch, Epoch, Frame, OriginArray, OriginId, SchemaError, SchemaResult, TimeArray,
 };
 use std::collections::HashMap;
 
@@ -161,83 +160,7 @@ pub fn rotate_coordinates_to_frame(
     coordinates: &CoordinateBatch,
     target_frame: Frame,
 ) -> SchemaResult<CoordinateBatch> {
-    if coordinates.frame == target_frame {
-        return Ok(coordinates.clone());
-    }
-    let states = coordinates.values.cartesian().ok_or_else(|| {
-        SchemaError::InvalidRecordBatch("frame rotation requires Cartesian coordinates".to_string())
-    })?;
-    let rotation: fn(&[f64; 6]) -> [f64; 6] = match (coordinates.frame, target_frame) {
-        (Frame::Equatorial, Frame::Ecliptic) => crate::rotate_equatorial_to_ecliptic_row,
-        (Frame::Ecliptic, Frame::Equatorial) => crate::rotate_ecliptic_to_equatorial_row,
-        _ => {
-            return Err(SchemaError::InvalidRecordBatch(format!(
-                "unsupported frame rotation from {} to {}",
-                coordinates.frame.as_str(),
-                target_frame.as_str()
-            )))
-        }
-    };
-    let rotated = states.iter().map(rotation).collect::<Vec<_>>();
-    let covariance = coordinates
-        .covariance
-        .as_ref()
-        .map(|covariance| rotate_covariance(covariance, rotation))
-        .transpose()?;
-    CoordinateBatch::cartesian(
-        rotated,
-        target_frame,
-        coordinates.origins.clone(),
-        coordinates.times.clone(),
-        covariance,
-    )
-}
-
-fn rotate_covariance(
-    covariance: &CovarianceBatch,
-    rotation: fn(&[f64; 6]) -> [f64; 6],
-) -> SchemaResult<CovarianceBatch> {
-    let mut jacobian = [[0.0_f64; 6]; 6];
-    for column in 0..6 {
-        let mut basis = [0.0_f64; 6];
-        basis[column] = 1.0;
-        let rotated = rotation(&basis);
-        for row in 0..6 {
-            jacobian[row][column] = rotated[row];
-        }
-    }
-    let mut values = Vec::with_capacity(covariance.rows * 36);
-    for row in 0..covariance.rows {
-        let input = covariance.row_values(row);
-        let mut intermediate = [[0.0_f64; 6]; 6];
-        for (output_row, intermediate_row) in intermediate.iter_mut().enumerate() {
-            for (column, value) in intermediate_row.iter_mut().enumerate() {
-                for inner in 0..6 {
-                    *value += jacobian[output_row][inner] * input[inner * 6 + column];
-                }
-            }
-        }
-        for intermediate_row in &intermediate {
-            for jacobian_row in &jacobian {
-                let value = intermediate_row
-                    .iter()
-                    .zip(jacobian_row.iter())
-                    .map(|(left, right)| left * right)
-                    .sum();
-                values.push(value);
-            }
-        }
-    }
-    let rotated = CovarianceBatch::new(
-        covariance.rows,
-        covariance.dimension,
-        values,
-        covariance.units.clone(),
-    )?;
-    Ok(match &covariance.row_validity {
-        Some(validity) => rotated.with_row_validity(validity.clone())?,
-        None => rotated,
-    })
+    coordinates.rotate_frame(target_frame)
 }
 
 /// Normalize a Cartesian `CoordinateBatch` to a single `target_origin` and

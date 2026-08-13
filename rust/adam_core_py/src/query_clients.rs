@@ -1,10 +1,10 @@
 use crate::http::{get_text, get_text_with_status, percent_encode};
 use adam_core_rs_coords::{
     cometary_to_cartesian6, optical_obs80_record_batch, parse_optical_obs80_file,
-    transform_with_covariance_flat6, CoordinateBatch, CoordinateRepresentation, CovarianceBatch,
-    CovarianceUnits, DataFrame, IntoNestedRecordBatch, ObjectId, OrbitBatch, OrbitId,
-    OrbitVariantBatch, OriginArray, OriginId, PhysicalParametersBatch, Representation, TimeArray,
-    TimeScale, VariantId,
+    transform_with_covariance_flat, CoordinateBatch, CoordinateRepresentation, CovarianceBatch,
+    CovarianceUnits, DataFrame, IntoNestedRecordBatch, NonGravitationalParametersBatch, ObjectId,
+    OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId, PhysicalParametersBatch,
+    Representation, TimeArray, TimeScale, VariantId,
 };
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
 use arrow_array::{
@@ -291,12 +291,51 @@ fn scout_object_payload(
     unreachable!("Scout attempts are always at least one")
 }
 
+fn neocc_solve_for_names(parsed: &Value) -> Option<Vec<String>> {
+    let info = parsed.get("nongrav")?;
+    let codes = info.get("solve_for_parameter_codes")?.as_array()?;
+    let names = codes
+        .iter()
+        .map(|code| match code.as_i64()? {
+            1 => Some("AMRAT".to_string()),
+            2 => Some("A2".to_string()),
+            3 => Some("A1".to_string()),
+            4 => Some("A3".to_string()),
+            5 => Some("DT".to_string()),
+            _ => None,
+        })
+        .collect::<Option<Vec<_>>>()?;
+    let dimension = info.get("dimension")?.as_u64()? as usize;
+    if dimension != 6 + names.len() {
+        return None;
+    }
+    if !matches!(
+        info.get("model_used").and_then(Value::as_i64),
+        None | Some(0 | 1)
+    ) {
+        return None;
+    }
+    let vector_length = info
+        .get("vector")
+        .and_then(Value::as_array)
+        .map_or(0, Vec::len);
+    if !matches!(vector_length, 0 | 2)
+        || names
+            .iter()
+            .any(|name| !matches!(name.as_str(), "AMRAT" | "A2"))
+    {
+        return None;
+    }
+    Some(names)
+}
+
 fn neocc_orbits(
     object_ids: &[String],
     orbit_type: &str,
     orbit_epoch: &str,
     recorded: Option<&[String]>,
-) -> PyResult<OrbitBatch> {
+    include_nongrav: bool,
+) -> PyResult<(OrbitBatch, Vec<String>)> {
     if orbit_type == "eq" {
         return Err(PyNotImplementedError::new_err(
             "Equinoctial elements are not supported yet.",
@@ -313,10 +352,16 @@ fn neocc_orbits(
     let mut cursor = 0usize;
     let mut orbit_ids = Vec::new();
     let mut coords = Vec::new();
-    let mut covariance = Vec::new();
+    let mut covariance_rows = Vec::new();
+    let mut has_extended_covariance = false;
     let mut epochs = Vec::new();
     let mut h_values = Vec::new();
     let mut g_values = Vec::new();
+    let mut nongrav_source = Vec::new();
+    let mut nongrav_a1 = Vec::new();
+    let mut nongrav_a2 = Vec::new();
+    let mut nongrav_a3 = Vec::new();
+    let mut warnings = Vec::new();
     for object_id in object_ids {
         let clean = object_id.replace(' ', "");
         let filename = format!("{clean}.{orbit_type}{epoch_suffix}");
@@ -348,11 +393,83 @@ fn neocc_orbits(
             number_field(elements, "peri")?,
             number_field(elements, "M")?,
         ]);
-        let matrix = number_array(&parsed, "covariance")?;
-        if matrix.len() != 36 {
+        let coordinate_covariance = number_array(&parsed, "covariance")?;
+        if coordinate_covariance.len() != 36 {
             return Err(value_error("NEOCC covariance must contain 36 values"));
         }
-        covariance.extend(matrix);
+        let solve_for = neocc_solve_for_names(&parsed);
+        if include_nongrav {
+            let nongrav = parsed.get("nongrav");
+            let has_solved_nongrav = nongrav.is_some_and(|info| {
+                info.get("dimension").and_then(Value::as_u64).unwrap_or(6) > 6
+                    || info
+                        .get("solve_for_parameter_codes")
+                        .and_then(Value::as_array)
+                        .is_some_and(|codes| !codes.is_empty())
+            });
+            match &solve_for {
+                Some(names) if names.iter().any(|name| name == "AMRAT") => warnings.push(
+                    format!(
+                        "NEOCC solution for object {object_id} includes an area-to-mass ratio (AMRAT), which is not supported for storage (only A1, A2, A3); dropping its value and marginalizing it out of the covariance."
+                    ),
+                ),
+                None if has_solved_nongrav => warnings.push(format!(
+                    "NEOCC non-grav solution for object {object_id} uses an unsupported model or solve-for parameters; the nominal values and the non-gravitational covariance block are left null."
+                )),
+                _ => {}
+            }
+        }
+        let a2 = solve_for
+            .as_ref()
+            .filter(|names| names.iter().any(|name| name == "A2"))
+            .and_then(|_| {
+                parsed
+                    .get("nongrav")
+                    .and_then(|info| info.get("vector"))
+                    .and_then(Value::as_array)
+                    .and_then(|vector| vector.get(1))
+                    .and_then(Value::as_f64)
+                    .map(|value| value * 1e-10)
+            });
+        let extended_covariance = if include_nongrav {
+            solve_for.as_ref().and_then(|names| {
+                let a2_source = names.iter().position(|name| name == "A2")?;
+                let info = parsed.get("nongrav")?;
+                let solved_dimension = info.get("dimension")?.as_u64()? as usize;
+                let source = parsed.get("covariance_full")?.as_array()?;
+                if source.len() != solved_dimension * solved_dimension {
+                    return None;
+                }
+                let source = source
+                    .iter()
+                    .map(Value::as_f64)
+                    .collect::<Option<Vec<_>>>()?;
+                let mut covariance = vec![0.0; 81];
+                let source_indices = [0, 1, 2, 3, 4, 5, 6 + a2_source];
+                let target_indices = [0, 1, 2, 3, 4, 5, 7];
+                for (&source_row, &target_row) in source_indices.iter().zip(target_indices.iter()) {
+                    for (&source_column, &target_column) in
+                        source_indices.iter().zip(target_indices.iter())
+                    {
+                        let row_factor = if target_row == 7 { 1e-10 } else { 1.0 };
+                        let column_factor = if target_column == 7 { 1e-10 } else { 1.0 };
+                        covariance[target_row * 9 + target_column] = source
+                            [source_row * solved_dimension + source_column]
+                            * row_factor
+                            * column_factor;
+                    }
+                }
+                Some(covariance)
+            })
+        } else {
+            None
+        };
+        if let Some(covariance) = extended_covariance {
+            has_extended_covariance = true;
+            covariance_rows.push(covariance);
+        } else {
+            covariance_rows.push(coordinate_covariance);
+        }
         epochs.push(number_field(&parsed, "epoch")?);
         let id = string_field(&parsed, "object_id")?;
         orbit_ids.push(id);
@@ -367,16 +484,39 @@ fn neocc_orbits(
                 .and_then(|value| value.get("G"))
                 .and_then(Value::as_f64),
         );
+        nongrav_source.push(
+            include_nongrav
+                .then(|| parsed.get("nongrav").map(|_| "NEOCC".to_string()))
+                .flatten(),
+        );
+        nongrav_a1.push(None);
+        nongrav_a2.push(include_nongrav.then_some(a2).flatten());
+        nongrav_a3.push(None);
     }
     let rows = coords.len();
+    let dimension = if has_extended_covariance { 9 } else { 6 };
+    let mut covariance = Vec::with_capacity(rows * dimension * dimension);
+    for row in covariance_rows {
+        if dimension == 6 || row.len() == 81 {
+            covariance.extend(row);
+            continue;
+        }
+        let mut padded = vec![f64::NAN; 81];
+        for coordinate_row in 0..6 {
+            padded[coordinate_row * 9..coordinate_row * 9 + 6]
+                .copy_from_slice(&row[coordinate_row * 6..coordinate_row * 6 + 6]);
+        }
+        covariance.extend(padded);
+    }
     let time_array =
         TimeArray::from_mjd(TimeScale::Tt, &epochs).map_err(|err| value_error(err.to_string()))?;
     let rounded_epochs = mjd_values(&time_array);
     let flat: Vec<f64> = coords.iter().flatten().copied().collect();
     let mu = vec![MU_SUN; rows];
-    let (cartesian, covariance) = transform_with_covariance_flat6(
+    let (cartesian, covariance) = transform_with_covariance_flat(
         &flat,
         &covariance,
+        dimension,
         Representation::Keplerian,
         Representation::Cartesian,
         adam_core_rs_coords::Frame::Ecliptic,
@@ -402,7 +542,7 @@ fn neocc_orbits(
         Some(
             CovarianceBatch::new(
                 rows,
-                6,
+                dimension,
                 covariance,
                 CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
             )
@@ -418,13 +558,26 @@ fn neocc_orbits(
         sigma_eff: vec![None; rows],
         chi2_red: vec![None; rows],
     };
-    OrbitBatch::new(
+    let nongrav = NonGravitationalParametersBatch {
+        source: nongrav_source,
+        a1: nongrav_a1,
+        a2: nongrav_a2,
+        a3: nongrav_a3,
+        aln: vec![None; rows],
+        nk: vec![None; rows],
+        nm: vec![None; rows],
+        nn: vec![None; rows],
+        r0: vec![None; rows],
+    };
+    let orbits = OrbitBatch::new(
         orbit_ids.iter().cloned().map(OrbitId).collect(),
         orbit_ids.into_iter().map(|id| Some(ObjectId(id))).collect(),
         coordinates,
     )
     .and_then(|orbits| orbits.with_physical_parameters(physical))
-    .map_err(|err| value_error(err.to_string()))
+    .and_then(|orbits| orbits.with_non_gravitational_parameters(nongrav))
+    .map_err(|err| value_error(err.to_string()))?;
+    Ok((orbits, warnings))
 }
 
 fn scout_summary_batch(payload: &str) -> PyResult<RecordBatch> {
@@ -683,26 +836,29 @@ fn scout_variants(
 }
 
 #[pyfunction]
-#[pyo3(signature = (object_ids, orbit_type="ke", orbit_epoch="present-day", recorded_responses=None))]
+#[pyo3(signature = (object_ids, orbit_type="ke", orbit_epoch="present-day", recorded_responses=None, include_nongrav=true))]
 fn query_neocc_arrow<'py>(
     py: Python<'py>,
     object_ids: Vec<String>,
     orbit_type: &str,
     orbit_epoch: &str,
     recorded_responses: Option<Vec<String>>,
-) -> PyResult<PyObject> {
-    let output = py.allow_threads(|| {
+    include_nongrav: bool,
+) -> PyResult<(PyObject, Vec<String>)> {
+    let (output, warnings) = py.allow_threads(|| {
         neocc_orbits(
             &object_ids,
             orbit_type,
             orbit_epoch,
             recorded_responses.as_deref(),
+            include_nongrav,
         )
     })?;
     output
         .into_nested_record_batch()
         .map_err(|err| value_error(err.to_string()))?
         .to_pyarrow(py)
+        .map(|batch| (batch, warnings))
         .map_err(|err| value_error(err.to_string()))
 }
 
@@ -1102,7 +1258,7 @@ fn sbdb_orbits(
     allow_missing: bool,
     orbit_id_from_input: bool,
     recorded: Option<&[String]>,
-) -> PyResult<OrbitBatch> {
+) -> PyResult<(OrbitBatch, Vec<String>)> {
     let mut cursor = 0usize;
     let mut kept_ids = Vec::new();
     let mut payloads = Vec::new();
@@ -1142,16 +1298,38 @@ fn sbdb_orbits(
     let covariance_rows = field(&normalized, "covariances_cometary")?
         .as_array()
         .ok_or_else(|| value_error("covariances_cometary must be an array"))?;
-    let mut covariance = Vec::with_capacity(covariance_rows.len() * 36);
-    for row in covariance_rows {
+    let covariance_dimension = if covariance_rows
+        .iter()
+        .any(|row| row.as_array().is_some_and(|values| values.len() == 81))
+    {
+        9
+    } else {
+        6
+    };
+    let mut covariance =
+        vec![f64::NAN; covariance_rows.len() * covariance_dimension * covariance_dimension];
+    for (row_index, row) in covariance_rows.iter().enumerate() {
         let values = row
             .as_array()
             .ok_or_else(|| value_error("SBDB covariance rows must be arrays"))?;
-        if values.len() != 36 {
-            return Err(value_error("SBDB covariance rows must contain 36 values"));
+        if !matches!(values.len(), 36 | 81) {
+            return Err(value_error(
+                "SBDB covariance rows must contain 36 or 81 values",
+            ));
         }
-        for value in values {
-            covariance.push(value.as_f64().unwrap_or(f64::NAN));
+        let parsed = values
+            .iter()
+            .map(|value| value.as_f64().unwrap_or(f64::NAN))
+            .collect::<Vec<_>>();
+        let row_start = row_index * covariance_dimension * covariance_dimension;
+        if values.len() == covariance_dimension * covariance_dimension {
+            covariance[row_start..row_start + parsed.len()].copy_from_slice(&parsed);
+        } else {
+            for coordinate_row in 0..6 {
+                let source = &parsed[coordinate_row * 6..coordinate_row * 6 + 6];
+                let start = row_start + coordinate_row * covariance_dimension;
+                covariance[start..start + 6].copy_from_slice(source);
+            }
         }
     }
     let rows = cometary.len();
@@ -1160,9 +1338,10 @@ fn sbdb_orbits(
     let time_array = TimeArray::from_mjd(TimeScale::Tdb, &epochs_mjd)
         .map_err(|err| value_error(err.to_string()))?;
     let mu = vec![MU_SUN; rows];
-    let (cartesian, covariance) = transform_with_covariance_flat6(
+    let (cartesian, covariance) = transform_with_covariance_flat(
         &flat,
         &covariance,
+        covariance_dimension,
         Representation::Cometary,
         Representation::Cartesian,
         adam_core_rs_coords::Frame::Ecliptic,
@@ -1188,7 +1367,7 @@ fn sbdb_orbits(
         Some(
             CovarianceBatch::new(
                 rows,
-                6,
+                covariance_dimension,
                 covariance,
                 CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
             )
@@ -1211,7 +1390,45 @@ fn sbdb_orbits(
         sigma_eff: vec![None; rows],
         chi2_red: vec![None; rows],
     };
-    OrbitBatch::new(
+    let warnings = field(&normalized, "warnings")?
+        .as_array()
+        .ok_or_else(|| value_error("warnings must be an array"))?
+        .iter()
+        .map(|warning| {
+            warning
+                .as_str()
+                .map(str::to_string)
+                .ok_or_else(|| value_error("warning entries must be strings"))
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    let nongrav_rows = field(&normalized, "non_gravitational_parameters")?
+        .as_array()
+        .ok_or_else(|| value_error("non_gravitational_parameters must be an array"))?;
+    let nongrav_float = |name: &str| {
+        nongrav_rows
+            .iter()
+            .map(|row| row.get(name).and_then(Value::as_f64))
+            .collect::<Vec<_>>()
+    };
+    let nongrav = NonGravitationalParametersBatch {
+        source: nongrav_rows
+            .iter()
+            .map(|row| {
+                row.get("source")
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+            })
+            .collect(),
+        a1: nongrav_float("A1"),
+        a2: nongrav_float("A2"),
+        a3: nongrav_float("A3"),
+        aln: nongrav_float("ALN"),
+        nk: nongrav_float("NK"),
+        nm: nongrav_float("NM"),
+        nn: nongrav_float("NN"),
+        r0: nongrav_float("R0"),
+    };
+    let orbits = OrbitBatch::new(
         orbit_ids.into_iter().map(OrbitId).collect(),
         object_ids
             .into_iter()
@@ -1220,7 +1437,9 @@ fn sbdb_orbits(
         coordinates,
     )
     .and_then(|orbits| orbits.with_physical_parameters(physical))
-    .map_err(|err| value_error(err.to_string()))
+    .and_then(|orbits| orbits.with_non_gravitational_parameters(nongrav))
+    .map_err(|err| value_error(err.to_string()))?;
+    Ok((orbits, warnings))
 }
 
 #[pyfunction]
@@ -1235,8 +1454,8 @@ fn query_sbdb_arrow<'py>(
     allow_missing: bool,
     orbit_id_from_input: bool,
     recorded_responses: Option<Vec<String>>,
-) -> PyResult<PyObject> {
-    let output = py.allow_threads(|| {
+) -> PyResult<(PyObject, Vec<String>)> {
+    let (output, warnings) = py.allow_threads(|| {
         sbdb_orbits(
             &ids,
             physical_parameters,
@@ -1251,6 +1470,7 @@ fn query_sbdb_arrow<'py>(
         .into_nested_record_batch()
         .map_err(|err| value_error(err.to_string()))?
         .to_pyarrow(py)
+        .map(|batch| (batch, warnings))
         .map_err(|err| value_error(err.to_string()))
 }
 
@@ -1274,6 +1494,7 @@ fn benchmark_query_client_processing(
                     "ke",
                     "present-day",
                     Some(&payloads),
+                    true,
                 )?);
             }
             "scout" => {

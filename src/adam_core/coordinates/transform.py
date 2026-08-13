@@ -25,7 +25,7 @@ from .._rust.arrow import (
     table_from_record_batch,
 )
 from ..constants import Constants as c
-from ..utils.bounded_lru import _bounded_lru_get, _bounded_lru_put
+from ..utils.bounded_lru import bounded_lru_get, bounded_lru_put
 from . import types
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
@@ -71,11 +71,11 @@ _TRANSLATION_CACHE_ALLOWED = {
 
 
 def _translation_cache_get(key: _TranslationCacheKey) -> np.ndarray | None:
-    return _bounded_lru_get(_TRANSLATION_CACHE, key, maxsize=_TRANSLATION_CACHE_MAXSIZE)
+    return bounded_lru_get(_TRANSLATION_CACHE, key, maxsize=_TRANSLATION_CACHE_MAXSIZE)
 
 
 def _translation_cache_put(key: _TranslationCacheKey, vectors: np.ndarray) -> None:
-    _bounded_lru_put(
+    bounded_lru_put(
         _TRANSLATION_CACHE, key, vectors, maxsize=_TRANSLATION_CACHE_MAXSIZE
     )
 
@@ -98,6 +98,10 @@ CoordinatesClasses = (
 )
 
 
+# Compatibility constant from the former JAX transform implementation. This
+# stays local to avoid importing observers.state and creating a coordinates ↔
+# observers module cycle.
+Z_AXIS = np.array([0.0, 0.0, 1.0])
 FLOAT_TOLERANCE = 1e-15
 
 _RUST_TRANSFORM_REPRESENTATIONS = {

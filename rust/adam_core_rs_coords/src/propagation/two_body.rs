@@ -14,7 +14,7 @@ use crate::propagate::{
 };
 use crate::types::origin_mu_au3_day2;
 use crate::types::time::TimeScaleProvider;
-use crate::{Epoch, TimeArray, TimeScale};
+use crate::{Epoch, NonGravitationalParametersBatch, TimeArray, TimeScale};
 use rayon::prelude::*;
 
 pub(crate) const DEFAULT_TWO_BODY_MAX_ITER: usize = 1000;
@@ -190,6 +190,22 @@ impl Propagator for TwoBodyPropagator {
         if !self.supports(request.options.covariance) {
             return Err(PropagationError::UnsupportedCovarianceMode(
                 request.options.covariance,
+            ));
+        }
+        let has_extended_solution = request
+            .input
+            .coordinates()
+            .covariance
+            .as_ref()
+            .is_some_and(|covariance| covariance.dimension > 6)
+            || request
+                .input
+                .non_gravitational_parameters()
+                .is_some_and(NonGravitationalParametersBatch::has_values);
+        if has_extended_solution {
+            return Err(PropagationError::InvalidRequest(
+                "TwoBodyPropagator does not support non-gravitational parameters or extended covariance."
+                    .to_string(),
             ));
         }
         let input_orbit_times = request

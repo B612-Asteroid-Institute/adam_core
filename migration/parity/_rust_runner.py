@@ -33,6 +33,7 @@ def _ensure(arr: Any, name: str) -> np.ndarray:
 
 def _coordinates_transform_coordinates(
     cases: list[dict[str, Any]],
+    spice_kernels: list[str] | None = None,
 ) -> dict[str, np.ndarray]:
     """Public ``transform_coordinates`` dispatcher on the migration checkout."""
     from adam_core.coordinates.cartesian import CartesianCoordinates
@@ -120,6 +121,15 @@ def _coordinates_transform_coordinates(
                 **covariance_kw,
             )
         raise ValueError(f"Unsupported representation_in: {representation_in}")
+
+    if spice_kernels is not None:
+        from adam_core.utils.spice_backend import get_backend
+
+        backend = get_backend()
+        if set(backend.registered_kernels()) != set(spice_kernels):
+            backend.clear()
+            for kernel in spice_kernels:
+                backend.furnsh(kernel)
 
     outputs: dict[str, np.ndarray] = {}
     for case in cases:
@@ -895,14 +905,16 @@ def _orbits_variant_orbits_create(
     coords: Any,
     epoch_mjd: Any,
     covariance: Any,
+    nongrav_values: Any,
     origin: str,
     frame: str,
+    include_nongrav: bool,
 ) -> dict[str, np.ndarray]:
     """Current public ``VariantOrbits.create`` sigma-point facade."""
     from adam_core.coordinates.cartesian import CartesianCoordinates
     from adam_core.coordinates.covariances import CoordinateCovariances
     from adam_core.coordinates.origin import Origin
-    from adam_core.orbits import Orbits
+    from adam_core.orbits import NonGravitationalParameters, Orbits
     from adam_core.orbits.variants import VariantOrbits
     from adam_core.time import Timestamp
 
@@ -922,11 +934,17 @@ def _orbits_variant_orbits_create(
             np.asarray(covariance, dtype=np.float64)
         ),
     )
+    values = np.asarray(nongrav_values, dtype=np.float64)
     orbits = Orbits.from_kwargs(
         orbit_id=[str(i) for i in range(n)],
         coordinates=cart,
+        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
+            A1=values[:, 0], A2=values[:, 1], A3=values[:, 2]
+        ),
     )
-    out = VariantOrbits.create(orbits, method="sigma-point")
+    out = VariantOrbits.create(
+        orbits, method="sigma-point", include_nongrav=include_nongrav
+    )
     return {
         "coordinates": _ensure(out.coordinates.values, "orbits.VariantOrbits.create"),
         "weights": _ensure(
@@ -936,6 +954,10 @@ def _orbits_variant_orbits_create(
         "weights_cov": _ensure(
             out.weights_cov.to_numpy(zero_copy_only=False),
             "orbits.VariantOrbits.create.weights_cov",
+        ),
+        "nongrav_values": _ensure(
+            out.non_gravitational_parameters.to_array(),
+            "orbits.VariantOrbits.create.nongrav_values",
         ),
     }
 

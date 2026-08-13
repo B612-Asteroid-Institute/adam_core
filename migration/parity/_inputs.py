@@ -462,7 +462,14 @@ def make_transform_coordinates(rng: np.random.Generator, n: int) -> Sample:
         )
     )
 
-    kw = {"cases": cases}
+    from adam_core.utils.spice import DEFAULT_KERNELS
+
+    # SPICE-dependent parity must use identical immutable kernel bytes on both
+    # sides. The frozen oracle environment may resolve a newer rotating
+    # naif-eop-high-prec data package than the current environment even when the
+    # adam-core source checkout is pinned. Passing the current process's paths
+    # into both runners isolates implementation differences from EOP-data drift.
+    kw = {"cases": cases, "spice_kernels": list(DEFAULT_KERNELS)}
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 
 
@@ -1895,12 +1902,29 @@ def make_variant_orbits_create(rng: np.random.Generator, n: int) -> Sample:
         coords = np.vstack([coords, _APOPHIS_PUBLIC_SCALE_MEAN[None, :]])
         epoch_mjd = np.concatenate([epoch_mjd, [_APOPHIS_PUBLIC_SCALE_EPOCH_MJD]])
         cov = np.concatenate([cov, _APOPHIS_PUBLIC_SCALE_COVARIANCE[None, :, :]])
+    nongrav_values = np.column_stack(
+        [
+            np.full(n, 1.0e-13, dtype=np.float64),
+            np.full(n, -2.0e-13, dtype=np.float64),
+            np.full(n, 4.0e-14, dtype=np.float64),
+        ]
+    )
+    covariance9: np.ndarray = np.zeros((n, 9, 9), dtype=np.float64)
+    covariance9[:, :6, :6] = cov
+    if n:
+        parameter_scales = np.array([2.0e-14, 3.0e-14, 1.0e-14])
+        covariance9[:, 6:, 6:] = np.diag(parameter_scales**2)
+        covariance9[:, 0, 6] = covariance9[:, 6, 0] = 1.0e-4 * np.sqrt(
+            covariance9[:, 0, 0] * covariance9[:, 6, 6]
+        )
     kw = {
         "coords": np.ascontiguousarray(coords, dtype=np.float64),
         "epoch_mjd": np.ascontiguousarray(epoch_mjd, dtype=np.float64),
-        "covariance": np.ascontiguousarray(cov, dtype=np.float64),
+        "covariance": np.ascontiguousarray(covariance9, dtype=np.float64),
+        "nongrav_values": np.ascontiguousarray(nongrav_values),
         "origin": "SUN",
         "frame": "ecliptic",
+        "include_nongrav": True,
     }
     return Sample(rust_kwargs=kw, legacy_kwargs=kw)
 

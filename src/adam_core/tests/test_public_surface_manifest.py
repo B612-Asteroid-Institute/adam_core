@@ -13,6 +13,18 @@ def test_public_surface_manifest_is_complete_and_current() -> None:
     assert committed == expected
 
 
+def test_frozen_updated_upstream_retirements_are_classified() -> None:
+    reconciliation = collect()["frozen_updated_upstream_reconciliation"]
+    assert reconciliation["commit"] == "757c09fca86adf9e3d5899952db3d379e09413f6"
+    assert reconciliation["upstream_symbols"] == 600
+    assert reconciliation["upstream_only_symbols"] == 22
+    assert reconciliation["all_upstream_only_symbols_classified"] is True
+    for retirement in reconciliation["retirements"]:
+        assert retirement["classification"].startswith("retired_")
+        audit_document = DEFAULT_OUTPUT.parents[2] / retirement["audit_document"]
+        assert audit_document.exists(), retirement["id"]
+
+
 def test_every_non_plotting_public_symbol_is_classified_and_tracked() -> None:
     manifest = collect()
     assert manifest["summary"]["unreviewed"] == 0

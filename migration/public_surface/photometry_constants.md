@@ -6,7 +6,7 @@ Scope: every public class, function, constant, and relevant inherited operation 
 
 ## Rules
 
-Only plotting/display may remain Python. Generic quivr/dataclass behavior and static constants are classified separately rather than counted as Rust migration credit. Each adam-core-owned non-plotting operation must execute in Rust or be a thin one-crossing compatibility veneer, with pinned-legacy parity and qualifying Rust-owned timing where deterministic computation is material.
+Only plotting/display may remain Python. Generic quivr/dataclass behavior and static constants are classified separately rather than counted as Rust migration credit. Each adam-core-owned non-plotting operation must execute in Rust or be a thin one-crossing compatibility veneer, with frozen updated-upstream parity and qualifying Rust-owned timing where deterministic computation is material.
 
 ## Data models and constants
 
@@ -28,7 +28,7 @@ The raw six photometry kernel lanes remain independently timed. A complete-facad
 
 ## Rotation-period surface
 
-The rotation integration added 31 public symbols and 12 public constants, bringing the pre-`9b756803` manifest to 576 symbols / 66 constants. After the Obs80/Scout/Trajectory integration, the authoritative complete manifest is 595 symbols / 67 constants. `estimate_rotation_period` now makes one native crossing: Rust owns time-scale/light-time conversion, distance reduction, frequency-grid construction, clipped Fourier fits, order selection, F-distribution thresholds, alias clustering, session-offset selection, confidence classification, and result diagnostics. `exact_evaluation_backend="numpy"` and `"jax"` remain accepted compatibility selectors but both use the default-artifact Rust engine; JAX is not imported.
+The rotation integration added 31 public symbols and 12 public constants, bringing the pre-`9b756803` manifest to 576 symbols / 66 constants. The Obs80/Scout/Trajectory integration then reached 595 symbols / 67 constants; after the current upstream reconciliation, the authoritative complete manifest is 629 symbols / 78 constants. `estimate_rotation_period` now makes one native crossing: Rust owns time-scale/light-time conversion, distance reduction, frequency-grid construction, clipped Fourier fits, order selection, F-distribution thresholds, alias clustering, session-offset selection, confidence classification, and result diagnostics. `exact_evaluation_backend="numpy"` and `"jax"` remain accepted compatibility selectors but both use the default-artifact Rust engine; JAX is not imported.
 
 `estimate_rotation_period_best_apparition` performs grouping, per-apparition solves, error candidates, ranking, and flagging in one Rust crossing. `estimate_rotation_period_from_detections_grouped` performs lexical grouping and all per-object solves in one grouped Rust estimator crossing after the Rust observation-construction boundary. The ordinary observation builder owns exposure alignment, midpoint observer states, ecliptic geometry, phase angle, UTC observing-night/session IDs, validation, and TDB output in Rust. A whole-call compatibility path remains only when `Exposures.observers` is explicitly overridden or an unsupported coordinate frame requires provider composition.
 

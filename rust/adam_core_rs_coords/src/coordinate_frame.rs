@@ -7,7 +7,7 @@ use crate::types::{
     CoordinateBatch, CoordinateRepresentation, CovarianceBatch, CovarianceUnits, Frame, OrbitBatch,
     SchemaError, SchemaResult,
 };
-use crate::{rotate_cartesian_frame_flat6, transform_with_covariance_flat6, Representation};
+use crate::{rotate_cartesian_frame_flat6, transform_with_covariance_flat, Representation};
 
 pub(crate) fn chunk6(flat: &[f64]) -> Vec<[f64; 6]> {
     flat.chunks_exact(6)
@@ -60,7 +60,7 @@ impl CoordinateBatch {
                 )
             }
             Some(covariance) => {
-                if covariance.dimension != 6 {
+                if covariance.dimension != 6 && covariance.dimension != 9 {
                     return Err(SchemaError::InvalidCovarianceShape {
                         rows: covariance.rows,
                         dimension: covariance.dimension,
@@ -68,9 +68,10 @@ impl CoordinateBatch {
                     });
                 }
                 let zeros = vec![0.0_f64; n];
-                let (coords_out, cov_out) = transform_with_covariance_flat6(
+                let (coords_out, cov_out) = transform_with_covariance_flat(
                     &flat,
                     &covariance.values_row_major,
+                    covariance.dimension,
                     Representation::Cartesian,
                     Representation::Cartesian,
                     from,
@@ -86,7 +87,7 @@ impl CoordinateBatch {
                 );
                 let new_covariance = CovarianceBatch::new(
                     n,
-                    6,
+                    covariance.dimension,
                     cov_out,
                     CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
                 )?;
@@ -112,8 +113,12 @@ impl OrbitBatch {
     pub fn rotate_frame(&self, target: Frame) -> SchemaResult<OrbitBatch> {
         let coordinates = self.coordinates.rotate_frame(target)?;
         let rotated = OrbitBatch::new(self.orbit_id.clone(), self.object_id.clone(), coordinates)?;
-        match self.physical_parameters.clone() {
-            Some(physical_parameters) => rotated.with_physical_parameters(physical_parameters),
+        let rotated = match self.physical_parameters.clone() {
+            Some(physical_parameters) => rotated.with_physical_parameters(physical_parameters)?,
+            None => rotated,
+        };
+        match self.non_gravitational_parameters.clone() {
+            Some(parameters) => rotated.with_non_gravitational_parameters(parameters),
             None => Ok(rotated),
         }
     }

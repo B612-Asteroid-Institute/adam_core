@@ -16,6 +16,7 @@ from ..coordinates.transform import transform_coordinates
 from ..observers.observers import Observers
 from ..time import Timestamp
 from .ephemeris import Ephemeris
+from .non_gravitational_parameters import NonGravitationalParameters
 from .orbits import Orbits
 from .physical_parameters import PhysicalParameters
 
@@ -28,6 +29,26 @@ class VariantOrbits(qv.Table):
     weights_cov = qv.Float64Column(nullable=True)
     coordinates = CartesianCoordinates.as_column()
     physical_parameters = PhysicalParameters.as_column(nullable=True)
+    non_gravitational_parameters = NonGravitationalParameters.as_column(nullable=True)
+
+    def has_non_gravitational_parameters(self) -> bool:
+        """Return whether any variant carries a non-zero A1/A2/A3 value."""
+        return self.non_gravitational_parameters.has_values()
+
+    def without_non_gravitational_parameters(self) -> "VariantOrbits":
+        """Strip non-grav values and reduce extended covariance to its 6D block."""
+        variants = self.set_column(
+            "non_gravitational_parameters",
+            NonGravitationalParameters.nulls(len(self)),
+        )
+        if variants.coordinates.covariance.has_nongrav_block():
+            variants = variants.set_column(
+                "coordinates.covariance",
+                CoordinateCovariances.from_matrix(
+                    variants.coordinates.covariance.to_matrix()
+                ),
+            )
+        return variants
 
     @classmethod
     def create(
@@ -39,6 +60,7 @@ class VariantOrbits(qv.Table):
         beta: float = 0,
         kappa: float = 0,
         seed: Optional[int] = None,
+        include_nongrav: bool = True,
     ) -> "VariantOrbits":
         """
         Sample and create variants for the given orbits by sampling the covariance matrices.
@@ -73,6 +95,10 @@ class VariantOrbits(qv.Table):
             Seed for monte-carlo sampling (including the auto-mode fallback).
             Given a seed the samples are reproducible; without one a fresh
             random seed is drawn per call.
+        include_nongrav : bool, optional
+            Jointly sample extended coordinate+A1/A2/A3 covariance rows when
+            true. When false, strip the parameter values and sample only the
+            leading 6x6 coordinate covariance block.
 
         Returns
         -------
@@ -113,6 +139,7 @@ class VariantOrbits(qv.Table):
             beta=beta,
             kappa=kappa,
             seed=seed,
+            include_nongrav=include_nongrav,
         )
 
     def link_to_orbits(

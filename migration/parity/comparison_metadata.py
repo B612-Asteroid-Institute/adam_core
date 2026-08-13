@@ -29,7 +29,7 @@ def for_api(api_id: str) -> dict[str, Any]:
         return {
             "comparison_mode": BACKEND_CANDIDATE,
             "comparison_mode_short": "impl candidate",
-            "comparison_mode_label": "backend candidate vs legacy public Python",
+            "comparison_mode_label": "backend candidate vs frozen updated-upstream Python",
             "current_entrypoint_kind": "python_adapter_backend_candidate",
             "current_boundary": candidate.boundary,
             "legacy_entrypoint_kind": "legacy_public_python",
@@ -90,7 +90,7 @@ def for_api(api_id: str) -> dict[str, Any]:
             {
                 "comparison_mode": PUBLIC_PYTHON_FACADE,
                 "comparison_mode_short": "public facade",
-                "comparison_mode_label": "current public Python facade vs legacy public Python",
+                "comparison_mode_label": "current public Python facade vs frozen updated-upstream Python",
                 "current_entrypoint_kind": "public_python_facade_rust_backed",
                 "speed_gate_scope": "public_facade_enforced",
             }
@@ -107,7 +107,7 @@ def for_api(api_id: str) -> dict[str, Any]:
                 {
                     "comparison_mode": PUBLIC_PYTHON_FACADE,
                     "comparison_mode_short": "public facade",
-                    "comparison_mode_label": "current public Python facade vs legacy public Python",
+                    "comparison_mode_label": "current public Python facade vs frozen updated-upstream Python",
                     "current_entrypoint_kind": (
                         "public_python_facade_arrow_rust_backed"
                         if migration.boundary == "arrow"
@@ -121,7 +121,7 @@ def for_api(api_id: str) -> dict[str, Any]:
                 {
                     "comparison_mode": THIN_PYTHON_NUMPY_WRAPPER,
                     "comparison_mode_short": "thin wrapper",
-                    "comparison_mode_label": "thin Python/NumPy Rust binding vs legacy public Python",
+                    "comparison_mode_label": "thin Python/NumPy Rust binding vs frozen updated-upstream Python",
                     "current_entrypoint_kind": "thin_python_numpy_wrapper_to_rust_pyo3",
                     "speed_gate_scope": "thin_wrapper_enforced",
                 }

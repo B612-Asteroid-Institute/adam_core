@@ -75,6 +75,7 @@ def propagate_2body(
     max_iter: int = 1000,
     tol: float = 1e-14,
     *,
+    include_nongrav: bool = True,
     max_processes: Optional[int] = 1,
     chunk_size: int = 100,
 ) -> Orbits:
@@ -97,6 +98,11 @@ def propagate_2body(
         Maximum universal-anomaly solver iterations.
     tol : float, optional
         Universal-anomaly convergence tolerance.
+    include_nongrav : bool, optional
+        If true, reject active non-gravitational parameters or extended
+        covariance because two-body dynamics cannot evolve that solved state.
+        If false, strip the parameters and reduce covariance to its leading
+        6x6 coordinate block before propagating gravity-only.
     max_processes : int, optional
         Retained compatibility control for callers that previously selected an
         outer process count. No Python/Ray compute fan-out occurs; local
@@ -112,6 +118,14 @@ def propagate_2body(
     # The retired Python process-count option is accepted but ignored; warmed
     # local parallelism belongs to Rust's process-global Rayon pool.
     del max_processes
+    if not include_nongrav:
+        orbits = orbits.without_non_gravitational_parameters()
+    if include_nongrav and orbits.has_non_gravitational_parameters():
+        raise ValueError(
+            "propagate_2body does not support non-gravitational accelerations. "
+            "Use an n-body propagator such as adam_assist.ASSISTPropagator for "
+            "orbits with non-gravitational parameters."
+        )
     return _propagate_2body_serial(
         orbits,
         times,

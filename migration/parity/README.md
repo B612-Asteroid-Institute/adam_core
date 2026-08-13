@@ -22,6 +22,50 @@ fallthroughs. When a fair baseline-main oracle does not exist for an API, use
 fixed trusted vectors or the Rust-only latency gate described in
 [`migration/benchmark_governance.md`](../benchmark_governance.md).
 
+## Consolidated review artifacts
+
+The canonical review entrypoints are:
+
+- `migration/artifacts/complete_parity_table.md` for all 44 registered core
+  computational work units plus ASSIST propagation, covariance, ephemeris,
+  collision/impact, OD/LSQ, IOD, and direct-Horizons evidence; and
+- `migration/artifacts/complete_performance_table.md` for the three-boundary
+  updated-upstream/current-public/native-Rust timing matrix, with exact
+  workload shapes, p50/p95 values, ratios, and gate status.
+
+Regenerate them with
+`python -m migration.scripts.complete_parity_table` and
+`python -m migration.scripts.complete_performance_table`. These reports are
+complete for the registered computational matrix, not a claim that each row of
+the 629-symbol core or 25-symbol ASSIST public inventories is an independent
+benchmark workload; complete-surface disposition remains in each project's
+public-surface manifest and domain audits.
+
+## Current-only benchmark suites
+
+Use the current-only suites when migration-baseline timing is neither needed
+nor available:
+
+```bash
+# adam-core: all 44 registered computational APIs across canonical
+# tiny/small/large lanes.
+pdm run benchmark-current
+
+# Focused core runs reuse the same API registry and workload shapes.
+pdm run benchmark-current --domains coordinates dynamics --lanes tiny small
+
+# In the adam-assist checkout: propagation, nongrav, ephemeris/covariance,
+# collisions, and OD across existing workload builders.
+pdm run benchmark-current
+pdm run benchmark-current --domains nongrav ephemeris covariance --lanes tiny small
+```
+
+Both commands write JSON plus Markdown. They report the current public Python
+facade, genuine Rust-owned `std::time::Instant` samples where adapters exist,
+and the public/native overhead ratio. They do not require a frozen checkout,
+legacy virtual environment, or legacy timing cache. Every ASSIST workload uses
+`max_processes=1`. `--quick` is available for smoke runs.
+
 ## Legacy oracle
 
 The legacy implementation lives in a **dedicated, main-pinned** sibling
@@ -31,17 +75,12 @@ fingerprinted on the legacy checkout's git commit (plus its venv
 `pip freeze` and the harness source), so a checkout that drifts onto a
 feature branch silently invalidates `parity_legacy_speed_baseline.json`.
 The dedicated checkout should stay on the commit the baseline was captured
-against (`936cc636096fcfefcee3e1310c21528444f39546`, upstream `main` at
-capture time, including the rotation-period surface); the speed gate asserts this pin before cache validation so
-checkout drift fails with a clear error. Bump it deliberately and recapture.
-
-Obs80, strict Scout snapshots, and `Trajectory` were added later at upstream
-`9b756803ab3afbe11e33df9e57d30a28e7976b92`, so they cannot be evaluated by
-the older 44-API oracle. Their exact conversion parity, Python-control
-performance, and Rust-Instant timing are captured separately by
-`migration/scripts/capture_latest_main_additions_parity.py` in
-`migration/artifacts/latest_main_additions_parity.json`. This supplemental lane
-does not silently rotate the established benchmark/cache identity.
+against (`757c09fca86adf9e3d5899952db3d379e09413f6`, the frozen updated-upstream
+non-gravitational authority); the speed gate asserts this pin before cache
+validation so checkout drift fails with a clear error. The older
+`936cc636096fcfefcee3e1310c21528444f39546` checkout remains historical-only
+for pre-non-grav evidence. Bump the current authority deliberately and
+recapture.
 
 Because both repos export the package name `adam_core`, they cannot coexist
 in one Python venv. We invoke the legacy implementation through a
@@ -51,7 +90,7 @@ in one Python venv. We invoke the legacy implementation through a
 # Dedicated legacy checkout pinned to upstream main.
 git clone git@github.com:B612-Asteroid-Institute/adam_core.git \
     /Users/aleck/Code/adam-core-legacy-main
-git -C /Users/aleck/Code/adam-core-legacy-main checkout main
+git -C /Users/aleck/Code/adam-core-legacy-main checkout --detach 757c09fca86adf9e3d5899952db3d379e09413f6
 
 python3.13 -m venv .legacy-venv
 .legacy-venv/bin/pip install -e /Users/aleck/Code/adam-core-legacy-main
@@ -61,7 +100,7 @@ To bump the legacy baseline to a newer upstream `main`:
 
 ```bash
 git -C /Users/aleck/Code/adam-core-legacy-main fetch origin
-git -C /Users/aleck/Code/adam-core-legacy-main reset --hard origin/main
+git -C /Users/aleck/Code/adam-core-legacy-main checkout --detach <reviewed-upstream-sha>
 pdm run rust-parity-legacy-cache-refresh   # recapture the baseline
 ```
 
@@ -76,12 +115,12 @@ Each parity/speed row is labeled with a **comparison mode** (`raw kernel`,
 `thin wrapper`, `public facade`, `rust native`, or `impl candidate`) so the
 tables make explicit whether the current side is measured as a raw Rust/PyO3
 kernel, a thin NumPy wrapper, or a composed public Python facade -- all
-against the same legacy public Python.
+against the same frozen updated-upstream Python authority.
 
 Performance rows report three distinct columns:
 
-1. **legacy adam_core**: the pinned legacy checkout in its isolated Python
-   runtime;
+1. **updated-upstream adam_core** (historical field names retain `legacy`): the
+   pinned frozen checkout in its isolated Python runtime;
 2. **current through Python** (`current_python_*`; historical `rust_*` keys are
    retained as aliases): the compatible current Python/public entrypoint users
    call; and
@@ -122,20 +161,21 @@ Verify it's reachable:
 
 The GPL parity suite is owned downstream by the adam-assist migration branch
 (`tests/rust/`) and compares the Rust-backed
-`adam_assist.ASSISTPropagator` against the pinned legacy, composition-based
-`adam_assist.ASSISTPropagator` with the **same two-runtime pattern**. Set
+`adam_assist.ASSISTPropagator` against the frozen updated-upstream,
+composition-based `adam_assist.ASSISTPropagator` with the **same two-runtime
+pattern**. Set
 `ADAM_ASSIST_RUST_REPO` and run `pdm run assist-rust-develop` to install that
 downstream checkout into the adam-core development environment. adam_core here has deleted the base `Propagator` composition, so
-the legacy propagator is no longer instantiable in the main runtime; it runs
-in a dedicated `.legacy-assist-venv` (gitignored) pinning legacy adam_core
-(composition) + downstream `adam_assist`:
+the updated-upstream propagator is no longer instantiable in the main runtime;
+it runs in a dedicated `.legacy-assist-venv` (gitignored) pinning core
+`757c09f` plus detached ASSIST `cb5bb14b5c1c6b27f43595d327f1a7b3f819e5c2`:
 
 ```bash
 python3.13 -m venv .legacy-assist-venv
-.legacy-assist-venv/bin/pip install 'assist==1.2.3' 'rebound>=4.4.10'
+.legacy-assist-venv/bin/pip install 'assist==1.2.3' 'rebound==4.6.0' 'timezonefinder==8.0.0'
 .legacy-assist-venv/bin/pip install -e /Users/aleck/Code/adam-core-legacy-main
 .legacy-assist-venv/bin/pip install naif-de440 jpl-small-bodies-de441-n16
-.legacy-assist-venv/bin/pip install 'adam-assist==0.3.9' --no-deps
+.legacy-assist-venv/bin/pip install -e /Users/aleck/Code/adam-assist-upstream-oracle --no-deps
 ```
 
 `migration/parity/_assist_oracle.py` exposes a `LegacyAssistPropagator`
@@ -151,11 +191,13 @@ legacy runtime live, like the adam_core fuzz gate). Set
 `ADAM_CORE_ASSIST_PARITY_REFRESH=1` to force re-running the legacy runtime;
 the venv Python is overridable via `ADAM_CORE_LEGACY_ASSIST_VENV_PYTHON`.
 
-ASSIST artifacts use the same column names. Until its package-level Rust
-implementations expose Rust-internal `Instant` benchmark adapters, the native
-Rust field is intentionally null and references `personal-98v.1`; timing the
-`NativeAssistPropagator` PyO3 method from Python would not satisfy the native
-column.
+ASSIST artifacts use the same column names. Current artifacts measure the
+native column through package-level Rust `std::time::Instant` adapters; Python,
+PyO3, and Arrow conversion are outside those samples. In the downstream
+ASSIST checkout, dedicated same-epoch non-gravitational batching evidence is
+captured by `migration/scripts/benchmark_assist_nongrav_propagation.py`, while
+ephemeris, covariance, collision, and OD retain their domain-specific benchmark
+scripts; their accepted artifacts are copied into this report tree.
 
 The parity tests skip gracefully when `.legacy-assist-venv` is absent. The
 frozen public-semantics fixture

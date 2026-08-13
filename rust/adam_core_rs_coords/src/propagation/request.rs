@@ -1,7 +1,7 @@
 use super::{PropagationError, PropagationResultValue};
 use crate::{
-    CoordinateBatch, ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, PhysicalParametersBatch,
-    TimeArray, VariantId,
+    CoordinateBatch, NonGravitationalParametersBatch, ObjectId, OrbitBatch, OrbitId,
+    OrbitVariantBatch, PhysicalParametersBatch, TimeArray, VariantId,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -176,6 +176,13 @@ impl<'a> PropagationInput<'a> {
         match self {
             Self::Orbits(orbits) => orbits.physical_parameters.as_ref(),
             Self::Variants(variants) => variants.physical_parameters.as_ref(),
+        }
+    }
+
+    pub fn non_gravitational_parameters(&self) -> Option<&'a NonGravitationalParametersBatch> {
+        match self {
+            Self::Orbits(orbits) => orbits.non_gravitational_parameters.as_ref(),
+            Self::Variants(variants) => variants.non_gravitational_parameters.as_ref(),
         }
     }
 

@@ -126,6 +126,7 @@ Use Cases (Complete List)
    Getting Started <getting_started/index>
    Use Cases <use_cases/index>
    Reference <reference/index>
+   Non-Gravitational Support <non_grav_support>
 
 Indices and tables
 ==================

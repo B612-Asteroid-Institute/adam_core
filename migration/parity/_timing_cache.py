@@ -6,8 +6,8 @@ semantic result caches outside the measured interval. Imports, loaded SPICE
 kernels/readers, JIT state, and thread pools remain warm.
 
 The same function is imported under both runtimes: it resolves ``adam_core`` to
-the current package in the main process and to pinned legacy adam_core in the
-isolated legacy process.
+the current package in the main process and to frozen updated-upstream adam_core
+in the isolated oracle process.
 """
 
 from __future__ import annotations

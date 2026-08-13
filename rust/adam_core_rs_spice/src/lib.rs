@@ -19,7 +19,7 @@ use adam_core_rs_coords::types::{
 };
 use adam_core_rs_coords::{
     calculate_moid_batch, origin_mu_au3_day2, rotate_cartesian_time_varying_flat6,
-    transform_values_flat6, transform_with_covariance_flat6, Frame as KernelFrame,
+    transform_values_flat6, transform_with_covariance_flat, Frame as KernelFrame,
     OriginTranslationProvider, Representation,
 };
 use spicekit::frame::{
@@ -655,9 +655,16 @@ impl AdamCoreSpiceBackend {
             let ktarget = to_kernel_frame(frame_out);
             return Ok(Some(match rotated_cov.as_deref() {
                 Some(cov) => {
-                    let (values, cov_out) = transform_with_covariance_flat6(
+                    let rows = rotated.len() / 6;
+                    let dimension = if rows > 0 && cov.len() == rows * 81 {
+                        9
+                    } else {
+                        6
+                    };
+                    let (values, cov_out) = transform_with_covariance_flat(
                         &rotated,
                         cov,
+                        dimension,
                         Representation::Cartesian,
                         rep_out,
                         ktarget,
@@ -709,9 +716,22 @@ impl AdamCoreSpiceBackend {
         let kframe_in = to_kernel_frame(frame_in);
         let kframe_out = to_kernel_frame(frame_out);
         if let Some(cov) = covariance_flat {
-            let (values, cov_out) = transform_with_covariance_flat6(
+            let rows = coords_flat.len() / 6;
+            let elements_per_row = cov.len().checked_div(rows).ok_or_else(|| {
+                SpiceBackendError::NotCovered(
+                    "covariance rows must match coordinate rows".to_string(),
+                )
+            })?;
+            let dimension = (elements_per_row as f64).sqrt() as usize;
+            if dimension * dimension != elements_per_row || !matches!(dimension, 6 | 9) {
+                return Err(SpiceBackendError::NotCovered(format!(
+                    "covariance dimension must be 6 or 9, got {elements_per_row} elements per row"
+                )));
+            }
+            let (values, cov_out) = transform_with_covariance_flat(
                 coords_flat,
                 cov,
+                dimension,
                 rep_in,
                 rep_out,
                 kframe_in,
@@ -977,12 +997,94 @@ impl AdamCoreSpiceBackend {
         }
         // One matrix per row, so the per-row index is the identity mapping.
         let time_index: Vec<usize> = (0..n).collect();
-        let cov = covariance_flat.unwrap_or(&[]);
-        let (rotated, rotated_cov) =
-            rotate_cartesian_time_varying_flat6(states_flat, cov, &time_index, &matrices_flat)
-                .map_err(|err| SpiceBackendError::NotCovered(err.to_string()))?;
-        let rotated_cov = covariance_flat.map(|_| rotated_cov);
-        Ok((rotated, rotated_cov))
+        let Some(covariance) = covariance_flat else {
+            let (rotated, _) =
+                rotate_cartesian_time_varying_flat6(states_flat, &[], &time_index, &matrices_flat)
+                    .map_err(|err| SpiceBackendError::NotCovered(err.to_string()))?;
+            return Ok((rotated, None));
+        };
+        if n == 0 {
+            return Ok((Vec::new(), Some(Vec::new())));
+        }
+        let elements_per_row = covariance.len().checked_div(n).ok_or_else(|| {
+            SpiceBackendError::NotCovered(
+                "covariance rows must match time-varying rotation state rows".to_string(),
+            )
+        })?;
+        let dimension = match elements_per_row {
+            36 => 6,
+            81 => 9,
+            _ => {
+                return Err(SpiceBackendError::NotCovered(format!(
+                    "time-varying covariance dimension must be 6 or 9, got {elements_per_row} elements per row"
+                )));
+            }
+        };
+        if covariance.len() != n * elements_per_row {
+            return Err(SpiceBackendError::NotCovered(
+                "covariance rows must match time-varying rotation state rows".to_string(),
+            ));
+        }
+        let coordinate_covariance = if dimension == 6 {
+            covariance.to_vec()
+        } else {
+            let mut coordinate_covariance = Vec::with_capacity(n * 36);
+            for row in covariance.chunks_exact(81) {
+                for coordinate_row in 0..6 {
+                    coordinate_covariance
+                        .extend_from_slice(&row[coordinate_row * 9..coordinate_row * 9 + 6]);
+                }
+            }
+            coordinate_covariance
+        };
+        let (rotated, rotated_coordinate_covariance) = rotate_cartesian_time_varying_flat6(
+            states_flat,
+            &coordinate_covariance,
+            &time_index,
+            &matrices_flat,
+        )
+        .map_err(|err| SpiceBackendError::NotCovered(err.to_string()))?;
+        if dimension == 6 {
+            return Ok((rotated, Some(rotated_coordinate_covariance)));
+        }
+
+        let mut rotated_covariance = vec![f64::NAN; n * 81];
+        for row_index in 0..n {
+            let source = &covariance[row_index * 81..(row_index + 1) * 81];
+            let destination = &mut rotated_covariance[row_index * 81..(row_index + 1) * 81];
+            let coordinate_only = (0..9).all(|row| {
+                (0..9).all(|column| row < 6 && column < 6 || source[row * 9 + column].is_nan())
+            });
+            for row in 0..6 {
+                destination[row * 9..row * 9 + 6].copy_from_slice(
+                    &rotated_coordinate_covariance
+                        [row_index * 36 + row * 6..row_index * 36 + row * 6 + 6],
+                );
+            }
+            if coordinate_only {
+                continue;
+            }
+            if source.iter().any(|value| value.is_nan()) {
+                destination.fill(f64::NAN);
+                continue;
+            }
+            let matrix = &matrices_flat[row_index * 36..(row_index + 1) * 36];
+            for output_row in 0..6 {
+                for parameter in 6..9 {
+                    destination[output_row * 9 + parameter] = (0..6)
+                        .map(|input| matrix[output_row * 6 + input] * source[input * 9 + parameter])
+                        .sum();
+                    destination[parameter * 9 + output_row] = (0..6)
+                        .map(|input| source[parameter * 9 + input] * matrix[output_row * 6 + input])
+                        .sum();
+                }
+            }
+            for row in 6..9 {
+                destination[row * 9 + 6..row * 9 + 9]
+                    .copy_from_slice(&source[row * 9 + 6..row * 9 + 9]);
+            }
+        }
+        Ok((rotated, Some(rotated_covariance)))
     }
 
     pub fn state_vectors(
@@ -1917,6 +2019,65 @@ mod tests {
             )
             .unwrap_err();
         assert!(matches!(itrf_error, SpiceBackendError::NotCovered(_)));
+    }
+
+    #[test]
+    fn time_varying_rotation_preserves_full_nongrav_covariance_blocks() {
+        let backend = AdamCoreSpiceBackend::new();
+        let states = vec![1.0, 0.5, -0.3, 0.01, 0.005, -0.003];
+        let times = TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60_000, 0)]).unwrap();
+        let mut covariance = vec![0.0; 81];
+        for index in 0..9 {
+            covariance[index * 9 + index] = (index + 1) as f64 * 1.0e-12;
+        }
+        covariance[7] = 2.5e-13;
+        covariance[7 * 9] = 2.5e-13;
+
+        let (values, rotated_covariance) = backend
+            .rotate_time_varying(
+                &states,
+                Some(&covariance),
+                Frame::Ecliptic,
+                Frame::Equatorial,
+                &times,
+            )
+            .unwrap();
+        let (expected_values, expected_covariance) = transform_with_covariance_flat(
+            &states,
+            &covariance,
+            9,
+            Representation::Cartesian,
+            Representation::Cartesian,
+            KernelFrame::Ecliptic,
+            KernelFrame::Equatorial,
+            &[60_000.0],
+            &[1.0],
+            &[1.0],
+            0.0,
+            0.0,
+            100,
+            1e-15,
+            None,
+        );
+        for (actual, expected) in values.iter().zip(expected_values.iter()) {
+            assert!((actual - expected).abs() < 1.0e-15);
+        }
+        let rotated_covariance = rotated_covariance.unwrap();
+        for (actual, expected) in rotated_covariance.iter().zip(expected_covariance.iter()) {
+            assert!((actual - expected).abs() < 1.0e-26);
+        }
+        assert_eq!(
+            &rotated_covariance[6 * 9 + 6..6 * 9 + 9],
+            &covariance[6 * 9 + 6..6 * 9 + 9]
+        );
+        assert_eq!(
+            &rotated_covariance[7 * 9 + 6..7 * 9 + 9],
+            &covariance[7 * 9 + 6..7 * 9 + 9]
+        );
+        assert_eq!(
+            &rotated_covariance[8 * 9 + 6..8 * 9 + 9],
+            &covariance[8 * 9 + 6..8 * 9 + 9]
+        );
     }
 
     #[test]

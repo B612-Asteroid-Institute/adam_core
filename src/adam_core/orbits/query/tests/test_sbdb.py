@@ -1,4 +1,6 @@
+import copy
 import json
+import logging
 import os
 from collections import OrderedDict
 from contextlib import contextmanager
@@ -392,11 +394,92 @@ def test_query_sbdb_new_physical_parameters_missing_phys_par_fills_nan() -> None
     assert np.isnan(orbits.physical_parameters.G[0].as_py())
 
 
+def test_query_sbdb_new_populates_nongrav_and_extended_covariance() -> None:
+    for object_id, filename in [("67P", "67P_phys.json"), ("99942", "99942_phys.json")]:
+        payload = _load_sbdb_fixture_payload(filename)
+
+        def new_side_effect(
+            requested_id: str, *, timeout_s: float, max_attempts: int
+        ) -> dict:
+            assert requested_id == object_id
+            return payload
+
+        with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+            mock_new.side_effect = new_side_effect
+            orbits = query_sbdb_new([object_id], timeout_s=1.0, max_attempts=1)
+
+        assert orbits.non_gravitational_parameters.source[0].as_py() == "SBDB"
+        assert orbits.coordinates.covariance.nongrav_block_mask().tolist() == [True]
+        full = orbits.coordinates.covariance.to_full_matrix()[0]
+        assert full.shape == (9, 9)
+        assert np.isfinite(full).all()
+        if object_id == "67P":
+            assert np.isclose(
+                orbits.non_gravitational_parameters.A1[0].as_py(),
+                1.042451026100725e-9,
+            )
+            assert orbits.non_gravitational_parameters.ALN[0].as_py() == 0.1112620426
+            assert orbits.non_gravitational_parameters.NK[0].as_py() == 4.6142
+            assert orbits.non_gravitational_parameters.R0[0].as_py() == 2.808
+        else:
+            npt.assert_allclose(np.sqrt(full[6, 6]), 4.892e-13, rtol=1e-3)
+            npt.assert_allclose(np.sqrt(full[7, 7]), 1.859e-16, rtol=1e-3)
+            assert np.all(full[8, :] == 0.0)
+            assert np.all(full[:, 8] == 0.0)
+
+
+@pytest.mark.parametrize("malformation", ["labels", "shape"])
+def test_query_sbdb_new_degrades_bad_covariance_with_warning(
+    caplog, malformation
+) -> None:
+    payload = copy.deepcopy(_load_sbdb_fixture_payload("99942_phys.json"))
+    covariance = payload["orbit"]["covariance"]
+    if malformation == "labels":
+        covariance["labels"][0] = "unexpected"
+    else:
+        covariance["data"] = [[1.0] * 5 for _ in range(5)]
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        with caplog.at_level(logging.WARNING, logger="adam_core.orbits.query.sbdb"):
+            orbits = query_sbdb_new(["99942"], timeout_s=1.0, max_attempts=1)
+
+    assert any(
+        "falling back to per-element sigmas" in record.message
+        for record in caplog.records
+    )
+    assert not orbits.coordinates.covariance.has_nongrav_block()
+    assert orbits.non_gravitational_parameters.A2[0].as_py() is not None
+    assert np.isfinite(orbits.coordinates.covariance.to_matrix()).all()
+
+
+def test_query_sbdb_new_include_nongrav_false_strips_solution() -> None:
+    payload = _load_sbdb_fixture_payload("67P_phys.json")
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        orbits = query_sbdb_new(
+            ["67P"],
+            timeout_s=1.0,
+            max_attempts=1,
+            include_nongrav=False,
+        )
+
+    assert orbits.non_gravitational_parameters.A1[0].as_py() is None
+    assert not orbits.coordinates.covariance.has_nongrav_block()
+
+
 def test_recorded_sbdb_complete_rust_product_matches_payload_facade() -> None:
     ids = ["Ceres", "2001VB", "54509"]
     payloads = [_load_sbdb_fixture_payload(f"{object_id}.json") for object_id in ids]
     expected = _orbits_from_sbdb_payloads(ids, payloads)
-    batch = _rust_native.query_sbdb_arrow(
+    batch, warnings = _rust_native.query_sbdb_arrow(
         ids,
         True,
         60.0,
@@ -406,6 +489,7 @@ def test_recorded_sbdb_complete_rust_product_matches_payload_facade() -> None:
         [json.dumps(payload) for payload in payloads],
     )
     actual = table_from_record_batch(Orbits, batch)
+    assert warnings == []
     _assert_orbits_equivalent(actual, expected, covariance_atol=3e-28)
 
 

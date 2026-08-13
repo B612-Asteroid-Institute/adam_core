@@ -51,7 +51,7 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timezone
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, TypedDict, cast
 
 from . import _threading
 from ._timing_cache import (
@@ -84,7 +84,7 @@ CANONICAL_SPEED_TRIALS = 3
 SPEED_TIMING_AGGREGATION = "median-of-trial-percentiles"
 LEGACY_TIMING_CACHE_SCHEMA_VERSION = 1
 LEGACY_TIMING_CACHE_PROCESS_VERSION = "rm-p1-023-canonical-variant-create-v1"
-# Dedicated, main-pinned legacy checkout, kept separate from any working
+# Dedicated, frozen updated-upstream checkout, kept separate from any working
 # checkout so the speed baseline is reproducible and does not silently drift
 # when a working tree changes branches. Override with ADAM_CORE_LEGACY_REPO_ROOT
 # (see migration/parity/README.md).
@@ -100,7 +100,7 @@ LEGACY_REPO_ROOT = Path(
 # recapturing the legacy speed baseline.
 EXPECTED_LEGACY_GIT_COMMIT = os.environ.get(
     "ADAM_CORE_LEGACY_EXPECTED_GIT_COMMIT",
-    "936cc636096fcfefcee3e1310c21528444f39546",
+    "757c09fca86adf9e3d5899952db3d379e09413f6",
 ).strip()
 LEGACY_RELEVANT_UNTRACKED_PREFIXES = (
     "src/",
@@ -173,7 +173,7 @@ def _perf_waivers_by_api_lane() -> dict[tuple[str, str], str]:
         if migration.waiver
     }
 
-    import yaml
+    import yaml  # type: ignore[import-untyped]
 
     waiver_path = Path(__file__).resolve().parents[1] / "waivers.yaml"
     data = yaml.safe_load(waiver_path.read_text()) if waiver_path.exists() else {}
@@ -266,7 +266,17 @@ def _median(values: Sequence[float]) -> float:
     return float(np.median(np.asarray(values, dtype=np.float64)))
 
 
-def _timing_summary(sample_trials: Sequence[Sequence[float]]) -> dict[str, object]:
+class _TimingSummary(TypedDict):
+    p50_s: float
+    p95_s: float
+    p50_trials_s: list[float]
+    p95_trials_s: list[float]
+    sample_trials_s: list[list[float]]
+    timing_trials: int
+    timing_aggregation: str
+
+
+def _timing_summary(sample_trials: Sequence[Sequence[float]]) -> _TimingSummary:
     trials = [[float(value) for value in trial] for trial in sample_trials]
     p50_trials = [_percentile(trial, 50) for trial in trials]
     p95_trials = [_percentile(trial, 95) for trial in trials]
@@ -679,7 +689,8 @@ def _time_legacy_warm(
     key = _hash_json(fields)
     entry = _cached_entry(legacy_cache, "warm", key, fields)
     if entry is not None:
-        return [float(value) for value in entry["samples_s"]], "cache", key
+        samples_s = cast(Sequence[float | int | str], entry["samples_s"])
+        return [float(value) for value in samples_s], "cache", key
     if not bool(legacy_cache["refresh"]):
         raise KeyError(_cache_miss_message(api_id, lane, workload_label, key))
 
@@ -755,7 +766,12 @@ def _time_legacy_warm_trials(
     entry = _cached_entry(legacy_cache, "warm", key, fields)
     if entry is not None:
         return (
-            [[float(value) for value in trial] for trial in entry["sample_trials_s"]],
+            [
+                [float(value) for value in cast(Sequence[float | int | str], trial)]
+                for trial in cast(
+                    Sequence[Sequence[float | int | str]], entry["sample_trials_s"]
+                )
+            ],
             "cache",
             key,
         )
@@ -822,7 +838,7 @@ def _time_legacy_cold(
     key = _hash_json(fields)
     entry = _cached_entry(legacy_cache, "cold", key, fields)
     if entry is not None:
-        return float(entry["elapsed_s"]), "cache", key
+        return float(cast(float | int | str, entry["elapsed_s"])), "cache", key
     if not bool(legacy_cache["refresh"]):
         raise KeyError(_cache_miss_message(api_id, lane, workload_label, key))
 
@@ -879,7 +895,8 @@ def _time_legacy_cold_trials(
     key = _hash_json(fields)
     entry = _cached_entry(legacy_cache, "cold", key, fields)
     if entry is not None:
-        return [float(value) for value in entry["elapsed_trials_s"]], "cache", key
+        elapsed_trials_s = cast(Sequence[float | int | str], entry["elapsed_trials_s"])
+        return [float(value) for value in elapsed_trials_s], "cache", key
     if not bool(legacy_cache["refresh"]):
         raise KeyError(_cache_miss_message(api_id, lane, workload_label, key))
 
@@ -1625,6 +1642,8 @@ def format_summary(results: list[SpeedResult]) -> str:
                 f"{r.rust_cold*1000:>10.1f}ms  {r.legacy_cold*1000:>9.1f}ms  "
                 f"{r.speedup_cold:>5.2f}x"
                 if r.rust_cold is not None
+                and r.legacy_cold is not None
+                and r.speedup_cold is not None
                 else f"{'—':>11s}  {'—':>10s}  {'—':>6s}"
             )
             lines.append(
@@ -1790,7 +1809,7 @@ def to_json(
         "semantic_cache_policy": SEMANTIC_CACHE_POLICY,
         "semantic_caches_cleared": list(SEMANTIC_CACHES_CLEARED),
         "performance_columns": {
-            "legacy_adam_core": "pinned legacy checkout in isolated Python runtime",
+            "legacy_adam_core": "frozen updated-upstream checkout in isolated Python runtime",
             "current_python": "current implementation called through compatible Python interface",
             "native_rust": (
                 "underlying function called directly in Rust and timed by Rust "

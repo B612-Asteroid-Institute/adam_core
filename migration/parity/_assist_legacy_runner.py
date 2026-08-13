@@ -8,10 +8,10 @@ Arrow-IPC response.
 
 The subprocess isolation is the whole point: the migration repo's adam_core has
 deleted the base ``Propagator`` composition, so the legacy reference cannot run
-in-process. ``.legacy-assist-venv`` pins legacy adam_core (``4c1fbc4c``) +
-downstream ``adam_assist==0.3.9`` + ``assist==1.2.3`` so the legacy behavior is
-reproducible and independent of the main runtime -- exactly like the adam_core
-parity oracle's ``.legacy-venv``.
+in-process. ``.legacy-assist-venv`` pins updated-upstream adam_core
+(``757c09f``) + adam_assist (``cb5bb14``) + ``assist==1.2.3`` so the Python
+reference is reproducible and independent of the main runtime -- exactly like
+the adam_core parity oracle's ``.legacy-venv``.
 """
 
 from __future__ import annotations

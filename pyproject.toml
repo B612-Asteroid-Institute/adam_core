@@ -195,6 +195,7 @@ typecheck = "mypy --strict ./src/adam_core"
 test = "pytest --benchmark-skip -m 'not profile' {args}"
 doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only {args}"
+benchmark-current = "python -m migration.scripts.benchmark_current {args}"
 coverage = "pytest --benchmark-skip --cov=adam_core --cov-report=xml -m 'not profile' {args}"
 docs = { cmd = "sphinx-build -b html docs/source docs/build", env = { LC_ALL = "C", LANG = "C" } }
 docs-check = { cmd = "sphinx-build -E -b html -W --keep-going docs/source docs/build_ci", env = { LC_ALL = "C", LANG = "C" } }

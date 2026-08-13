@@ -1,12 +1,12 @@
 # Remaining Rust support surface
 
-Updated 2026-07-17 after integrating upstream main at
-`9b756803ab3afbe11e33df9e57d30a28e7976b92`.
+Updated 2026-08-11 while integrating upstream main at
+`757c09fca86adf9e3d5899952db3d379e09413f6`.
 
 ## Runtime support summary
 
 - The authoritative complete inventory is
-  `migration/public_surface/manifest.json`: **595 symbols / 67 constants**.
+  `migration/public_surface/manifest.json`: **629 symbols / 78 constants**.
   Domain dispositions are recorded under `migration/public_surface/`.
 - The 44-row parity registry remains a selected migration benchmark set, not a
   public-API count. All enforced rows pass; raw-kernel diagnostic rows do not
@@ -20,6 +20,13 @@ Updated 2026-07-17 after integrating upstream main at
 - The `9b756803` additions are present: Rust owns MPC Obs80 parsing/Arrow
   assembly, Scout `file=mpc` acquisition/signature/hash/snapshot products, and
   all six custom validity-bounded `Trajectory` methods with native timing.
+- The integrated `757c09fc` non-gravitational surface is included in that
+  complete count. Rust owns mixed 6D/9D covariance transforms and sampling,
+  SBDB/NEOCC normalization, warning products, nested Arrow transport, and
+  propagated-variant collapse; Python retains typed quivr schemas and thin
+  compatibility/data veneers. The manifest also durably classifies all 22
+  frozen-upstream-only JAX/Ray/scalar-worker/composition helpers as intentional
+  retirements with replacements in the domain audits.
 - `adam-assist` owns ASSIST propagation, sampled covariance, ephemeris,
   collision/impact, OD/IOD, and scheduling orchestration. It consumes
   `libassist-sys` and `librebound-sys` directly; no `assist-rs` v2 is planned.

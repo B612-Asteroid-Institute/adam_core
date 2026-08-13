@@ -99,14 +99,25 @@ def _build_transform_coordinates_case(case: dict[str, Any]) -> Any:
 
 
 def _transform_coordinates(
-    *, cases: list[dict[str, Any]], reps: int, warmup: int, trials: int
+    *,
+    cases: list[dict[str, Any]],
+    reps: int,
+    warmup: int,
+    trials: int,
+    spice_kernels: list[str] | None = None,
 ) -> NativeRustTiming:
     from adam_core import _rust_native
     from adam_core._rust.arrow import ensure_spice_backend
     from adam_core.coordinates.geodetics import WGS84
     from adam_core.coordinates.transform import _coordinate_record_batch
 
-    ensure_spice_backend()
+    backend = ensure_spice_backend()
+    if spice_kernels is not None and set(backend.registered_kernels()) != set(
+        spice_kernels
+    ):
+        backend.clear()
+        for kernel in spice_kernels:
+            backend.furnsh(kernel)
     coordinates = [_build_transform_coordinates_case(case) for case in cases]
     batches = [
         _coordinate_record_batch(coords, str(case["representation_in"]))
@@ -1151,19 +1162,22 @@ def _variant_orbits_create(
     coords: Any,
     epoch_mjd: Any,
     covariance: Any,
+    nongrav_values: Any,
     origin: str,
     frame: str,
+    include_nongrav: bool,
     **_unused: Any,
 ) -> NativeRustTiming:
     from adam_core import _rust_native
     from adam_core.coordinates.cartesian import CartesianCoordinates
     from adam_core.coordinates.covariances import CoordinateCovariances
     from adam_core.coordinates.origin import Origin
-    from adam_core.orbits import Orbits
+    from adam_core.orbits import NonGravitationalParameters, Orbits
     from adam_core.orbits.arrow_bridge import orbits_to_record_batch
     from adam_core.time import Timestamp
 
     values = np.asarray(coords, dtype=np.float64)
+    values_nongrav = np.asarray(nongrav_values, dtype=np.float64)
     rows = values.shape[0]
     orbits = Orbits.from_kwargs(
         orbit_id=[str(index) for index in range(rows)],
@@ -1183,6 +1197,11 @@ def _variant_orbits_create(
                 np.asarray(covariance, dtype=np.float64)
             ),
         ),
+        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
+            A1=values_nongrav[:, 0],
+            A2=values_nongrav[:, 1],
+            A3=values_nongrav[:, 2],
+        ),
     )
     samples = _rust_native.benchmark_sample_orbit_variants_arrow(
         orbits_to_record_batch(orbits),
@@ -1190,6 +1209,7 @@ def _variant_orbits_create(
         reps,
         trials,
         warmup,
+        include_nongrav=include_nongrav,
     )
     return NativeRustTiming(
         status="measured",

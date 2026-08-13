@@ -13,6 +13,7 @@
 
 use crate::types::{SchemaError, SchemaResult, TimeArray, TimeScale};
 use serde_json::{json, Map, Value};
+use std::collections::HashMap;
 
 fn invalid(message: impl Into<String>) -> SchemaError {
     SchemaError::InvalidRecordBatch(message.into())
@@ -91,28 +92,34 @@ fn upper_triangular_to_full(values: &[f64], dimension: usize) -> SchemaResult<Ve
     Ok(out)
 }
 
-fn remove_last_column_of_upper_triangular_7(values: &[f64]) -> SchemaResult<Vec<f64>> {
-    if values.len() != 28 {
+fn triangular_dimension(elements: usize) -> SchemaResult<usize> {
+    let dimension = (((8 * elements + 1) as f64).sqrt() as usize - 1) / 2;
+    if dimension * (dimension + 1) / 2 != elements {
         return Err(invalid(format!(
-            "7x7 upper triangular vector must have 28 values, got {}",
-            values.len()
+            "covariance upper-triangular length {elements} is not a valid triangular number"
         )));
     }
-    let mut full = vec![0.0; 49];
-    let mut index = 0;
-    for row in 0..7 {
-        for col in row..7 {
-            full[row * 7 + col] = values[index];
-            index += 1;
-        }
+    Ok(dimension)
+}
+
+fn solved_covariance_from_upper_triangular(
+    values: &[f64],
+    solved_dimension: usize,
+) -> SchemaResult<Vec<f64>> {
+    let full_dimension = triangular_dimension(values.len())?;
+    if solved_dimension > full_dimension {
+        return Err(invalid(format!(
+            "solved covariance dimension {solved_dimension} exceeds stored dimension {full_dimension}"
+        )));
     }
-    let mut out = Vec::with_capacity(21);
-    for row in 0..6 {
-        for col in row..6 {
-            out.push(full[row * 7 + col]);
-        }
+    let full = upper_triangular_to_full(values, full_dimension)?;
+    let mut solved = Vec::with_capacity(solved_dimension * solved_dimension);
+    for row in 0..solved_dimension {
+        solved.extend_from_slice(
+            &full[row * full_dimension..row * full_dimension + solved_dimension],
+        );
     }
-    Ok(out)
+    Ok(solved)
 }
 
 pub fn neocc_parse_oef_json(data: &str) -> SchemaResult<String> {
@@ -200,6 +207,52 @@ pub fn neocc_parse_oef_json(data: &str) -> SchemaResult<String> {
         }
     }
 
+    let mut nongrav = Map::new();
+    for line in &lines {
+        let stripped = line.trim();
+        if stripped.starts_with("LSP") {
+            let values = stripped
+                .split_whitespace()
+                .skip(1)
+                .map(|value| {
+                    value
+                        .parse::<i64>()
+                        .map_err(|err| invalid(format!("bad LSP value {value:?}: {err}")))
+                })
+                .collect::<SchemaResult<Vec<_>>>()?;
+            nongrav.insert(
+                "model_used".to_string(),
+                values.first().copied().map_or(Value::Null, Value::from),
+            );
+            nongrav.insert(
+                "parameter_count".to_string(),
+                values.get(1).copied().map_or(Value::Null, Value::from),
+            );
+            nongrav.insert(
+                "dimension".to_string(),
+                Value::from(values.get(2).copied().unwrap_or(6)),
+            );
+            nongrav.insert(
+                "solve_for_parameter_codes".to_string(),
+                Value::Array(values.into_iter().skip(3).map(Value::from).collect()),
+            );
+        } else if stripped.starts_with("NGR") {
+            let values = stripped
+                .split_whitespace()
+                .skip(1)
+                .map(|value| {
+                    value
+                        .parse::<f64>()
+                        .map_err(|err| invalid(format!("bad NGR value {value:?}: {err}")))
+                })
+                .collect::<SchemaResult<Vec<_>>>()?;
+            nongrav.insert("vector".to_string(), json!(values));
+        }
+    }
+    if !nongrav.is_empty() {
+        result.insert("nongrav".to_string(), Value::Object(nongrav));
+    }
+
     let mut derived = Map::new();
     for line in &lines {
         let stripped = line.trim();
@@ -238,27 +291,26 @@ pub fn neocc_parse_oef_json(data: &str) -> SchemaResult<String> {
             }
         }
     }
+    let solved_dimension = result
+        .get("nongrav")
+        .and_then(|value| value.get("dimension"))
+        .and_then(Value::as_u64)
+        .unwrap_or(6) as usize;
     if !cov_values.is_empty() {
-        let values = if cov_values.len() == 28 {
-            remove_last_column_of_upper_triangular_7(&cov_values)?
-        } else {
-            cov_values
-        };
+        let full = solved_covariance_from_upper_triangular(&cov_values, solved_dimension)?;
         result.insert(
             "covariance".to_string(),
-            json!(upper_triangular_to_full(&values, 6)?),
+            json!(sbdb_coordinate_covariance(&full, solved_dimension)),
         );
+        result.insert("covariance_full".to_string(), json!(full));
     }
     if !cor_values.is_empty() {
-        let values = if cor_values.len() == 28 {
-            remove_last_column_of_upper_triangular_7(&cor_values)?
-        } else {
-            cor_values
-        };
+        let full = solved_covariance_from_upper_triangular(&cor_values, solved_dimension)?;
         result.insert(
             "correlation".to_string(),
-            json!(upper_triangular_to_full(&values, 6)?),
+            json!(sbdb_coordinate_covariance(&full, solved_dimension)),
         );
+        result.insert("correlation_full".to_string(), json!(full));
     }
 
     encode(Value::Object(result))
@@ -303,27 +355,70 @@ fn sbdb_element_sigma(elements: &Map<String, Value>, name: &str) -> SchemaResult
     }
 }
 
-fn sbdb_matrix6_from_json(value: &Value) -> SchemaResult<Vec<f64>> {
+fn sbdb_matrix_from_json(value: &Value) -> SchemaResult<(Vec<f64>, usize)> {
     let rows = as_array(value, "SBDB covariance data")?;
-    if rows.len() < 6 {
+    let dimension = rows.len();
+    if dimension < 6 {
         return Err(invalid("SBDB covariance data must have at least 6 rows"));
     }
-    let mut out = Vec::with_capacity(36);
-    for (row_index, row) in rows.iter().take(6).enumerate() {
+    let mut out = Vec::with_capacity(dimension * dimension);
+    for (row_index, row) in rows.iter().enumerate() {
         let cols = as_array(row, "SBDB covariance row")?;
-        if cols.len() < 6 {
+        if cols.len() != dimension {
             return Err(invalid(format!(
-                "SBDB covariance row {row_index} must have at least 6 columns"
+                "SBDB covariance row {row_index} must have {dimension} columns"
             )));
         }
-        for (col_index, value) in cols.iter().take(6).enumerate() {
+        for (col_index, value) in cols.iter().enumerate() {
             out.push(number(
                 value,
                 &format!("SBDB covariance[{row_index},{col_index}]"),
             )?);
         }
     }
-    Ok(out)
+    Ok((out, dimension))
+}
+
+fn sbdb_coordinate_covariance(matrix: &[f64], dimension: usize) -> Vec<f64> {
+    let mut coordinate = Vec::with_capacity(36);
+    for row in 0..6 {
+        coordinate.extend_from_slice(&matrix[row * dimension..row * dimension + 6]);
+    }
+    coordinate
+}
+
+fn convert_sbdb_full_covariance(
+    matrix: &[f64],
+    dimension: usize,
+    labels: &[String],
+) -> (Option<Vec<f64>>, Vec<String>) {
+    if dimension <= 6 || labels.len() != dimension {
+        return (None, Vec::new());
+    }
+    let coordinate_source = [1, 0, 5, 3, 4, 2];
+    let mut source_indices = coordinate_source.to_vec();
+    let mut target_indices = (0..6).collect::<Vec<_>>();
+    for (offset, parameter) in ["A1", "A2", "A3"].iter().enumerate() {
+        if let Some(index) = labels[6..].iter().position(|label| label == parameter) {
+            source_indices.push(6 + index);
+            target_indices.push(6 + offset);
+        }
+    }
+    let dropped = labels[6..]
+        .iter()
+        .filter(|label| !matches!(label.as_str(), "A1" | "A2" | "A3"))
+        .cloned()
+        .collect::<Vec<_>>();
+    if source_indices.len() == 6 {
+        return (None, dropped);
+    }
+    let mut full = vec![0.0; 81];
+    for (&source_row, &target_row) in source_indices.iter().zip(&target_indices) {
+        for (&source_column, &target_column) in source_indices.iter().zip(&target_indices) {
+            full[target_row * 9 + target_column] = matrix[source_row * dimension + source_column];
+        }
+    }
+    (Some(full), dropped)
 }
 
 fn diagonal_covariance(sigmas: &[f64; 6]) -> Vec<f64> {
@@ -416,6 +511,64 @@ fn json_or_nan(value: Option<f64>) -> Value {
     }
 }
 
+fn sbdb_non_gravitational_parameters(payload: &Value) -> Value {
+    let model_parameters = payload
+        .get("orbit")
+        .and_then(|orbit| orbit.get("model_pars"))
+        .and_then(Value::as_array);
+    let Some(model_parameters) = model_parameters else {
+        return json!({
+            "source": Value::Null,
+            "A1": Value::Null,
+            "A2": Value::Null,
+            "A3": Value::Null,
+            "ALN": Value::Null,
+            "NK": Value::Null,
+            "NM": Value::Null,
+            "NN": Value::Null,
+            "R0": Value::Null,
+        });
+    };
+    let mut values = HashMap::<String, f64>::new();
+    for parameter in model_parameters {
+        let Some(name) = parameter.get("name").and_then(Value::as_str) else {
+            continue;
+        };
+        if matches!(name, "A1" | "A2" | "A3" | "ALN" | "NK" | "NM" | "NN" | "R0") {
+            if let Some(value) = phys_par_value(Some(parameter)) {
+                values.insert(name.to_string(), value);
+            }
+        }
+    }
+    let has_acceleration = ["A1", "A2", "A3"]
+        .iter()
+        .any(|name| values.contains_key(*name));
+    let standard = [
+        ("ALN", 0.111_262_042_6),
+        ("NK", 4.6142),
+        ("NM", 2.15),
+        ("NN", 5.093),
+        ("R0", 2.808),
+    ];
+    if has_acceleration {
+        for (name, value) in standard {
+            values.entry(name.to_string()).or_insert(value);
+        }
+    }
+    let value = |name: &str| json_or_nan(values.get(name).copied());
+    json!({
+        "source": "SBDB",
+        "A1": value("A1"),
+        "A2": value("A2"),
+        "A3": value("A3"),
+        "ALN": value("ALN"),
+        "NK": value("NK"),
+        "NM": value("NM"),
+        "NN": value("NN"),
+        "R0": value("R0"),
+    })
+}
+
 pub fn sbdb_normalize_payloads_json(ids_json: &str, payloads_json: &str) -> SchemaResult<String> {
     let ids_value = parse_json(ids_json, "SBDB ids")?;
     let payloads_value = parse_json(payloads_json, "SBDB payloads")?;
@@ -435,6 +588,8 @@ pub fn sbdb_normalize_payloads_json(ids_json: &str, payloads_json: &str) -> Sche
     let mut h_sigma = Vec::with_capacity(payloads.len());
     let mut g = Vec::with_capacity(payloads.len());
     let mut g_sigma = Vec::with_capacity(payloads.len());
+    let mut nongrav = Vec::with_capacity(payloads.len());
+    let mut warnings = Vec::new();
 
     for (i, payload) in payloads.iter().enumerate() {
         let obj_id = ids[i].as_str().unwrap_or("");
@@ -463,31 +618,66 @@ pub fn sbdb_normalize_payloads_json(ids_json: &str, payloads_json: &str) -> Sche
             "SBDB epoch",
         )?;
         let mut cov_matrix: Option<Vec<f64>> = None;
+        let mut cov_matrix_full: Option<Vec<f64>> = None;
 
         if let Some(cov) = orbit.get("covariance").and_then(Value::as_object) {
             if let Some(data) = cov.get("data") {
-                if let Some(labels) = cov.get("labels").and_then(Value::as_array) {
-                    let labels6: Vec<String> = labels
+                let labels = cov.get("labels").and_then(Value::as_array).map(|labels| {
+                    labels
+                        .iter()
+                        .map(|value| value.as_str().unwrap_or("").to_string())
+                        .collect::<Vec<_>>()
+                });
+                let labels_are_valid = labels.as_ref().is_none_or(|labels| {
+                    labels
                         .iter()
                         .take(6)
-                        .map(|v| v.as_str().unwrap_or("").to_string())
-                        .collect();
-                    if labels6 != expected_labels {
-                        return Err(invalid(format!(
-                            "Expected covariance matrix labels to be {:?} in the first 6 entries, got {:?}.",
-                            expected_labels, labels6
-                        )));
-                    }
-                }
-                cov_matrix = Some(sbdb_matrix6_from_json(data)?);
-                if let Some(cov_elements) = cov.get("elements") {
-                    if !cov_elements.is_null() {
-                        elements_list = Some(cov_elements);
-                        if let Some(cov_epoch) = cov.get("epoch") {
-                            if !cov_epoch.is_null() {
-                                epoch_jd = number(cov_epoch, "SBDB covariance epoch")?;
+                        .map(String::as_str)
+                        .eq(expected_labels)
+                });
+                if !labels_are_valid {
+                    warnings.push(format!(
+                        "SBDB covariance labels for object {obj_id} do not start with {:?}; discarding the covariance and falling back to per-element sigmas.",
+                        expected_labels
+                    ));
+                } else {
+                    match sbdb_matrix_from_json(data) {
+                        Ok((matrix, dimension)) => {
+                            cov_matrix = Some(sbdb_coordinate_covariance(&matrix, dimension));
+                            if dimension > 6 {
+                                if let Some(labels) = labels.as_ref().filter(|labels| labels.len() == dimension) {
+                                    let (full, dropped) = convert_sbdb_full_covariance(
+                                        &matrix,
+                                        dimension,
+                                        labels,
+                                    );
+                                    cov_matrix_full = full;
+                                    if !dropped.is_empty() {
+                                        warnings.push(format!(
+                                            "SBDB covariance for object {obj_id} includes estimated parameters {:?} that are not supported for storage (only A1, A2, A3); marginalizing them out.",
+                                            dropped
+                                        ));
+                                    }
+                                } else {
+                                    warnings.push(format!(
+                                        "SBDB covariance labels for object {obj_id} are missing or do not match the matrix size; discarding the non-gravitational covariance block."
+                                    ));
+                                }
+                            }
+                            if let Some(cov_elements) = cov.get("elements") {
+                                if !cov_elements.is_null() {
+                                    elements_list = Some(cov_elements);
+                                    if let Some(cov_epoch) = cov.get("epoch") {
+                                        if !cov_epoch.is_null() {
+                                            epoch_jd = number(cov_epoch, "SBDB covariance epoch")?;
+                                        }
+                                    }
+                                }
                             }
                         }
+                        Err(_) => warnings.push(format!(
+                            "SBDB covariance matrix for object {obj_id} is not a square matrix of dimension at least 6; discarding the covariance record and falling back to per-element sigmas."
+                        )),
                     }
                 }
             }
@@ -517,8 +707,12 @@ pub fn sbdb_normalize_payloads_json(ids_json: &str, payloads_json: &str) -> Sche
         let w = sbdb_element_value(&elements, "w")?;
         let tp_mjd = mjd_from_jd_legacy(sbdb_element_value(&elements, "tp")?)?;
         coords.push(vec![q, e, inc, om, w, tp_mjd]);
-        covariances.push(convert_sbdb_covariances(&cov_matrix));
+        covariances.push(match cov_matrix_full {
+            Some(covariance) => covariance,
+            None => convert_sbdb_covariances(&cov_matrix),
+        });
         times_jd.push(epoch_jd);
+        nongrav.push(sbdb_non_gravitational_parameters(payload));
 
         let (row_h, row_h_sigma, row_g, row_g_sigma) = phys_par_from_payload(payload);
         h.push(json_or_nan(row_h));
@@ -538,7 +732,9 @@ pub fn sbdb_normalize_payloads_json(ids_json: &str, payloads_json: &str) -> Sche
             "H_v_sigma": h_sigma,
             "G": g,
             "G_sigma": g_sigma,
-        }
+        },
+        "non_gravitational_parameters": nongrav,
+        "warnings": warnings,
     }))
 }
 
@@ -695,13 +891,19 @@ mod tests {
     use super::*;
 
     #[test]
-    fn neocc_upper_triangular_28_drops_last_column() {
+    fn neocc_upper_triangular_28_respects_solved_dimension() {
         let values: Vec<f64> = (0..28).map(|x| x as f64).collect();
-        let out = remove_last_column_of_upper_triangular_7(&values).unwrap();
-        assert_eq!(out.len(), 21);
-        assert_eq!(out[0], 0.0);
-        assert_eq!(out[5], 5.0);
-        assert_eq!(out[20], 25.0);
+        let orbital = solved_covariance_from_upper_triangular(&values, 6).unwrap();
+        assert_eq!(orbital.len(), 36);
+        assert_eq!(orbital[0], 0.0);
+        assert_eq!(orbital[5], 5.0);
+        assert_eq!(orbital[35], 25.0);
+        assert_eq!(
+            solved_covariance_from_upper_triangular(&values, 7)
+                .unwrap()
+                .len(),
+            49
+        );
     }
 
     #[test]

@@ -373,6 +373,7 @@ def _sample_orbit_variants_arrow(
     alpha: float = 1.0,
     beta: float = 0.0,
     kappa: float = 0.0,
+    include_nongrav: bool = True,
 ) -> VariantOrbits:
     """Private Arrow-native Rust backend for ``VariantOrbits.create``.
 
@@ -386,7 +387,14 @@ def _sample_orbit_variants_arrow(
     reattachment is needed even for variable-count auto-mode outputs.
     """
     out = _rn.sample_orbit_variants_arrow(
-        orbits_to_record_batch(orbits), method, num_samples, seed, alpha, beta, kappa
+        orbits_to_record_batch(orbits),
+        method,
+        num_samples,
+        seed,
+        alpha,
+        beta,
+        kappa,
+        include_nongrav,
     )
     return variants_from_record_batch(out)
 

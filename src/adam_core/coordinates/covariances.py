@@ -4,11 +4,14 @@ from typing import Callable, Optional, Tuple
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
+import pyarrow.compute as pc
 import quivr as qv
 
 logger = logging.getLogger(__name__)
 
 COVARIANCE_FILL_VALUE = np.nan
+COORD_DIM = 6
+FULL_DIM = 9
 
 
 def sigmas_to_covariances(sigmas: np.ndarray) -> np.ndarray:
@@ -37,22 +40,34 @@ def sigmas_to_covariances(sigmas: np.ndarray) -> np.ndarray:
 
 
 class CoordinateCovariances(qv.Table):
-    # TODO: Would be interesting if the dimensionality can be generalized
-    #      to D dimensions, so (N, D, D) instead of (N, 6, 6). We would be
-    #      able to use this class for the covariance matrices of different
-    #      measurments like projections (D = 4) and photometry (D = 1).
+    """Per-row 6D coordinate or 9D coordinate+A1/A2/A3 covariance."""
 
     values = qv.LargeListColumn(pa.float64(), nullable=True)
     # When fixed, we should revert to:
     # values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
 
     @property
-    def sigmas(self):
+    def sigmas(self) -> npt.NDArray[np.float64]:
         from adam_core import _rust_native
 
+        # Public sigmas remain the six coordinate dimensions for compatibility.
         return np.asarray(
             _rust_native.covariance_sigmas_numpy(self.to_matrix()), dtype=np.float64
         )
+
+    def nongrav_block_mask(self) -> npt.NDArray[np.bool_]:
+        """Return rows whose covariance carries the trailing A1/A2/A3 block."""
+        lengths = pc.list_value_length(self.values)
+        return np.asarray(
+            pc.fill_null(pc.equal(lengths, FULL_DIM * FULL_DIM), False).to_numpy(
+                zero_copy_only=False
+            ),
+            dtype=np.bool_,
+        )
+
+    def has_nongrav_block(self) -> bool:
+        """Return whether any row carries the trailing non-grav block."""
+        return bool(self.nongrav_block_mask().any())
 
     def _fast_to_matrix(self) -> Optional[np.ndarray]:
         """
@@ -94,9 +109,12 @@ class CoordinateCovariances(qv.Table):
         covariances : `numpy.ndarray` (N, 6, 6)
             Covariance matrices for N coordinates in 6 dimensions.
         """
-        # Fast path: LargeListArray with uniform stride-36 offsets and no nulls
-        # (the normal shape produced by `from_matrix`). Reshape the underlying
-        # flat buffer instead of stacking per-row pyarrow objects.
+        if self.has_nongrav_block():
+            return np.ascontiguousarray(
+                self.to_full_matrix()[:, :COORD_DIM, :COORD_DIM]
+            )
+
+        # Fast path: LargeListArray with uniform stride-36 offsets and no nulls.
         fast = self._fast_to_matrix()
         if fast is not None:
             return fast
@@ -140,6 +158,37 @@ class CoordinateCovariances(qv.Table):
 
         return cov
 
+    def to_full_matrix(self) -> np.ndarray:
+        """Return normalized (N, 9, 9) coordinate+A1/A2/A3 covariance rows."""
+        full = np.full((len(self), FULL_DIM, FULL_DIM), np.nan)
+        arr = self.values
+        if isinstance(arr, pa.ChunkedArray):
+            arr = arr.combine_chunks()
+        flat = arr.values.to_numpy(zero_copy_only=False)
+        offsets = arr.offsets.to_numpy(zero_copy_only=False)
+        starts = offsets[:-1]
+        lengths = np.diff(offsets)
+        valid = ~arr.is_null().to_numpy(zero_copy_only=False)
+        is6 = valid & (lengths == COORD_DIM * COORD_DIM)
+        is9 = valid & (lengths == FULL_DIM * FULL_DIM)
+        bad = valid & ~is6 & ~is9
+        if bad.any():
+            row = int(np.flatnonzero(bad)[0])
+            raise ValueError(
+                f"Covariance row {row} has {lengths[row]} values; expected 36 or 81."
+            )
+        if is6.any():
+            gather = starts[is6, None] + np.arange(COORD_DIM * COORD_DIM)
+            full[is6, :COORD_DIM, :COORD_DIM] = flat[gather].reshape(-1, 6, 6)
+        if is9.any():
+            gather = starts[is9, None] + np.arange(FULL_DIM * FULL_DIM)
+            full[is9] = flat[gather].reshape(-1, 9, 9)
+        return full
+
+    def to_transform_matrix(self) -> np.ndarray:
+        """Return 9D rows when present, otherwise the ordinary 6D matrix."""
+        return self.to_full_matrix() if self.has_nongrav_block() else self.to_matrix()
+
     @classmethod
     def from_matrix(cls, covariances: np.ndarray) -> "CoordinateCovariances":
         """
@@ -159,14 +208,37 @@ class CoordinateCovariances(qv.Table):
         ------
         ValueError : If the covariance matrices are not (N, 6, 6)
         """
-        # cov = pa.FixedShapeTensorArray.from_numpy_ndarray(covariances)
-        if covariances.shape[1:] != (6, 6):
-            raise ValueError(
-                f"Covariance matrices should have shape (N, 6, 6) but got {covariances.shape}"
+        covariances = np.asarray(covariances, dtype=np.float64)
+        if covariances.shape[1:] == (COORD_DIM, COORD_DIM):
+            flat = covariances.reshape(-1)
+            offsets = np.arange(
+                0,
+                (len(covariances) + 1) * COORD_DIM * COORD_DIM,
+                COORD_DIM * COORD_DIM,
+                dtype=np.int64,
             )
-        cov = covariances.flatten()
-        offsets = np.arange(0, (len(covariances) + 1) * 36, 36, dtype=np.int64)
-        return cls.from_kwargs(values=pa.LargeListArray.from_arrays(offsets, cov))
+            return cls.from_kwargs(values=pa.LargeListArray.from_arrays(offsets, flat))
+        if covariances.shape[1:] != (FULL_DIM, FULL_DIM):
+            raise ValueError(
+                "Covariance matrices should have shape (N, 6, 6) or (N, 9, 9) "
+                f"but got {covariances.shape}"
+            )
+        is6 = np.isnan(covariances[:, COORD_DIM:, :]).all(axis=(1, 2)) & np.isnan(
+            covariances[:, :, COORD_DIM:]
+        ).all(axis=(1, 2))
+        lengths = np.where(is6, COORD_DIM * COORD_DIM, FULL_DIM * FULL_DIM)
+        offsets = np.zeros(len(covariances) + 1, dtype=np.int64)
+        np.cumsum(lengths, out=offsets[1:])
+        flat = np.empty(int(offsets[-1]), dtype=np.float64)
+        if is6.any():
+            positions = offsets[:-1][is6, None] + np.arange(COORD_DIM * COORD_DIM)
+            flat[positions.reshape(-1)] = covariances[
+                is6, :COORD_DIM, :COORD_DIM
+            ].reshape(-1)
+        if (~is6).any():
+            positions = offsets[:-1][~is6, None] + np.arange(FULL_DIM * FULL_DIM)
+            flat[positions.reshape(-1)] = covariances[~is6].reshape(-1)
+        return cls.from_kwargs(values=pa.LargeListArray.from_arrays(offsets, flat))
 
     @classmethod
     def from_sigmas(cls, sigmas: np.ndarray) -> "CoordinateCovariances":
@@ -188,7 +260,7 @@ class CoordinateCovariances(qv.Table):
         return cls.from_matrix(sigmas_to_covariances(sigmas))
 
     @classmethod
-    def nulls(cls, length: int) -> "CoordinateCovariances":
+    def nulls(cls, length: int, **kwargs: int | float | str) -> "CoordinateCovariances":
         """
         Create a Covariances object with all covariance matrix elements set to NaN.
         Parameters
@@ -205,7 +277,8 @@ class CoordinateCovariances(qv.Table):
             values=pa.ListArray.from_arrays(
                 pa.array(np.arange(0, 36 * (length + 1), 36)),
                 pa.nulls(36 * length, pa.float64()),
-            )
+            ),
+            **kwargs,
         )
 
     def is_all_nan(self) -> bool:
@@ -487,6 +560,43 @@ def transform_covariances_sampling(
     return covariances_out
 
 
+def apply_linear_covariance_transform(
+    transform_matrices: np.ndarray,
+    covariances: np.ndarray,
+) -> np.ndarray:
+    """Apply a 6x6 linear transform to 6D or extended 9D covariance rows."""
+    from adam_core import _rust_native
+
+    matrices = np.asarray(transform_matrices, dtype=np.float64)
+    covariance_values = np.asarray(covariances, dtype=np.float64)
+    if matrices.shape == (COORD_DIM, COORD_DIM):
+        matrices = matrices.reshape(1, COORD_DIM, COORD_DIM)
+    if matrices.ndim != 3 or matrices.shape[1:] != (COORD_DIM, COORD_DIM):
+        raise ValueError(
+            "transform_matrices must have shape (6, 6) or (N, 6, 6), "
+            f"got {matrices.shape}"
+        )
+    if covariance_values.ndim != 3 or covariance_values.shape[1:] not in (
+        (COORD_DIM, COORD_DIM),
+        (FULL_DIM, FULL_DIM),
+    ):
+        raise ValueError(
+            "Covariance matrices should have shape (N, 6, 6) or (N, 9, 9), "
+            f"got {covariance_values.shape}"
+        )
+    if len(matrices) not in (1, len(covariance_values)):
+        raise ValueError(
+            "Number of transform matrices must be 1 or match the number of covariances."
+        )
+    return np.asarray(
+        _rust_native.apply_linear_covariance_transform_numpy(
+            np.ascontiguousarray(matrices),
+            np.ascontiguousarray(covariance_values),
+        ),
+        dtype=np.float64,
+    )
+
+
 def rust_covariance_transform(
     coords_values: np.ndarray,
     covariances: np.ndarray,
@@ -516,11 +626,12 @@ def rust_covariance_transform(
     if coords_values.ndim != 2 or coords_values.shape[1] != 6:
         raise ValueError("coords_values must have shape (N, 6)")
     n = coords_values.shape[0]
-    if covariances.shape != (n, 6, 6):
-        raise ValueError("covariances must have shape (N, 6, 6)")
+    if covariances.shape not in ((n, 6, 6), (n, 9, 9)):
+        raise ValueError("covariances must have shape (N, 6, 6) or (N, 9, 9)")
+    dimension = covariances.shape[1]
 
     cov_flat = np.ascontiguousarray(
-        np.asarray(covariances, dtype=np.float64).reshape(n, 36)
+        np.asarray(covariances, dtype=np.float64).reshape(n, dimension * dimension)
     )
     result = transform_coordinates_with_covariance_numpy(
         coords_values,
@@ -539,7 +650,7 @@ def rust_covariance_transform(
     coords_out, cov_flat_out = result
     return (
         np.asarray(coords_out, dtype=np.float64),
-        np.asarray(cov_flat_out, dtype=np.float64).reshape(n, 6, 6),
+        np.asarray(cov_flat_out, dtype=np.float64).reshape(n, dimension, dimension),
     )
 
 

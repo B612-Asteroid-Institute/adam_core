@@ -40,6 +40,7 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "add_light_time_numpy",
     "add_stellar_aberration_numpy",
     "apply_cosine_latitude_correction_numpy",
+    "apply_linear_covariance_transform_numpy",
     "apply_lagrange_coefficients_numpy",
     "bound_longitude_residual_column_in_place_numpy",
     "bound_longitude_residual_column_numpy",

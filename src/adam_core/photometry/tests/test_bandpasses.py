@@ -1,3 +1,6 @@
+import re
+from pathlib import Path
+
 import numpy as np
 import pyarrow.compute as pc
 import pytest
@@ -258,6 +261,65 @@ def test_on_unknown_skip_keeps_canonical_pass_through():
 def test_on_unknown_invalid_value_raises_immediately():
     with pytest.raises(ValueError, match="on_unknown must be 'raise' or 'skip'"):
         map_to_canonical_filter_bands(["W84"], ["g"], on_unknown="warn")  # type: ignore[arg-type]
+
+
+def test_documented_bandpass_inventory_matches_vendored_data():
+    docs_path = (
+        Path(__file__).parents[4]
+        / "docs"
+        / "source"
+        / "cookbook"
+        / "photometry_and_magnitude.rst"
+    )
+    docs = docs_path.read_text()
+
+    canonical_section = docs.split("Supported Canonical Filters", maxsplit=1)[1].split(
+        "Reported-Band Resolution", maxsplit=1
+    )[0]
+    canonical_table = canonical_section.split(".. list-table::", maxsplit=1)[1]
+    documented_filter_ids = set(re.findall(r"``([A-Za-z0-9_]+)``", canonical_table))
+    curves = load_bandpass_curves()
+    assert documented_filter_ids == set(curves.filter_id.to_pylist())
+
+    mapping_section = docs.split("Reported-Band Resolution", maxsplit=1)[1].split(
+        "Bandpass Conversion and Color Terms", maxsplit=1
+    )[0]
+    explicit_table = mapping_section.split(
+        ".. list-table:: Explicit observatory mappings", maxsplit=1
+    )[1].split("For ``X05``", maxsplit=1)[0]
+    documented_mappings = set()
+    for row in explicit_table.split("\n   * - ")[2:]:
+        cells = row.split("\n     - ")
+        observatory_codes = re.findall(r"``([A-Z0-9]+)``", cells[0])
+        band_mappings = re.findall(r"``([^`]+)``\s+→\s+``([A-Za-z0-9_]+)``", cells[1])
+        documented_mappings.update(
+            (observatory_code, reported_band, filter_id)
+            for observatory_code in observatory_codes
+            for reported_band, filter_id in band_mappings
+        )
+
+    mapping = load_observatory_band_map()
+    vendored_mappings = set(
+        zip(
+            mapping.observatory_code.to_pylist(),
+            mapping.reported_band.to_pylist(),
+            mapping.filter_id.to_pylist(),
+        )
+    )
+    assert documented_mappings == vendored_mappings
+
+    fallback_table = mapping_section.split(
+        ".. list-table:: Generic reported-band fallbacks", maxsplit=1
+    )[1].split("Generic fallback matching", maxsplit=1)[0]
+    documented_fallbacks = dict(
+        re.findall(r"\* - ``([^`]+)``\s+- ``([A-Za-z0-9_]+)``", fallback_table)
+    )
+    unknown_codes = [f"Z{i:02d}" for i in range(len(documented_fallbacks))]
+    resolved_fallbacks = map_to_canonical_filter_bands(
+        unknown_codes,
+        documented_fallbacks.keys(),
+    )
+    assert dict(zip(documented_fallbacks, resolved_fallbacks)) == documented_fallbacks
 
 
 def test_bandpass_curves_are_sane():

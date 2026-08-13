@@ -1,10 +1,10 @@
 # Public surface audit: I/O, queries, products, and utilities
 
-Audit date: 2026-07-17
+Audit date: 2026-08-12
 
 Parent bead: `personal-cmy.37.4`
 
-Audited revision: `f27370b2`
+Audited frozen updated-upstream revision: `757c09fca86adf9e3d5899952db3d379e09413f6`
 
 ## Decision applied
 
@@ -64,7 +64,7 @@ query paths depend on them, but they are not counted as public API commitments.
 | Family | Current Rust ownership | Closure under the one-crossing rule |
 |---|---|---|
 | Horizons | complete one-crossing Rust HTTP products | Rust owns API URLs, HTTP, 50-epoch chunking, CSV protocol parsing, target-name compatibility, ordering, element conversion, nulls, and nested Orbits/Ephemeris Arrow assembly; Python only projects time/code columns and wraps the returned batch |
-| NEOCC | complete one-crossing Rust HTTP product | Rust owns URL cleaning, HTTPS, OEF parsing, validation, covariance/state conversion, physical parameters, ordering, and nested Arrow assembly |
+| NEOCC | complete one-crossing Rust HTTP product | Rust owns URL cleaning, HTTPS, OEF parsing, validation, supported AMRAT/A2 solve-for decoding, AMRAT/DT warning products and marginalization, covariance/state conversion, physical parameters, ordering, and nested Arrow assembly |
 | Scout | complete one-crossing Rust HTTP products | Rust owns summary, sampled-orbit, and `file=mpc` HTTP/retry protocols; structured lifecycle errors; API 1.3 signature checks; strict Obs80 parsing; SHA-256/provenance metadata; cometary conversion; IDs/order; and ScoutObjectSummary/VariantOrbits/ScoutObservations Arrow assembly. Explicitly injected `http_get` remains the compatibility provider seam. |
 | SBDB | complete one-crossing Rust HTTP products | Both exports use the direct Rust client; Rust owns validation, fair-use sequential requests, timeout/retry/backoff, missing filtering, normalization, covariance/state conversion, physical parameters, order, and nested Arrow assembly |
 | ADES PSV | fused Rust writer/parser plus observation/context kernels | Public writer/parser each satisfy one crossing; Python only reconstructs compatibility dataclasses/quivr objects |
@@ -73,8 +73,8 @@ query paths depend on them, but they are not counted as public API commitments.
 | SPK | fused Rust fitting, Type 3/9 segment, multi-summary DAF, and product workflow | No-propagator products satisfy one crossing; optional propagation is the declared provider boundary followed by the same one product crossing. Rust owns transform/group/sort/IDs/windows/fits/units/segments and atomic output |
 | MPC | eight scalar pack/unpack functions and batched packed-date decode | Designation APIs and `convert_mpc_packed_dates` satisfy one Rust crossing; Astropy `Time` construction is a lazy optional compatibility boundary |
 | SPICE backend | kernel readers/writers and low-level backend methods | Low-level methods are thin; **gap:** high-level setup/data discovery, obscodes file read, Python cache/dedup, time/frame/unit conversion, and typed table assembly |
-| Chunk/LRU helpers | retired public-ish names | Unused numeric chunking module removed; LRU functions renamed private and retained only as the documented Python container cache-policy boundary around Rust semantic calls; private OD/query iterators remain tracked by their fused-workflow beads |
-| Parallel/Ray | none | **Gap:** arbitrary Python callable/ObjectRef orchestration cannot be treated as a permanent exception; migrate callers to fused Rayon operations and retire, or define a Rust-owned replacement |
+| Chunk/LRU helpers | bounded public cache-policy names retained; JAX chunking helpers retired | `bounded_lru_get`/`bounded_lru_put` are the documented Python container cache-policy boundary around Rust semantic calls. Frozen-upstream-only `pad_to_fixed_size` and `process_in_chunks` are durably retired because no production caller remains and default JAX is forbidden; private OD/query iterators belong to fused workflows. |
+| Parallel/Ray | retired optional dependency | Frozen-upstream-only `initialize_use_ray` and worker helpers are durably retired; fused Rust/Rayon operations own all default workflows, so default artifacts neither install nor import Ray. |
 
 The previous fixture files for ADES, OEM, OpenSpace, and MPC are useful parity
 evidence, but they do not prove a public API is one crossing. Likewise,
@@ -104,7 +104,7 @@ opt-in live tests cover service compatibility and errors.
 
 #### NEOCC
 
-Public package export `query_neocc` is a one-crossing veneer. Rust owns designation cleaning, epoch/type validation, HTTPS, OEF parsing, empty responses, reference/time-system errors, covariance-aware Keplerian conversion, physical parameters, row order, and nested Arrow assembly. Existing OEF fixtures gate complete products.
+Public package export `query_neocc` is a one-crossing veneer. Rust owns designation cleaning, epoch/type validation, HTTPS, OEF parsing, empty responses, reference/time-system errors, supported AMRAT/A2 solve-for decoding, A2 unit conversion, AMRAT marginalization, warning products for AMRAT/DT and other unsupported models, covariance-aware Keplerian conversion, physical parameters, row order, and nested Arrow assembly. Existing OEF fixtures gate complete products.
 
 #### Scout
 
@@ -250,11 +250,11 @@ breadth to spicekit.
 
 ### Generic utilities and execution
 
-The public-ish `bounded_lru_get`/`bounded_lru_put` names and unused
-`pad_to_fixed_size`/`process_in_chunks` module have been retired. One shared
-underscore-private bounded-LRU helper remains solely as the explicit Python
-container cache-policy boundary around Rust semantic state calls; it is not an
-adam-core public API. `_iterate_chunks` and `_iterate_chunk_indices` remain
+The public `bounded_lru_get`/`bounded_lru_put` names are retained as the one
+shared Python container cache-policy boundary around Rust semantic state calls;
+they contain no domain computation. The unused
+`pad_to_fixed_size`/`process_in_chunks` module remains intentionally retired.
+`_iterate_chunks` and `_iterate_chunk_indices` remain
 private implementation details of OD/IOD and Horizons and are eliminated with
 their fused workflow beads rather than promoted as standalone public APIs.
 

@@ -80,7 +80,7 @@ def convert_representation(
     if not source.covariance.is_all_nan():
         coords_out, covariances_out = rust_covariance_transform(
             values,
-            source.covariance.to_matrix(),
+            source.covariance.to_transform_matrix(),
             representation_in,
             representation_out,
             t0=t0,

@@ -305,10 +305,12 @@ class CartesianCoordinates(qv.Table):
             Rotated Cartesian coordinates and their covariances.
         """
         from .._rust.api import rotate_cartesian_time_varying_numpy
+        from .covariances import apply_linear_covariance_transform
 
         n = len(self)
-        cov_matrix = self.covariance.to_matrix()
-        cov_flat = np.ascontiguousarray(cov_matrix.reshape(n, 36))
+        cov_matrix = self.covariance.to_transform_matrix()
+        coordinate_covariance = cov_matrix[:, :6, :6]
+        cov_flat = np.ascontiguousarray(coordinate_covariance.reshape(n, 36))
         # Single shared rotation matrix applied to all rows; time_index
         # is a zero-vector pointing into a length-1 matrix table. The Rust
         # kernel handles the NaN policy for covariance (fill NaN with 0,
@@ -329,22 +331,27 @@ class CartesianCoordinates(qv.Table):
         covariances_rotated = np.asarray(cov_flat_rotated, dtype=np.float64).reshape(
             n, 6, 6
         )
+        if cov_matrix.shape[1] == 9:
+            covariance_mask = np.isnan(cov_matrix)
+            covariances_rotated = apply_linear_covariance_transform(
+                rotation_matrix, np.nan_to_num(cov_matrix, nan=0.0)
+            )
+            covariances_rotated[covariance_mask] = np.nan
 
-        # Check if any covariance elements are near zero, if so set them to zero
+        # Check if any coordinate-block elements are near zero, if so set them to zero
+        coordinate_block = covariances_rotated[:, :6, :6]
         near_zero = len(
-            covariances_rotated[
-                np.abs(covariances_rotated) < COVARIANCE_ROTATION_TOLERANCE
-            ]
+            coordinate_block[np.abs(coordinate_block) < COVARIANCE_ROTATION_TOLERANCE]
         )
         if near_zero > 0:
             logger.debug(
                 f"{near_zero} covariance elements are within {COVARIANCE_ROTATION_TOLERANCE:.0e}"
                 " of zero after rotation, setting these elements to 0."
             )
-            covariances_rotated = np.where(
-                np.abs(covariances_rotated) < COVARIANCE_ROTATION_TOLERANCE,
+            covariances_rotated[:, :6, :6] = np.where(
+                np.abs(coordinate_block) < COVARIANCE_ROTATION_TOLERANCE,
                 0,
-                covariances_rotated,
+                coordinate_block,
             )
 
         coords = self.from_kwargs(

@@ -30,6 +30,7 @@ without ever loading both interpreters' versions side-by-side.
 from __future__ import annotations
 
 import io
+import os
 import pickle
 import sys
 import time
@@ -52,6 +53,7 @@ from migration.parity._porkchop_runner import (
 
 def _coordinates_transform_coordinates(
     cases: list[dict[str, Any]],
+    spice_kernels: list[str] | None = None,
 ) -> dict[str, np.ndarray]:
     """Public ``transform_coordinates`` dispatcher on baseline main.
 
@@ -143,6 +145,20 @@ def _coordinates_transform_coordinates(
                 **covariance_kw,
             )
         raise ValueError(f"Unsupported representation_in: {representation_in}")
+
+    if spice_kernels is not None:
+        from adam_core.utils import spice as spice_module
+
+        expected = set(spice_kernels)
+        if spice_module.list_registered_kernels() != expected:
+            for kernel in list(spice_module.list_registered_kernels()):
+                spice_module.unregister_spice_kernel(kernel)
+            for kernel in spice_kernels:
+                spice_module.register_spice_kernel(kernel)
+        # The public transform calls setup_SPICE(), whose process sentinel is
+        # separate from the custom-kernel registry. Mark this exact shared pool
+        # initialized so it does not append independently-resolved DEFAULT_KERNELS.
+        os.environ[f"ADAM_CORE_SPICE_INITIALIZED_{os.getpid()}"] = "True"
 
     outputs: dict[str, np.ndarray] = {}
     for case in cases:
@@ -1086,14 +1102,16 @@ def _orbits_variant_orbits_create(
     coords: Any,
     epoch_mjd: Any,
     covariance: Any,
+    nongrav_values: Any,
     origin: str,
     frame: str,
+    include_nongrav: bool,
 ) -> dict[str, np.ndarray]:
     """Pinned legacy public ``VariantOrbits.create`` sigma-point facade."""
     from adam_core.coordinates.cartesian import CartesianCoordinates
     from adam_core.coordinates.covariances import CoordinateCovariances
     from adam_core.coordinates.origin import Origin
-    from adam_core.orbits import Orbits
+    from adam_core.orbits import NonGravitationalParameters, Orbits
     from adam_core.orbits.variants import VariantOrbits
     from adam_core.time import Timestamp
 
@@ -1113,11 +1131,17 @@ def _orbits_variant_orbits_create(
             np.asarray(covariance, dtype=np.float64)
         ),
     )
+    values = np.asarray(nongrav_values, dtype=np.float64)
     orbits = Orbits.from_kwargs(
         orbit_id=[str(i) for i in range(n)],
         coordinates=cart,
+        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
+            A1=values[:, 0], A2=values[:, 1], A3=values[:, 2]
+        ),
     )
-    out = VariantOrbits.create(orbits, method="sigma-point")
+    out = VariantOrbits.create(
+        orbits, method="sigma-point", include_nongrav=include_nongrav
+    )
     return {
         "coordinates": np.asarray(out.coordinates.values, dtype=np.float64),
         "weights": np.asarray(
@@ -1125,6 +1149,9 @@ def _orbits_variant_orbits_create(
         ),
         "weights_cov": np.asarray(
             out.weights_cov.to_numpy(zero_copy_only=False), dtype=np.float64
+        ),
+        "nongrav_values": np.asarray(
+            out.non_gravitational_parameters.to_array(), dtype=np.float64
         ),
     }
 

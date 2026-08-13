@@ -1,12 +1,12 @@
 # Public-surface audit: observations and source catalogs
 
-Audit date: 2026-07-17
+Audit date: 2026-08-12
 Parent bead: `personal-cmy.37.7`  
 Scope: every public class, function, custom method, and relevant inherited operation under `src/adam_core/observations`.
 
 ## Rules
 
-Only plotting/display may remain Python. Unchanged quivr constructors, descriptors, slicing, selection, and serialization are **external/generic** and do not earn Rust migration credit. A completed adam-core domain operation must execute directly in Rust or use a compatible one-crossing Python veneer. Qualifying deterministic work requires pinned-legacy parity and Rust-owned `std::time::Instant` timing.
+Only plotting/display may remain Python. Unchanged quivr constructors, descriptors, slicing, selection, and serialization are **external/generic** and do not earn Rust migration credit. A completed adam-core domain operation must execute directly in Rust or use a compatible one-crossing Python veneer. Qualifying deterministic work requires frozen updated-upstream parity and Rust-owned `std::time::Instant` timing.
 
 ## Generic data models
 
@@ -62,4 +62,4 @@ This domain defines no plotting APIs. Therefore no adam-core-owned method above 
 
 ## Closure
 
-The observations domain is complete against upstream `9b756803ab3afbe11e33df9e57d30a28e7976b92`. The ADES product task (`personal-cmy.37.4.3`) and all three observation-domain implementation children (`personal-cmy.37.7.1`, `.37.7.2`, `.37.7.3`) are closed: every deterministic grouping, projection, HEALPix, time, and observer workflow executes in Rust behind a one-crossing veneer with parity coverage (frozen legacy fixtures, healpy-oracle equality, legacy-valued unit tests, fused-vs-legacy assertions) and Rust-Instant timing. The remaining Python is limited to declared compatibility wrapping, computation-free generic quivr projections/constructors, generic `Linkage` key selection, and null-bearing compatibility inputs. Space/custom observer codes now share the Rust `Observers.from_codes` crossing.
+The observations domain is complete against frozen updated-upstream `757c09fca86adf9e3d5899952db3d379e09413f6`. The ADES product task (`personal-cmy.37.4.3`) and all three observation-domain implementation children (`personal-cmy.37.7.1`, `.37.7.2`, `.37.7.3`) are closed: every deterministic grouping, projection, HEALPix, time, and observer workflow executes in Rust behind a one-crossing veneer with parity coverage (frozen legacy fixtures, healpy-oracle equality, legacy-valued unit tests, fused-vs-legacy assertions) and Rust-Instant timing. The remaining Python is limited to declared compatibility wrapping, computation-free generic quivr projections/constructors, generic `Linkage` key selection, and null-bearing compatibility inputs. Space/custom observer codes now share the Rust `Observers.from_codes` crossing.

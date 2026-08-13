@@ -12,6 +12,10 @@ from .bandpasses.api import _composition_args, _data_dir_str
 from .bandpasses.api import compute_mix_integrals as _compute_bandpass_mix_integrals
 from .bandpasses.api import get_integrals as _get_bandpass_integrals
 
+# Compatibility name retained without importing JAX; current callers execute
+# the Rust/NumPy path and receive NumPy arrays.
+JAX_CHUNK_SIZE = 8192
+
 BandpassComposition: TypeAlias = Union[str, tuple[float, float]]
 
 # IAU two-parameter (H, G) phase-function coefficients (Bowell et al. 1989).  Defined
@@ -117,6 +121,18 @@ def bandpass_delta_table_for_composition_cached(
         _data_dir_str(), template_id=template_id, mix=mix
     )
     return np.asarray(delta, dtype=np.float64)
+
+
+@lru_cache(maxsize=None)
+def bandpass_delta_table_jax_for_composition_cached(
+    composition_key: BandpassComposition,
+) -> npt.NDArray[np.float64]:
+    """Return the cached delta table without importing JAX.
+
+    The historical function name is preserved for compatibility; its returned
+    NumPy array remains accepted by downstream array consumers.
+    """
+    return bandpass_delta_table_for_composition_cached(composition_key)
 
 
 def bandpass_delta_table_for_composition(

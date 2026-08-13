@@ -22,6 +22,7 @@ import logging
 from abc import ABC, abstractmethod
 from typing import Literal, Optional, Union
 
+from ..constants import Constants as _Constants
 from ..orbits.ephemeris import Ephemeris
 from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantOrbits
@@ -37,6 +38,10 @@ __all__ = [
     "OrbitType",
     "TimestampType",
 ]
+
+# Compatibility constant retained for callers that imported the upstream
+# propagator module's light-speed value.
+C = _Constants.C
 
 _CovarianceMethod = Literal["auto", "sigma-point", "monte-carlo"]
 
@@ -64,6 +69,7 @@ class EphemerisMixin(ABC):
         seed: Optional[int] = None,
         predict_magnitudes: bool = True,
         predict_phase_angle: bool = False,
+        include_nongrav: bool = True,
     ) -> Ephemeris:
         """Generate ephemerides for each orbit as observed by each observer.
 
@@ -90,6 +96,9 @@ class EphemerisMixin(ABC):
             optional outer distribution wrapper.
         predict_magnitudes, predict_phase_angle : bool, optional
             Whether to attach predicted V magnitude / phase angle columns.
+        include_nongrav : bool, optional
+            Whether the backend receives non-gravitational parameter values
+            and extended covariance. False requests gravity-only behavior.
 
         Returns
         -------
@@ -119,6 +128,7 @@ class Propagator(EphemerisMixin):
         chunk_size: int = 100,
         max_processes: Optional[int] = 1,
         seed: Optional[int] = None,
+        include_nongrav: bool = True,
     ) -> Union[Orbits, VariantOrbits]:
         """Propagate each orbit in ``orbits`` to each time in ``times``.
 
@@ -143,6 +153,9 @@ class Propagator(EphemerisMixin):
             Backend parallelism / determinism controls. Local parallelism is a
             backend (rayon) concern; ``max_processes`` is retained only for an
             optional outer distribution wrapper.
+        include_nongrav : bool, optional
+            Whether the backend receives non-gravitational parameter values
+            and extended covariance. False requests gravity-only behavior.
 
         Returns
         -------

@@ -425,7 +425,13 @@ def main() -> int:
         orbits = state["orbits"]
         epoch = state["epoch"]
         targets = Timestamp.from_mjd(epoch + TARGET_OFFSETS_DAYS, scale="tdb")
-        two_body = propagate_2body(orbits, targets, max_processes=1, chunk_size=1)
+        two_body = propagate_2body(
+            orbits,
+            targets,
+            max_processes=1,
+            chunk_size=1,
+            include_nongrav=False,
+        )
         propagator = ASSISTPropagator()
         n_body = propagator.propagate_orbits(
             orbits, targets, covariance=False, max_processes=1, chunk_size=1

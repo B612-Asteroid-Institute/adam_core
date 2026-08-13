@@ -245,7 +245,7 @@ class CometaryCoordinates(qv.Table):
         t0_np = self.time.to_numpy()
 
         if not self.covariance.is_all_nan():
-            cometary_covariances = self.covariance.to_matrix()
+            cometary_covariances = self.covariance.to_transform_matrix()
             rust_result = rust_covariance_transform(
                 self.values,
                 cometary_covariances,
@@ -303,7 +303,7 @@ class CometaryCoordinates(qv.Table):
         t0_np = cartesian.time.to_numpy()
 
         if not cartesian.covariance.is_all_nan():
-            cartesian_covariances = cartesian.covariance.to_matrix()
+            cartesian_covariances = cartesian.covariance.to_transform_matrix()
             rust_result = rust_covariance_transform(
                 cartesian.values,
                 cartesian_covariances,

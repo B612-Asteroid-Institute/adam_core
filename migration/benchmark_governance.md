@@ -85,6 +85,8 @@ Artifacts:
 - `migration/artifacts/parity_report.md`
 - `migration/artifacts/parity_table_rca.json`
 
+For broad baseline-independent public/native timing, use the current-only suites documented in [`migration/parity/README.md`](parity/README.md#current-only-benchmark-suites). They are performance inventories rather than machine-independent regression gates.
+
 ### Rust-only latency regression
 
 Use `pdm run rust-latency-gate` for post-legacy APIs and local performance

@@ -14,6 +14,8 @@ the full picture in one run, then exits non-zero if any failed.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import importlib.metadata
 import json
 import sys
 from dataclasses import dataclass, field
@@ -224,10 +226,27 @@ def format_summary(results: list[ApiResult]) -> str:
     return "\n".join(lines)
 
 
+def _spice_kernel_provenance() -> dict[str, object]:
+    from adam_core.utils.spice import DEFAULT_KERNELS
+
+    return {
+        "naif_eop_high_prec_version": importlib.metadata.version("naif-eop-high-prec"),
+        "kernels": [
+            {
+                "path": str(kernel_path),
+                "size_bytes": kernel_path.stat().st_size,
+                "sha256": hashlib.sha256(kernel_path.read_bytes()).hexdigest(),
+            }
+            for kernel_path in map(Path, DEFAULT_KERNELS)
+        ],
+    }
+
+
 def to_json(results: list[ApiResult]) -> dict:
     from . import comparison_metadata
 
     return {
+        "spice_kernel_provenance": _spice_kernel_provenance(),
         "apis": [
             {
                 "api_id": r.api_id,

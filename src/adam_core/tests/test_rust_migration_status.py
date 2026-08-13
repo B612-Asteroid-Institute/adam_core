@@ -1,4 +1,5 @@
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -25,7 +26,7 @@ from migration.parity import (
     tolerances,
 )
 from migration.parity.backend_candidates import BACKEND_CANDIDATES_BY_ID
-from migration.scripts import parity_table
+from migration.scripts import benchmark_current, parity_table
 from migration.scripts.rust_backend_benchmark_gate import (
     BENCHMARK_TO_API_ID,
     EXTERNALLY_BENCHMARKED,
@@ -126,6 +127,74 @@ def test_transform_coordinates_partial_coverage_is_visible() -> None:
     assert any("geodetic input" in case for case in migration.excluded_subcases)
 
 
+def test_transform_coordinates_parity_pins_shared_spice_kernel_paths() -> None:
+    rng = np.random.default_rng(20260429)
+    sample = _inputs.make("coordinates.transform_coordinates", rng, 128)
+
+    rust_kernels = sample.rust_kwargs["spice_kernels"]
+    legacy_kernels = sample.legacy_kwargs["spice_kernels"]
+    assert rust_kernels == legacy_kernels
+    assert len(rust_kernels) == 6
+    assert any(path.endswith(".bpc") for path in rust_kernels)
+
+
+def test_legacy_transform_shared_kernel_pool_blocks_default_kernel_append(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested = ["shared-current.bpc"]
+    registered: set[str] = set()
+    furnished: list[str] = []
+
+    class FakeSpiceModule:
+        @staticmethod
+        def list_registered_kernels() -> set[str]:
+            return registered.copy()
+
+        @staticmethod
+        def unregister_spice_kernel(kernel: str) -> None:
+            registered.discard(kernel)
+
+        @staticmethod
+        def register_spice_kernel(kernel: str) -> None:
+            registered.add(kernel)
+            furnished.append(kernel)
+
+    monkeypatch.setattr(
+        "adam_core.utils.spice.list_registered_kernels",
+        FakeSpiceModule.list_registered_kernels,
+    )
+    monkeypatch.setattr(
+        "adam_core.utils.spice.unregister_spice_kernel",
+        FakeSpiceModule.unregister_spice_kernel,
+    )
+    monkeypatch.setattr(
+        "adam_core.utils.spice.register_spice_kernel",
+        FakeSpiceModule.register_spice_kernel,
+    )
+    sentinel = f"ADAM_CORE_SPICE_INITIALIZED_{os.getpid()}"
+    monkeypatch.delenv(sentinel, raising=False)
+
+    with pytest.raises(ValueError, match="Unsupported representation_in"):
+        _legacy_runner._coordinates_transform_coordinates(
+            [
+                {
+                    "coords": np.zeros((1, 6)),
+                    "time_mjd": np.array([60_500.0]),
+                    "origin_in": "EARTH",
+                    "frame_in": "ecliptic",
+                    "frame_out": "equatorial",
+                    "representation_in": "unsupported",
+                    "representation_out": "cartesian",
+                }
+            ],
+            spice_kernels=requested,
+        )
+
+    assert furnished == requested
+    assert registered == set(requested)
+    assert os.environ[sentinel] == "True"
+
+
 def test_covariance_finite_difference_fixtures_are_visible() -> None:
     api_ids = {
         "dynamics.propagate_2body_with_covariance",
@@ -155,6 +224,18 @@ def test_moid_fixed_fixtures_cover_flat_and_unique_minima() -> None:
         "well_conditioned_unique_minimum",
     } <= fixture_names
     assert "unique-minimum" in migration.coverage_note
+
+
+def test_parity_artifact_records_spice_kernel_provenance() -> None:
+    artifact = parity_fuzz.to_json([])
+    provenance = artifact["spice_kernel_provenance"]
+
+    assert provenance["naif_eop_high_prec_version"]
+    kernels = provenance["kernels"]
+    assert len(kernels) == 6
+    assert all(len(kernel["sha256"]) == 64 for kernel in kernels)
+    assert all(kernel["size_bytes"] > 0 for kernel in kernels)
+    assert any(str(kernel["path"]).endswith(".bpc") for kernel in kernels)
 
 
 def test_parity_output_reports_headroom_and_nan_policy() -> None:
@@ -389,6 +470,28 @@ def test_github_actions_latency_baseline_matches_benchmark_scope() -> None:
         assert baseline[name]["thread_mode"] == "single"
         assert baseline[name]["rust_seconds_p50"] > 0.0
         assert baseline[name]["rust_seconds_p95"] > 0.0
+
+
+def test_current_benchmark_reuses_registry_and_canonical_lane_shapes() -> None:
+    parser = benchmark_current._build_arg_parser()
+    args = parser.parse_args(["--quick"])
+
+    assert benchmark_current._selected_api_ids(None, None) == [
+        migration.api_id for migration in API_MIGRATIONS
+    ]
+    assert [lane.name for lane in benchmark_current._lanes(args)] == [
+        "tiny-n",
+        "small-n",
+        "large-n",
+    ]
+    help_text = parser.format_help().lower()
+    source = Path(benchmark_current.__file__).read_text()
+    assert "legacy-cache" not in help_text
+    assert "legacy-root" not in help_text
+    assert "oracle-python" not in help_text
+    assert "_legacy_runner" not in source
+    assert "LEGACY_REPO_ROOT" not in source
+    assert "LEGACY_VENV_PYTHON" not in source
 
 
 def test_parity_speed_default_thread_mode_is_multi_thread() -> None:

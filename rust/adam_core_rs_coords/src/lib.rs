@@ -8,7 +8,8 @@ pub use types::{
     convert_mu_km3_s2_to_au3_day2, naif_origin_name, origin_code_mu_au3_day2, origin_mu_au3_day2,
     solar_system_barycenter_mu_au3_day2, ArrowSchemaExport, CoordinateBatch,
     CoordinateRepresentation, CoordinateValues, CovarianceBatch, CovarianceUnits, EphemerisBatch,
-    Epoch, Frame as DataFrame, IntoNestedRecordBatch, IntoRecordBatch, ObjectId, ObservatoryCode,
+    Epoch, Frame as DataFrame, IntoNestedRecordBatch, IntoRecordBatch,
+    NonGravitationalParametersBatch, NonGravitationalParametersRow, ObjectId, ObservatoryCode,
     ObserverBatch, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
     PhysicalParametersBatch, SchemaError, TimeArray, TimeScale, TimeScaleProvider,
     TryFromNestedRecordBatch, TryFromRecordBatch, Validity, VariantId, J2000_TDB_MJD, KM_PER_AU,
@@ -109,9 +110,9 @@ pub mod variant_sampling;
 pub use variant_sampling::{
     collapse_propagated_variants_to_orbits, collapse_variant_ephemeris,
     create_monte_carlo_orbit_variants, create_sampled_orbit_variants,
-    create_sigma_point_orbit_variants, sample_coordinate_covariances_flat,
-    sample_covariance_random_flat, sample_covariance_sigma_points_flat, OrbitVariantSamples,
-    OrbitVariantSamplingMethod,
+    create_sampled_orbit_variants_with_nongrav, create_sigma_point_orbit_variants,
+    sample_coordinate_covariances_flat, sample_covariance_random_flat,
+    sample_covariance_sigma_points_flat, OrbitVariantSamples, OrbitVariantSamplingMethod,
 };
 
 pub mod translation;
@@ -625,6 +626,151 @@ pub fn transform_with_covariance_flat6(
     (coords_out, cov_out)
 }
 
+/// Transform an arbitrary solved-state covariance whose first six dimensions
+/// are coordinates and whose remaining dimensions are invariant model
+/// parameters (currently A1/A2/A3). The full Jacobian is block diagonal
+/// `diag(J_coordinates, I_parameters)`, preserving coordinate/parameter cross
+/// covariance. The 6D path delegates to the established kernel verbatim.
+#[allow(clippy::too_many_arguments)]
+pub fn transform_with_covariance_flat(
+    coords_flat: &[f64],
+    covariance_flat: &[f64],
+    dimension: usize,
+    rep_in: Representation,
+    rep_out: Representation,
+    frame_in: Frame,
+    frame_out: Frame,
+    t0: &[f64],
+    mu_in: &[f64],
+    mu_out: &[f64],
+    a: f64,
+    f: f64,
+    max_iter: usize,
+    tol: f64,
+    translation_flat: Option<&[f64]>,
+) -> (Vec<f64>, Vec<f64>) {
+    assert!(dimension >= 6, "covariance dimension must be at least 6");
+    if dimension == 6 {
+        return transform_with_covariance_flat6(
+            coords_flat,
+            covariance_flat,
+            rep_in,
+            rep_out,
+            frame_in,
+            frame_out,
+            t0,
+            mu_in,
+            mu_out,
+            a,
+            f,
+            max_iter,
+            tol,
+            translation_flat,
+        );
+    }
+    let rows = coords_flat.len() / 6;
+    assert_eq!(
+        covariance_flat.len(),
+        rows * dimension * dimension,
+        "covariance_flat length must be N * dimension * dimension"
+    );
+    let mut values_out = vec![0.0; rows * 6];
+    let mut covariance_out = vec![0.0; covariance_flat.len()];
+    values_out
+        .par_chunks_mut(6)
+        .zip(covariance_out.par_chunks_mut(dimension * dimension))
+        .enumerate()
+        .for_each(|(row_index, (values_dst, covariance_dst))| {
+            let coordinate_start = row_index * 6;
+            let coordinates: [f64; 6] = coords_flat[coordinate_start..coordinate_start + 6]
+                .try_into()
+                .expect("coordinate row has six elements");
+            let translation: Option<[f64; 6]> = translation_flat.map(|values| {
+                values[coordinate_start..coordinate_start + 6]
+                    .try_into()
+                    .expect("translation row has six elements")
+            });
+            let covariance_start = row_index * dimension * dimension;
+            let covariance =
+                &covariance_flat[covariance_start..covariance_start + dimension * dimension];
+            let coordinate_only = (0..dimension).all(|index| {
+                (6..dimension).all(|parameter| {
+                    covariance[index * dimension + parameter].is_nan()
+                        && covariance[parameter * dimension + index].is_nan()
+                })
+            });
+            let mut coordinate_covariance = [0.0; 36];
+            for row in 0..6 {
+                coordinate_covariance[row * 6..row * 6 + 6]
+                    .copy_from_slice(&covariance[row * dimension..row * dimension + 6]);
+            }
+            let translation_values = translation.map(|values| values.to_vec());
+            let (values, transformed_coordinate_covariance) = transform_with_covariance_flat6(
+                &coordinates,
+                &coordinate_covariance,
+                rep_in,
+                rep_out,
+                frame_in,
+                frame_out,
+                &[t0[row_index]],
+                &[mu_in[row_index]],
+                &[mu_out[row_index]],
+                a,
+                f,
+                max_iter,
+                tol,
+                translation_values.as_deref(),
+            );
+            values_dst.copy_from_slice(&values);
+            covariance_dst.fill(f64::NAN);
+            for row in 0..6 {
+                covariance_dst[row * dimension..row * dimension + 6]
+                    .copy_from_slice(&transformed_coordinate_covariance[row * 6..row * 6 + 6]);
+            }
+            if coordinate_only {
+                return;
+            }
+            if covariance.iter().any(|value| value.is_nan()) {
+                covariance_dst.fill(f64::NAN);
+                return;
+            }
+            let (_, jacobian) = transform_row_with_jacobian(
+                coordinates,
+                rep_in,
+                rep_out,
+                frame_in,
+                frame_out,
+                t0[row_index],
+                mu_in[row_index],
+                mu_out[row_index],
+                a,
+                f,
+                max_iter,
+                tol,
+                translation,
+            );
+            for output_row in 0..6 {
+                for parameter in 6..dimension {
+                    covariance_dst[output_row * dimension + parameter] = (0..6)
+                        .map(|input| {
+                            jacobian[output_row][input] * covariance[input * dimension + parameter]
+                        })
+                        .sum();
+                    covariance_dst[parameter * dimension + output_row] = (0..6)
+                        .map(|input| {
+                            covariance[parameter * dimension + input] * jacobian[output_row][input]
+                        })
+                        .sum();
+                }
+            }
+            for row in 6..dimension {
+                covariance_dst[row * dimension + 6..row * dimension + dimension]
+                    .copy_from_slice(&covariance[row * dimension + 6..row * dimension + dimension]);
+            }
+        });
+    (values_out, covariance_out)
+}
+
 /// Value-only sibling of [`transform_with_covariance_flat6`]: run the full
 /// representation -> Cartesian -> (origin translation) -> constant-frame
 /// rotation -> representation composition and return `(values_flat, ncols)`,
@@ -956,20 +1102,91 @@ pub fn rotate_cartesian_frame_flat6(
 }
 
 /// Apply per-row time-varying 6x6 rotation matrices to a batch of
-/// Cartesian states (and optionally their 6x6 covariance matrices).
-///
-/// - `flat_coords`: row-major `[N*6]` states.
-/// - `flat_cov`: row-major `[N*36]` covariances, or empty slice to skip.
-/// - `time_index`: `[N]` per-row index into the matrix table. A single
-///   6x6 matrix can be reused across many rows when the workload has
-///   far fewer unique epochs than rows (the typical ephemeris case).
-/// - `matrices_flat`: `[U*36]` row-major 6x6 matrices (already in the
-///   caller's desired units — no unit conversion is applied here).
-///
-/// Returns `(rotated_coords_flat, rotated_cov_flat)`. When `flat_cov`
-/// is empty the returned cov buffer is also empty. NaN covariance rows
-/// pass through untouched (same convention as
-/// [`transform_with_covariance_flat6`]).
+/// Apply time-indexed 6x6 linear transforms to 6D or 9D covariance rows.
+/// The extended path is `diag(M, I3) Σ diag(M, I3)^T`. NaNs are zero-filled
+/// for the transform and restored at their original positions, preserving the
+/// public covariance-mask compatibility policy.
+pub fn apply_linear_covariance_transform_flat(
+    flat_cov: &[f64],
+    dimension: usize,
+    time_index: &[usize],
+    matrices_flat: &[f64],
+) -> Result<Vec<f64>, &'static str> {
+    if !matches!(dimension, 6 | 9) {
+        return Err("covariance dimension must be 6 or 9");
+    }
+    let n = flat_cov.len() / (dimension * dimension);
+    if flat_cov.len() != n * dimension * dimension {
+        return Err("flat_cov length must be N * dimension * dimension");
+    }
+    if time_index.len() != n {
+        return Err("time_index length must match covariance rows");
+    }
+    if !matrices_flat.len().is_multiple_of(36) {
+        return Err("matrices_flat length must be a multiple of 36");
+    }
+    let matrix_count = matrices_flat.len() / 36;
+    if time_index.iter().any(|&index| index >= matrix_count) {
+        return Err("time_index contains value >= number of matrices");
+    }
+
+    let mut output = vec![0.0_f64; flat_cov.len()];
+    output
+        .par_chunks_mut(dimension * dimension)
+        .zip(flat_cov.par_chunks(dimension * dimension))
+        .zip(time_index.par_iter())
+        .for_each(|((target, source), &matrix_index)| {
+            let matrix = &matrices_flat[matrix_index * 36..matrix_index * 36 + 36];
+            let mut filled = source.to_vec();
+            let nan_mask = source
+                .iter()
+                .map(|value| value.is_nan())
+                .collect::<Vec<_>>();
+            for (value, is_nan) in filled.iter_mut().zip(&nan_mask) {
+                if *is_nan {
+                    *value = 0.0;
+                }
+            }
+            let mut left = vec![0.0_f64; 6 * dimension];
+            for row in 0..6 {
+                for column in 0..dimension {
+                    for input in 0..6 {
+                        left[row * dimension + column] +=
+                            matrix[row * 6 + input] * filled[input * dimension + column];
+                    }
+                }
+            }
+            for row in 0..6 {
+                for column in 0..6 {
+                    for input in 0..6 {
+                        target[row * dimension + column] +=
+                            left[row * dimension + input] * matrix[column * 6 + input];
+                    }
+                }
+                for parameter in 6..dimension {
+                    target[row * dimension + parameter] = left[row * dimension + parameter];
+                }
+            }
+            if dimension == 9 {
+                for parameter in 6..9 {
+                    for column in 0..6 {
+                        target[parameter * dimension + column] =
+                            target[column * dimension + parameter];
+                    }
+                    target[parameter * dimension + 6..parameter * dimension + 9].copy_from_slice(
+                        &filled[parameter * dimension + 6..parameter * dimension + 9],
+                    );
+                }
+            }
+            for (value, is_nan) in target.iter_mut().zip(nan_mask) {
+                if is_nan {
+                    *value = f64::NAN;
+                }
+            }
+        });
+    Ok(output)
+}
+
 pub fn rotate_cartesian_time_varying_flat6(
     flat_coords: &[f64],
     flat_cov: &[f64],

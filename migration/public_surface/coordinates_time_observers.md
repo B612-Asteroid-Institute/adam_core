@@ -1,7 +1,7 @@
 # Coordinates, time, origins, and observers public-surface disposition
 
-Updated 2026-07-17 against upstream main
-`9b756803ab3afbe11e33df9e57d30a28e7976b92`. The symbol-level authority is
+Updated 2026-08-11 while integrating upstream main
+`757c09fca86adf9e3d5899952db3d379e09413f6`. The symbol-level authority is
 `manifest.json`; this document supplies the grouped disposition referenced by
 those rows.
 
@@ -31,8 +31,10 @@ those rows.
 
 | Surface group | Disposition | Evidence |
 |---|---|---|
-| covariance matrix/sigma/null accessors | data veneer | schema/null tests |
-| sigma expansion, PSD repair, random and sigma-point sampling, weighted mean/covariance, sampling transforms, coordinate-variant creation | one crossing into Rust computation, with Python RNG/UUID inputs supplied where compatibility requires nondeterminism | fixed/fuzz/statistical parity and Rust-owned timing |
+| covariance matrix/sigma/null accessors, 6D compatibility views, 9D full views, and non-grav block inspection | data veneer over validated Arrow storage; mixed batches promote to 9D with coordinate-only NaN padding | schema/null/mixed 6D-9D tests |
+| coordinate and SPICE covariance transforms | one crossing; Rust applies the coordinate Jacobian to 6D blocks and coordinate/non-grav cross blocks while preserving the 3D parameter block and coordinate-only padding | dedicated static/time-varying non-grav covariance regressions |
+| legacy generic `calc_jacobian` / `transform_covariances_jacobian` | explicitly retired reference-only JAX provider surface; no production caller remains and importing JAX by default is forbidden | compatibility-removal test/docs plus frozen updated-upstream oracle for reference behavior |
+| sigma expansion, PSD repair, random and sigma-point sampling, weighted mean/covariance, sampling transforms, coordinate-variant creation | one crossing into Rust computation for dimensions exactly 6 or 9, with Python RNG/UUID inputs supplied where compatibility requires nondeterminism | fixed/fuzz/statistical parity, 9D reconstruction/collapse tests, and Rust-owned timing |
 | `Residuals.calculate`, chi-square, longitude bounding, cosine-latitude correction, reduced chi-square | one crossing for built-in coordinate types; explicitly custom coordinate objects use the compatibility provider path | parity registry, custom-coordinate tests, native timing |
 | AU/km and AU/day/km/s scalar/vector/covariance conversions | one crossing or constant-factor veneer over Rust; operation order is fixed by compatibility tests | exact/fixed tests |
 

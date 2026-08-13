@@ -15,6 +15,38 @@ from ..constants import Constants as C
 MU = C.MU
 
 
+def izzo_lambert(
+    r1: np.ndarray,
+    r2: np.ndarray,
+    tof: float,
+    mu: float = MU,
+    M: int = 0,
+    prograde: bool = True,
+    low_path: bool = True,
+    maxiter: int = 35,
+    atol: float = 1e-10,
+    rtol: float = 1e-10,
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Solve one Lambert problem through the shared Rust Izzo kernel."""
+    from .._rust.api import izzo_lambert_numpy
+
+    values_r1 = np.asarray(r1, dtype=np.float64)
+    values_r2 = np.asarray(r2, dtype=np.float64)
+    velocities_1, velocities_2 = izzo_lambert_numpy(
+        values_r1.reshape(1, 3),
+        values_r2.reshape(1, 3),
+        np.array([tof], dtype=np.float64),
+        float(mu),
+        int(M),
+        bool(prograde),
+        bool(low_path),
+        int(maxiter),
+        float(atol),
+        float(rtol),
+    )
+    return velocities_1[0], velocities_2[0]
+
+
 def solve_lambert(
     r1: np.ndarray,
     r2: np.ndarray,

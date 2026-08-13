@@ -7,9 +7,10 @@ from astropy import units as u
 
 from ..._rust import propagate_2body_numpy
 from ...coordinates.cartesian import CartesianCoordinates
+from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.origin import Origin
 from ...dynamics.exceptions import DynamicsNumericalError
-from ...orbits import Orbits
+from ...orbits import NonGravitationalParameters, Orbits
 from ...orbits.physical_parameters import PhysicalParameters
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
@@ -112,6 +113,34 @@ _PROP2B_ORACLE_CASES = (
         ),
     },
 )
+
+
+def test_propagate_2body_include_nongrav_contract() -> None:
+    covariance = np.eye(9, dtype=np.float64)[None] * 1e-12
+    orbits = Orbits.from_kwargs(
+        orbit_id=["nongrav"],
+        object_id=["nongrav"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.017],
+            vz=[0.0],
+            time=Timestamp.from_mjd([60000.0], scale="tdb"),
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+            covariance=CoordinateCovariances.from_matrix(covariance),
+        ),
+        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(A1=[1e-12]),
+    )
+    target = Timestamp.from_mjd([60001.0], scale="tdb")
+    with pytest.raises(ValueError, match="does not support non-gravitational"):
+        propagate_2body(orbits, target)
+
+    propagated = propagate_2body(orbits, target, include_nongrav=False)
+    assert not propagated.has_non_gravitational_parameters()
+    assert not propagated.coordinates.covariance.has_nongrav_block()
 
 
 def _propagate_2body_single(

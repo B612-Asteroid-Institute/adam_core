@@ -137,7 +137,7 @@ class GeodeticCoordinates(qv.Table):
         covariances_geodetic = None
 
         if not cartesian.covariance.is_all_nan():
-            cartesian_covariances = cartesian.covariance.to_matrix()
+            cartesian_covariances = cartesian.covariance.to_transform_matrix()
             rust_result = rust_covariance_transform(
                 cartesian.values,
                 cartesian_covariances,

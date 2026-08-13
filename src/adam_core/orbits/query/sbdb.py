@@ -17,6 +17,7 @@ from ...coordinates.cometary import CometaryCoordinates
 from ...coordinates.covariances import CoordinateCovariances, sigmas_to_covariances
 from ...coordinates.origin import Origin
 from ...time import Timestamp
+from ..non_gravitational_parameters import NonGravitationalParameters
 from ..orbits import Orbits
 from ..physical_parameters import PhysicalParameters
 
@@ -269,10 +270,11 @@ def _orbits_from_sbdb_results(ids: npt.ArrayLike, results: List[OrderedDict]) ->
         object_id=object_ids,
         coordinates=coordinates.to_cartesian(),
         physical_parameters=physical_parameters,
+        non_gravitational_parameters=NonGravitationalParameters.nulls(len(results)),
     )
 
 
-def query_sbdb(ids: npt.ArrayLike) -> Orbits:
+def query_sbdb(ids: npt.ArrayLike, *, include_nongrav: bool = True) -> Orbits:
     """
     Query JPL's Small-Body Database (SBDB) for orbits. The epoch at
     which the orbits are returned are near the epoch as published by the
@@ -286,6 +288,10 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     ----------
     ids : list
         List of object IDs to query.
+    include_nongrav : bool, optional
+        Include the non-gravitational solution when the active Rust-backed
+        query path supplies one. False strips parameter values and reduces an
+        extended covariance to its 6x6 coordinate block.
 
     Returns
     -------
@@ -297,7 +303,10 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
     NotFoundError: If any of the queries object IDs are not found.
     """
     if _sbdb_compatibility.query is not _DEFAULT_SBDB_QUERY:
-        return _orbits_from_sbdb_results(ids, _get_sbdb_elements(ids))
+        orbits = _orbits_from_sbdb_results(ids, _get_sbdb_elements(ids))
+        return (
+            orbits if include_nongrav else orbits.without_non_gravitational_parameters()
+        )
 
     from adam_core import _rust_native
 
@@ -306,14 +315,19 @@ def query_sbdb(ids: npt.ArrayLike) -> Orbits:
 
     object_ids = [str(value) for value in ids]
     try:
-        batch = _rust_native.query_sbdb_arrow(object_ids, False, 60.0, 5, False, False)
+        batch, warnings = _rust_native.query_sbdb_arrow(
+            object_ids, False, 60.0, 5, False, False
+        )
+        for warning in warnings:
+            logger.warning("%s", warning)
     except RuntimeError as error:
         _raise_compatible_http_error(error)
     except ValueError as error:
         if str(error).startswith("__NOT_FOUND__:"):
             raise NotFoundError("object {} was not found", str(error).split(":", 1)[1])
         raise
-    return table_from_record_batch(Orbits, batch)
+    orbits = table_from_record_batch(Orbits, batch)
+    return orbits if include_nongrav else orbits.without_non_gravitational_parameters()
 
 
 def _sbdb_api_get_json(
@@ -547,10 +561,20 @@ def _orbits_from_sbdb_payloads(
     normalized = json.loads(
         _rn.query_sbdb_normalize_payloads(json.dumps(ids), json.dumps(payloads))
     )
+    for warning in normalized.get("warnings", []):
+        logger.warning("%s", warning)
     coords_cometary = np.asarray(normalized["coords_cometary"], dtype=np.float64)
-    covariances_cometary = np.asarray(
-        normalized["covariances_cometary"], dtype=np.float64
-    ).reshape(len(payloads), 6, 6)
+    covariance_rows = normalized["covariances_cometary"]
+    if any(len(row) == 81 for row in covariance_rows):
+        covariances_cometary = np.full((len(payloads), 9, 9), np.nan, dtype=np.float64)
+        for row_index, row in enumerate(covariance_rows):
+            dimension = int(np.sqrt(len(row)))
+            values = np.asarray(row, dtype=np.float64).reshape(dimension, dimension)
+            covariances_cometary[row_index, :dimension, :dimension] = values
+    else:
+        covariances_cometary = np.asarray(covariance_rows, dtype=np.float64).reshape(
+            len(payloads), 6, 6
+        )
     times = Timestamp.from_jd(
         pa.array(normalized["times_jd"], type=pa.float64()), scale="tdb"
     )
@@ -576,11 +600,20 @@ def _orbits_from_sbdb_payloads(
         G=np.asarray(phys["G"], dtype=np.float64),
         G_sigma=np.asarray(phys["G_sigma"], dtype=np.float64),
     )
+    nongrav_rows = normalized["non_gravitational_parameters"]
+    nongrav_columns = {
+        field: [row.get(field) for row in nongrav_rows]
+        for field in ("source", "A1", "A2", "A3", "ALN", "NK", "NM", "NN", "R0")
+    }
+    non_gravitational_parameters = NonGravitationalParameters.from_kwargs(
+        **nongrav_columns
+    )
     return Orbits.from_kwargs(
         orbit_id=np.array(normalized["orbit_id"], dtype="object"),
         object_id=np.array(normalized["object_id"], dtype="object"),
         coordinates=coordinates.to_cartesian(),
         physical_parameters=physical_parameters,
+        non_gravitational_parameters=non_gravitational_parameters,
     )
 
 
@@ -643,6 +676,7 @@ def query_sbdb_new(
     max_attempts: int = 5,
     allow_missing: bool = False,
     orbit_id_from_input: bool = False,
+    include_nongrav: bool = True,
 ) -> Orbits:
     """
     Query JPL SBDB for orbits using direct HTTP requests (new implementation).
@@ -665,6 +699,9 @@ def query_sbdb_new(
     orbit_id_from_input : bool, optional
         If True, set the returned `Orbits.orbit_id` values to the input IDs (after any missing
         filtering). This is useful when callers need to map rows back to the requested identifiers.
+    include_nongrav : bool, optional
+        Include A1/A2/A3, fixed Marsden constants, and the extended covariance.
+        If false, strip the parameters and reduce covariance to its 6D block.
     """
     from adam_core import _rust_native
 
@@ -698,13 +735,19 @@ def query_sbdb_new(
                 orbits = orbits.set_column(
                     "orbit_id", pa.array(kept_ids, type=pa.large_string())
                 )
-            return orbits
+            return (
+                orbits
+                if include_nongrav
+                else orbits.without_non_gravitational_parameters()
+            )
         orbits = _orbits_from_sbdb_payloads(obj_ids, payloads)
         if orbit_id_from_input:
             orbits = orbits.set_column(
                 "orbit_id", pa.array(obj_ids, type=pa.large_string())
             )
-        return orbits
+        return (
+            orbits if include_nongrav else orbits.without_non_gravitational_parameters()
+        )
     if max_concurrent_requests > 1:
         logger.warning(
             "query_sbdb_new is configured with max_concurrent_requests=%s. "
@@ -713,7 +756,7 @@ def query_sbdb_new(
             max_concurrent_requests,
         )
     try:
-        batch = _rust_native.query_sbdb_arrow(
+        batch, warnings = _rust_native.query_sbdb_arrow(
             obj_ids,
             True,
             float(timeout_s),
@@ -721,13 +764,16 @@ def query_sbdb_new(
             bool(allow_missing),
             bool(orbit_id_from_input),
         )
+        for warning in warnings:
+            logger.warning("%s", warning)
     except RuntimeError as error:
         _raise_compatible_http_error(error)
     except ValueError as error:
         if str(error).startswith("__NOT_FOUND__:"):
             raise NotFoundError("object {} was not found", str(error).split(":", 1)[1])
         raise
-    return table_from_record_batch(Orbits, batch)
+    orbits = table_from_record_batch(Orbits, batch)
+    return orbits if include_nongrav else orbits.without_non_gravitational_parameters()
 
 
 class NotFoundError(Exception):

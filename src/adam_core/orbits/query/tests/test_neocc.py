@@ -6,7 +6,12 @@ from adam_core import _rust_native
 from adam_core._rust.arrow import table_from_record_batch
 from adam_core.orbits import Orbits
 
-from ..neocc import _parse_oef, _physical_parameters_from_neocc
+from ..neocc import (
+    _full_covariance_from_upper_triangular,
+    _non_gravitational_parameters_from_neocc,
+    _parse_oef,
+    _physical_parameters_from_neocc,
+)
 
 TESTDATA_DIR = Path(__file__).parent / "testdata" / "neocc"
 
@@ -118,7 +123,10 @@ def test_query_neocc_recorded_products():
         payloads = [
             (TESTDATA_DIR / f"{obj}.{suffix}").read_text() for obj in object_ids
         ]
-        batch = _rust_native.query_neocc_arrow(object_ids, "ke", orbit_epoch, payloads)
+        batch, warnings = _rust_native.query_neocc_arrow(
+            object_ids, "ke", orbit_epoch, payloads
+        )
+        assert warnings == []
         orbits = table_from_record_batch(Orbits, batch)
         assert orbits.orbit_id.to_pylist() == object_ids
         assert orbits.object_id.to_pylist() == object_ids
@@ -189,15 +197,127 @@ def test_real_neocc_oef_files_parse_without_error() -> None:
 
 
 def test_empty_response() -> None:
-    batch = _rust_native.query_neocc_arrow(["1416T-2"], "ke", "present-day", [""])
+    batch, warnings = _rust_native.query_neocc_arrow(
+        ["1416T-2"], "ke", "present-day", [""]
+    )
+    assert warnings == []
     assert len(table_from_record_batch(Orbits, batch)) == 0
 
 
 def test_28element_matrix() -> None:
-    batch = _rust_native.query_neocc_arrow(
+    batch, warnings = _rust_native.query_neocc_arrow(
         ["2018 CW2"],
         "ke",
         "present-day",
         [(TESTDATA_DIR / "2018CW2.ke1").read_text()],
     )
+    assert warnings == []
     assert len(table_from_record_batch(Orbits, batch)) == 1
+
+
+def test_full_covariance_respects_solved_dimension() -> None:
+    upper = list(range(1, 29))
+    orbital = _full_covariance_from_upper_triangular(upper, solved_dimension=6)
+    extended = _full_covariance_from_upper_triangular(upper, solved_dimension=7)
+    assert orbital.shape == (6, 6)
+    assert extended.shape == (7, 7)
+    np.testing.assert_array_equal(extended[:6, :6], orbital)
+
+
+def test_parse_oef_nongrav_solution() -> None:
+    result = _parse_oef((TESTDATA_DIR / "99942.ke1").read_text())
+    assert result["nongrav"] == {
+        "model_used": 1,
+        "parameter_count": 2,
+        "dimension": 7,
+        "solve_for_parameter_codes": [2],
+        "vector": [0.0, -2.90010329254113e-04],
+    }
+    assert result["covariance"].shape == (6, 6)
+    assert result["covariance_full"].shape == (7, 7)
+    assert result["correlation_full"].shape == (7, 7)
+
+
+def test_non_gravitational_parameters_from_neocc_yarkovsky() -> None:
+    data = _parse_oef((TESTDATA_DIR / "101955.ke1").read_text())
+    nongrav = _non_gravitational_parameters_from_neocc(data)
+    assert nongrav.source[0].as_py() == "NEOCC"
+    assert np.isclose(nongrav.A2[0].as_py(), -4.60477568857430e-14)
+    assert nongrav.A1[0].as_py() is None
+    assert nongrav.A3[0].as_py() is None
+
+
+def test_non_gravitational_parameters_from_neocc_unsupported_model(caplog) -> None:
+    import logging
+
+    data = _parse_oef((TESTDATA_DIR / "99942.ke1").read_text())
+    data["nongrav"]["model_used"] = 2
+    data["nongrav"]["solve_for_parameter_codes"] = [3]
+    with caplog.at_level(logging.WARNING, logger="adam_core.orbits.query.neocc"):
+        nongrav = _non_gravitational_parameters_from_neocc(data)
+    assert any("unsupported" in record.message for record in caplog.records)
+    assert nongrav.A1[0].as_py() is None
+    assert nongrav.A2[0].as_py() is None
+    assert nongrav.A3[0].as_py() is None
+
+
+def test_query_neocc_recorded_builds_extended_covariance() -> None:
+    payload = (TESTDATA_DIR / "99942.ke1").read_text()
+    batch, warnings = _rust_native.query_neocc_arrow(
+        ["99942"], "ke", "present-day", [payload], True
+    )
+    assert warnings == []
+    orbits = table_from_record_batch(Orbits, batch)
+    assert orbits.coordinates.covariance.nongrav_block_mask().tolist() == [True]
+    covariance = orbits.coordinates.covariance.to_full_matrix()[0]
+    assert covariance.shape == (9, 9)
+    assert np.isclose(np.sqrt(covariance[7, 7]), 2.32321e-16, rtol=1e-4)
+    assert np.all(covariance[6, :] == 0.0)
+    assert np.all(covariance[8, :] == 0.0)
+    assert np.isclose(
+        orbits.non_gravitational_parameters.A2[0].as_py(),
+        -2.90010329254113e-14,
+    )
+
+
+def test_query_neocc_recorded_include_nongrav_false_strips_solution() -> None:
+    payload = (TESTDATA_DIR / "99942.ke1").read_text()
+    batch, warnings = _rust_native.query_neocc_arrow(
+        ["99942"], "ke", "present-day", [payload], False
+    )
+    assert warnings == []
+    orbits = table_from_record_batch(Orbits, batch)
+    assert orbits.non_gravitational_parameters.A2[0].as_py() is None
+    assert not orbits.coordinates.covariance.has_nongrav_block()
+
+
+def test_query_neocc_recorded_warns_and_drops_unsupported_dt() -> None:
+    payload = (TESTDATA_DIR / "99942.ke1").read_text()
+    payload_with_dt = payload.replace("LSP   1  2    7    2", "LSP   1  2    7    5")
+    assert payload_with_dt != payload
+
+    batch, warnings = _rust_native.query_neocc_arrow(
+        ["99942"], "ke", "present-day", [payload_with_dt], True
+    )
+    assert len(warnings) == 1
+    assert "unsupported" in warnings[0]
+    orbits = table_from_record_batch(Orbits, batch)
+    assert orbits.non_gravitational_parameters.A1[0].as_py() is None
+    assert orbits.non_gravitational_parameters.A2[0].as_py() is None
+    assert orbits.non_gravitational_parameters.A3[0].as_py() is None
+    assert not orbits.coordinates.covariance.has_nongrav_block()
+
+
+def test_query_neocc_recorded_warns_and_marginalizes_amrat() -> None:
+    payload = (TESTDATA_DIR / "99942.ke1").read_text()
+    payload_with_amrat = payload.replace("LSP   1  2    7    2", "LSP   1  2    7    1")
+    assert payload_with_amrat != payload
+
+    batch, warnings = _rust_native.query_neocc_arrow(
+        ["99942"], "ke", "present-day", [payload_with_amrat], True
+    )
+    assert len(warnings) == 1
+    assert "AMRAT" in warnings[0]
+    orbits = table_from_record_batch(Orbits, batch)
+    assert orbits.non_gravitational_parameters.A2[0].as_py() is None
+    assert not orbits.coordinates.covariance.has_nongrav_block()
