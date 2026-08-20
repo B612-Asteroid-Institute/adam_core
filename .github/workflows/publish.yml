@@ -10,7 +10,7 @@ on:
       expected_version:
         description: Exact PEP 440 release-candidate version
         required: true
-        default: 0.5.6rc4
+        default: 0.5.6rc5
         type: string
       repository:
         description: Destination index
@@ -99,6 +99,7 @@ jobs:
           mkdir dist
           find acceptance-artifacts -type f -name 'adam_core-*.whl' -exec cp '{}' dist/ ';'
           test "$(find dist -maxdepth 1 -name 'adam_core-*.whl' | wc -l | tr -d ' ')" = 12
+          python migration/scripts/check_wheel_artifacts.py dist
           python - <<'PY'
           import email
           import os

@@ -110,6 +110,22 @@ def _distribution_version(name: str) -> str:
     return importlib.metadata.version(name)
 
 
+def _validate_runtime_versions(
+    distribution_versions: dict[str, str], runtime_versions: dict[str, str]
+) -> dict[str, str]:
+    mismatches = {
+        name: {
+            "distribution": distribution_versions[name],
+            "runtime": runtime_version,
+        }
+        for name, runtime_version in runtime_versions.items()
+        if distribution_versions[name] != runtime_version
+    }
+    if mismatches:
+        raise AssertionError(f"runtime package version mismatch: {mismatches}")
+    return runtime_versions
+
+
 def _write_report(path: Path, report: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -207,6 +223,7 @@ def main() -> int:
         import adam_assist._native
         import adam_core
         import adam_core._rust_native
+        from adam_assist.version import __version__ as adam_assist_version
 
         forbidden_optional_distributions = (
             "astropy",
@@ -277,16 +294,25 @@ def main() -> int:
             raise AssertionError("ASSIST asteroids path must not be overridden")
         if _cache_files(kernel_cache):
             raise AssertionError("isolated kernel cache was not empty at startup")
-        return {
-            "versions": {
-                name: _distribution_version(name)
-                for name in (
-                    "adam-core",
-                    "adam-assist",
-                    "naif-de440",
-                    "jpl-small-bodies-de441-n16",
-                )
+        distribution_versions = {
+            name: _distribution_version(name)
+            for name in (
+                "adam-core",
+                "adam-assist",
+                "naif-de440",
+                "jpl-small-bodies-de441-n16",
+            )
+        }
+        runtime_versions = _validate_runtime_versions(
+            distribution_versions,
+            {
+                "adam-core": adam_core.__version__,
+                "adam-assist": adam_assist_version,
             },
+        )
+        return {
+            "versions": distribution_versions,
+            "runtime_versions": runtime_versions,
             "module_paths": {name: str(path) for name, path in module_paths.items()},
             "optional_distributions_absent": list(forbidden_optional_distributions),
             "optional_modules_loaded": eagerly_loaded,

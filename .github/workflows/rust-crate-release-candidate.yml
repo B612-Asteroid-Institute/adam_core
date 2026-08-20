@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 env:
-  PYTHON_PREVIEW_VERSION: "0.5.6rc4"
+  PYTHON_PREVIEW_VERSION: "0.5.6rc5"
   RUST_PREVIEW_VERSION: "0.1.0-rc.4"
 
 jobs:

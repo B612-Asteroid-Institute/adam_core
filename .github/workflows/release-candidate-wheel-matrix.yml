@@ -10,7 +10,7 @@ on:
       adam_assist_ref:
         description: adam-assist revision to test with this adam-core revision
         required: true
-        default: rust-migration-assist
+        default: release-candidate/adam-assist-0.4.0rc6
 
 permissions:
   contents: read
@@ -20,9 +20,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref || 'rust-migration-assist' }}
+  ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref || 'release-candidate/adam-assist-0.4.0rc6' }}
   PIP_ONLY_BINARY: ":all:"
-  PYTHON_PREVIEW_VERSION: "0.5.6rc4"
+  PYTHON_PREVIEW_VERSION: "0.5.6rc5"
 
 jobs:
   artifact-acceptance:
@@ -88,6 +88,10 @@ jobs:
               raise SystemExit(f"runner architecture mismatch: {actual} != {expected}")
           PY
 
+      - name: Write adam-core runtime version
+        if: matrix.platform.family == 'manylinux'
+        run: python migration/scripts/write_maturin_version.py
+
       - name: Build adam-core manylinux wheel
         if: matrix.platform.family == 'manylinux'
         uses: PyO3/maturin-action@v1
@@ -136,6 +140,16 @@ jobs:
             --workspace "$RUNNER_TEMP/acceptance" \
             --report "$RUNNER_TEMP/acceptance-report.json" \
             --python "$(command -v python)"
+
+      - name: Inspect adam-core wheel contents
+        shell: bash
+        run: |
+          set -euo pipefail
+          inspection="$RUNNER_TEMP/core-wheel-inspection"
+          rm -rf "$inspection"
+          mkdir -p "$inspection"
+          cp "$RUNNER_TEMP"/acceptance/wheelhouse/adam_core-*.whl "$inspection/"
+          python migration/scripts/check_wheel_artifacts.py "$inspection"
 
       - name: Verify platform wheel count and tags
         shell: bash

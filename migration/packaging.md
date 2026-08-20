@@ -1,6 +1,6 @@
 # adam-core Rust Packaging Notes
 
-Last updated: 2026-08-13.
+Last updated: 2026-08-20.
 
 ## Supported Build Path
 
@@ -8,6 +8,7 @@ Last updated: 2026-08-13.
 - `pdm run wheel-build` runs `pdm run wheel-version`, then `pdm build --no-sdist --dest dist`.
 - `pdm run wheel-inspect` must pass before uploading or using `dist/*.whl` as a release artifact. It rejects build-only runtime dependencies and packaged test modules as well as version/native-extension errors.
 - `pdm run rust-build` is an alias for `pdm run wheel-build`.
+- Direct Maturin manylinux jobs must run `migration/scripts/write_maturin_version.py` before building and `migration/scripts/check_wheel_artifacts.py` on the produced Core wheel before artifact upload. Clean-room acceptance also compares runtime package versions with installed distribution metadata.
 
 ## Version Source
 

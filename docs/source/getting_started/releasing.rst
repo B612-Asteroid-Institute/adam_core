@@ -22,10 +22,10 @@ Preview versions and opt-in installation
 ----------------------------------------
 
 The currently published migration preview is ``adam-core==0.5.6rc2`` on
-PyPI. The next locally prepared promotion candidate is
-``adam-core==0.5.6rc4`` with public Rust crates ``0.1.0-rc.4`` and exact
-internal requirements such as ``=0.1.0-rc.4``; it is not published until its
-exact artifacts complete the separately authorized hosted matrix. Pip and
+PyPI. The corrected promotion candidate is ``adam-core==0.5.6rc5`` with the already
+published public Rust crates ``0.1.0-rc.4`` and exact internal requirements
+such as ``=0.1.0-rc.4``; it is not published until its exact artifacts complete
+the separately authorized hosted matrix and post-download inspection. Pip and
 Cargo exclude prereleases from ordinary resolution;
 preview consumers must opt in with an exact pin. The Python wheel contains the
 Python veneer and compiled ``adam_core._rust_native`` extension, so Python
@@ -46,29 +46,23 @@ version, commit SHA, and destination. The collector verifies the run name,
 successful conclusion, exact head SHA, RC-only version, wheel metadata, and the
 complete 12-wheel matrix before assembling only ``adam_core`` wheels.
 
-The first release of each Rust crate uses a manually scoped token held only in
-the protected ``crates-io-preview`` environment; crates.io can attach an OIDC
-trusted publisher after that crate exists. Crate publication verifies the same
-explicit confirmation, candidate provenance, checksums, archive metadata,
-prerelease versions, and exact internal dependency pins, then uploads the exact
-candidate ``.crate`` archives in dependency order without repackaging or
-compiling. The bootstrap token must be revoked after owners and trusted
-publishers are configured.
+The six public Rust crates ``0.1.0-rc.4`` were published through crates.io OIDC
+trusted publishing from the exact hosted candidate archives. Crate publication
+verified explicit confirmation, candidate provenance, checksums, archive
+metadata, prerelease versions, and exact internal dependency pins, then
+uploaded the accepted ``.crate`` archives in dependency order without
+repackaging or compiling.
 
 Release order
 -------------
 
-After review and approval:
+The six Rust crates are already published. After review and approval:
 
-#. publish ``adam_core_rs_autodiff`` and
-   ``adam_core_rs_orbit_determination``;
-#. publish ``adam_core_rs_coords``, ``adam_core_rs_spice``,
-   ``adam_core_rs_kernel_data``, then the ``adam_core`` umbrella crate;
-#. publish the exact accepted ``adam-core`` RC wheel set and verify it from the
-   public index;
+#. publish the exact accepted ``adam-core==0.5.6rc5`` wheel set and verify it
+   from the public index;
 #. resolve adam-assist against exact public RC dependencies and test the
-   prepared ``adam-assist==0.4.0rc5`` candidate against
-   ``adam-core==0.5.6rc4``;
+   prepared ``adam-assist==0.4.0rc6`` candidate against
+   ``adam-core==0.5.6rc5``;
 #. publish the exact accepted ``adam-assist`` RC wheel set; and
 #. run the precovery-v2 clean package-manager smoke test with exact pins.
 
