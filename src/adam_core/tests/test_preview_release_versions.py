@@ -62,3 +62,19 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
 
     assert workflow.index(writer) < workflow.index(builder) < workflow.index(inspector)
     assert 'PYTHON_PREVIEW_VERSION: "0.5.6rc5"' in workflow
+
+
+def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
+    workflows = ROOT / ".github/workflows"
+    normal_ci = (workflows / "pip-build-lint-test-coverage.yml").read_text()
+    crate_ci = (workflows / "rust-crate-release-candidate.yml").read_text()
+    tier1 = (workflows / "tier1-dependent-smoke.yml").read_text()
+    assist_sha = "2aea9bed3f837faff70929c1ea3315d8853cf23a"
+
+    assert "dtolnay/rust-toolchain@1.87.0" in normal_ci
+    assert "dtolnay/rust-toolchain@1.87.0" in crate_ci
+    assert "dtolnay/rust-toolchain@1.87.0" in tier1
+    assert assist_sha in normal_ci
+    assert assist_sha in tier1
+    assert 'version("adam-core") == adam_core.__version__ == "0.5.6rc5"' in tier1
+    assert 'version("adam-assist") == assist_version == "0.4.0rc6"' in tier1
