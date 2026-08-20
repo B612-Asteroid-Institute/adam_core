@@ -1737,7 +1737,7 @@ fn dedup_epochs(times: &TimeArray) -> Result<(TimeArray, Vec<usize>), SpiceBacke
     // for unsorted input (non-adjacent duplicates).
     if epochs.windows(2).all(|w| key(&w[0]) <= key(&w[1])) {
         for epoch in epochs {
-            if unique.last().map(&key) != Some(key(epoch)) {
+            if unique.last().map(key) != Some(key(epoch)) {
                 unique.push(*epoch);
             }
             inverse.push(unique.len() - 1);

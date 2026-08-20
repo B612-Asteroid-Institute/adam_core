@@ -760,12 +760,12 @@ fn monte_carlo_samples<const N: usize>(
             *value = rng.standard_normal();
         }
         let mut values = *mean;
-        for dim in 0..N {
+        for (dim, value) in values.iter_mut().enumerate() {
             let mut offset = 0.0;
             for k in 0..N {
                 offset += z[k] * root[k][dim];
             }
-            values[dim] += offset;
+            *value += offset;
         }
         if values.iter().any(|value| !value.is_finite()) {
             return Err(SchemaError::InvalidRecordBatch(
@@ -1451,8 +1451,8 @@ fn symmetric_square_root_scaled_with_tolerance<const N: usize>(
     for row in 0..N {
         for col in 0..N {
             let mut value = 0.0;
-            for k in 0..N {
-                value += vectors[row][k] * roots[k] * vectors[col][k];
+            for (k, root) in roots.iter().enumerate() {
+                value += vectors[row][k] * *root * vectors[col][k];
             }
             sqrt[row][col] = value;
         }
