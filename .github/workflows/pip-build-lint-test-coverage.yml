@@ -133,7 +133,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: B612-Asteroid-Institute/adam-assist
-          ref: 2aea9bed3f837faff70929c1ea3315d8853cf23a
+          ref: 2ee4e37833b707f0d3fe4c8507e3b417c8204aea
           path: .ci/adam-assist
       - name: Build compatible downstream adam-assist
         env:
@@ -171,6 +171,8 @@ jobs:
         run: git fetch --prune --unshallow --tags
       - name: Set up Rust at the public-crate MSRV
         uses: dtolnay/rust-toolchain@1.87.0
+        with:
+          components: rustfmt, clippy
       - name: Set up PDM (cached)
         if: ${{ hashFiles('**/pdm.lock') != '' }}
         uses: pdm-project/setup-pdm@v4
@@ -189,7 +191,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: B612-Asteroid-Institute/adam-assist
-          ref: 2aea9bed3f837faff70929c1ea3315d8853cf23a
+          ref: 2ee4e37833b707f0d3fe4c8507e3b417c8204aea
           path: .ci/adam-assist
       - name: Build compatible downstream adam-assist
         env:

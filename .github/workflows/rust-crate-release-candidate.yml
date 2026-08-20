@@ -27,6 +27,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.87.0
+        with:
+          components: rustfmt, clippy
       - name: Verify prerelease versions and exact internal pins
         run: |
           python migration/scripts/verify_preview_versions.py \
