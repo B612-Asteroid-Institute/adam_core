@@ -18,6 +18,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Set up Rust at the public-crate MSRV
         uses: dtolnay/rust-toolchain@1.87.0
+        with:
+          components: rustfmt, clippy
       - name: Set up PDM
         uses: pdm-project/setup-pdm@v4
         with:
@@ -32,7 +34,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: B612-Asteroid-Institute/adam-assist
-          ref: be488eb3246d484663913567f994347016f9a047
+          ref: 159d0b2cf74918dcdade31d640ecebd4aec0a728
           path: dependent
       - name: Install dependent and adam_core wheel
         run: |

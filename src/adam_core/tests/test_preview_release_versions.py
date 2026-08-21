@@ -69,7 +69,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     normal_ci = (workflows / "pip-build-lint-test-coverage.yml").read_text()
     crate_ci = (workflows / "rust-crate-release-candidate.yml").read_text()
     tier1 = (workflows / "tier1-dependent-smoke.yml").read_text()
-    assist_sha = "be488eb3246d484663913567f994347016f9a047"
+    assist_sha = "159d0b2cf74918dcdade31d640ecebd4aec0a728"
 
     assert "dtolnay/rust-toolchain@1.87.0" in normal_ci
     assert "components: rustfmt, clippy" in normal_ci
@@ -80,3 +80,11 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert assist_sha in tier1
     assert 'version("adam-core") == adam_core.__version__ == "0.5.6rc5"' in tier1
     assert 'version("adam-assist") == assist_version == "0.4.0rc6"' in tier1
+
+    for workflow in workflows.glob("*.yml"):
+        source = workflow.read_text()
+        if "dtolnay/rust-toolchain@" not in source:
+            continue
+        assert "dtolnay/rust-toolchain@stable" not in source, workflow.name
+        assert "dtolnay/rust-toolchain@1.87.0" in source, workflow.name
+        assert "components: rustfmt, clippy" in source, workflow.name

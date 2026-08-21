@@ -20,7 +20,9 @@ jobs:
       - name: Get git tags
         run: git fetch --prune --unshallow --tags
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.87.0
+        with:
+          components: rustfmt, clippy
       - name: Set up PDM (cached)
         if: ${{ hashFiles('**/pdm.lock') != '' }}
         uses: pdm-project/setup-pdm@v4

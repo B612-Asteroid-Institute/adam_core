@@ -38,7 +38,9 @@ jobs:
     environment: crates-io-preview
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@1.87.0
+        with:
+          components: rustfmt, clippy
       - name: Verify exact RC tag and irreversible-action confirmation
         env:
           CONFIRMATION: ${{ inputs.confirmation }}

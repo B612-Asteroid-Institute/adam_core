@@ -75,7 +75,9 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.87.0
+        with:
+          components: rustfmt, clippy
 
       - name: Verify runner architecture
         shell: bash
