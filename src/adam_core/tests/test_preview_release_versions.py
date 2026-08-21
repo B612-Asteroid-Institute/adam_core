@@ -69,7 +69,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     normal_ci = (workflows / "pip-build-lint-test-coverage.yml").read_text()
     crate_ci = (workflows / "rust-crate-release-candidate.yml").read_text()
     tier1 = (workflows / "tier1-dependent-smoke.yml").read_text()
-    assist_sha = "a2e09852c59bf4c073d2c20c8999c5848a934a5a"
+    assist_sha = "c7795c1e205f33ad3c4e2f81d572c8344fda7be0"
 
     assert "dtolnay/rust-toolchain@1.87.0" in normal_ci
     assert "components: rustfmt, clippy" in normal_ci
