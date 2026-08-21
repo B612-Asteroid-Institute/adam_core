@@ -1,5 +1,5 @@
 import json
-import os
+import tomllib
 from pathlib import Path
 
 import numpy as np
@@ -11,18 +11,11 @@ from adam_core._rust.status import (
     validate_api_migrations,
 )
 from migration.parity import (
-    _assist_bench,
     _inputs,
-    _legacy_runner,
     _native_rust_runner,
-    _oracle,
     _threading,
-    _timing_cache,
     comparison_metadata,
-    parity_fixed,
     parity_fuzz,
-    parity_main,
-    parity_speed,
     tolerances,
 )
 from migration.parity.backend_candidates import BACKEND_CANDIDATES_BY_ID
@@ -30,11 +23,6 @@ from migration.scripts import benchmark_current, parity_table
 from migration.scripts.rust_backend_benchmark_gate import (
     BENCHMARK_TO_API_ID,
     EXTERNALLY_BENCHMARKED,
-)
-from migration.scripts.rust_backend_benchmark_gate import (
-    _build_arg_parser as _build_latency_arg_parser,
-)
-from migration.scripts.rust_backend_benchmark_gate import (
     _latency_summary,
     _thread_mode_from_argv,
 )
@@ -86,28 +74,6 @@ def test_no_dual_rows_without_current_legacy_implementation() -> None:
     ]
 
 
-def test_fixed_fixture_manifest_entries_are_registered() -> None:
-    fixed_fixture_ids = set(parity_fixed.all_api_ids())
-
-    assert fixed_fixture_ids <= set(API_MIGRATIONS_BY_ID)
-    assert all(
-        API_MIGRATIONS_BY_ID[api_id].parity_coverage in {"fixed-fixture", "random-fuzz"}
-        for api_id in fixed_fixture_ids
-    )
-
-
-def test_gauss_iod_constrained_random_fuzz_is_visible() -> None:
-    migration = API_MIGRATIONS_BY_ID["orbit_determination.gaussIOD"]
-
-    assert migration.parity_coverage == "random-fuzz"
-    assert migration.coverage_note
-    assert "Random fuzz is constrained" in migration.coverage_note
-    assert migration.covered_subcases
-    assert migration.excluded_subcases
-    assert "orbit_determination.gaussIOD" in _inputs.all_api_ids()
-    assert "orbit_determination.gaussIOD" in parity_fixed.all_api_ids()
-
-
 def test_transform_coordinates_partial_coverage_is_visible() -> None:
     migration = API_MIGRATIONS_BY_ID["coordinates.transform_coordinates"]
 
@@ -136,94 +102,6 @@ def test_transform_coordinates_parity_pins_shared_spice_kernel_paths() -> None:
     assert rust_kernels == legacy_kernels
     assert len(rust_kernels) == 6
     assert any(path.endswith(".bpc") for path in rust_kernels)
-
-
-def test_legacy_transform_shared_kernel_pool_blocks_default_kernel_append(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    requested = ["shared-current.bpc"]
-    registered: set[str] = set()
-    furnished: list[str] = []
-
-    class FakeSpiceModule:
-        @staticmethod
-        def list_registered_kernels() -> set[str]:
-            return registered.copy()
-
-        @staticmethod
-        def unregister_spice_kernel(kernel: str) -> None:
-            registered.discard(kernel)
-
-        @staticmethod
-        def register_spice_kernel(kernel: str) -> None:
-            registered.add(kernel)
-            furnished.append(kernel)
-
-    monkeypatch.setattr(
-        "adam_core.utils.spice.list_registered_kernels",
-        FakeSpiceModule.list_registered_kernels,
-    )
-    monkeypatch.setattr(
-        "adam_core.utils.spice.unregister_spice_kernel",
-        FakeSpiceModule.unregister_spice_kernel,
-    )
-    monkeypatch.setattr(
-        "adam_core.utils.spice.register_spice_kernel",
-        FakeSpiceModule.register_spice_kernel,
-    )
-    sentinel = f"ADAM_CORE_SPICE_INITIALIZED_{os.getpid()}"
-    monkeypatch.delenv(sentinel, raising=False)
-
-    with pytest.raises(ValueError, match="Unsupported representation_in"):
-        _legacy_runner._coordinates_transform_coordinates(
-            [
-                {
-                    "coords": np.zeros((1, 6)),
-                    "time_mjd": np.array([60_500.0]),
-                    "origin_in": "EARTH",
-                    "frame_in": "ecliptic",
-                    "frame_out": "equatorial",
-                    "representation_in": "unsupported",
-                    "representation_out": "cartesian",
-                }
-            ],
-            spice_kernels=requested,
-        )
-
-    assert furnished == requested
-    assert registered == set(requested)
-    assert os.environ[sentinel] == "True"
-
-
-def test_covariance_finite_difference_fixtures_are_visible() -> None:
-    api_ids = {
-        "dynamics.propagate_2body_with_covariance",
-        "dynamics.generate_ephemeris_2body_with_covariance",
-    }
-
-    assert api_ids <= set(parity_fixed.all_api_ids())
-    for api_id in api_ids:
-        migration = API_MIGRATIONS_BY_ID[api_id]
-        assert migration.parity_coverage == "random-fuzz"
-        assert "finite-difference covariance fixture" in migration.coverage_note
-        assert any(
-            "finite-difference covariance witness" in case
-            for case in migration.covered_subcases
-        )
-
-
-def test_moid_fixed_fixtures_cover_flat_and_unique_minima() -> None:
-    migration = API_MIGRATIONS_BY_ID["dynamics.calculate_moid"]
-    fixture_names = {
-        fixture.name
-        for fixture in parity_fixed.FIXTURES_BY_API["dynamics.calculate_moid"]
-    }
-
-    assert {
-        "identical_circular_flat_minimum",
-        "well_conditioned_unique_minimum",
-    } <= fixture_names
-    assert "unique-minimum" in migration.coverage_note
 
 
 def test_parity_artifact_records_spice_kernel_provenance() -> None:
@@ -337,7 +215,6 @@ def test_raw_statistics_kernels_are_random_fuzz_with_diagnostic_speed() -> None:
         assert migration.status == "raw-kernel-only"
         assert migration.parity_coverage == "random-fuzz"
         assert "diagnostic raw-kernel comparisons" in migration.coverage_note
-        assert parity_speed._is_diagnostic_speed_api(api_id)
 
 
 def test_raw_coordinate_kernels_are_random_fuzz_with_diagnostic_speed() -> None:
@@ -353,7 +230,6 @@ def test_raw_coordinate_kernels_are_random_fuzz_with_diagnostic_speed() -> None:
         assert migration.parity_coverage == "random-fuzz"
         assert "diagnostic raw-kernel comparisons" in migration.coverage_note
         assert migration.covered_subcases
-        assert parity_speed._is_diagnostic_speed_api(api_id)
 
     transform_covariance = API_MIGRATIONS_BY_ID[
         "coordinates.transform_coordinates_with_covariance"
@@ -378,7 +254,6 @@ def test_residual_helper_kernels_are_random_fuzz() -> None:
         assert migration.status == "public-rust-default"
         assert migration.parity_coverage == "random-fuzz"
         assert migration.covered_subcases
-        assert not parity_speed._is_diagnostic_speed_api(api_id)
 
 
 def test_tisserand_parameter_is_random_fuzz() -> None:
@@ -389,7 +264,6 @@ def test_tisserand_parameter_is_random_fuzz() -> None:
     assert migration.status == "public-rust-default"
     assert migration.parity_coverage == "random-fuzz"
     assert migration.covered_subcases
-    assert not parity_speed._is_diagnostic_speed_api(api_id)
 
 
 def test_raw_propagation_arc_kernels_are_random_fuzz_with_diagnostic_speed() -> None:
@@ -405,7 +279,6 @@ def test_raw_propagation_arc_kernels_are_random_fuzz_with_diagnostic_speed() -> 
         assert migration.parity_coverage == "random-fuzz"
         assert "diagnostic raw-kernel comparisons" in migration.coverage_note
         assert migration.covered_subcases
-        assert parity_speed._is_diagnostic_speed_api(api_id)
 
 
 def test_raw_batch_kernels_are_random_fuzz_with_diagnostic_speed() -> None:
@@ -421,7 +294,6 @@ def test_raw_batch_kernels_are_random_fuzz_with_diagnostic_speed() -> None:
         assert migration.parity_coverage == "random-fuzz"
         assert "diagnostic raw-kernel comparisons" in migration.coverage_note
         assert migration.covered_subcases
-        assert parity_speed._is_diagnostic_speed_api(api_id)
 
 
 def test_latency_gate_registry_matches_latency_benchmark_scope() -> None:
@@ -472,16 +344,20 @@ def test_github_actions_latency_baseline_matches_benchmark_scope() -> None:
         assert baseline[name]["rust_seconds_p95"] > 0.0
 
 
-def test_current_ci_scripts_are_normal_ci_legacy_free_gates() -> None:
+def test_current_ci_scripts_are_complete_normal_ci_legacy_free_gates() -> None:
     repo_root = Path(__file__).resolve().parents[3]
-    pyproject = (repo_root / "pyproject.toml").read_text()
+    with (repo_root / "pyproject.toml").open("rb") as pyproject_file:
+        command = tomllib.load(pyproject_file)["tool"]["pdm"]["scripts"][
+            "benchmark-current-ci"
+        ]
     workflow = (
         repo_root / ".github" / "workflows" / "pip-build-lint-test-coverage.yml"
     ).read_text()
 
-    assert "benchmark-current-ci" in pyproject
-    assert "test-current-regression" in pyproject
-    assert "--require-native" in pyproject
+    assert "--lanes tiny small large" in command
+    assert "--trials 3" in command
+    assert "--require-native" in command
+    assert "--quick" not in command
     assert "pdm run benchmark-current-ci" in workflow
     assert "pdm run test-current-regression" in workflow
     assert "current-only-benchmark" in workflow
@@ -489,16 +365,16 @@ def test_current_ci_scripts_are_normal_ci_legacy_free_gates() -> None:
 
 def test_current_benchmark_reuses_registry_and_canonical_lane_shapes() -> None:
     parser = benchmark_current._build_arg_parser()
-    args = parser.parse_args(["--quick"])
+    args = parser.parse_args([])
 
     assert benchmark_current._selected_api_ids(None, None) == [
         migration.api_id for migration in API_MIGRATIONS
     ]
-    assert [lane.name for lane in benchmark_current._lanes(args)] == [
-        "tiny-n",
-        "small-n",
-        "large-n",
-    ]
+    lanes = benchmark_current._lanes(args)
+    assert [lane.name for lane in lanes] == ["tiny-n", "small-n", "large-n"]
+    assert [lane.reps for lane in lanes] == [101, 21, 7]
+    assert args.trials == 3
+    assert args.quick is False
     help_text = parser.format_help().lower()
     source = Path(benchmark_current.__file__).read_text()
     assert "legacy-cache" not in help_text
@@ -507,25 +383,6 @@ def test_current_benchmark_reuses_registry_and_canonical_lane_shapes() -> None:
     assert "_legacy_runner" not in source
     assert "LEGACY_REPO_ROOT" not in source
     assert "LEGACY_VENV_PYTHON" not in source
-
-
-def test_parity_speed_default_thread_mode_is_multi_thread() -> None:
-    parser = parity_speed._build_arg_parser()
-    args = parser.parse_args([])
-    assert args.threads == "multi-thread"
-
-
-def test_parity_main_default_thread_mode_is_multi_thread() -> None:
-    parser = parity_main._build_arg_parser()
-    args = parser.parse_args([])
-    assert args.threads == "multi-thread"
-
-
-def test_speed_trial_counts_are_source_governed() -> None:
-    assert parity_speed.CANONICAL_SPEED_TRIALS >= 3
-    assert "--trials" not in parity_speed._build_arg_parser().format_help()
-    assert "--speed-trials" not in parity_main._build_arg_parser().format_help()
-    assert "--trials" not in _build_latency_arg_parser().format_help()
 
 
 def test_thread_mode_native_is_deprecated_alias_for_multi_thread() -> None:
@@ -576,49 +433,6 @@ def test_latency_summary_uses_median_of_trial_percentiles() -> None:
     assert summary["latency_aggregation"] == "median-of-trial-percentiles"
 
 
-def test_parity_speed_summary_uses_median_of_trial_percentiles() -> None:
-    samples = [
-        [1.0, 1.0, 1.0, 1.0, 1.0],
-        [1.0, 1.0, 1.0, 1.0, 100.0],
-        [2.0, 2.0, 2.0, 2.0, 2.0],
-    ]
-
-    summary = parity_speed._timing_summary(samples)
-
-    assert summary["timing_trials"] == 3
-    assert summary["p50_s"] == 1.0
-    assert summary["p95_s"] == 2.0
-    assert summary["p95_trials_s"][1] > 50.0
-    assert summary["sample_trials_s"] == samples
-    assert summary["timing_aggregation"] == "median-of-trial-percentiles"
-
-
-def test_single_thread_policy_sets_and_forwards_caps(monkeypatch) -> None:
-    monkeypatch.setenv("PYTHONPATH", "/tmp/should-not-leak")
-    monkeypatch.setenv("RAYON_NUM_THREADS", "8")
-
-    env: dict[str, str] = {}
-    snapshot = _threading.apply_thread_mode("single", env)
-    assert snapshot["RAYON_NUM_THREADS"] == "1"
-    assert snapshot["JAX_NUM_THREADS"] == "1"
-    assert snapshot["XLA_FLAGS"] == (
-        "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
-    )
-
-    subprocess_env = _oracle._subprocess_env(thread_mode="single")
-    assert subprocess_env["RAYON_NUM_THREADS"] == "1"
-    assert subprocess_env["OMP_NUM_THREADS"] == "1"
-    assert subprocess_env["OPENBLAS_NUM_THREADS"] == "1"
-    assert subprocess_env["MKL_NUM_THREADS"] == "1"
-    assert subprocess_env["VECLIB_MAXIMUM_THREADS"] == "1"
-    assert subprocess_env["NUMEXPR_NUM_THREADS"] == "1"
-    assert subprocess_env["JAX_NUM_THREADS"] == "1"
-    assert subprocess_env["XLA_FLAGS"] == (
-        "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
-    )
-    assert "PYTHONPATH" not in subprocess_env
-
-
 def test_workload_shape_records_multi_axis_large_lanes() -> None:
     workloads = _inputs.lane_workloads()
     ephemeris = workloads["large-n"]["dynamics.generate_ephemeris_2body"]
@@ -628,87 +442,6 @@ def test_workload_shape_records_multi_axis_large_lanes() -> None:
     assert ephemeris.axes() == {"orbits": 400, "epochs": 50}
     assert photometry.axes() == {"orbits": 1000, "observers": 50}
     assert "×" in ephemeris.label()
-
-
-def test_speed_artifact_records_thread_metadata() -> None:
-    result = parity_speed.SpeedResult(
-        api_id="coordinates.cartesian_to_spherical",
-        n=1,
-        rust_p50=1.0,
-        rust_p95=1.0,
-        legacy_p50=2.0,
-        legacy_p95=2.0,
-        speedup_p50=2.0,
-        speedup_p95=2.0,
-        raw_passed=True,
-        passed=True,
-        timing_trials=3,
-        rust_sample_trials_s=[[1.0], [1.0], [1.0]],
-        rust_p50_trials_s=[1.0, 1.0, 1.0],
-        rust_p95_trials_s=[1.0, 1.0, 1.0],
-        legacy_sample_trials_s=[[2.0], [2.0], [2.0]],
-        legacy_p50_trials_s=[2.0, 2.0, 2.0],
-        legacy_p95_trials_s=[2.0, 2.0, 2.0],
-        speedup_p50_trials=[2.0, 2.0, 2.0],
-        speedup_p95_trials=[2.0, 2.0, 2.0],
-        native_rust_status="measured",
-        native_rust_p50=0.5,
-        native_rust_p95=0.5,
-        current_python_over_native_rust_p50=2.0,
-        current_python_over_native_rust_p95=2.0,
-        native_rust_entrypoint="example::direct_rust",
-        native_rust_timing_boundary="Rust Instant; no Python/PyO3 in samples",
-        native_rust_sample_trials_s=[[0.5], [0.5], [0.5]],
-        native_rust_p50_trials_s=[0.5, 0.5, 0.5],
-        native_rust_p95_trials_s=[0.5, 0.5, 0.5],
-        thread_mode="single",
-        thread_env=_threading.SINGLE_THREAD_ENV.copy(),
-        cold_thread_mode="native",
-        cold_thread_env={key: None for key in _threading.THREAD_ENV_KEYS},
-    )
-
-    artifact = parity_speed.to_json([result])
-
-    assert artifact["canonical_speed_trials"] == parity_speed.CANONICAL_SPEED_TRIALS
-    assert artifact["timing_aggregation"] == "median-of-trial-percentiles"
-    assert artifact["semantic_cache_policy"] == (
-        "semantic-result-caches-cleared-before-each-sample"
-    )
-    assert artifact["semantic_caches_cleared"] == [
-        "observer-state",
-        "origin-translation",
-        "spkez-state",
-    ]
-    assert (
-        artifact["apis"][0]["semantic_cache_policy"]
-        == artifact["semantic_cache_policy"]
-    )
-    assert "Semantic result caches are cleared" in artifact["timing_policy"]
-    assert artifact["thread_mode"] == "single"
-    assert artifact["thread_env"]["RAYON_NUM_THREADS"] == "1"
-    assert artifact["cold_thread_mode"] == "native"
-    assert artifact["lanes"][0]["name"] == "small-n"
-    assert artifact["lanes"][0]["enforced"] is True
-    assert artifact["lanes"][0]["timing_trials"] == [3]
-    assert "single-trial" in artifact["timing_policy"]
-    assert artifact["apis"][0]["rust_sample_trials_s"] == [[1.0], [1.0], [1.0]]
-    assert "current_python_sample_trials_s" not in artifact["apis"][0]
-    assert "current_python_p50_trials_s" not in artifact["apis"][0]
-    row = artifact["apis"][0]
-    assert row["legacy_p95_trials_s"] == [2.0, 2.0, 2.0]
-    assert row["current_python_p50_s"] == row["rust_p50_s"] == 1.0
-    assert row["native_rust_p50_s"] == 0.5
-    assert row["current_python_over_native_rust_p50"] == 2.0
-    assert "no Python/PyO3" in row["native_rust_timing_boundary"]
-    assert artifact["performance_columns_schema_version"] == 1
-    assert "directly in Rust" in artifact["performance_columns"]["native_rust"]
-    assert "large-n" in artifact["lane_policy"]
-    assert "multi-thread" in artifact["thread_policy"]
-    lane_cell = parity_table._format_lane_cell(row)
-    assert "legacy adam_core 2.000s/2.000s" in lane_cell
-    assert "current Python 1.000s/1.000s" in lane_cell
-    assert "native Rust 500.00ms/500.00ms" in lane_cell
-    assert "Python/native 2.00x/2.00x" in lane_cell
 
 
 def test_simple_timing_renderer_uses_canonical_candidate_names_and_blank_native() -> (
@@ -744,60 +477,6 @@ def test_simple_timing_renderer_uses_canonical_candidate_names_and_blank_native(
     assert "| 6.00ms / 7.00ms | 200.0µs / 300.0µs | 10.0µs / 20.0µs |" in rendered
     assert (
         parity_table._build_arg_parser().parse_args(["--simple-timings"]).simple_timings
-    )
-
-
-def test_current_and_legacy_speed_loops_clear_caches_outside_samples(
-    monkeypatch,
-) -> None:
-    current_events: list[str] = []
-    monkeypatch.setattr(
-        parity_speed,
-        "clear_semantic_result_caches",
-        lambda: current_events.append("clear"),
-    )
-    from migration.parity import _rust_runner
-
-    monkeypatch.setattr(
-        _rust_runner,
-        "run",
-        lambda api_id, **kwargs: current_events.append(f"run:{api_id}"),
-    )
-    samples = parity_speed._time_rust("example", {}, reps=2, warmup=1)
-    assert len(samples) == 2
-    assert current_events == [
-        "clear",
-        "run:example",
-        "clear",
-        "run:example",
-        "clear",
-        "run:example",
-    ]
-
-    legacy_events: list[str] = []
-    monkeypatch.setattr(
-        _legacy_runner,
-        "clear_semantic_result_caches",
-        lambda: legacy_events.append("clear"),
-    )
-    monkeypatch.setattr(
-        _legacy_runner,
-        "_run_one",
-        lambda api_id, kwargs: legacy_events.append(f"run:{api_id}") or {},
-    )
-    response = _legacy_runner._handle(
-        {"api": "example", "mode": "time", "kwargs": {}, "reps": 2, "warmup": 1}
-    )
-    assert response["ok"] is True
-    assert len(response["elapsed"]) == 2
-    assert legacy_events == current_events
-
-
-def test_semantic_cache_policy_names_the_complete_known_cache_set() -> None:
-    assert _timing_cache.SEMANTIC_CACHES_CLEARED == (
-        "observer-state",
-        "origin-translation",
-        "spkez-state",
     )
 
 
@@ -1077,439 +756,3 @@ def test_every_parity_api_has_an_intentional_native_rust_todo_bucket() -> None:
         "coordinates.rotate_cartesian_time_varying",
     } <= catch_all
     assert not any(api_id.startswith("bridge.") for api_id in todos)
-
-
-def test_all_26_assist_lanes_are_wired_to_native_rust_timing() -> None:
-    root = Path(__file__).resolve().parents[3]
-    propagation = (
-        root / "migration/scripts/benchmark_assist_public_semantics.py"
-    ).read_text()
-    covariance = (root / "migration/scripts/benchmark_assist_covariance.py").read_text()
-    impacts = (root / "migration/scripts/benchmark_assist_impacts.py").read_text()
-
-    assert propagation.count("Workload(") == 17
-    assert covariance.count("CovarianceWorkload(") == 6
-    assert "LANES = (10, 50, 200)" in impacts
-    assert (
-        sum(
-            "time_native_rust" in source
-            for source in (propagation, covariance, impacts)
-        )
-        == 3
-    )
-    assert 'native_rust_status": "measured' in impacts
-
-
-def test_assist_payload_requires_rust_owned_native_samples() -> None:
-    payload = _assist_bench.performance_timing_payload(
-        [2.0, 2.0, 2.0],
-        [1.0, 1.0, 1.0],
-        [0.5, 0.5, 0.5],
-        native_operation="propagation",
-    )
-
-    assert payload["legacy_adam_core"]["p50"] == 2.0
-    assert payload["legacy_adam_core"]["samples_alias"] == "python.values"
-    assert payload["current_python"]["p50"] == 1.0
-    assert payload["current_python"]["samples_alias"] == "rust.values"
-    assert "values" not in payload["current_python"]
-    assert payload["native_rust"]["status"] == "measured"
-    assert payload["native_rust"]["operation"] == "propagation"
-    assert payload["native_rust"]["timer"] == "std::time::Instant"
-    assert payload["native_rust"]["p50"] == 0.5
-
-
-def test_parity_main_exposes_additive_legacy_cache_refresh_controls() -> None:
-    parser = parity_main._build_arg_parser()
-    help_text = parser.format_help()
-    args = parser.parse_args(
-        [
-            "--speed-legacy-cache",
-            "cache.json",
-            "--speed-refresh-legacy-cache",
-            "--speed-replace-legacy-cache",
-        ]
-    )
-
-    assert args.speed_refresh_legacy_cache
-    assert args.speed_replace_legacy_cache
-    assert "merge" in help_text
-    assert "--speed-replace-legacy-cache" in help_text
-
-
-def test_legacy_relevant_untracked_status_filters_non_code(monkeypatch) -> None:
-    def fake_git_output(args: list[str], *, cwd: Path) -> str:
-        assert "--untracked-files=all" in args
-        return "\n".join(
-            [
-                "?? .pi/session.json",
-                "?? decisions.md",
-                "?? src/adam_core/new_module.py",
-                "?? adam_core/top_level.py",
-                " M src/adam_core/existing.py",
-            ]
-        )
-
-    monkeypatch.setattr(parity_speed, "_git_output", fake_git_output)
-
-    status = parity_speed._legacy_relevant_untracked_status()
-
-    assert "src/adam_core/new_module.py" in status
-    assert "adam_core/top_level.py" in status
-    assert ".pi/session.json" not in status
-    assert "decisions.md" not in status
-    assert "existing.py" not in status
-
-
-def test_legacy_identity_fails_loudly_when_checkout_commit_drifts(monkeypatch) -> None:
-    expected = "936cc636096fcfefcee3e1310c21528444f39546"
-    actual = "0000000000000000000000000000000000000000"
-
-    def fake_git_output(args: list[str], *, cwd: Path) -> str:
-        if args[:2] == ["rev-parse", "HEAD"]:
-            return actual
-        return ""
-
-    monkeypatch.setattr(parity_speed, "EXPECTED_LEGACY_GIT_COMMIT", expected)
-    monkeypatch.setattr(parity_speed, "_git_output", fake_git_output)
-    monkeypatch.setattr(parity_speed, "_legacy_relevant_untracked_status", lambda: "")
-
-    try:
-        parity_speed._legacy_identity()
-    except ValueError as exc:
-        message = str(exc)
-        assert "committed speed baseline expects" in message
-        assert expected in message
-        assert actual in message
-    else:
-        raise AssertionError("legacy checkout commit drift should fail explicitly")
-
-
-def test_refresh_legacy_cache_merges_existing_entries(monkeypatch, tmp_path) -> None:
-    identity = {
-        "git_commit": "baseline",
-        "process_version": "test",
-        "benchmark_source_hash": "new-source",
-        "timing_process_hash": "process-source",
-        "legacy_packages_hash": "packages",
-    }
-    monkeypatch.setattr(parity_speed, "_legacy_identity", lambda: identity)
-    cache_path = tmp_path / "legacy_cache.json"
-    cache_path.write_text("""
-        {
-          "schema_version": 1,
-          "process_version": "rm-p1-023-canonical-variant-create-v1",
-          "created_at": "2026-05-05T00:00:00+00:00",
-          "updated_at": "2026-05-05T00:00:00+00:00",
-          "legacy_identity": {
-            "git_commit": "baseline",
-            "process_version": "test",
-            "benchmark_source_hash": "old-source",
-            "timing_process_hash": "process-source",
-            "legacy_packages_hash": "packages"
-          },
-          "warm": {"existing-warm": {"key_fields": {"kind": "warm"}}},
-          "cold": {"existing-cold": {"key_fields": {"kind": "cold"}}}
-        }
-        """)
-
-    try:
-        parity_speed.prepare_legacy_timing_cache(cache_path)
-    except ValueError as exc:
-        assert "benchmark source hash" in str(exc)
-    else:
-        raise AssertionError("source-hash drift should fail without refresh")
-
-    untouched_cache = parity_speed.prepare_legacy_timing_cache(cache_path, refresh=True)
-    assert untouched_cache is not None
-    parity_speed.write_legacy_timing_cache(untouched_cache)
-    untouched = __import__("json").loads(cache_path.read_text())
-    assert untouched["legacy_identity"]["benchmark_source_hash"] == "old-source"
-
-    cache = parity_speed.prepare_legacy_timing_cache(cache_path, refresh=True)
-    assert cache is not None
-    parity_speed._write_cache_entry(
-        cache,
-        "warm",
-        "new-warm",
-        {"key_fields": {"kind": "warm", "api_id": "new"}, "samples_s": [1.0]},
-    )
-    parity_speed.write_legacy_timing_cache(cache)
-
-    merged = __import__("json").loads(cache_path.read_text())
-    assert merged["legacy_identity"] == identity
-    assert set(merged["warm"]) == {"existing-warm", "new-warm"}
-    assert set(merged["cold"]) == {"existing-cold"}
-    assert merged["warm"]["new-warm"]["legacy_identity"] == identity
-
-    replaced = parity_speed.prepare_legacy_timing_cache(
-        cache_path,
-        refresh=True,
-        replace=True,
-    )
-    assert replaced is not None
-    assert parity_speed._cache_section(replaced, "warm") == {}
-    assert parity_speed._cache_section(replaced, "cold") == {}
-
-
-def test_legacy_cache_entry_identity_allows_source_hash_only_drift() -> None:
-    identity = {
-        "git_commit": "baseline",
-        "process_version": "test",
-        "benchmark_source_hash": "new-source",
-        "timing_process_hash": "process-source",
-        "legacy_packages_hash": "packages",
-    }
-    fields = {"kind": "warm", "api_id": "api", "process_version": "test"}
-    old_source_identity = dict(identity)
-    old_source_identity["benchmark_source_hash"] = "old-source"
-    context = {
-        "data": {
-            "legacy_identity": identity,
-            "warm": {
-                "key": {
-                    "key_fields": fields,
-                    "samples_s": [1.0],
-                    "legacy_identity": old_source_identity,
-                }
-            },
-        },
-        "refresh": False,
-        "hits": {"warm": 0, "cold": 0},
-        "misses": {"warm": 0, "cold": 0},
-        "writes": {"warm": 0, "cold": 0},
-    }
-
-    assert parity_speed._cached_entry(context, "warm", "key", fields) is not None
-    assert context["hits"] == {"warm": 1, "cold": 0}
-
-    del context["data"]["warm"]["key"]["legacy_identity"]
-    try:
-        parity_speed._cached_entry(context, "warm", "key", fields)
-    except ValueError as exc:
-        assert "missing legacy_identity" in str(exc)
-    else:
-        raise AssertionError("missing per-entry identity should fail cache lookup")
-
-    context["data"]["warm"]["key"]["legacy_identity"] = old_source_identity
-    stale_identity = dict(old_source_identity)
-    stale_identity["legacy_packages_hash"] = "other-packages"
-    context["data"]["warm"]["key"]["legacy_identity"] = stale_identity
-    try:
-        parity_speed._cached_entry(context, "warm", "key", fields)
-    except ValueError as exc:
-        assert "different legacy checkout" in str(exc)
-    else:
-        raise AssertionError("non-source identity drift should fail cache lookup")
-
-
-def test_time_legacy_warm_rejects_stale_entry_identity(monkeypatch) -> None:
-    identity = {
-        "git_commit": "baseline",
-        "process_version": "test",
-        "benchmark_source_hash": "source",
-        "timing_process_hash": "process-source",
-        "legacy_packages_hash": "packages",
-    }
-    stale_identity = dict(identity)
-    stale_identity["legacy_packages_hash"] = "other-packages"
-    workload_shape = {"rows": 1, "axes": {}, "label": "rows=1"}
-    fields = parity_speed._legacy_cache_fields(
-        kind="warm",
-        api_id="api",
-        lane="small-n",
-        workload_shape=workload_shape,
-        seed=123,
-        thread_mode="single",
-        reps=1,
-        warmup=0,
-    )
-    key = parity_speed._hash_json(fields)
-    context = {
-        "data": {
-            "legacy_identity": identity,
-            "warm": {
-                key: {
-                    "key_fields": fields,
-                    "samples_s": [1.0],
-                    "legacy_identity": stale_identity,
-                }
-            },
-            "cold": {},
-        },
-        "refresh": False,
-        "hits": {"warm": 0, "cold": 0},
-        "misses": {"warm": 0, "cold": 0},
-        "writes": {"warm": 0, "cold": 0},
-    }
-
-    def fail_time_legacy(*args: object, **kwargs: object) -> list[float]:
-        raise AssertionError("stale cache lookup should fail before measurement")
-
-    monkeypatch.setattr(_oracle, "time_legacy", fail_time_legacy)
-
-    try:
-        parity_speed._time_legacy_warm(
-            "api",
-            {},
-            reps=1,
-            warmup=0,
-            seed=123,
-            thread_mode="single",
-            lane="small-n",
-            workload_shape=workload_shape,
-            workload_label="rows=1",
-            legacy_cache=context,
-        )
-    except ValueError as exc:
-        assert "different legacy checkout" in str(exc)
-    else:
-        raise AssertionError("stale per-entry identity should fail warm lookup")
-    assert context["hits"] == {"warm": 0, "cold": 0}
-
-
-def test_time_legacy_warm_refresh_writes_entry_identity(monkeypatch) -> None:
-    identity = {
-        "git_commit": "baseline",
-        "process_version": "test",
-        "benchmark_source_hash": "source",
-        "timing_process_hash": "process-source",
-        "legacy_packages_hash": "packages",
-    }
-    workload_shape = {"rows": 1, "axes": {}, "label": "rows=1"}
-    context = {
-        "data": {"legacy_identity": identity, "warm": {}, "cold": {}},
-        "refresh": True,
-        "dirty": False,
-        "hits": {"warm": 0, "cold": 0},
-        "misses": {"warm": 0, "cold": 0},
-        "writes": {"warm": 0, "cold": 0},
-    }
-    samples = [0.1, 0.2, 0.3]
-
-    monkeypatch.setattr(
-        _oracle,
-        "time_legacy",
-        lambda *args, **kwargs: samples,
-    )
-
-    measured, source, key = parity_speed._time_legacy_warm(
-        "api",
-        {},
-        reps=3,
-        warmup=0,
-        seed=123,
-        thread_mode="single",
-        lane="small-n",
-        workload_shape=workload_shape,
-        workload_label="rows=1",
-        legacy_cache=context,
-    )
-
-    assert measured == samples
-    assert source == "refreshed"
-    entry = context["data"]["warm"][key]
-    assert entry["legacy_identity"] == identity
-    assert entry["samples_s"] == samples
-    assert context["dirty"] is True
-    assert context["writes"] == {"warm": 1, "cold": 0}
-
-
-def test_speed_artifact_records_legacy_cache_metadata() -> None:
-    result = parity_speed.SpeedResult(
-        api_id="coordinates.cartesian_to_spherical",
-        n=1,
-        rust_p50=1.0,
-        rust_p95=1.0,
-        legacy_p50=2.0,
-        legacy_p95=2.0,
-        speedup_p50=2.0,
-        speedup_p95=2.0,
-        raw_passed=True,
-        passed=True,
-        legacy_source="cache",
-        legacy_cache_key="warm-key",
-    )
-    cache_context = {
-        "path": Path("migration/artifacts/parity_legacy_speed_baseline.json"),
-        "data": {
-            "schema_version": parity_speed.LEGACY_TIMING_CACHE_SCHEMA_VERSION,
-            "process_version": parity_speed.LEGACY_TIMING_CACHE_PROCESS_VERSION,
-            "legacy_identity": {"git_commit": "baseline"},
-            "warm": {
-                "warm-key": {
-                    "captured_at": "2026-05-05T00:00:00+00:00",
-                    "legacy_identity": {
-                        "git_commit": "baseline",
-                        "benchmark_source_hash": "source",
-                    },
-                }
-            },
-            "cold": {},
-        },
-        "refresh": False,
-        "dirty": False,
-        "hits": {"warm": 1, "cold": 0},
-        "misses": {"warm": 0, "cold": 0},
-        "writes": {"warm": 0, "cold": 0},
-    }
-
-    artifact = parity_speed.to_json([result], legacy_cache=cache_context)
-
-    assert artifact["legacy_timing_cache"]["hits"] == {"warm": 1, "cold": 0}
-    assert artifact["legacy_timing_cache"]["entry_freshness"]["warm"] == {
-        "entries": 1,
-        "captured_at_min": "2026-05-05T00:00:00+00:00",
-        "captured_at_max": "2026-05-05T00:00:00+00:00",
-        "missing_legacy_identity": 0,
-        "distinct_legacy_identities": 1,
-        "benchmark_source_hashes": ["source"],
-    }
-    assert artifact["apis"][0]["legacy_source"] == "cache"
-    assert artifact["apis"][0]["legacy_cache_key"] == "warm-key"
-
-
-def test_speed_artifact_enforces_large_lane_and_records_status() -> None:
-    small = parity_speed.SpeedResult(
-        api_id="coordinates.cartesian_to_spherical",
-        n=2000,
-        rust_p50=1.0,
-        rust_p95=1.0,
-        legacy_p50=2.0,
-        legacy_p95=2.0,
-        speedup_p50=2.0,
-        speedup_p95=2.0,
-        raw_passed=True,
-        passed=True,
-        lane="small-n",
-        lane_enforced=True,
-        workload_shape={"rows": 2000, "axes": {}, "label": "rows=2000"},
-        workload_label="rows=2000",
-    )
-    large = parity_speed.SpeedResult(
-        api_id="coordinates.cartesian_to_spherical",
-        n=20_000,
-        rust_p50=2.0,
-        rust_p95=2.0,
-        legacy_p50=2.0,
-        legacy_p95=2.0,
-        speedup_p50=1.0,
-        speedup_p95=1.0,
-        raw_passed=False,
-        passed=False,
-        lane="large-n",
-        lane_enforced=True,
-        workload_shape={"rows": 20_000, "axes": {}, "label": "rows=20000"},
-        workload_label="rows=20000",
-        min_speedup_p50=1.0,
-        min_speedup_p95=1.0,
-    )
-
-    artifact = parity_speed.to_json([small, large])
-
-    assert artifact["all_passed"] is False
-    assert [lane["name"] for lane in artifact["lanes"]] == ["small-n", "large-n"]
-    assert artifact["lane_status"]["large-n"]["passed"] is False
-    assert artifact["apis"][1]["lane"] == "large-n"
-    assert artifact["apis"][1]["lane_enforced"] is True
-    assert artifact["apis"][1]["workload_shape"]["rows"] == 20_000

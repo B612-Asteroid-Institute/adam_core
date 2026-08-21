@@ -64,7 +64,24 @@ Both commands write JSON plus Markdown. They report the current public Python
 facade, genuine Rust-owned `std::time::Instant` samples where adapters exist,
 and the public/native overhead ratio. They do not require a frozen checkout,
 legacy virtual environment, or legacy timing cache. Every ASSIST workload uses
-`max_processes=1`. `--quick` is available for smoke runs.
+`max_processes=1`. `--quick` is available for smoke runs. Normal release CI runs
+all 44 Core APIs across all three lanes (132 rows) and all 35 ASSIST workloads;
+smoke subsets are not substitutes for these release-blocking jobs.
+
+## Current-only correctness regression
+
+Run the complete ordinary regression suite without a frozen runtime:
+
+```bash
+pdm run test-current-regression
+```
+
+The compressed, hash-pinned fixture contains all 44 APIs across the accepted
+eight-seed grid (352 cases) plus all five special fixed fixtures, for 357 cases
+and 855 output checks. The 128 contractual exact outputs use byte/dtype/shape
+hashes; numerical science outputs retain their reviewed per-output tolerances.
+Normal pytest imports neither the archived oracle nor its runner or timing-cache
+infrastructure.
 
 ## Legacy oracle
 

@@ -196,7 +196,7 @@ test = "pytest --benchmark-skip -m 'not profile' {args}"
 doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only {args}"
 benchmark-current = "python -m migration.scripts.benchmark_current {args}"
-benchmark-current-ci = "python -m migration.scripts.benchmark_current --quick --lanes tiny --trials 1 --require-native --output migration/artifacts/benchmark_current_core_ci.json --markdown migration/artifacts/benchmark_current_core_ci.md"
+benchmark-current-ci = "python -m migration.scripts.benchmark_current --lanes tiny small large --trials 3 --require-native --output migration/artifacts/benchmark_current_core_ci.json --markdown migration/artifacts/benchmark_current_core_ci.md"
 test-current-regression = "python -m migration.scripts.current_regression"
 coverage = "pytest --benchmark-skip --cov=adam_core --cov-report=xml -m 'not profile' {args}"
 docs = { cmd = "sphinx-build -b html docs/source docs/build", env = { LC_ALL = "C", LANG = "C" } }

@@ -39,7 +39,7 @@ from typing import Any
 
 import numpy as np
 
-from migration.parity._timing_cache import clear_semantic_result_caches
+from migration.parity._semantic_cache_policy import clear_semantic_result_caches
 from migration.parity._porkchop_runner import (
     run_generate_porkchop_data as _dynamics_generate_porkchop_data,
 )

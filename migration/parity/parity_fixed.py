@@ -23,7 +23,7 @@ from typing import Any, Optional
 
 import numpy as np
 
-from . import _inputs, _oracle, _rust_runner, parity_fuzz, tolerances
+from . import _inputs, _rust_runner, parity_fuzz, tolerances
 
 
 @dataclass(frozen=True)
@@ -453,6 +453,10 @@ def fixed_one(api_id: str) -> ApiResult:
         try:
             rust_out = _rust_runner.run(api_id, **sample.rust_kwargs)
             if fixture.reference_outputs is None:
+                # The archived subprocess authority is loaded only for an
+                # explicit historical parity run, never by normal regressions.
+                from . import _oracle
+
                 reference_out = _oracle.parity(api_id, **sample.legacy_kwargs)
                 reference_label = "legacy"
             else:

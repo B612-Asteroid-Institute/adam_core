@@ -54,7 +54,7 @@ from pathlib import Path
 from typing import Any, Optional, TypedDict, cast
 
 from . import _threading
-from ._timing_cache import (
+from ._semantic_cache_policy import (
     SEMANTIC_CACHE_POLICY,
     SEMANTIC_CACHES_CLEARED,
     clear_semantic_result_caches,
@@ -334,7 +334,7 @@ def _benchmark_source_hash() -> str:
             parity_dir / "_legacy_runner.py",
             parity_dir / "_oracle.py",
             parity_dir / "_public_facades.py",
-            parity_dir / "_timing_cache.py",
+            parity_dir / "_semantic_cache_policy.py",
         ]
     )
 
