@@ -514,16 +514,15 @@ sigma-clipping threshold.</p></li>
 </dd>
 </dl>
 <p class="rubric">Notes</p>
-<p>The confidence verdict is <strong>measured, not guaranteed.</strong> The solver is designed to
-downgrade harmonic and sampling aliases to <code class="docutils literal notranslate"><span class="pre">period_family</span></code> instead of asserting a
-confident <code class="docutils literal notranslate"><span class="pre">single_period</span></code>, but this is calibrated behaviour with a known, nonzero
-residual false-confidence risk: a <code class="docutils literal notranslate"><span class="pre">single_period</span></code> result can occasionally be a
-harmonic or sampling alias of the true period. Measured strict <code class="docutils literal notranslate"><span class="pre">single_period</span></code>
-precision on the LCDB/DAMIT standard-candle set is ~0.88, and one tracked case
-(1627 Ivar, a ~5/3 diurnal-sampling alias) is still reported confidently at the
-wrong period. When a period that is wrong by an integer factor would be costly,
-cross-check a <code class="docutils literal notranslate"><span class="pre">single_period</span></code> result against <code class="docutils literal notranslate"><span class="pre">alternate_period_days</span></code> and
-<code class="docutils literal notranslate"><span class="pre">reliability_code</span></code> rather than treating the verdict as infallible.</p>
+<p>The confidence verdict is <strong>measured, not guaranteed.</strong> The solver downgrades
+unresolved harmonic and sampling aliases to <code class="docutils literal notranslate"><span class="pre">period_family</span></code>. Order selection
+also compares the physical frequencies preferred independently by each Fourier
+order: when a majority agree and the F-test-selected high order lands on a one- or
+two-cycle/day cadence alias, the highest order in the consensus family is used and
+<code class="docutils literal notranslate"><span class="pre">diurnal_order_consensus</span></code> is reported. If four or more orders are evaluated but
+no majority physical-frequency family exists, confidence is capped at
+<code class="docutils literal notranslate"><span class="pre">period_family</span></code> with <code class="docutils literal notranslate"><span class="pre">fourier_order_disagreement</span></code>. Callers should still inspect
+<code class="docutils literal notranslate"><span class="pre">alternate_period_days</span></code> and <code class="docutils literal notranslate"><span class="pre">reliability_code</span></code> for high-consequence uses.</p>
 </dd></dl>
 
 </section>

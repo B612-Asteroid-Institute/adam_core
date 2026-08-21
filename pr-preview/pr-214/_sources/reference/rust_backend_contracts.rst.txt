@@ -141,6 +141,7 @@ Validation Contract
 -------------------
 
 - The standard Python test suite command ``pytest --benchmark-skip -m 'not profile'`` must run in a Rust-enabled environment for migration validation.
+- Release candidates additionally run every profile-marked scientific fixture and the opt-in live external-service integration gates after wheel acceptance.
 - Validation runs fail during import if the Rust extension is unavailable.
 - High-level migrated APIs must include a contract test that enforces single-crossing execution (one Python->Rust entry and one Rust->Python return).
 

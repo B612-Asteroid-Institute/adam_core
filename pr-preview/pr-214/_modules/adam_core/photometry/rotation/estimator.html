@@ -551,6 +551,8 @@
     <span class="n">used_session_offsets</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="n">fit_summary</span><span class="p">:</span> <span class="n">_FitResult</span>
     <span class="n">sigma_curve</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+    <span class="n">order_consensus_corrected</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">order_consensus_supported</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span>
 
 
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">slots</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
@@ -1313,6 +1315,55 @@
     <span class="p">)</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_frequency_consensus_order</span><span class="p">(</span>
+    <span class="n">order_frequencies</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]],</span>
+    <span class="n">statistical_order</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="n">tolerance</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span> <span class="nb">bool</span> <span class="o">|</span> <span class="kc">None</span><span class="p">]:</span>
+    <span class="n">finite</span> <span class="o">=</span> <span class="nb">sorted</span><span class="p">(</span>
+        <span class="p">(</span>
+            <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">order</span><span class="p">),</span> <span class="nb">float</span><span class="p">(</span><span class="n">frequency</span><span class="p">))</span>
+            <span class="k">for</span> <span class="n">order</span><span class="p">,</span> <span class="n">frequency</span> <span class="ow">in</span> <span class="n">order_frequencies</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">frequency</span><span class="p">)</span> <span class="ow">and</span> <span class="n">frequency</span> <span class="o">&gt;</span> <span class="mf">0.0</span>
+        <span class="p">),</span>
+        <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">finite</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span>
+
+    <span class="n">groups</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[[</span><span class="n">finite</span><span class="p">[</span><span class="mi">0</span><span class="p">]]]</span>
+    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">finite</span><span class="p">[</span><span class="mi">1</span><span class="p">:]:</span>
+        <span class="k">if</span> <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">groups</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="o">-</span><span class="mi">1</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">tolerance</span><span class="p">:</span>
+            <span class="n">groups</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">groups</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">item</span><span class="p">])</span>
+    <span class="n">groups</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">group</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="n">group</span><span class="p">),</span> <span class="n">group</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="mi">1</span><span class="p">]))</span>
+    <span class="n">consensus</span> <span class="o">=</span> <span class="n">groups</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">consensus</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">3</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">consensus</span><span class="p">)</span> <span class="o">*</span> <span class="mi">2</span> <span class="o">&lt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">order_frequencies</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">False</span>
+    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">order</span> <span class="o">==</span> <span class="n">statistical_order</span> <span class="k">for</span> <span class="n">order</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">consensus</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">True</span>
+
+    <span class="n">selected_frequency</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span>
+        <span class="p">(</span>
+            <span class="n">frequency</span>
+            <span class="k">for</span> <span class="n">order</span><span class="p">,</span> <span class="n">frequency</span> <span class="ow">in</span> <span class="n">order_frequencies</span>
+            <span class="k">if</span> <span class="n">order</span> <span class="o">==</span> <span class="n">statistical_order</span>
+        <span class="p">),</span>
+        <span class="kc">None</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">selected_frequency</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">False</span>
+    <span class="n">consensus_frequency</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">([</span><span class="n">frequency</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">frequency</span> <span class="ow">in</span> <span class="n">consensus</span><span class="p">]))</span>
+    <span class="n">separation</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">selected_frequency</span><span class="p">)</span> <span class="o">-</span> <span class="n">consensus_frequency</span><span class="p">)</span>
+    <span class="n">nearest_daily_alias</span> <span class="o">=</span> <span class="nb">round</span><span class="p">(</span><span class="n">separation</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">nearest_daily_alias</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">{</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">}:</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">False</span>
+    <span class="k">if</span> <span class="nb">abs</span><span class="p">(</span><span class="n">separation</span> <span class="o">-</span> <span class="n">nearest_daily_alias</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">tolerance</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">False</span>
+    <span class="k">return</span> <span class="nb">max</span><span class="p">(</span><span class="n">order</span> <span class="k">for</span> <span class="n">order</span><span class="p">,</span> <span class="n">_</span> <span class="ow">in</span> <span class="n">consensus</span><span class="p">),</span> <span class="kc">True</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_derive_fourier_solution</span><span class="p">(</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">t_rel</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
@@ -1353,7 +1404,21 @@
     <span class="k">if</span> <span class="ow">not</span> <span class="n">candidate_fits</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"no valid rotation-period fit could be found"</span><span class="p">)</span>
 
-    <span class="n">chosen_order_fit</span> <span class="o">=</span> <span class="n">_select_order</span><span class="p">(</span><span class="n">candidate_fits</span><span class="p">,</span> <span class="n">profile</span><span class="o">.</span><span class="n">order_selection_confidence</span><span class="p">)</span>
+    <span class="n">statistical_order_fit</span> <span class="o">=</span> <span class="n">_select_order</span><span class="p">(</span>
+        <span class="n">candidate_fits</span><span class="p">,</span> <span class="n">profile</span><span class="o">.</span><span class="n">order_selection_confidence</span>
+    <span class="p">)</span>
+    <span class="n">order_frequencies</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="mf">1.0</span> <span class="o">/</span> <span class="n">_fit_with_period</span><span class="p">(</span><span class="n">fit</span><span class="p">)</span><span class="o">.</span><span class="n">period_days</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">order</span><span class="p">,</span> <span class="n">fit</span> <span class="ow">in</span> <span class="n">candidate_fits</span><span class="o">.</span><span class="n">items</span><span class="p">()</span>
+    <span class="p">]</span>
+    <span class="c1"># Treat optima within four shared search-grid bins as one physical frequency.</span>
+    <span class="n">consensus_tolerance</span> <span class="o">=</span> <span class="mf">4.0</span> <span class="o">*</span> <span class="nb">float</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">frequencies</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">frequencies</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+    <span class="n">consensus_order</span><span class="p">,</span> <span class="n">order_consensus_supported</span> <span class="o">=</span> <span class="n">_frequency_consensus_order</span><span class="p">(</span>
+        <span class="n">order_frequencies</span><span class="p">,</span>
+        <span class="n">statistical_order_fit</span><span class="o">.</span><span class="n">fourier_order</span><span class="p">,</span>
+        <span class="n">consensus_tolerance</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">chosen_order_fit</span> <span class="o">=</span> <span class="n">candidate_fits</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">consensus_order</span><span class="p">,</span> <span class="n">statistical_order_fit</span><span class="p">)</span>
     <span class="n">sigma_curve</span><span class="p">,</span> <span class="n">fits</span> <span class="o">=</span> <span class="n">_evaluate_full_order_curve</span><span class="p">(</span>
         <span class="n">t_rel</span><span class="o">=</span><span class="n">t_rel</span><span class="p">,</span>
         <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span>
@@ -1464,6 +1529,8 @@
         <span class="n">used_session_offsets</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">used_session_offsets</span><span class="p">),</span>
         <span class="n">fit_summary</span><span class="o">=</span><span class="n">best_fit</span><span class="p">,</span>
         <span class="n">sigma_curve</span><span class="o">=</span><span class="n">sigma_curve</span><span class="p">,</span>
+        <span class="n">order_consensus_corrected</span><span class="o">=</span><span class="n">consensus_order</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">order_consensus_supported</span><span class="o">=</span><span class="n">order_consensus_supported</span><span class="p">,</span>
     <span class="p">)</span>
 
 
@@ -2047,16 +2114,15 @@
 
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
-<span class="sd">    The confidence verdict is **measured, not guaranteed.** The solver is designed to</span>
-<span class="sd">    downgrade harmonic and sampling aliases to ``period_family`` instead of asserting a</span>
-<span class="sd">    confident ``single_period``, but this is calibrated behaviour with a known, nonzero</span>
-<span class="sd">    residual false-confidence risk: a ``single_period`` result can occasionally be a</span>
-<span class="sd">    harmonic or sampling alias of the true period. Measured strict ``single_period``</span>
-<span class="sd">    precision on the LCDB/DAMIT standard-candle set is ~0.88, and one tracked case</span>
-<span class="sd">    (1627 Ivar, a ~5/3 diurnal-sampling alias) is still reported confidently at the</span>
-<span class="sd">    wrong period. When a period that is wrong by an integer factor would be costly,</span>
-<span class="sd">    cross-check a ``single_period`` result against ``alternate_period_days`` and</span>
-<span class="sd">    ``reliability_code`` rather than treating the verdict as infallible.</span>
+<span class="sd">    The confidence verdict is **measured, not guaranteed.** The solver downgrades</span>
+<span class="sd">    unresolved harmonic and sampling aliases to ``period_family``. Order selection</span>
+<span class="sd">    also compares the physical frequencies preferred independently by each Fourier</span>
+<span class="sd">    order: when a majority agree and the F-test-selected high order lands on a one- or</span>
+<span class="sd">    two-cycle/day cadence alias, the highest order in the consensus family is used and</span>
+<span class="sd">    ``diurnal_order_consensus`` is reported. If four or more orders are evaluated but</span>
+<span class="sd">    no majority physical-frequency family exists, confidence is capped at</span>
+<span class="sd">    ``period_family`` with ``fourier_order_disagreement``. Callers should still inspect</span>
+<span class="sd">    ``alternate_period_days`` and ``reliability_code`` for high-consequence uses.</span>
 <span class="sd">    """</span>
     <span class="k">if</span> <span class="n">clip_sigma</span> <span class="o">&lt;=</span> <span class="mf">0.0</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"clip_sigma must be positive"</span><span class="p">)</span>
@@ -2239,6 +2305,16 @@
         <span class="n">primary</span><span class="o">.</span><span class="n">is_valid</span> <span class="o">=</span> <span class="kc">True</span>
         <span class="n">primary</span><span class="o">.</span><span class="n">is_reliable</span> <span class="o">=</span> <span class="kc">False</span>
 
+    <span class="k">if</span> <span class="p">(</span>
+        <span class="n">primary</span><span class="o">.</span><span class="n">period_verdict</span> <span class="o">==</span> <span class="n">_VERDICT_SINGLE</span>
+        <span class="ow">and</span> <span class="n">fourier_solution</span><span class="o">.</span><span class="n">order_consensus_supported</span> <span class="ow">is</span> <span class="kc">False</span>
+    <span class="p">):</span>
+        <span class="n">primary</span><span class="o">.</span><span class="n">period_verdict</span> <span class="o">=</span> <span class="n">_VERDICT_FAMILY</span>
+        <span class="n">primary</span><span class="o">.</span><span class="n">reliability_code</span> <span class="o">=</span> <span class="n">_RELIABILITY_BY_VERDICT</span><span class="p">[</span><span class="n">_VERDICT_FAMILY</span><span class="p">]</span>
+        <span class="n">primary</span><span class="o">.</span><span class="n">insufficiency_reasons</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"fourier_order_disagreement"</span><span class="p">)</span>
+        <span class="n">primary</span><span class="o">.</span><span class="n">is_valid</span> <span class="o">=</span> <span class="kc">True</span>
+        <span class="n">primary</span><span class="o">.</span><span class="n">is_reliable</span> <span class="o">=</span> <span class="kc">False</span>
+
     <span class="c1"># Sub-harmonic confidence guardrail.  When the span is short enough that the</span>
     <span class="c1"># recovered period sits at the long-period edge of the search grid -- fewer</span>
     <span class="c1"># than ~4 rotations spanned, so HALF the recovered frequency falls below the</span>
@@ -2286,6 +2362,8 @@
     <span class="c1"># the hard cap, so callers can see the recovered period/uncertainty came from a</span>
     <span class="c1"># coarsened or heuristically-searched grid rather than the requested resolution.</span>
     <span class="n">diagnostic_flags</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="n">fourier_solution</span><span class="o">.</span><span class="n">order_consensus_corrected</span><span class="p">:</span>
+        <span class="n">diagnostic_flags</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"diurnal_order_consensus"</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">resolved_fidelity</span> <span class="o">==</span> <span class="s2">"validated_staged"</span> <span class="ow">and</span> <span class="nb">int</span><span class="p">(</span><span class="n">frequencies</span><span class="o">.</span><span class="n">size</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">2048</span><span class="p">:</span>
         <span class="n">diagnostic_flags</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">"staged_search_used"</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">_grid_was_capped</span><span class="p">(</span>

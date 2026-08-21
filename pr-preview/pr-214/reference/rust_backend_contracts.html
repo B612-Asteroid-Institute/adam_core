@@ -578,6 +578,7 @@ are explicit compatibility/provider boundaries rather than default backends.</p>
 <h2>Validation Contract<a class="headerlink" href="#validation-contract" title="Link to this heading">¶</a></h2>
 <ul class="simple">
 <li><p>The standard Python test suite command <code class="docutils literal notranslate"><span class="pre">pytest</span> <span class="pre">--benchmark-skip</span> <span class="pre">-m</span> <span class="pre">'not</span> <span class="pre">profile'</span></code> must run in a Rust-enabled environment for migration validation.</p></li>
+<li><p>Release candidates additionally run every profile-marked scientific fixture and the opt-in live external-service integration gates after wheel acceptance.</p></li>
 <li><p>Validation runs fail during import if the Rust extension is unavailable.</p></li>
 <li><p>High-level migrated APIs must include a contract test that enforces single-crossing execution (one Python-&gt;Rust entry and one Rust-&gt;Python return).</p></li>
 </ul>
