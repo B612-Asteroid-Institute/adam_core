@@ -89,6 +89,17 @@ def test_live_http_gates_are_opt_in_via_documented_env_vars():
         assert "skipif" in source, f"{module} live tests must be opt-in"
 
 
+def test_release_candidate_runs_slow_and_live_integration_gates():
+    workflow = (
+        SRC.parents[1] / ".github/workflows/release-candidate-wheel-matrix.yml"
+    ).read_text()
+    assert "extended-coverage:" in workflow
+    assert "cargo test -p adam_core_rs_kernel_data -- --ignored" in workflow
+    assert "pdm run test-profile -- src/adam_core" in workflow
+    for _, env_var in LIVE_GATES:
+        assert f'{env_var}: "1"' in workflow
+
+
 def test_file_product_round_trip_modules_exist():
     missing = [
         module for module in PRODUCT_ROUND_TRIP_MODULES if not (SRC / module).is_file()

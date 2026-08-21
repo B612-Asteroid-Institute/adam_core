@@ -34,7 +34,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: B612-Asteroid-Institute/adam-assist
-          ref: c1f50bdca84576444dd645ca197862db2e35f753
+          ref: a2e09852c59bf4c073d2c20c8999c5848a934a5a
           path: dependent
       - name: Install dependent and adam_core wheel
         run: |

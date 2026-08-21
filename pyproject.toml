@@ -140,6 +140,7 @@ profile = "black"
 norecursedirs = ["__pypackages__", ".ci"]
 markers = [
     "integration: exercises installed data/runtime integrations rather than a hermetic unit seam",
+    "profile: long-running scientific validation and profiling fixture",
 ]
 
 [tool.ruff]
@@ -193,6 +194,8 @@ fix = "ruff check ./src/adam_core --fix"
 typecheck = "mypy --strict ./src/adam_core"
 
 test = "pytest --benchmark-skip -m 'not profile' {args}"
+test-profile = "pytest --benchmark-skip -m profile {args}"
+test-live-integrations = "pytest --benchmark-skip {args}"
 doctest = "pytest --doctest-plus --doctest-only"
 benchmark = "pytest --benchmark-only {args}"
 benchmark-current = "python -m migration.scripts.benchmark_current {args}"

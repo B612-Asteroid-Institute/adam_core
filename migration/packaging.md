@@ -30,6 +30,7 @@ Last updated: 2026-08-20.
 ## Expected Validation Shape
 
 - `pdm run test-rust-full` currently runs under Python 3.13 in this checkout.
-- The RC4 precommit full-suite validation passed `1189` tests with `36` skipped, `6` deselected, and one expected xfail after excluding the benchmark modules from the correctness invocation.
-- Profile-marked tests remain excluded from this correctness gate; current-only performance is exercised separately through `benchmark-current`.
+- The current normal deterministic suite passes 1,173 tests; its 121 skips are exactly 118 pytest-benchmark rows and three opt-in live HTTP tests, while six profile tests are selected by the extended gate.
+- Dedicated benchmark jobs execute every benchmark row. The release-candidate workflow runs all six profile-marked scientific fixtures, both live Rust kernel-data integrations, and the three live Horizons/NEOCC/Scout/SBDB integration tests after wheel acceptance.
+- No expected xfail remains in the rotation-period confidence suite: every committed standard-candle fixture enforces the strict confidence contract.
 - To inspect skip reasons, run `pdm run test-rust-full -- -rs`.

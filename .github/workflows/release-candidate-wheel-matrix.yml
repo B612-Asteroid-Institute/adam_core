@@ -199,3 +199,42 @@ jobs:
             ${{ runner.temp }}/acceptance/wheelhouse/*.whl
             ${{ runner.temp }}/acceptance/logs/*.log
           if-no-files-found: error
+
+  extended-coverage:
+    name: Slow fixtures and live service integrations
+    needs: artifact-acceptance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout adam-core candidate
+        uses: actions/checkout@v4
+      - name: Checkout exact adam-assist candidate
+        uses: actions/checkout@v4
+        with:
+          repository: B612-Asteroid-Institute/adam-assist
+          ref: ${{ env.ADAM_ASSIST_REF }}
+          path: .ci/adam-assist
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@1.87.0
+        with:
+          components: rustfmt, clippy
+      - uses: pdm-project/setup-pdm@v4
+        with:
+          python-version: "3.12"
+      - name: Install exact source pair and optional test providers
+        run: |
+          pdm install -G test
+          ADAM_ASSIST_RUST_REPO="$GITHUB_WORKSPACE/.ci/adam-assist" pdm run assist-rust-develop
+      - name: Run live Rust kernel-data integrations
+        run: cargo test -p adam_core_rs_kernel_data -- --ignored
+      - name: Run slow scientific validation fixtures
+        run: pdm run test-profile -- src/adam_core
+      - name: Run live Horizons and query-client integrations
+        env:
+          ADAM_CORE_LIVE_HORIZONS: "1"
+          ADAM_CORE_LIVE_QUERY_CLIENTS: "1"
+        run: |
+          pdm run test-live-integrations -- \
+            src/adam_core/orbits/query/tests/test_horizons.py \
+            src/adam_core/orbits/query/tests/test_query_clients_live.py

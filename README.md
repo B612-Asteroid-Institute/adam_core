@@ -217,22 +217,15 @@ propagated_orbits = propagator.propagate_orbits(
 ```
 
 #### Ephemeris Generation
-Ephemeris generation requires a propagator that implements the EphemerisMixin interface. This is currently only implemented by the PYOORB propagator. The ephemeris generator will automatically map the propagated covariance matrices to the sky-plane.
-
-You will need to install adam-pyoorb in order to use the ephemeris generator, which is currently only available on GitHub.
-
-```sh
-pip install git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git
-```
-
+Ephemeris generation requires a compatible propagator. `adam-assist` supplies the supported high-precision N-body implementation and maps propagated covariance matrices to the sky plane.
 
 ```python
 import numpy as np
 from astropy import units as u
 
-from adam_core.orbits.query import query_horizons
-from adam_core.propagator.adam_pyoorb import PYOORBPropagator
+from adam_assist import ASSISTPropagator
 from adam_core.observers import Observers
+from adam_core.orbits.query import query_horizons
 from adam_core.time import Timestamp
 
 # Get orbits to propagate
@@ -240,8 +233,7 @@ initial_time = Timestamp.from_mjd([60000.0], scale="tdb")
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, initial_time)
 
-# Make sure PYOORB is ready
-propagator = PYOORBPropagator()
+propagator = ASSISTPropagator()
 
 # Define a set of observers and observation times
 times = Timestamp.from_mjd(initial_time.mjd() + np.arange(0, 100))
@@ -304,10 +296,10 @@ propagated_orbits = propagate_2body(
 #### 2-body Ephemeris Generation
 This package also has functionality to generate ephemerides for a set of orbits. We do not recommend you use this with
 2-body propagated orbits as it will not be accurate for more than a few days. However, if you used a N-body propagator
-such as PYOORB, you can feed in the propagated orbits to this function to generate ephemerides. We call the ephemeris generator
+such as ASSIST, you can feed in the propagated orbits to this function to generate ephemerides. We call the ephemeris generator
 2-body because the light-time correction is applied using a 2-body propagator.
 
-Because the ephemeris generator was written in Jax, we can also map covariances directly to the sky-plane. To do this, we propagate
+The ephemeris generator can map covariances directly to the sky plane. To do this, propagate
 the covariance matrices with the orbits. This is done by passing `covariance=True` to the propagator. The ephemeris generator will
 then automatically map the propagated covariance matrices to the sky-plane.
 
@@ -315,9 +307,9 @@ then automatically map the propagated covariance matrices to the sky-plane.
 import numpy as np
 from astropy import units as u
 
-from adam_core.orbits.query import query_sbdb
-from adam_core.propagator.adam_pyoorb import PYOORBPropagator
+from adam_assist import ASSISTPropagator
 from adam_core.observers import Observers
+from adam_core.orbits.query import query_sbdb
 from adam_core.dynamics import generate_ephemeris_2body
 from adam_core.time import Timestamp
 
@@ -325,14 +317,13 @@ from adam_core.time import Timestamp
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_sbdb(object_ids)
 
-# Make sure PYOORB is ready
-propagator = PYOORBPropagator()
+propagator = ASSISTPropagator()
 
 # Define a set of observers and observation times
 times = Timestamp.from_mjd(np.arange(59000, 60000), scale="tdb")
 observers = Observers.from_code("I11", times)
 
-# Propagate orbits with PYOORB (note that we are propagating with covariances)
+# Propagate orbits with ASSIST (including covariances)
 propagated_orbits = propagator.propagate_orbits(
     orbits,
     times,
