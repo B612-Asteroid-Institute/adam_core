@@ -8,16 +8,14 @@ solver on each. Two gates are exercised:
    a coherent confidence result (``period_verdict`` in the valid enum,
    ``reliability_code`` in ``{"1", "2", "3"}``, and the validity/reliability/period
    fields consistent with the verdict).
-2. The zero-false-confidence gate: no committed fixture may be labelled
-   ``single_period`` while its STRICT (no-harmonic-adjustment) error exceeds the
-   fixture tolerance -- a confident-but-wrong call, including a clean 2x/0.5x alias
-   (the worst failure mode). This is ``xfail(strict=True)`` because 1627 Ivar
-   remains a confident diurnal-sampling alias on the committed set (the
-   order-selection fix is a tracked follow-up); strict=True forces the marker to be
-   removed once the solver is fixed (an xpass fails CI).
+2. A zero-false-confidence gate on every fixture: no result labelled
+   ``single_period`` may exceed the fixture's strict, unadjusted period tolerance.
+   This includes harmonic and cadence aliases. The per-order frequency-consensus
+   guard prevents a statistically preferred high-order daily alias from overriding
+   the physical-frequency family shared by a majority of Fourier orders.
 
-Slow fixtures are marked ``@pytest.mark.profile`` so the default run
-(``-m 'not profile'``) stays fast.
+Slow fixtures are marked ``@pytest.mark.profile`` and run by the extended
+release-candidate coverage job.
 """
 
 from __future__ import annotations
@@ -136,76 +134,25 @@ def test_validation_fixture_schema(fixture_name: str) -> None:
         assert (
             p_hours is not None and np.isfinite(float(p_hours)) and float(p_hours) > 0.0
         )
-    # NB: committed fixtures (e.g. Ivar n=101) are curated sparse subsets and can behave
-    # differently from the full cached calibration (Ivar n=1255 -> period_family); this
-    # gate is a per-fixture regression lock, not the full-dataset precision figure.
+    if str(meta["object"]).startswith("1627 Ivar"):
+        assert "diurnal_order_consensus" in result.confidence_flags[0].as_py()
+        assert result.fourier_order[0].as_py() == 5
+    if str(meta["object"]).startswith("3295 Murakami"):
+        assert verdict == "period_family"
+        assert "fourier_order_disagreement" in result.insufficiency_reasons[0].as_py()
 
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="Zero-false-confidence is not yet satisfied on the committed set: 1627 "
-    "Ivar is reported as a confident single_period at the ~5/3 diurnal-sampling alias "
-    "(P_rec=7.99h vs P_true=4.795h). The estimator targets a MEASURED ~0.88 strict "
-    "single_period precision, not a zero-alias guarantee. strict=True so that fixing "
-    "the order-selection alias surfaces as an xpass and forces removing this marker.",
-)
-def test_zero_false_confidence() -> None:
-    """No committed fixture may be confidently wrong (the headline gate).
-
-    Collects every fast-set fixture labelled ``single_period`` whose STRICT relative
-    error (no harmonic adjustment) exceeds the fixture tolerance -- a confident-but-
-    wrong call -- and requires the list to be empty.
-
-    The metric is intentionally strict ``within_tolerance``: unlike a harmonic-adjusted
-    metric, it ALSO flags a clean 2x/0.5x ``single_period``, the worst failure mode.
-    ``harmonic_adjusted_error_pct`` is retained only for the diagnostic alias-bucket
-    label on each offender.
-
-    Current state (xfail, strict): the fast committed gold set has exactly one offender,
-    1627 Ivar -- an in-grid order-6 fit that relocates to a ~2 cycle/day diurnal
-    sampling alias (NOT a harmonic-only issue, and NOT recovered by the existing
-    sub-harmonic guardrail, which only fires below the grid floor). Resolving it
-    requires frequency-aware order selection; a prototyped frequency-anchored order
-    selection regressed the gold set, so it is a calibration task, not a one-liner.
-    """
-    # Iterate the fast default set only so the gate stays cheap; the known
-    # offender (1627 Ivar) is in this set. Slow fixtures are covered by the
-    # profile-marked schema gate.
-    fixtures = [n for n in _ALL_FIXTURES if not _is_slow(n)]
-    offenders: list[str] = []
-    n_single = 0
-    for fixture_name in fixtures:
-        if fixture_name == "__NO_FIXTURES__":
-            pytest.skip("No rotation-period validation fixtures found on disk.")
-        observations, meta = _load_fixture(DATA_DIR / fixture_name)
-        result = _solve(observations, meta)
-
-        verdict = str(result.period_verdict[0].as_py())
-        if verdict != "single_period":
-            continue
-        n_single += 1
-        p_rec = float(result.period_hours[0].as_py())
+    if verdict == "single_period":
+        p_rec = float(p_hours)
         p_true = float(meta["expected_hours"])
-        tol = float(meta["tolerance_fraction"])
-        # STRICT metric: a single_period whose RAW relative error exceeds tolerance is
-        # confidently wrong. This also flags a clean 2x/0.5x alias (the worst case);
-        # harmonic_adjusted_error_pct is used only for the diagnostic alias label.
-        if not within_tolerance(p_rec, p_true, tol):
+        tolerance = float(meta["tolerance_fraction"])
+        if not within_tolerance(p_rec, p_true, tolerance):
             _, best_factor = harmonic_adjusted_error_pct(p_rec, p_true)
-            offenders.append(
-                f"{meta['object']}: single_period P_rec={p_rec:.4f}h "
-                f"P_true={p_true:.4f}h raw_err={relative_error_pct(p_rec, p_true):.2f}% "
-                f"(tol={tol * 100.0:.2f}%) alias={alias_bucket(best_factor)}"
+            pytest.fail(
+                f"{meta['object']}: confident period {p_rec:.4f}h differs from "
+                f"{p_true:.4f}h by {relative_error_pct(p_rec, p_true):.2f}% "
+                f"(tolerance {tolerance * 100.0:.2f}%, alias "
+                f"{alias_bucket(best_factor)})"
             )
 
-    n_correct = n_single - len(offenders)
-    precision = n_correct / n_single if n_single else float("nan")
-    print(
-        f"\nD4 fast-set single_period precision: {n_correct}/{n_single} = "
-        f"{precision:.3f} (bar: >= 0.90)"
-    )
-    if offenders:
-        print("False-confidence offenders:")
-        for line in offenders:
-            print(f"  {line}")
-    assert offenders == [], f"{len(offenders)} confident-but-wrong fixture(s)"
+    # Committed fixtures are curated sparse subsets and can behave differently from
+    # a full calibration corpus. This is a per-fixture scientific regression lock.

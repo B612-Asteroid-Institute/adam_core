@@ -208,6 +208,8 @@ struct Solution {
     amplitude: f64,
     fit: Fit,
     sigma_threshold: f64,
+    order_consensus_corrected: bool,
+    order_consensus_supported: Option<bool>,
 }
 
 #[derive(Clone, Copy)]
@@ -491,6 +493,11 @@ pub fn estimate_rotation_period(
         reliability = "2".to_string();
         reasons.push("period_implausibly_long".to_string());
     }
+    if verdict == "single_period" && chosen.order_consensus_supported == Some(false) {
+        verdict = "period_family".to_string();
+        reliability = "2".to_string();
+        reasons.push("fourier_order_disagreement".to_string());
+    }
     if verdict == "single_period"
         && period.is_finite()
         && period > 0.0
@@ -516,6 +523,9 @@ pub fn estimate_rotation_period(
     }
 
     let mut confidence_flags = flags;
+    if chosen.order_consensus_corrected {
+        confidence_flags.push("diurnal_order_consensus".to_string());
+    }
     if config.search_fidelity == "validated_staged" && frequencies.len() > 2048 {
         confidence_flags.push("staged_search_used".to_string());
     }
@@ -891,7 +901,19 @@ fn derive_solution(
         return Err("no valid rotation-period fit could be found".to_string());
     }
     candidates.sort_by_key(|fit| fit.order);
-    let selected_order = select_order(&candidates, 0.90).order;
+    let statistical_order = select_order(&candidates, 0.90).order;
+    let order_frequencies = candidates
+        .iter()
+        .map(|fit| {
+            let period = fit_with_period(fit.clone()).period_days;
+            (fit.order, 1.0 / period)
+        })
+        .collect::<Vec<_>>();
+    // Treat optima within four shared search-grid bins as one physical frequency.
+    let consensus_tolerance = 4.0 * (frequencies[1] - frequencies[0]).abs();
+    let (consensus_order, order_consensus_supported) =
+        frequency_consensus_order(&order_frequencies, statistical_order, consensus_tolerance);
+    let selected_order = consensus_order.unwrap_or(statistical_order);
     let fits: Vec<Option<Fit>> = frequencies
         .par_iter()
         .map(|&frequency| {
@@ -976,6 +998,8 @@ fn derive_solution(
         amplitude,
         fit: best,
         sigma_threshold,
+        order_consensus_corrected: consensus_order.is_some(),
+        order_consensus_supported,
     })
 }
 
@@ -1477,6 +1501,65 @@ fn quadratic_fit(x: &[f64], y: &[f64]) -> [f64; 3] {
     [coeffs[0], coeffs[1], coeffs[2]]
 }
 
+fn frequency_consensus_order(
+    order_frequencies: &[(usize, f64)],
+    statistical_order: usize,
+    tolerance: f64,
+) -> (Option<usize>, Option<bool>) {
+    let mut finite = order_frequencies
+        .iter()
+        .copied()
+        .filter(|(_, frequency)| frequency.is_finite() && *frequency > 0.0)
+        .collect::<Vec<_>>();
+    if finite.len() < 4 {
+        return (None, None);
+    }
+    finite.sort_by(|left, right| total_cmp(left.1, right.1));
+
+    let mut groups = vec![vec![finite[0]]];
+    for item in finite.into_iter().skip(1) {
+        let previous_frequency = groups.last().unwrap().last().unwrap().1;
+        if item.1 - previous_frequency <= tolerance {
+            groups.last_mut().unwrap().push(item);
+        } else {
+            groups.push(vec![item]);
+        }
+    }
+    groups.sort_by(|left, right| {
+        right
+            .len()
+            .cmp(&left.len())
+            .then_with(|| total_cmp(left[0].1, right[0].1))
+    });
+    let consensus = &groups[0];
+    if consensus.len() < 3 || consensus.len() * 2 <= order_frequencies.len() {
+        return (None, Some(false));
+    }
+    if consensus
+        .iter()
+        .any(|(order, _)| *order == statistical_order)
+    {
+        return (None, Some(true));
+    }
+
+    let Some(selected_frequency) = order_frequencies
+        .iter()
+        .find_map(|(order, frequency)| (*order == statistical_order).then_some(*frequency))
+    else {
+        return (None, Some(false));
+    };
+    let consensus_frequency =
+        consensus.iter().map(|item| item.1).sum::<f64>() / consensus.len() as f64;
+    let separation = (selected_frequency - consensus_frequency).abs();
+    let nearest_daily_alias = separation.round();
+    if !(1.0..=2.0).contains(&nearest_daily_alias)
+        || (separation - nearest_daily_alias).abs() > tolerance
+    {
+        return (None, Some(false));
+    }
+    (consensus.iter().map(|(order, _)| *order).max(), Some(true))
+}
+
 fn select_order(fits: &[Fit], required_confidence: f64) -> &Fit {
     for (index, candidate) in fits.iter().enumerate() {
         let significantly_worse = fits[(index + 1)..]
@@ -1830,6 +1913,30 @@ mod tests {
         assert_eq!(alias_bucket(0.5), "1/2x");
         assert!(within_tolerance(10.1, 10.0, 0.02));
         assert!(near_day_alias(8.0, 12.0, 0.01));
+    }
+
+    #[test]
+    fn frequency_consensus_rejects_a_high_order_daily_alias() {
+        let candidates = [
+            (2, 5.0048),
+            (3, 5.0043),
+            (4, 5.0043),
+            (5, 5.0043),
+            (6, 3.0028),
+        ];
+        assert_eq!(
+            frequency_consensus_order(&candidates, 6, 0.02),
+            (Some(5), Some(true))
+        );
+    }
+
+    #[test]
+    fn frequency_consensus_does_not_override_without_a_majority() {
+        let candidates = [(2, 5.0), (3, 5.0), (4, 4.0), (5, 3.0), (6, 3.0)];
+        assert_eq!(
+            frequency_consensus_order(&candidates, 6, 0.02),
+            (None, Some(false))
+        );
     }
 
     #[test]

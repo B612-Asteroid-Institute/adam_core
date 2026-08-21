@@ -120,6 +120,8 @@ class _FourierSolution:
     used_session_offsets: bool
     fit_summary: _FitResult
     sigma_curve: npt.NDArray[np.float64]
+    order_consensus_corrected: bool
+    order_consensus_supported: bool | None
 
 
 @dataclass(slots=True)
@@ -882,6 +884,55 @@ def _max_cluster_period_deviation(
     )
 
 
+def _frequency_consensus_order(
+    order_frequencies: list[tuple[int, float]],
+    statistical_order: int,
+    tolerance: float,
+) -> tuple[int | None, bool | None]:
+    finite = sorted(
+        (
+            (int(order), float(frequency))
+            for order, frequency in order_frequencies
+            if np.isfinite(frequency) and frequency > 0.0
+        ),
+        key=lambda item: item[1],
+    )
+    if len(finite) < 4:
+        return None, None
+
+    groups: list[list[tuple[int, float]]] = [[finite[0]]]
+    for item in finite[1:]:
+        if item[1] - groups[-1][-1][1] <= tolerance:
+            groups[-1].append(item)
+        else:
+            groups.append([item])
+    groups.sort(key=lambda group: (-len(group), group[0][1]))
+    consensus = groups[0]
+    if len(consensus) < 3 or len(consensus) * 2 <= len(order_frequencies):
+        return None, False
+    if any(order == statistical_order for order, _ in consensus):
+        return None, True
+
+    selected_frequency = next(
+        (
+            frequency
+            for order, frequency in order_frequencies
+            if order == statistical_order
+        ),
+        None,
+    )
+    if selected_frequency is None:
+        return None, False
+    consensus_frequency = float(np.mean([frequency for _, frequency in consensus]))
+    separation = abs(float(selected_frequency) - consensus_frequency)
+    nearest_daily_alias = round(separation)
+    if nearest_daily_alias not in {1, 2}:
+        return None, False
+    if abs(separation - nearest_daily_alias) > tolerance:
+        return None, False
+    return max(order for order, _ in consensus), True
+
+
 def _derive_fourier_solution(
     *,
     t_rel: npt.NDArray[np.float64],
@@ -922,7 +973,21 @@ def _derive_fourier_solution(
     if not candidate_fits:
         raise ValueError("no valid rotation-period fit could be found")
 
-    chosen_order_fit = _select_order(candidate_fits, profile.order_selection_confidence)
+    statistical_order_fit = _select_order(
+        candidate_fits, profile.order_selection_confidence
+    )
+    order_frequencies = [
+        (order, 1.0 / _fit_with_period(fit).period_days)
+        for order, fit in candidate_fits.items()
+    ]
+    # Treat optima within four shared search-grid bins as one physical frequency.
+    consensus_tolerance = 4.0 * float(abs(frequencies[1] - frequencies[0]))
+    consensus_order, order_consensus_supported = _frequency_consensus_order(
+        order_frequencies,
+        statistical_order_fit.fourier_order,
+        consensus_tolerance,
+    )
+    chosen_order_fit = candidate_fits.get(consensus_order, statistical_order_fit)
     sigma_curve, fits = _evaluate_full_order_curve(
         t_rel=t_rel,
         y=y,
@@ -1033,6 +1098,8 @@ def _derive_fourier_solution(
         used_session_offsets=bool(used_session_offsets),
         fit_summary=best_fit,
         sigma_curve=sigma_curve,
+        order_consensus_corrected=consensus_order is not None,
+        order_consensus_supported=order_consensus_supported,
     )
 
 
@@ -1614,16 +1681,15 @@ def estimate_rotation_period(
 
     Notes
     -----
-    The confidence verdict is **measured, not guaranteed.** The solver is designed to
-    downgrade harmonic and sampling aliases to ``period_family`` instead of asserting a
-    confident ``single_period``, but this is calibrated behaviour with a known, nonzero
-    residual false-confidence risk: a ``single_period`` result can occasionally be a
-    harmonic or sampling alias of the true period. Measured strict ``single_period``
-    precision on the LCDB/DAMIT standard-candle set is ~0.88, and one tracked case
-    (1627 Ivar, a ~5/3 diurnal-sampling alias) is still reported confidently at the
-    wrong period. When a period that is wrong by an integer factor would be costly,
-    cross-check a ``single_period`` result against ``alternate_period_days`` and
-    ``reliability_code`` rather than treating the verdict as infallible.
+    The confidence verdict is **measured, not guaranteed.** The solver downgrades
+    unresolved harmonic and sampling aliases to ``period_family``. Order selection
+    also compares the physical frequencies preferred independently by each Fourier
+    order: when a majority agree and the F-test-selected high order lands on a one- or
+    two-cycle/day cadence alias, the highest order in the consensus family is used and
+    ``diurnal_order_consensus`` is reported. If four or more orders are evaluated but
+    no majority physical-frequency family exists, confidence is capped at
+    ``period_family`` with ``fourier_order_disagreement``. Callers should still inspect
+    ``alternate_period_days`` and ``reliability_code`` for high-consequence uses.
     """
     if clip_sigma <= 0.0:
         raise ValueError("clip_sigma must be positive")
@@ -1806,6 +1872,16 @@ def estimate_rotation_period(
         primary.is_valid = True
         primary.is_reliable = False
 
+    if (
+        primary.period_verdict == _VERDICT_SINGLE
+        and fourier_solution.order_consensus_supported is False
+    ):
+        primary.period_verdict = _VERDICT_FAMILY
+        primary.reliability_code = _RELIABILITY_BY_VERDICT[_VERDICT_FAMILY]
+        primary.insufficiency_reasons.append("fourier_order_disagreement")
+        primary.is_valid = True
+        primary.is_reliable = False
+
     # Sub-harmonic confidence guardrail.  When the span is short enough that the
     # recovered period sits at the long-period edge of the search grid -- fewer
     # than ~4 rotations spanned, so HALF the recovered frequency falls below the
@@ -1853,6 +1929,8 @@ def estimate_rotation_period(
     # the hard cap, so callers can see the recovered period/uncertainty came from a
     # coarsened or heuristically-searched grid rather than the requested resolution.
     diagnostic_flags: list[str] = []
+    if fourier_solution.order_consensus_corrected:
+        diagnostic_flags.append("diurnal_order_consensus")
     if resolved_fidelity == "validated_staged" and int(frequencies.size) > 2048:
         diagnostic_flags.append("staged_search_used")
     if _grid_was_capped(
