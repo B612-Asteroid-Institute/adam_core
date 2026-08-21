@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "object": "152830 Dinkinesh (1999 VD57)",
+  "captured_at_utc": "2026-08-21T16:20:25Z",
+  "sources": {
+    "sbdb": "JPL SBDB API through adam_core.orbits.query.query_sbdb('1999 VD57')",
+    "horizons": "JPL Horizons API through adam_core.orbits.query.query_horizons('1999 VD57', 2023-11-01T00:00:00Z, cartesian, @sun, smallbody)"
+  },
+  "sbdb_orbit": {
+    "orbit_id": "00000",
+    "epoch_mjd": 60249.0,
+    "time_scale": "tdb",
+    "origin": "SUN",
+    "frame": "ecliptic",
+    "cartesian_au_au_per_day": [
+      -2.1103967947997395,
+      -0.8177087394430383,
+      0.00029282617009667236,
+      0.0029115708391876257,
+      -0.010854788898813843,
+      -0.000408290238798819
+    ]
+  },
+  "horizons_expected": {
+    "epoch_mjd": 60249.00080072321,
+    "time_scale": "tdb",
+    "origin": "SUN",
+    "frame": "ecliptic",
+    "cartesian_au_au_per_day": [
+      -2.110394463418332,
+      -0.8177174311244393,
+      0.000292499242372342,
+      0.002911613967023816,
+      -0.01085477219119784,
+      -0.0004082902446588196
+    ]
+  }
+}

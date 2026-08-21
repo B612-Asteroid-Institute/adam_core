@@ -20,6 +20,7 @@ from adam_core import _rust_native
 SRC = Path(__file__).parents[1]
 
 RECORDED_QUERY_FIXTURES = [
+    "dynamics/tests/data/dinkinesh_sbdb_horizons_2023-11-01.json",
     "orbits/query/tests/data/horizons/vectors_bennu_20240101.txt",
     "orbits/query/tests/data/horizons/elements_bennu_20240101.txt",
     "orbits/query/tests/data/horizons/ephemerides_bennu_20240101.txt",

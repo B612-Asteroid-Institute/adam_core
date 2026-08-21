@@ -1,4 +1,7 @@
+import hashlib
+import json
 import logging
+from pathlib import Path
 
 import numpy as np
 import pyarrow.compute as pc
@@ -13,11 +16,17 @@ from adam_core.coordinates.origin import (
 )
 from adam_core.dynamics.lambert import calculate_c3, solve_lambert
 from adam_core.orbits import Orbits
-from adam_core.orbits.query import query_horizons, query_sbdb
 from adam_core.time import Timestamp
 from adam_core.utils.spice import get_perturber_state
 
 logger = logging.getLogger(__name__)
+
+_DINKINESH_FIXTURE_PATH = (
+    Path(__file__).parent / "data" / "dinkinesh_sbdb_horizons_2023-11-01.json"
+)
+_DINKINESH_FIXTURE_SHA256 = (
+    "3ca86b70fe2f760c59036476ac7675bfe27c755f9a0c96a4381d620e0553e18e"
+)
 
 # Test cases from Vallado's "Fundamentals of Astrodynamics and Applications"
 # and other well-known problems
@@ -90,7 +99,26 @@ def test_dinkinesh_propagation():
     departure_date = Timestamp.from_iso8601(["2022-10-16T00:00:00Z"], scale="utc")
     arrival_date = Timestamp.from_iso8601(["2023-11-01T00:00:00Z"], scale="utc")
 
-    dinkinesh_orbit = query_sbdb(["1999 VD57"])
+    fixture_bytes = _DINKINESH_FIXTURE_PATH.read_bytes()
+    assert hashlib.sha256(fixture_bytes).hexdigest() == _DINKINESH_FIXTURE_SHA256
+    fixture = json.loads(fixture_bytes)
+    sbdb = fixture["sbdb_orbit"]
+    sbdb_state = np.asarray(sbdb["cartesian_au_au_per_day"], dtype=np.float64)
+    dinkinesh_orbit = Orbits.from_kwargs(
+        orbit_id=[sbdb["orbit_id"]],
+        object_id=[fixture["object"]],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[sbdb_state[0]],
+            y=[sbdb_state[1]],
+            z=[sbdb_state[2]],
+            vx=[sbdb_state[3]],
+            vy=[sbdb_state[4]],
+            vz=[sbdb_state[5]],
+            time=Timestamp.from_mjd([sbdb["epoch_mjd"]], scale=sbdb["time_scale"]),
+            origin=Origin.from_OriginCodes(OriginCodes.SUN),
+            frame=sbdb["frame"],
+        ),
+    )
     prop = ASSISTPropagator()
     dinkinesh_arrival = prop.propagate_orbits(dinkinesh_orbit, arrival_date)
     dinkinesh_arrival = dinkinesh_arrival.set_column(
@@ -103,27 +131,14 @@ def test_dinkinesh_propagation():
         ),
     )
 
-    dinkinesh_horizons = query_horizons(
-        ["1999 VD57"],
-        arrival_date,
-        coordinate_type="cartesian",
-        location="@sun",
-        id_type="smallbody",
-    )
-    dinkinesh_horizons = dinkinesh_horizons.set_column(
-        "coordinates",
-        transform_coordinates(
-            dinkinesh_horizons.coordinates,
-            representation_out=CartesianCoordinates,
-            frame_out="ecliptic",
-            origin_out=OriginCodes.SUN,
-        ),
+    horizons_state = np.asarray(
+        fixture["horizons_expected"]["cartesian_au_au_per_day"], dtype=np.float64
     )
 
-    # This is a live sanity check that our ASSIST propagation of a real SBDB
-    # orbit agrees with JPL Horizons' own integrator/ephemeris -- two
-    # independent propagators compared against external data that JPL revises
-    # over time. The original atol=1e-15 (with numpy's default rtol=1e-7) was
+    # Frozen JPL SBDB input and independent Horizons output preserve this
+    # external-reference regression without making the deterministic suite
+    # depend on service availability. The original atol=1e-15 (with numpy's
+    # default rtol=1e-7) was
     # fragile: it fails on the near-ecliptic z-component (~2.9e-4 AU), where a
     # ~4e-11 AU (~6 m) absolute agreement still exceeds a 1e-7 relative bound.
     # Gate on a physically meaningful position/velocity agreement with an atol
@@ -132,13 +147,13 @@ def test_dinkinesh_propagation():
     # tolerating small-component geometry and modest Horizons/SBDB drift.
     np.testing.assert_allclose(
         dinkinesh_arrival.coordinates.r,
-        dinkinesh_horizons.coordinates.r,
+        horizons_state[None, :3],
         rtol=1e-6,
         atol=1e-8,
     )
     np.testing.assert_allclose(
         dinkinesh_arrival.coordinates.v,
-        dinkinesh_horizons.coordinates.v,
+        horizons_state[None, 3:],
         rtol=1e-6,
         atol=1e-10,
     )
