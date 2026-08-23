@@ -12,6 +12,7 @@ import scipy.optimize
 
 from ..dynamics.propagation import propagate_2body
 from ..observers.observers import Observers
+from .bandpasses.api import map_to_canonical_filter_bands
 from .hg12star import hg12star_correction
 from .lightcurve import reduced_magnitude
 from .magnitude import calculate_phase_angle
@@ -27,6 +28,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Color channels we fit an absolute magnitude for. These are the base band
+# letters of the canonical vendored filter IDs (e.g. SDSS_g, LSST_g, PS1_g all
+# reduce to the "g" channel); see `_resolve_channels`.
 _BANDS = ("g", "i", "r", "u")
 _PHI_TYPES = ("HG12star", "HG", "c1c2")
 # If fewer than this fraction of an object's observations survive validity
@@ -103,6 +107,47 @@ def _compute_geometry(
     return r, delta, alpha_deg
 
 
+def _resolve_channels(stn: np.ndarray, bands: np.ndarray) -> np.ndarray:
+    """
+    Map raw (observatory_code, reported_band) pairs to g/i/r/u color channels.
+
+    Rather than matching MPC band strings literally, this routes each observation
+    through the shared `map_to_canonical_filter_bands` utility, which resolves
+    `(observatory_code, band)` to a canonical vendored filter ID (handling MPC/ADES
+    label quirks, e.g. G96 "G" -> SDSS_g, ATLAS "o" -> ATLAS_o, LSST encodings, etc).
+    The canonical filter's base band letter is then taken as the color channel, so
+    every g-like filter (SDSS_g, LSST_g, PS1_g, DECam_g, so on) contributes to the "g"
+    fit, and filters outside the g/i/r/u set (V, PS1_w, SkyMapper_v) or rows with
+    no resolvable filter are returned as ``None`` (excluded downstream).
+
+    Returns an object array of length ``len(bands)`` whose entries are one of
+    ``"g"``, ``"i"``, ``"r"``, ``"u"`` or ``None``.
+    """
+    # on_unknown="skip" leaves unresolvable rows as None instead of raising, so
+    # unfiltered reports and unmapped bands are simply dropped from the fit.
+    filter_ids = map_to_canonical_filter_bands(stn, bands, on_unknown="skip")
+    channels = np.empty(len(filter_ids), dtype=object)
+    for i, fid in enumerate(filter_ids.tolist()):
+        if fid is None:
+            channels[i] = None
+            continue
+        base = str(fid).rsplit("_", 1)[-1].lower()
+        channels[i] = base if base in _BANDS else None
+
+    unresolved = channels == None  # noqa: E711
+    if np.any(unresolved):
+        dropped = sorted(
+            {f"{s}|{b}" for s, b in zip(stn[unresolved], bands[unresolved])}
+        )
+        logger.warning(
+            "Excluding %d observation(s) whose (station, band) does not resolve to a "
+            "g/i/r/u color channel: %s",
+            int(np.sum(unresolved)),
+            dropped,
+        )
+    return channels
+
+
 def _prepare_geometry(
     obs: MPCObservations,
     object_coords,
@@ -112,8 +157,10 @@ def _prepare_geometry(
     """
     Extract geometry and photometry arrays needed for per-band H fitting.
 
-    Returns (mag, rmsmag, bands, r, delta, alpha_deg, valid_mask).
-    valid_mask selects rows with finite mag, finite positive rmsmag.
+    Returns (mag, rmsmag, channels, r, delta, alpha_deg, valid_mask).
+    ``channels`` holds the resolved g/i/r/u color channel (or ``None``) for each
+    row; see `_resolve_channels`. valid_mask selects rows with finite mag, finite
+    positive rmsmag.
     """
     stn = np.asarray(obs.stn.to_numpy(zero_copy_only=False), dtype=object).astype(str)
     observers = Observers.from_codes(stn, obs.obstime)
@@ -123,21 +170,22 @@ def _prepare_geometry(
     bands = np.asarray(obs.band.to_numpy(zero_copy_only=False), dtype=object).astype(
         str
     )
+    channels = _resolve_channels(stn, bands)
 
     r, delta, alpha_deg = _compute_geometry(object_coords, observers)
     valid = np.isfinite(mag) & np.isfinite(rmsmag) & (rmsmag > 0)
-    return mag, rmsmag, bands, r, delta, alpha_deg, valid
+    return mag, rmsmag, channels, r, delta, alpha_deg, valid
 
 
-def _band_selector_matrix(bands: np.ndarray) -> np.ndarray:
+def _band_selector_matrix(channels: np.ndarray) -> np.ndarray:
     """N×4 selector matrix for H_g, H_i, H_r, H_u columns."""
-    return np.column_stack([(bands == b).astype(float) for b in _BANDS])
+    return np.column_stack([(channels == b).astype(float) for b in _BANDS])
 
 
 def _fit_per_band_h(
     m_red: np.ndarray,
     alpha_deg: np.ndarray,
-    bands: np.ndarray,
+    channels: np.ndarray,
     root_weights: np.ndarray,
     phi_type: Literal["HG12star", "HG", "c1c2"],
 ) -> dict[str, float]:
@@ -150,11 +198,12 @@ def _fit_per_band_h(
     - "c1c2": polynomial phase correction c1*alpha + c2*alpha^2 (alpha in radians);
       purely linear.
 
-    Observations whose band is not one of "g", "i", "r", "u" are excluded up
-    front and counted as outliers. A band with zero surviving observations is
-    reported as NaN. If, after all exclusions and outlier rejection, fewer than
-    `_MIN_RETAINED_FRACTION` of the input rows remain, the fit is considered
-    unreliable and raises.
+    ``channels`` is the resolved g/i/r/u color channel for each row (or ``None``);
+    see `_resolve_channels`. Observations whose channel is not one of "g", "i", "r",
+    "u" are excluded up front and counted as outliers. A channel with zero surviving
+    observations is reported as NaN. If, after all exclusions and outlier rejection,
+    fewer than `_MIN_RETAINED_FRACTION` of the input rows remain, the fit is
+    considered unreliable and raises.
 
     In all cases the fit is solved with iterative 3-sigma outlier rejection.
 
@@ -163,17 +212,12 @@ def _fit_per_band_h(
     "HG12star"); it is NaN for "c1c2", which has no such parameter.
     """
     n = len(m_red)
-    H_sel = _band_selector_matrix(bands)
+    H_sel = _band_selector_matrix(channels)
     full_weights = root_weights**2
 
-    known_band_mask = np.isin(bands, _BANDS)
-    if not np.all(known_band_mask):
-        unknown_bands = sorted(set(bands[~known_band_mask].tolist()))
-        logger.warning(
-            "Excluding %d observations with unrecognized band codes: %s",
-            int(np.sum(~known_band_mask)),
-            unknown_bands,
-        )
+    # Rows whose (station, band) did not resolve to a color channel are already
+    # logged in `_resolve_channels`; here they are simply excluded from the fit.
+    known_band_mask = np.isin(channels, _BANDS)
     included = known_band_mask.copy()
 
     if phi_type == "c1c2":
@@ -187,7 +231,7 @@ def _fit_per_band_h(
         )
         H_init = np.array(
             [
-                float(np.mean(m_red[bands == b])) if np.any(bands == b) else 0.0
+                float(np.mean(m_red[channels == b])) if np.any(channels == b) else 0.0
                 for b in _BANDS
             ]
         )
@@ -243,7 +287,7 @@ def _fit_per_band_h(
 
     H_values = [float(values[H_idx + i]) for i in range(len(_BANDS))]
     for i, b in enumerate(_BANDS):
-        if not np.any(bands[known_band_mask] == b):
+        if not np.any(channels[known_band_mask] == b):
             H_values[i] = float("nan")
 
     G_fit = float(values[0]) if phi_type != "c1c2" else float("nan")
@@ -347,7 +391,7 @@ def estimate_colors(
         G_fit: float = float("nan")
 
         try:
-            mag, rmsmag, bands, r, delta, alpha_deg, valid = _prepare_geometry(
+            mag, rmsmag, channels, r, delta, alpha_deg, valid = _prepare_geometry(
                 obs, object_coords
             )
             n_invalid = len(obs) - int(np.sum(valid))
@@ -355,7 +399,7 @@ def estimate_colors(
                 m_red = reduced_magnitude(mag[valid], r[valid], delta[valid])
                 root_weights = 1.0 / rmsmag[valid]
                 fit = _fit_per_band_h(
-                    m_red, alpha_deg[valid], bands[valid], root_weights, phi_type
+                    m_red, alpha_deg[valid], channels[valid], root_weights, phi_type
                 )
                 H_g = fit["H_g"]
                 H_i = fit["H_i"]
