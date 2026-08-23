@@ -13,7 +13,8 @@ from mpcq.orbits import MPCOrbits
 
 from adam_core.time import Timestamp
 
-from ..color_determination import ColorFit, estimate_colors
+from ..bandpasses.api import bandpass_delta_mag
+from ..color_determination import ColorFit, _apply_color_terms, estimate_colors
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -296,3 +297,114 @@ def test_force_g_bounds_false_warns_and_returns(
         and "force_g_bounds=False" in record.message
         for record in caplog.records
     ), "Expected an out-of-range warning mentioning force_g_bounds=False"
+
+
+# ---------------------------------------------------------------------------
+# Inter-system color-term correction (opt-in color_term_composition)
+# ---------------------------------------------------------------------------
+
+
+def test_apply_color_terms_reconciles_mixed_channel() -> None:
+    """
+    In a channel that mixes filter systems, minority-filter rows are shifted onto
+    the most-observed filter by exactly `bandpass_delta_mag`, while the majority
+    filter and any single-system channel are left untouched.
+    """
+    # g channel: 3x LSST_g (majority) + 1x SDSS_g (minority); r channel single-system.
+    filter_ids = np.array(
+        ["LSST_g", "LSST_g", "LSST_g", "SDSS_g", "LSST_r", "LSST_r"], dtype=object
+    )
+    channels = np.array(["g", "g", "g", "g", "r", "r"], dtype=object)
+    m_red = np.array([20.0, 20.0, 20.0, 20.0, 19.0, 19.0], dtype=np.float64)
+
+    out = _apply_color_terms(m_red, filter_ids, channels, "S")
+    delta = bandpass_delta_mag("S", "SDSS_g", "LSST_g")
+
+    assert delta != 0.0
+    # Majority LSST_g rows unchanged (reference filter).
+    np.testing.assert_array_equal(out[:3], 20.0)
+    # Minority SDSS_g row converted onto the LSST_g reference.
+    assert np.isclose(out[3], 20.0 + delta)
+    # Single-system r channel untouched.
+    np.testing.assert_array_equal(out[4:], 19.0)
+    # Input is not mutated.
+    np.testing.assert_array_equal(m_red[3], 20.0)
+
+
+def test_apply_color_terms_single_system_is_noop() -> None:
+    """A channel observed through a single filter system is never corrected."""
+    filter_ids = np.array(["LSST_g", "LSST_g", "LSST_r"], dtype=object)
+    channels = np.array(["g", "g", "r"], dtype=object)
+    m_red = np.array([20.0, 21.0, 19.0], dtype=np.float64)
+    out = _apply_color_terms(m_red, filter_ids, channels, "C")
+    np.testing.assert_array_equal(out, m_red)
+
+
+def _has_mixed_channel(fx: np.lib.npyio.NpzFile) -> bool:
+    """True if any g/i/r/u channel draws on more than one canonical filter."""
+    by_channel: dict[str, set[str]] = {}
+    for fid in fx["filter_id"].astype(str).tolist():
+        if not fid:
+            continue
+        base = fid.rsplit("_", 1)[-1].lower()
+        if base in _BAND_MAG_FIELD:
+            by_channel.setdefault(base, set()).add(fid)
+    return any(len(fids) > 1 for fids in by_channel.values())
+
+
+@pytest.mark.parametrize("fixture_name", COLOR_FIXTURES)
+def test_color_term_composition_noop_on_single_system_fixtures(
+    fixture_name: str,
+) -> None:
+    """
+    On a fixture whose channels are each single-system, the color-term correction
+    changes nothing: colors are bit-for-bit identical with and without it.
+    """
+    if fixture_name == "__NO_FIXTURES__":
+        pytest.skip("No color fixtures found on disk.")
+    fx = np.load(DATA_DIR / fixture_name, allow_pickle=True)
+    if _has_mixed_channel(fx):
+        pytest.skip(f"{fixture_name} mixes filter systems; covered elsewhere.")
+
+    observations = _load_fixture_observations(fx)
+    orbits = _load_fixture_orbits(fx)
+
+    base = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
+    corrected = estimate_colors(
+        observations,
+        orbits,
+        "HG12star",
+        force_g_bounds=False,
+        color_term_composition="S",
+    )
+    for field in ("g_r", "g_i", "r_i", "g_mag", "r_mag", "i_mag"):
+        assert getattr(base, field).to_pylist() == getattr(corrected, field).to_pylist()
+
+
+@pytest.mark.parametrize("fixture_name", COLOR_FIXTURES)
+def test_color_term_composition_preserves_paper_on_mixed_fixtures(
+    fixture_name: str,
+) -> None:
+    """
+    On a fixture that mixes filter systems within a channel, applying the
+    correction keeps colors finite and still within tolerance of the paper (the
+    griz inter-system terms are small, so reproduction is preserved).
+    """
+    if fixture_name == "__NO_FIXTURES__":
+        pytest.skip("No color fixtures found on disk.")
+    fx = np.load(DATA_DIR / fixture_name, allow_pickle=True)
+    if not _has_mixed_channel(fx):
+        pytest.skip(f"{fixture_name} has no mixed-system channel.")
+
+    object_id = str(fx["object_id"][0])
+    observations = _load_fixture_observations(fx)
+    orbits = _load_fixture_orbits(fx)
+
+    result = estimate_colors(
+        observations,
+        orbits,
+        "HG12star",
+        force_g_bounds=False,
+        color_term_composition="S",
+    )
+    _assert_colors_close(result, object_id, _paper_colors(fx), HG12STAR_TOLERANCE)
