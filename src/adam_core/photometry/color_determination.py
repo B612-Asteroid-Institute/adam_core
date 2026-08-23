@@ -12,7 +12,7 @@ import scipy.optimize
 
 from ..dynamics.propagation import propagate_2body
 from ..observers.observers import Observers
-from .bandpasses.api import map_to_canonical_filter_bands
+from .bandpasses.api import bandpass_delta_mag, map_to_canonical_filter_bands
 from .hg12star import hg12star_correction
 from .lightcurve import reduced_magnitude
 from .magnitude import calculate_phase_angle
@@ -107,7 +107,9 @@ def _compute_geometry(
     return r, delta, alpha_deg
 
 
-def _resolve_channels(stn: np.ndarray, bands: np.ndarray) -> np.ndarray:
+def _resolve_channels(
+    stn: np.ndarray, bands: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Map raw (observatory_code, reported_band) pairs to g/i/r/u color channels.
 
@@ -120,8 +122,11 @@ def _resolve_channels(stn: np.ndarray, bands: np.ndarray) -> np.ndarray:
     fit, and filters outside the g/i/r/u set (V, PS1_w, SkyMapper_v) or rows with
     no resolvable filter are returned as ``None`` (excluded downstream).
 
-    Returns an object array of length ``len(bands)`` whose entries are one of
-    ``"g"``, ``"i"``, ``"r"``, ``"u"`` or ``None``.
+    Returns ``(channels, filter_ids)``, each an object array of length
+    ``len(bands)``. ``channels`` entries are one of ``"g"``, ``"i"``, ``"r"``,
+    ``"u"`` or ``None``; ``filter_ids`` holds the canonical vendored filter ID (or
+    ``None``) and is kept so callers can apply inter-system color-term corrections
+    (see `_apply_color_terms`).
     """
     # on_unknown="skip" leaves unresolvable rows as None instead of raising, so
     # unfiltered reports and unmapped bands are simply dropped from the fit.
@@ -145,22 +150,70 @@ def _resolve_channels(stn: np.ndarray, bands: np.ndarray) -> np.ndarray:
             int(np.sum(unresolved)),
             dropped,
         )
-    return channels
+    return channels, filter_ids
+
+
+def _apply_color_terms(
+    m_red: np.ndarray,
+    filter_ids: np.ndarray,
+    channels: np.ndarray,
+    composition: str | tuple[float, float],
+) -> np.ndarray:
+    """
+    Reconcile reduced magnitudes onto a single reference filter per color channel.
+
+    A channel may pool observations taken through different but same-letter filters
+    (e.g. SDSS_g and LSST_g both feed the "g" channel). Merging them directly biases
+    the per-channel H by the inter-system color term. This converts every row onto
+    the channel's reference filter using `bandpass_delta_mag`:
+
+        m_red_ref = m_red + Δm(composition, filter_id -> reference_filter)
+
+    Because the reference is the dominant filter, rows already in it are unchanged,
+    and a channel containing a single filter system is a no-op. ``composition`` (a
+    template id "C"/"S"/"NEO"/"MBA" or a ``(weight_C, weight_S)`` tuple) therefore
+    only influences channels that genuinely mix filter systems.
+    """
+    out = np.asarray(m_red, dtype=np.float64).copy()
+    fid_str = np.array([str(f) for f in filter_ids.tolist()], dtype=object)
+    for ch in _BANDS:
+        in_ch = channels == ch
+        if not np.any(in_ch):
+            continue
+        uniq, counts = np.unique(fid_str[in_ch], return_counts=True)
+        if len(uniq) < 2:
+            continue  # single filter system in this channel: nothing to reconcile
+        ref = str(uniq[int(np.argmax(counts))])
+        for src in uniq.tolist():
+            if src == ref:
+                continue
+            delta = bandpass_delta_mag(composition, src, ref)
+            out[in_ch & (fid_str == src)] += delta
+            logger.debug(f"Color-term correction {src} -> {ref} ({ch} channel): {delta:.4f} mag")
+    return out
 
 
 def _prepare_geometry(
     obs: MPCObservations,
     object_coords,
 ) -> tuple[
-    np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
+    np.ndarray,
 ]:
     """
     Extract geometry and photometry arrays needed for per-band H fitting.
 
-    Returns (mag, rmsmag, channels, r, delta, alpha_deg, valid_mask).
+    Returns (mag, rmsmag, channels, filter_ids, r, delta, alpha_deg, valid_mask).
     ``channels`` holds the resolved g/i/r/u color channel (or ``None``) for each
-    row; see `_resolve_channels`. valid_mask selects rows with finite mag, finite
-    positive rmsmag.
+    row and ``filter_ids`` the canonical vendored filter ID (or ``None``); see
+    `_resolve_channels`. valid_mask selects rows with finite mag, finite positive
+    rmsmag.
     """
     stn = np.asarray(obs.stn.to_numpy(zero_copy_only=False), dtype=object).astype(str)
     observers = Observers.from_codes(stn, obs.obstime)
@@ -170,11 +223,11 @@ def _prepare_geometry(
     bands = np.asarray(obs.band.to_numpy(zero_copy_only=False), dtype=object).astype(
         str
     )
-    channels = _resolve_channels(stn, bands)
+    channels, filter_ids = _resolve_channels(stn, bands)
 
     r, delta, alpha_deg = _compute_geometry(object_coords, observers)
     valid = np.isfinite(mag) & np.isfinite(rmsmag) & (rmsmag > 0)
-    return mag, rmsmag, channels, r, delta, alpha_deg, valid
+    return mag, rmsmag, channels, filter_ids, r, delta, alpha_deg, valid
 
 
 def _band_selector_matrix(channels: np.ndarray) -> np.ndarray:
@@ -308,6 +361,7 @@ def estimate_colors(
     orbits: MPCOrbits,
     phi_type: Literal["HG12star", "HG", "c1c2"],
     force_g_bounds: bool = True,
+    color_term_composition: str | tuple[float, float] | None = None,
 ) -> ColorFit:
     """
     Estimate per-band absolute magnitudes and colors for each object.
@@ -333,6 +387,16 @@ def estimate_colors(
         is logged as a warning and the out-of-range value is kept -- some
         analyses (e.g. Greenstreet et al.) only reproduce when values outside
         [0, 1] are allowed.
+    color_term_composition
+        If set, reconcile observations from different filter systems within a
+        color channel (e.g. SDSS_g and LSST_g both feeding "g") onto the channel's
+        most-observed filter using `bandpass_delta_mag`, assuming this reflectance
+        spectrum: a template id ("C", "S", "NEO", "MBA") or a ``(weight_C,
+        weight_S)`` tuple. Channels observed through a single filter system are
+        unaffected, so this is a no-op unless a channel actually mixes systems.
+        If ``None`` (default), no color-term correction is applied and same-letter
+        filters are pooled directly (griz inter-system terms are ~0.01 mag; see
+        `_apply_color_terms`).
 
     Returns
     -------
@@ -391,12 +455,19 @@ def estimate_colors(
         G_fit: float = float("nan")
 
         try:
-            mag, rmsmag, channels, r, delta, alpha_deg, valid = _prepare_geometry(
-                obs, object_coords
+            mag, rmsmag, channels, filter_ids, r, delta, alpha_deg, valid = (
+                _prepare_geometry(obs, object_coords)
             )
             n_invalid = len(obs) - int(np.sum(valid))
             if np.any(valid):
                 m_red = reduced_magnitude(mag[valid], r[valid], delta[valid])
+                if color_term_composition is not None:
+                    m_red = _apply_color_terms(
+                        m_red,
+                        filter_ids[valid],
+                        channels[valid],
+                        color_term_composition,
+                    )
                 root_weights = 1.0 / rmsmag[valid]
                 fit = _fit_per_band_h(
                     m_red, alpha_deg[valid], channels[valid], root_weights, phi_type
