@@ -173,6 +173,23 @@ def test_estimate_colors_from_fixture(
 _BAND_MAG_FIELD = {"g": "g_mag", "i": "i_mag", "r": "r_mag", "u": "u_mag"}
 
 
+def _channels_present(fx: np.lib.npyio.NpzFile) -> set[str]:
+    """
+    Color channels (g/i/r/u) present in a fixture, derived from the canonical
+    ``filter_id`` the fixture generator resolved via `map_to_canonical_filter_bands`
+    (e.g. ``SDSS_g``/``LSST_g`` -> "g"). This mirrors how `estimate_colors` groups
+    observations into channels, rather than matching raw MPC band strings.
+    """
+    present: set[str] = set()
+    for fid in fx["filter_id"].astype(str).tolist():
+        if not fid:
+            continue
+        base = fid.rsplit("_", 1)[-1].lower()
+        if base in _BAND_MAG_FIELD:
+            present.add(base)
+    return present
+
+
 @pytest.mark.parametrize("fixture_name", COLOR_FIXTURES)
 def test_estimate_colors_missing_band_is_nan(fixture_name: str) -> None:
     """
@@ -185,7 +202,7 @@ def test_estimate_colors_missing_band_is_nan(fixture_name: str) -> None:
     fixture_path = DATA_DIR / fixture_name
     fx = np.load(fixture_path, allow_pickle=True)
     object_id = str(fx["object_id"][0])
-    bands_present = set(fx["band"].astype(str).tolist()) & set(_BAND_MAG_FIELD)
+    bands_present = _channels_present(fx)
     missing_bands = set(_BAND_MAG_FIELD) - bands_present
     if not missing_bands:
         print(f"{fixture_name} has observations in every band; nothing to check.")
