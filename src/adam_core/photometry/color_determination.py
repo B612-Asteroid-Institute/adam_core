@@ -15,7 +15,7 @@ from ..observers.observers import Observers
 from .bandpasses.api import bandpass_delta_mag, map_to_canonical_filter_bands
 from .hg12star import hg12star_correction
 from .lightcurve import reduced_magnitude
-from .magnitude import calculate_phase_angle
+from .magnitude import observing_geometry
 from .magnitude_common import hg_phase_correction
 
 if TYPE_CHECKING:
@@ -103,29 +103,6 @@ class ColorFit(qv.Table):
     converged = qv.BooleanColumn(nullable=True)
     num_obs = qv.Int64Column(nullable=True)
     num_outliers = qv.Int64Column(nullable=True)
-
-
-def _compute_geometry(
-    object_coords,
-    observers: Observers,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Compute heliocentric distance r (AU), topocentric distance delta (AU),
-    and phase angle alpha (degrees).
-
-    object_coords: CartesianCoordinates, heliocentric, aligned with observers rows.
-    observers: Observers, heliocentric, aligned with object_coords rows.
-
-    Phase angle is computed via `calculate_phase_angle`, which also validates
-    that the input geometry is finite and physically sensible (r > 0, delta > 0)
-    and raises otherwise.
-    """
-    obj_pos = object_coords.r  # N×3
-    observer_pos = observers.coordinates.r  # N×3
-    r = np.linalg.norm(obj_pos, axis=1)
-    delta = np.linalg.norm(obj_pos - observer_pos, axis=1)
-    alpha_deg = calculate_phase_angle(object_coords, observers)
-    return r, delta, alpha_deg
 
 
 def _resolve_channels(
@@ -248,7 +225,7 @@ def _prepare_geometry(
     )
     channels, filter_ids = _resolve_channels(stn, bands)
 
-    r, delta, alpha_deg = _compute_geometry(object_coords, observers)
+    r, delta, alpha_deg = observing_geometry(object_coords, observers)
     valid = np.isfinite(mag) & np.isfinite(rmsmag) & (rmsmag > 0)
     return mag, rmsmag, channels, filter_ids, r, delta, alpha_deg, valid
 
