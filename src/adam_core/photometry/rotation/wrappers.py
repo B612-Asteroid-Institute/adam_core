@@ -15,7 +15,7 @@ from ...observations.detections import PointSourceDetections
 from ...observations.exposures import Exposures
 from ...observers.observers import Observers
 from ...observers.utils import calculate_observing_night
-from ..magnitude import calculate_phase_angle
+from ..magnitude import observing_geometry
 from .core import (
     GroupedRotationPeriodResults,
     RotationPeriodObservations,
@@ -125,13 +125,8 @@ def build_rotation_period_observations_from_detections(
     time = object_coords_helio.time.rescale("tdb")
     mag = _as_float64_nan(detections.mag)
     mag_sigma = _as_float64_nan(detections.mag_sigma)
-    r_au = np.linalg.norm(np.asarray(object_coords_helio.r, dtype=np.float64), axis=1)
-    delta_vec = np.asarray(object_coords_helio.r, dtype=np.float64) - np.asarray(
-        observers_helio.coordinates.r, dtype=np.float64
-    )
-    delta_au = np.linalg.norm(delta_vec, axis=1)
-    phase_angle_deg = np.asarray(
-        calculate_phase_angle(object_coords_helio, observers_helio), dtype=np.float64
+    r_au, delta_au, phase_angle_deg = observing_geometry(
+        object_coords_helio, observers_helio
     )
 
     if np.any(~np.isfinite(mag)):
