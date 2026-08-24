@@ -1,10 +1,16 @@
 import numpy as np
+import numpy.typing as npt
 
 
 # Basis functions Phi1, Phi2, Phi3 from Penttila et al. (2016)
 # Hermite cubic spline (Appendix A, Eq. A.1).
 # xs in degrees; derivatives ds are in d(y)/d(alpha_rad) as given in Penttila Table A.2/A.3.
-def _hermite_spline(x_deg, xs_deg, ys, ds_per_rad):
+def _hermite_spline(
+    x_deg: npt.NDArray[np.float64] | float,
+    xs_deg: npt.NDArray[np.float64],
+    ys: npt.NDArray[np.float64],
+    ds_per_rad: npt.NDArray[np.float64],
+) -> npt.NDArray[np.float64] | float:
     x = np.deg2rad(np.asarray(x_deg, dtype=float))
     xs = np.deg2rad(xs_deg)
     scalar = x.ndim == 0
@@ -81,35 +87,29 @@ _XI3_D = np.array(
 )
 
 
-def _phi1(alpha_deg):
+def _phi1(alpha_deg: npt.NDArray[np.float64] | float) -> npt.NDArray[np.float64]:
     a = np.asarray(alpha_deg, dtype=float)
     lin = 1.0 - (6.0 / np.pi) * np.deg2rad(a)
     spl = _hermite_spline(a, _XI1_X, _XI1_Y, _XI1_D)
     return np.where(a <= 7.5, lin, spl)
 
 
-def _phi2(alpha_deg):
+def _phi2(alpha_deg: npt.NDArray[np.float64] | float) -> npt.NDArray[np.float64]:
     a = np.asarray(alpha_deg, dtype=float)
     lin = 1.0 - (9.0 / (5.0 * np.pi)) * np.deg2rad(a)
     spl = _hermite_spline(a, _XI2_X, _XI2_Y, _XI2_D)
     return np.where(a <= 7.5, lin, spl)
 
 
-def _phi3(alpha_deg):
+def _phi3(alpha_deg: npt.NDArray[np.float64] | float) -> npt.NDArray[np.float64]:
     a = np.asarray(alpha_deg, dtype=float)
     spl = _hermite_spline(a, _XI3_X, _XI3_Y, _XI3_D)
     return np.where(a <= 30.0, spl, 0.0)
 
 
-# TODO: Make unittests from this
-# Sanity check using table B.4 from page 25 of Pentilla.
-# Their value for phi_i(0) is wrong (should be 1, they have 0),
-# the rest should match
-# for alpha in [0.0, 0.35, 2.0, 5.5, 75]:
-#    print(f"Alpha={alpha} phi1={_phi1(alpha)} phi2={_phi2(alpha)} phi3={_phi3(alpha)}")
-
-
-def hg12star_correction(alpha_deg: np.ndarray, g12star: float) -> np.ndarray:
+def hg12star_correction(
+    alpha_deg: npt.NDArray[np.float64] | float, g12star: float
+) -> npt.NDArray[np.float64]:
     """Compute alpha correction using H,G12* approximation.
 
     Parameters:
