@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
 import pyarrow.compute as pc
@@ -77,9 +77,30 @@ class ColorFit(qv.Table):
     i_mag = qv.Float64Column(nullable=True)
     r_mag = qv.Float64Column(nullable=True)
     u_mag = qv.Float64Column(nullable=True)
+    # 1-sigma formal uncertainties on the per-band absolute magnitudes, rescaled
+    # to the observed scatter (see `_fit_per_band_h`). NaN for unobserved bands.
+    g_mag_sigma = qv.Float64Column(nullable=True)
+    i_mag_sigma = qv.Float64Column(nullable=True)
+    r_mag_sigma = qv.Float64Column(nullable=True)
+    u_mag_sigma = qv.Float64Column(nullable=True)
     g_r = qv.Float64Column(nullable=True)
     g_i = qv.Float64Column(nullable=True)
     r_i = qv.Float64Column(nullable=True)
+    # Color uncertainties, propagated from the full parameter covariance (so the
+    # H_x/H_y correlation through the shared phase parameter is accounted for).
+    g_r_sigma = qv.Float64Column(nullable=True)
+    g_i_sigma = qv.Float64Column(nullable=True)
+    r_i_sigma = qv.Float64Column(nullable=True)
+    # Fitted phase slope parameter (G for "HG", G12* for "HG12star"; NaN for
+    # "c1c2") and its 1-sigma uncertainty.
+    phase_param = qv.Float64Column(nullable=True)
+    phase_param_sigma = qv.Float64Column(nullable=True)
+    # Fit-quality diagnostics over the finally-included observations.
+    chi2 = qv.Float64Column(nullable=True)
+    reduced_chi2 = qv.Float64Column(nullable=True)
+    dof = qv.Int64Column(nullable=True)
+    rank = qv.Int64Column(nullable=True)
+    converged = qv.BooleanColumn(nullable=True)
     num_obs = qv.Int64Column(nullable=True)
     num_outliers = qv.Int64Column(nullable=True)
 
@@ -189,7 +210,9 @@ def _apply_color_terms(
                 continue
             delta = bandpass_delta_mag(composition, src, ref)
             out[in_ch & (fid_str == src)] += delta
-            logger.debug(f"Color-term correction {src} -> {ref} ({ch} channel): {delta:.4f} mag")
+            logger.debug(
+                f"Color-term correction {src} -> {ref} ({ch} channel): {delta:.4f} mag"
+            )
     return out
 
 
@@ -260,9 +283,23 @@ def _fit_per_band_h(
 
     In all cases the fit is solved with iterative 3-sigma outlier rejection.
 
-    Returns dict with keys "H_g", "H_i", "H_r", "H_u", "G", "num_obs",
-    "num_outliers". "G" is the fitted slope parameter (G for "HG", G12* for
-    "HG12star"); it is NaN for "c1c2", which has no such parameter.
+    Returns a dict of fit results and diagnostics:
+
+    - "H_g"/"H_i"/"H_r"/"H_u" and their "_sigma": per-band absolute magnitudes and
+      1-sigma uncertainties (NaN for an unobserved band).
+    - "g_r_sigma"/"g_i_sigma"/"r_i_sigma": color uncertainties, propagated from the
+      full parameter covariance so the H_x/H_y correlation is included.
+    - "G"/"G_sigma": fitted slope parameter (G for "HG", G12* for "HG12star"; NaN
+      for "c1c2") and its uncertainty.
+    - "chi2"/"reduced_chi2"/"dof"/"rank": goodness-of-fit over the finally-included
+      rows and the design-matrix rank.
+    - "converged": whether the (nonlinear) optimizer reported success; always True
+      for the linear "c1c2" solve.
+    - "num_obs"/"num_outliers".
+
+    Uncertainties come from the (J'*W*J)^-1 covariance rescaled by the reduced
+    chi-square, i.e. errors are matched to the observed scatter rather than trusting
+    the absolute rmsmag calibration.
     """
     n = len(m_red)
     H_sel = _band_selector_matrix(channels)
@@ -338,19 +375,79 @@ def _fit_per_band_h(
             f"(more than {1 - _MIN_RETAINED_FRACTION:.0%} of the data); fit is unreliable."
         )
 
-    H_values = [float(values[H_idx + i]) for i in range(len(_BANDS))]
-    for i, b in enumerate(_BANDS):
-        if not np.any(channels[known_band_mask] == b):
-            H_values[i] = float("nan")
+    # Fit diagnostics: goodness of fit and parameter covariance.
+    #
+    # chi2 is the weighted sum of squared residuals over the finally-included
+    # rows; dof = n_incl - num_params. `J` is the weighted design matrix (c1c2)
+    # or the optimizer's residual Jacobian (nonlinear), both equal
+    # d(weighted residual)/d(params), so cov = (J'J)^-1, rescaled by the reduced
+    # chi-square to match the observed scatter. pinv keeps this well-defined when
+    # an unobserved band leaves its H column at zero (rank-deficient normal
+    # matrix); those bands are then masked out to NaN below.
+    n_incl = int(np.sum(included))
+    dof = n_incl - num_params
+    chi2 = float(np.dot(res, included))
+    reduced_chi2 = chi2 / dof if dof > 0 else float("nan")
+
+    if phi_type == "c1c2":
+        J = A[included] * root_weights[included, None]
+        optimizer_converged = True
+    else:
+        J = np.asarray(result.jac, dtype=np.float64)
+        optimizer_converged = bool(result.success)
+    rank = int(np.linalg.matrix_rank(J)) if J.size else 0
+
+    if dof > 0:
+        cov = np.linalg.pinv(J.T @ J) * reduced_chi2
+        param_sigma = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
+    else:
+        cov = np.full((num_params, num_params), np.nan)
+        param_sigma = np.full(num_params, np.nan)
+
+    band_present = [bool(np.any(channels[known_band_mask] == b)) for b in _BANDS]
+    H_values = [
+        float(values[H_idx + i]) if band_present[i] else float("nan")
+        for i in range(len(_BANDS))
+    ]
+    H_sigma = [
+        float(param_sigma[H_idx + i]) if band_present[i] else float("nan")
+        for i in range(len(_BANDS))
+    ]
+
+    def _color_sigma(i: int, j: int) -> float:
+        if not (band_present[i] and band_present[j]):
+            return float("nan")
+        a, b = H_idx + i, H_idx + j
+        var = float(cov[a, a] + cov[b, b] - 2.0 * cov[a, b])
+        return float(np.sqrt(var)) if var > 0 else float("nan")
+
+    # _BANDS order is (g, i, r, u) -> indices g=0, i=1, r=2, u=3.
+    g_r_sigma = _color_sigma(0, 2)
+    g_i_sigma = _color_sigma(0, 1)
+    r_i_sigma = _color_sigma(2, 1)
 
     G_fit = float(values[0]) if phi_type != "c1c2" else float("nan")
+    G_sigma = float(param_sigma[0]) if phi_type != "c1c2" else float("nan")
 
     return {
         "H_g": H_values[0],
         "H_i": H_values[1],
         "H_r": H_values[2],
         "H_u": H_values[3],
+        "H_g_sigma": H_sigma[0],
+        "H_i_sigma": H_sigma[1],
+        "H_r_sigma": H_sigma[2],
+        "H_u_sigma": H_sigma[3],
+        "g_r_sigma": g_r_sigma,
+        "g_i_sigma": g_i_sigma,
+        "r_i_sigma": r_i_sigma,
         "G": G_fit,
+        "G_sigma": G_sigma,
+        "chi2": chi2,
+        "reduced_chi2": reduced_chi2,
+        "dof": dof,
+        "rank": rank,
+        "converged": optimizer_converged,
         "num_obs": n,
         "num_outliers": num_outliers,
     }
@@ -417,16 +514,7 @@ def estimate_colors(
         x for x in pc.unique(observations.requested_provid).to_pylist() if x is not None
     ]
 
-    out_ids: list[str] = []
-    out_g_mag: list[Optional[float]] = []
-    out_i_mag: list[Optional[float]] = []
-    out_r_mag: list[Optional[float]] = []
-    out_u_mag: list[Optional[float]] = []
-    out_g_r: list[Optional[float]] = []
-    out_g_i: list[Optional[float]] = []
-    out_r_i: list[Optional[float]] = []
-    out_num_obs: list[Optional[int]] = []
-    out_num_outliers: list[Optional[int]] = []
+    rows: list[dict[str, object]] = []
 
     for obj_id in unique_ids:
         obs_mask = pc.equal(observations.requested_provid, obj_id)
@@ -443,15 +531,35 @@ def estimate_colors(
         propagated = propagate_2body(adam_orbits, obs.obstime)
         object_coords = propagated.coordinates
 
-        H_g: Optional[float] = None
-        H_i: Optional[float] = None
-        H_r: Optional[float] = None
-        H_u: Optional[float] = None
-        g_r: Optional[float] = None
-        g_i: Optional[float] = None
-        r_i: Optional[float] = None
-        num_obs: int = len(obs)
-        num_outliers: Optional[int] = None
+        # Per-object outputs default to None (no fit produced) and are overwritten
+        # when a fit runs. G_fit stays NaN so `_validate_g_bounds` skips objects
+        # without a slope parameter (no valid data, or phi_type="c1c2").
+        row: dict[str, object] = {
+            "object_id": obj_id,
+            "g_mag": None,
+            "i_mag": None,
+            "r_mag": None,
+            "u_mag": None,
+            "g_mag_sigma": None,
+            "i_mag_sigma": None,
+            "r_mag_sigma": None,
+            "u_mag_sigma": None,
+            "g_r": None,
+            "g_i": None,
+            "r_i": None,
+            "g_r_sigma": None,
+            "g_i_sigma": None,
+            "r_i_sigma": None,
+            "phase_param": None,
+            "phase_param_sigma": None,
+            "chi2": None,
+            "reduced_chi2": None,
+            "dof": None,
+            "rank": None,
+            "converged": None,
+            "num_obs": len(obs),
+            "num_outliers": None,
+        }
         G_fit: float = float("nan")
 
         try:
@@ -472,43 +580,66 @@ def estimate_colors(
                 fit = _fit_per_band_h(
                     m_red, alpha_deg[valid], channels[valid], root_weights, phi_type
                 )
-                H_g = fit["H_g"]
-                H_i = fit["H_i"]
-                H_r = fit["H_r"]
-                H_u = fit["H_u"]
-                num_outliers = n_invalid + int(fit["num_outliers"])
                 G_fit = fit["G"]
-                g_r = H_g - H_r
-                g_i = H_g - H_i
-                r_i = H_r - H_i
+                row.update(
+                    g_mag=fit["H_g"],
+                    i_mag=fit["H_i"],
+                    r_mag=fit["H_r"],
+                    u_mag=fit["H_u"],
+                    g_mag_sigma=fit["H_g_sigma"],
+                    i_mag_sigma=fit["H_i_sigma"],
+                    r_mag_sigma=fit["H_r_sigma"],
+                    u_mag_sigma=fit["H_u_sigma"],
+                    g_r=fit["H_g"] - fit["H_r"],
+                    g_i=fit["H_g"] - fit["H_i"],
+                    r_i=fit["H_r"] - fit["H_i"],
+                    g_r_sigma=fit["g_r_sigma"],
+                    g_i_sigma=fit["g_i_sigma"],
+                    r_i_sigma=fit["r_i_sigma"],
+                    phase_param=G_fit,
+                    phase_param_sigma=fit["G_sigma"],
+                    chi2=fit["chi2"],
+                    reduced_chi2=fit["reduced_chi2"],
+                    dof=fit["dof"],
+                    rank=fit["rank"],
+                    converged=fit["converged"],
+                    num_outliers=n_invalid + int(fit["num_outliers"]),
+                )
             else:
-                num_outliers = n_invalid
+                row["num_outliers"] = n_invalid
         except Exception:
             logger.exception("Problem when fitting colors for %s", obj_id)
             raise
 
         _validate_g_bounds(G_fit, phi_type, obj_id, force_g_bounds)
+        rows.append(row)
 
-        out_ids.append(obj_id)
-        out_g_mag.append(H_g)
-        out_i_mag.append(H_i)
-        out_r_mag.append(H_r)
-        out_u_mag.append(H_u)
-        out_g_r.append(g_r)
-        out_g_i.append(g_i)
-        out_r_i.append(r_i)
-        out_num_obs.append(num_obs)
-        out_num_outliers.append(num_outliers)
+    def _col(name: str) -> list[object]:
+        return [row[name] for row in rows]
 
     return ColorFit.from_kwargs(
-        object_id=out_ids,
-        g_mag=out_g_mag,
-        i_mag=out_i_mag,
-        r_mag=out_r_mag,
-        u_mag=out_u_mag,
-        g_r=out_g_r,
-        g_i=out_g_i,
-        r_i=out_r_i,
-        num_obs=out_num_obs,
-        num_outliers=out_num_outliers,
+        object_id=_col("object_id"),
+        g_mag=_col("g_mag"),
+        i_mag=_col("i_mag"),
+        r_mag=_col("r_mag"),
+        u_mag=_col("u_mag"),
+        g_mag_sigma=_col("g_mag_sigma"),
+        i_mag_sigma=_col("i_mag_sigma"),
+        r_mag_sigma=_col("r_mag_sigma"),
+        u_mag_sigma=_col("u_mag_sigma"),
+        g_r=_col("g_r"),
+        g_i=_col("g_i"),
+        r_i=_col("r_i"),
+        g_r_sigma=_col("g_r_sigma"),
+        g_i_sigma=_col("g_i_sigma"),
+        r_i_sigma=_col("r_i_sigma"),
+        phase_param=_col("phase_param"),
+        phase_param_sigma=_col("phase_param_sigma"),
+        chi2=_col("chi2"),
+        reduced_chi2=_col("reduced_chi2"),
+        dof=_col("dof"),
+        rank=_col("rank"),
+        converged=_col("converged"),
+        num_obs=_col("num_obs"),
+        num_outliers=_col("num_outliers"),
     )

@@ -218,14 +218,21 @@ def test_estimate_colors_missing_band_is_nan(fixture_name: str) -> None:
 
     for band, field in _BAND_MAG_FIELD.items():
         value = getattr(row, field)[0].as_py()
+        sigma = getattr(row, f"{field}_sigma")[0].as_py()
         if band in missing_bands:
             assert value is not None and np.isnan(
                 value
             ), f"{object_id} {field}: expected NaN for unobserved band {band!r}, got {value}"
+            assert sigma is not None and np.isnan(
+                sigma
+            ), f"{object_id} {field}_sigma: expected NaN for unobserved band {band!r}, got {sigma}"
         else:
             assert value is not None and np.isfinite(
                 value
             ), f"{object_id} {field}: expected a finite value for observed band {band!r}, got {value}"
+            assert (
+                sigma is not None and np.isfinite(sigma) and sigma > 0
+            ), f"{object_id} {field}_sigma: expected a positive finite value for band {band!r}, got {sigma}"
 
 
 def test_estimate_colors_multi_object() -> None:
@@ -408,3 +415,95 @@ def test_color_term_composition_preserves_paper_on_mixed_fixtures(
         color_term_composition="S",
     )
     _assert_colors_close(result, object_id, _paper_colors(fx), HG12STAR_TOLERANCE)
+
+
+# ---------------------------------------------------------------------------
+# Fit diagnostics (uncertainties, chi-square, DOF/rank, convergence)
+# ---------------------------------------------------------------------------
+
+_DIAGNOSTICS_FIXTURE = "color_fixture_2025_MF76.npz"
+
+
+def _load_diagnostics_fixture() -> np.lib.npyio.NpzFile:
+    path = DATA_DIR / _DIAGNOSTICS_FIXTURE
+    if not path.exists():
+        pytest.skip(f"Missing fixture {_DIAGNOSTICS_FIXTURE}")
+    fx: np.lib.npyio.NpzFile = np.load(path, allow_pickle=True)
+    return fx
+
+
+@pytest.mark.parametrize("phi_type", ["HG12star", "HG", "c1c2"])
+def test_fit_diagnostics_are_populated(
+    phi_type: Literal["HG12star", "HG", "c1c2"],
+) -> None:
+    """Every fit reports goodness-of-fit, covariance-based errors, and status."""
+    fx = _load_diagnostics_fixture()
+    observations = _load_fixture_observations(fx)
+    orbits = _load_fixture_orbits(fx)
+
+    row = estimate_colors(observations, orbits, phi_type, force_g_bounds=False)
+    assert len(row) == 1
+
+    chi2 = row.chi2[0].as_py()
+    dof = row.dof[0].as_py()
+    reduced_chi2 = row.reduced_chi2[0].as_py()
+    assert chi2 > 0
+    assert dof > 0
+    assert np.isfinite(reduced_chi2) and reduced_chi2 > 0
+    assert np.isclose(reduced_chi2, chi2 / dof)
+    assert row.converged[0].as_py() is True
+
+    # DOF invariant: included observations minus the number of fitted parameters.
+    num_params = 6 if phi_type == "c1c2" else 5
+    assert dof == row.num_obs[0].as_py() - row.num_outliers[0].as_py() - num_params
+
+    # Design-matrix rank = one column per observed band, plus the phase columns
+    # (G for HG/HG12star; c1*alpha + c2*alpha^2 for c1c2).
+    present = _channels_present(fx)
+    phase_cols = 2 if phi_type == "c1c2" else 1
+    assert row.rank[0].as_py() == len(present) + phase_cols
+
+    # Phase slope parameter: fitted (with an uncertainty) for HG/HG12star, and
+    # NaN for c1c2 which has no such parameter.
+    phase_param = row.phase_param[0].as_py()
+    phase_param_sigma = row.phase_param_sigma[0].as_py()
+    if phi_type == "c1c2":
+        assert np.isnan(phase_param) and np.isnan(phase_param_sigma)
+    else:
+        assert np.isfinite(phase_param)
+        assert np.isfinite(phase_param_sigma) and phase_param_sigma > 0
+
+    # Per-band uncertainties are positive-finite for observed bands (NaN handling
+    # for unobserved bands is covered by test_estimate_colors_missing_band_is_nan).
+    for band, field in _BAND_MAG_FIELD.items():
+        if band not in present:
+            continue
+        sigma = getattr(row, f"{field}_sigma")[0].as_py()
+        assert np.isfinite(sigma) and sigma > 0
+
+    for field in ("g_r_sigma", "g_i_sigma", "r_i_sigma"):
+        value = getattr(row, field)[0].as_py()
+        assert np.isfinite(value) and value > 0
+
+
+def test_color_sigma_propagates_covariance_not_quadrature() -> None:
+    """
+    Color uncertainties use the full parameter covariance, so the H_x/H_y
+    correlation through the shared phase parameter reduces them below a naive
+    quadrature sum. The HG model makes G and H strongly degenerate, so the effect
+    is pronounced there.
+    """
+    fx = _load_diagnostics_fixture()
+    observations = _load_fixture_observations(fx)
+    orbits = _load_fixture_orbits(fx)
+
+    row = estimate_colors(observations, orbits, "HG", force_g_bounds=False)
+    g_sigma = row.g_mag_sigma[0].as_py()
+    r_sigma = row.r_mag_sigma[0].as_py()
+    g_r_sigma = row.g_r_sigma[0].as_py()
+
+    quadrature = float(np.hypot(g_sigma, r_sigma))
+    assert g_r_sigma < quadrature
+    # The per-band magnitudes share the G degeneracy, so each is far more
+    # uncertain than the color itself.
+    assert g_r_sigma < g_sigma
