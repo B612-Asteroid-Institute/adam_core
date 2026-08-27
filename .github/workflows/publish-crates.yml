@@ -10,7 +10,7 @@ on:
       expected_version:
         description: Exact prerelease shared by all six crates
         required: true
-        default: 0.1.0-rc.4
+        default: 0.1.0-rc.5
         type: string
       authentication:
         description: crates.io OIDC trusted publishing (bootstrap token was revoked after rc.1)
@@ -30,7 +30,7 @@ permissions:
   id-token: write
 
 env:
-  PYTHON_PREVIEW_VERSION: "0.5.6rc4"
+  PYTHON_SOURCE_VERSION: "0.5.6rc5"
 
 jobs:
   publish:
@@ -48,12 +48,12 @@ jobs:
           EXPECTED_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          test "$GITHUB_REF" = "refs/tags/v$PYTHON_PREVIEW_VERSION"
+          test "$GITHUB_REF" = "refs/tags/v$EXPECTED_VERSION"
           test "$CONFIRMATION" = "publish $EXPECTED_VERSION from $EXPECTED_SHA to crates.io"
       - name: Verify source prerelease versions and exact internal pins
         run: |
           python migration/scripts/verify_preview_versions.py \
-            --python-version "$PYTHON_PREVIEW_VERSION" \
+            --python-version "$PYTHON_SOURCE_VERSION" \
             --rust-version "${{ inputs.expected_version }}"
       - name: Verify candidate run provenance and success
         env:

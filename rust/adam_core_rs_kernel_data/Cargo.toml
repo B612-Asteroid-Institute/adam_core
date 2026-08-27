@@ -1,6 +1,6 @@
 [package]
 name = "adam_core_rs_kernel_data"
-version = "0.1.0-rc.4"
+version = "0.1.0-rc.5"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -15,8 +15,14 @@ spice = ["dep:adam_core_rs_spice"]
 [dependencies]
 sha2 = "0.10"
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
+# Keep ureq's URL/IDNA stack compatible with the declared Rust 1.87 MSRV for
+# downstream consumers that resolve without this workspace's Cargo.lock.
+icu_locale_core = { version = "=2.2.0", default-features = false }
+icu_normalizer = { version = "=2.2.0", default-features = false }
+icu_properties = { version = "=2.2.0", default-features = false }
+icu_provider = { version = "=2.2.0", default-features = false }
 zip = { version = "2", default-features = false, features = ["deflate"] }
-adam_core_rs_spice = { version = "=0.1.0-rc.4", path = "../adam_core_rs_spice", optional = true }
+adam_core_rs_spice = { version = "=0.1.0-rc.5", path = "../adam_core_rs_spice", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

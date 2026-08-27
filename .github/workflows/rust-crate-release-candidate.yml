@@ -19,7 +19,7 @@ permissions:
 
 env:
   PYTHON_PREVIEW_VERSION: "0.5.6rc5"
-  RUST_PREVIEW_VERSION: "0.1.0-rc.4"
+  RUST_PREVIEW_VERSION: "0.1.0-rc.5"
 
 jobs:
   package-and-test:
@@ -73,6 +73,57 @@ jobs:
           python migration/scripts/publish_crate_archives.py \
             --archives crate-dist \
             --expected-version "$RUST_PREVIEW_VERSION"
+      - name: Verify clean no-lock Rust 1.87 consumer resolution
+        run: |
+          set -euo pipefail
+          consumer="$(mktemp -d)"
+          trap 'rm -rf "$consumer"' EXIT
+          mkdir -p "$consumer/src"
+          printf 'fn main() {}\n' > "$consumer/src/main.rs"
+          cat > "$consumer/Cargo.toml" <<EOF
+          [package]
+          name = "adam-core-msrv-consumer"
+          version = "0.0.0"
+          edition = "2021"
+
+          [dependencies]
+          adam_core = "=$RUST_PREVIEW_VERSION"
+
+          [patch.crates-io]
+          adam_core = { path = "$GITHUB_WORKSPACE/rust/adam_core" }
+          adam_core_rs_autodiff = { path = "$GITHUB_WORKSPACE/rust/adam_core_rs_autodiff" }
+          adam_core_rs_coords = { path = "$GITHUB_WORKSPACE/rust/adam_core_rs_coords" }
+          adam_core_rs_kernel_data = { path = "$GITHUB_WORKSPACE/rust/adam_core_rs_kernel_data" }
+          adam_core_rs_orbit_determination = { path = "$GITHUB_WORKSPACE/rust/adam_core_rs_orbit_determination" }
+          adam_core_rs_spice = { path = "$GITHUB_WORKSPACE/rust/adam_core_rs_spice" }
+          EOF
+          test ! -e "$consumer/Cargo.lock"
+          rustc --version | grep -F "rustc 1.87.0"
+          cargo check --manifest-path "$consumer/Cargo.toml"
+          cargo metadata --format-version 1 --manifest-path "$consumer/Cargo.toml" \
+            > "$consumer/metadata.json"
+          python - "$consumer/metadata.json" <<'PY'
+          import json
+          import sys
+
+          expected = {
+              "icu_collections",
+              "icu_locale_core",
+              "icu_normalizer",
+              "icu_normalizer_data",
+              "icu_properties",
+              "icu_properties_data",
+              "icu_provider",
+          }
+          packages = json.load(open(sys.argv[1], encoding="utf-8"))["packages"]
+          resolved = {
+              package["name"]: package["version"]
+              for package in packages
+              if package["name"] in expected
+          }
+          assert resolved == {name: "2.2.0" for name in expected}, resolved
+          print("clean Rust 1.87 consumer resolved ICU4X 2.2.0 exactly")
+          PY
       - name: Upload exact crate publication set
         uses: actions/upload-artifact@v4
         with:

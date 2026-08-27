@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -62,6 +63,32 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
 
     assert workflow.index(writer) < workflow.index(builder) < workflow.index(inspector)
     assert 'PYTHON_PREVIEW_VERSION: "0.5.6rc5"' in workflow
+
+
+def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
+    manifest_path = ROOT / "rust/adam_core_rs_kernel_data/Cargo.toml"
+    with manifest_path.open("rb") as source:
+        dependencies = tomllib.load(source)["dependencies"]
+
+    expected = {"version": "=2.2.0", "default-features": False}
+    for name in (
+        "icu_locale_core",
+        "icu_normalizer",
+        "icu_properties",
+        "icu_provider",
+    ):
+        assert dependencies[name] == expected
+
+    workflow = (ROOT / ".github/workflows/rust-crate-release-candidate.yml").read_text()
+    assert "Verify clean no-lock Rust 1.87 consumer resolution" in workflow
+    assert 'test ! -e "$consumer/Cargo.lock"' in workflow
+    assert 'rustc --version | grep -F "rustc 1.87.0"' in workflow
+    assert "clean Rust 1.87 consumer resolved ICU4X 2.2.0 exactly" in workflow
+
+    publisher = (ROOT / ".github/workflows/publish-crates.yml").read_text()
+    assert "default: 0.1.0-rc.5" in publisher
+    assert 'PYTHON_SOURCE_VERSION: "0.5.6rc5"' in publisher
+    assert 'test "$GITHUB_REF" = "refs/tags/v$EXPECTED_VERSION"' in publisher
 
 
 def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
