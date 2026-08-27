@@ -20,6 +20,26 @@ RETIRED_PYTHON_BACKENDS = frozenset(
         "spicekit",
     }
 )
+SPICE_KERNEL_RUNTIME_REQUIREMENTS = frozenset(
+    {
+        "naif-de440",
+        "naif-leapseconds",
+        "naif-eop-high-prec",
+        "naif-eop-predict",
+        "naif-eop-historical",
+        "naif-earth-itrf93",
+    }
+)
+SPICE_KERNEL_TEST_AUTHORITIES = frozenset(
+    {
+        "naif-de440==2020.12.21.1",
+        "naif-leapseconds==2025.4.22",
+        "naif-eop-high-prec==2026.5.9",
+        "naif-eop-predict==2024.8.28.1",
+        "naif-eop-historical==2024.8.28.1",
+        "naif-earth-itrf93==2007.4.3.1",
+    }
+)
 
 
 def _iter_audited_python_paths() -> Iterator[Path]:
@@ -74,3 +94,20 @@ def test_project_runtime_dependencies_exclude_retired_python_backends() -> None:
     }
 
     assert dependency_names.isdisjoint(RETIRED_PYTHON_BACKENDS)
+
+
+def test_spice_kernel_test_authorities_do_not_pin_runtime_metadata() -> None:
+    pyproject = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))
+    runtime_requirements = {
+        requirement
+        for requirement in pyproject["project"]["dependencies"]
+        if _top_level_requirement_name(requirement) in SPICE_KERNEL_RUNTIME_REQUIREMENTS
+    }
+    test_authorities = {
+        requirement
+        for requirement in pyproject["dependency-groups"]["test"]
+        if _top_level_requirement_name(requirement) in SPICE_KERNEL_RUNTIME_REQUIREMENTS
+    }
+
+    assert runtime_requirements == SPICE_KERNEL_RUNTIME_REQUIREMENTS
+    assert test_authorities == SPICE_KERNEL_TEST_AUTHORITIES
