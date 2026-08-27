@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
 
+from adam_core import _rust_native
+
 from ...coordinates import CartesianCoordinates
 from ...coordinates.origin import Origin
 from ...time import Timestamp
@@ -74,6 +76,16 @@ def test_validate_coverage_accepts_contiguous_non_overlapping():
     assert _contiguous().validate_coverage() is not None
 
 
+def test_empty_trajectory_preserves_upstream_defaults():
+    trajectory = Trajectory.empty()
+    np.testing.assert_array_equal(trajectory.coverage_start_mjd(), [])
+    np.testing.assert_array_equal(trajectory.coverage_end_mjd(), [])
+    np.testing.assert_array_equal(trajectory.epoch_mjd(), [])
+    assert trajectory.object_ids() == []
+    assert trajectory.validate_coverage() is trajectory
+    assert trajectory.segment_for(59000.0) is None
+
+
 def test_validate_coverage_rejects_non_positive_window():
     traj = _trajectory("A", epochs=[59000.0], starts=[59000.0], ends=[59000.0])
     with pytest.raises(ValueError, match="strictly after"):
@@ -122,3 +134,29 @@ def test_segment_for_multi_object_requires_object_id():
         both.segment_for(59000.0)
     assert both.segment_for(59000.0, object_id="A").segment_id.to_pylist() == ["A.seg0"]
     assert both.segment_for(59000.0, object_id="B").segment_id.to_pylist() == ["B.seg0"]
+
+
+def test_trajectory_public_methods_have_rust_owned_timing():
+    trajectory = _contiguous().validate_coverage()
+    batch = trajectory._native_batch()
+    for operation in [
+        "coverage_start_mjd",
+        "coverage_end_mjd",
+        "epoch_mjd",
+        "object_ids",
+        "validate_coverage",
+        "segment_for",
+    ]:
+        samples = np.asarray(
+            _rust_native.benchmark_trajectory_arrow(
+                batch,
+                operation,
+                2,
+                2,
+                1,
+                59000.0 if operation == "segment_for" else None,
+                "A" if operation == "segment_for" else None,
+            )
+        )
+        assert samples.shape == (2, 2)
+        assert np.all(samples > 0.0)

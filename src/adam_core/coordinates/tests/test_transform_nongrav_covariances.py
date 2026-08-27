@@ -1,5 +1,7 @@
 import numpy as np
 
+from adam_core.coordinates.covariances import apply_linear_covariance_transform
+
 from ...time import Timestamp
 from ..cartesian import CartesianCoordinates
 from ..cometary import CometaryCoordinates
@@ -155,6 +157,33 @@ def test_transform_coordinates_mixed_rows_keep_plain_6x6():
     assert np.isnan(full[1, 6:, :]).all()
     assert np.isnan(full[1, :, 6:]).all()
     assert not np.isnan(full[1, :6, :6]).any()
+
+
+def test_apply_linear_covariance_transform_preserves_extended_blocks():
+    covariance = _extended_covariance(seed=37)[None]
+    angle = np.deg2rad(17.0)
+    rotation3 = np.array(
+        [
+            [np.cos(angle), -np.sin(angle), 0.0],
+            [np.sin(angle), np.cos(angle), 0.0],
+            [0.0, 0.0, 1.0],
+        ]
+    )
+    rotation6 = np.zeros((6, 6))
+    rotation6[:3, :3] = rotation3
+    rotation6[3:, 3:] = rotation3
+
+    transformed = apply_linear_covariance_transform(rotation6, covariance)
+    np.testing.assert_allclose(
+        transformed[:, 6:, 6:], covariance[:, 6:, 6:], rtol=0, atol=0
+    )
+    np.testing.assert_allclose(
+        transformed[:, :6, 6:], rotation6 @ covariance[:, :6, 6:]
+    )
+    np.testing.assert_allclose(
+        transformed[:, 6:, :6],
+        np.transpose(transformed[:, :6, 6:], axes=(0, 2, 1)),
+    )
 
 
 def test_coordinate_covariances_full_matrix_round_trip():

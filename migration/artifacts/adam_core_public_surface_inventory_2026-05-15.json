@@ -1,0 +1,4063 @@
+{
+  "generated_at": "2026-05-15",
+  "root": "src/adam_core",
+  "count": 507,
+  "entries": [
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 28
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.values",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 62
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.r",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 70
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.r_mag",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 77
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.r_hat",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 84
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.v",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 91
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.v_mag",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 98
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.v_hat",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 105
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.sigma_x",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 112
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.sigma_y",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 119
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.sigma_z",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 126
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.sigma_vx",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 133
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.sigma_vy",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 140
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.sigma_vz",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 147
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.sigma_r",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 154
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.sigma_r_mag",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 161
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.sigma_v",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 168
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.sigma_v_mag",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 175
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.h",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 182
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.h_mag",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 189
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.values_km",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 196
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.r_km",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 210
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.v_km_s",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 217
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.ric3_matrix",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 224
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.ric6_matrix",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 247
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.covariance_km",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 257
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.rotate",
+      "kind": "method",
+      "signature": "(self, rotation_matrix: npt.NDArray[np.float64], frame_out: str)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 272
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.translate",
+      "kind": "method",
+      "signature": "(self, vector: npt.NDArray[np.float64], origin_out: str)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 350
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.to_cometary",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 398
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.from_cometary",
+      "kind": "classmethod",
+      "signature": "(cls, cometary: cometary.CometaryCoordinates)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 405
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.to_keplerian",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 413
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.from_keplerian",
+      "kind": "classmethod",
+      "signature": "(cls, keplerian: keplerian.KeplerianCoordinates)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 420
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.to_spherical",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 428
+    },
+    {
+      "module": "adam_core.coordinates.cartesian",
+      "qualname": "CartesianCoordinates.from_spherical",
+      "kind": "classmethod",
+      "signature": "(cls, spherical: spherical.SphericalCoordinates)",
+      "path": "src/adam_core/coordinates/cartesian.py",
+      "line": 435
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 19
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.values",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 37
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.sigma_q",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 41
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.sigma_e",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 48
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.sigma_i",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 55
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.sigma_raan",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 62
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.sigma_ap",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 69
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.sigma_tp",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 76
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.a",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 83
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.a",
+      "kind": "method",
+      "signature": "(self, value)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 93
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.a",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 101
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.Q",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 109
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.Q",
+      "kind": "method",
+      "signature": "(self, value)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 119
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.Q",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 127
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.p",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 135
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.p",
+      "kind": "method",
+      "signature": "(self, value)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 145
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.p",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 153
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.P",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 161
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.P",
+      "kind": "method",
+      "signature": "(self, value)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 171
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.P",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 179
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.n",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 187
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.n",
+      "kind": "method",
+      "signature": "(self, value)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 201
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.n",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 209
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.to_cartesian",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 216
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.from_cartesian",
+      "kind": "classmethod",
+      "signature": "(cls, cartesian: cartesian.CartesianCoordinates)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 272
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.to_keplerian",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 327
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.from_keplerian",
+      "kind": "classmethod",
+      "signature": "(cls, keplerian_coordinates: keplerian.KeplerianCoordinates)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 331
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.to_spherical",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 336
+    },
+    {
+      "module": "adam_core.coordinates.cometary",
+      "qualname": "CometaryCoordinates.from_spherical",
+      "kind": "classmethod",
+      "signature": "(cls, spherical_coordinates: spherical.SphericalCoordinates)",
+      "path": "src/adam_core/coordinates/cometary.py",
+      "line": 340
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "sigmas_to_covariances",
+      "kind": "function",
+      "signature": "(sigmas: np.ndarray)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 16
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "CoordinateCovariances",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 37
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "CoordinateCovariances.sigmas",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 48
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "CoordinateCovariances.to_matrix",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 84
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "CoordinateCovariances.from_matrix",
+      "kind": "classmethod",
+      "signature": "(cls, covariances: np.ndarray)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 140
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "CoordinateCovariances.from_sigmas",
+      "kind": "classmethod",
+      "signature": "(cls, sigmas: np.ndarray)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 168
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "CoordinateCovariances.nulls",
+      "kind": "classmethod",
+      "signature": "(cls, length: int)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 187
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "CoordinateCovariances.is_all_nan",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 207
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "make_positive_semidefinite",
+      "kind": "function",
+      "signature": "(cov: np.ndarray, semidef_tol: float=1e-15)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 219
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "sample_covariance_random",
+      "kind": "function",
+      "signature": "(mean: np.ndarray, cov: np.ndarray, num_samples: int=10000, seed: Optional[int]=None, semidef_tol: Optional[float]=1e-15)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 252
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "sample_covariance_sigma_points",
+      "kind": "function",
+      "signature": "(mean: np.ndarray, cov: np.ndarray, alpha: float=1, beta: float=0.0, kappa: float=0.0)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 314
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "weighted_mean",
+      "kind": "function",
+      "signature": "(samples: np.ndarray, W: np.ndarray)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 398
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "weighted_covariance",
+      "kind": "function",
+      "signature": "(mean: np.ndarray, samples: np.ndarray, W_cov: np.ndarray)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 426
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "transform_covariances_sampling",
+      "kind": "function",
+      "signature": "(coords: np.ndarray, covariances: np.ndarray, func: Callable, num_samples: int=100000)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 456
+    },
+    {
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "rust_covariance_transform",
+      "kind": "function",
+      "signature": "(coords_values: np.ndarray, covariances: np.ndarray, representation_in: str, representation_out: str, *, t0: Optional[np.ndarray]=None, mu: Optional[np.ndarray]=None, a: Optional[float]=None, f: Optional[float]=None, frame_in: str='ecliptic', frame_out: Optional[str]=None)",
+      "path": "src/adam_core/coordinates/covariances.py",
+      "line": 493
+    },
+    {
+      "module": "adam_core.coordinates.geodetics",
+      "qualname": "GeodeticConstants",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/coordinates/geodetics.py",
+      "line": 25
+    },
+    {
+      "module": "adam_core.coordinates.geodetics",
+      "qualname": "GeodeticCoordinates",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/coordinates/geodetics.py",
+      "line": 51
+    },
+    {
+      "module": "adam_core.coordinates.geodetics",
+      "qualname": "GeodeticCoordinates.values",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/geodetics.py",
+      "line": 65
+    },
+    {
+      "module": "adam_core.coordinates.geodetics",
+      "qualname": "GeodeticCoordinates.sigma_alt",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/geodetics.py",
+      "line": 71
+    },
+    {
+      "module": "adam_core.coordinates.geodetics",
+      "qualname": "GeodeticCoordinates.sigma_lon",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/geodetics.py",
+      "line": 78
+    },
+    {
+      "module": "adam_core.coordinates.geodetics",
+      "qualname": "GeodeticCoordinates.sigma_lat",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/geodetics.py",
+      "line": 85
+    },
+    {
+      "module": "adam_core.coordinates.geodetics",
+      "qualname": "GeodeticCoordinates.sigma_vup",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/geodetics.py",
+      "line": 92
+    },
+    {
+      "module": "adam_core.coordinates.geodetics",
+      "qualname": "GeodeticCoordinates.sigma_veast",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/geodetics.py",
+      "line": 99
+    },
+    {
+      "module": "adam_core.coordinates.geodetics",
+      "qualname": "GeodeticCoordinates.sigma_vnorth",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/geodetics.py",
+      "line": 106
+    },
+    {
+      "module": "adam_core.coordinates.geodetics",
+      "qualname": "GeodeticCoordinates.google_maps_url",
+      "kind": "method",
+      "signature": "(self, zoom: int=18)",
+      "path": "src/adam_core/coordinates/geodetics.py",
+      "line": 112
+    },
+    {
+      "module": "adam_core.coordinates.geodetics",
+      "qualname": "GeodeticCoordinates.from_cartesian",
+      "kind": "classmethod",
+      "signature": "(cls, cartesian: cartesian.CartesianCoordinates)",
+      "path": "src/adam_core/coordinates/geodetics.py",
+      "line": 124
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 19
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.values",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 33
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.sigma_a",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 37
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.sigma_e",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 44
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.sigma_i",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 51
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.sigma_raan",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 58
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.sigma_ap",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 65
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.sigma_M",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 72
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.q",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 79
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.q",
+      "kind": "method",
+      "signature": "(self, value)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 89
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.q",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 97
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.Q",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 105
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.Q",
+      "kind": "method",
+      "signature": "(self, value)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 115
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.Q",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 123
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.p",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 131
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.p",
+      "kind": "method",
+      "signature": "(self, value)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 141
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.p",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 149
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.P",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 157
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.P",
+      "kind": "method",
+      "signature": "(self, value)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 169
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.P",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 177
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.n",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 185
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.n",
+      "kind": "method",
+      "signature": "(self, value)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 199
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.n",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 207
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.to_cartesian",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 214
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.from_cartesian",
+      "kind": "classmethod",
+      "signature": "(cls, cartesian: cartesian.CartesianCoordinates)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 258
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.to_cometary",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 306
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.from_cometary",
+      "kind": "classmethod",
+      "signature": "(cls, cometary_coordinates: cometary.CometaryCoordinates)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 310
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.to_spherical",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 315
+    },
+    {
+      "module": "adam_core.coordinates.keplerian",
+      "qualname": "KeplerianCoordinates.from_spherical",
+      "kind": "classmethod",
+      "signature": "(cls, spherical_coordinates: spherical.SphericalCoordinates)",
+      "path": "src/adam_core/coordinates/keplerian.py",
+      "line": 319
+    },
+    {
+      "module": "adam_core.coordinates.origin",
+      "qualname": "OriginCodes",
+      "kind": "class",
+      "signature": "(Enum)",
+      "path": "src/adam_core/coordinates/origin.py",
+      "line": 14
+    },
+    {
+      "module": "adam_core.coordinates.origin",
+      "qualname": "OriginGravitationalParameters",
+      "kind": "class",
+      "signature": "(float, Enum)",
+      "path": "src/adam_core/coordinates/origin.py",
+      "line": 43
+    },
+    {
+      "module": "adam_core.coordinates.origin",
+      "qualname": "OriginGravitationalParameters.SOLAR_SYSTEM_BARYCENTER",
+      "kind": "classmethod",
+      "signature": "(cls)",
+      "path": "src/adam_core/coordinates/origin.py",
+      "line": 60
+    },
+    {
+      "module": "adam_core.coordinates.origin",
+      "qualname": "Origin",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/coordinates/origin.py",
+      "line": 94
+    },
+    {
+      "module": "adam_core.coordinates.origin",
+      "qualname": "Origin.from_OriginCodes",
+      "kind": "classmethod",
+      "signature": "(cls, code: OriginCodes, size: int=1)",
+      "path": "src/adam_core/coordinates/origin.py",
+      "line": 98
+    },
+    {
+      "module": "adam_core.coordinates.origin",
+      "qualname": "Origin.as_OriginCodes",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/origin.py",
+      "line": 103
+    },
+    {
+      "module": "adam_core.coordinates.origin",
+      "qualname": "Origin.mu",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/origin.py",
+      "line": 134
+    },
+    {
+      "module": "adam_core.coordinates.residuals",
+      "qualname": "compute_residuals_ndarray",
+      "kind": "function",
+      "signature": "(observed: CoordinateType, predicted: CoordinateType)",
+      "path": "src/adam_core/coordinates/residuals.py",
+      "line": 36
+    },
+    {
+      "module": "adam_core.coordinates.residuals",
+      "qualname": "apply_cosine_latitude_correction",
+      "kind": "function",
+      "signature": "(lat: npt.NDArray[np.float64], residuals: npt.NDArray[np.float64], covariances: npt.NDArray[np.float64])",
+      "path": "src/adam_core/coordinates/residuals.py",
+      "line": 73
+    },
+    {
+      "module": "adam_core.coordinates.residuals",
+      "qualname": "bound_longitude_residuals",
+      "kind": "function",
+      "signature": "(observed: npt.NDArray[np.float64], residuals: npt.NDArray[np.float64])",
+      "path": "src/adam_core/coordinates/residuals.py",
+      "line": 115
+    },
+    {
+      "module": "adam_core.coordinates.residuals",
+      "qualname": "Residuals",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/coordinates/residuals.py",
+      "line": 152
+    },
+    {
+      "module": "adam_core.coordinates.residuals",
+      "qualname": "Residuals.calculate",
+      "kind": "classmethod",
+      "signature": "(cls, observed: CoordinateType, predicted: CoordinateType, custom_coordinates: bool=False, use_predicted_covariance: bool=True)",
+      "path": "src/adam_core/coordinates/residuals.py",
+      "line": 160
+    },
+    {
+      "module": "adam_core.coordinates.residuals",
+      "qualname": "Residuals.to_array",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/residuals.py",
+      "line": 305
+    },
+    {
+      "module": "adam_core.coordinates.residuals",
+      "qualname": "calculate_chi2",
+      "kind": "function",
+      "signature": "(residuals: npt.NDArray[np.float64], covariances: npt.NDArray[np.float64])",
+      "path": "src/adam_core/coordinates/residuals.py",
+      "line": 317
+    },
+    {
+      "module": "adam_core.coordinates.residuals",
+      "qualname": "calculate_reduced_chi2",
+      "kind": "function",
+      "signature": "(residuals: Residuals, parameters: int)",
+      "path": "src/adam_core/coordinates/residuals.py",
+      "line": 370
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 20
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.values",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 33
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.sigma_rho",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 39
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.sigma_lon",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 46
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.sigma_lat",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 53
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.sigma_vrho",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 60
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.sigma_vlon",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 67
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.sigma_vlat",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 74
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.to_unit_sphere",
+      "kind": "method",
+      "signature": "(self, only_missing: bool=False)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 80
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.to_cartesian",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 139
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.from_cartesian",
+      "kind": "classmethod",
+      "signature": "(cls, cartesian: cartesian.CartesianCoordinates)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 176
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.to_cometary",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 219
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.from_cometary",
+      "kind": "classmethod",
+      "signature": "(cls, cometary_coordinates: cometary.CometaryCoordinates)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 223
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.to_keplerian",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 228
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.from_keplerian",
+      "kind": "classmethod",
+      "signature": "(cls, keplerian_coordinates: keplerian.KeplerianCoordinates)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 232
+    },
+    {
+      "module": "adam_core.coordinates.spherical",
+      "qualname": "SphericalCoordinates.from_spherical",
+      "kind": "classmethod",
+      "signature": "(cls, spherical_coordinates: SphericalCoordinates)",
+      "path": "src/adam_core/coordinates/spherical.py",
+      "line": 238
+    },
+    {
+      "module": "adam_core.coordinates.transform",
+      "qualname": "clear_translation_cache",
+      "kind": "function",
+      "signature": "()",
+      "path": "src/adam_core/coordinates/transform.py",
+      "line": 81
+    },
+    {
+      "module": "adam_core.coordinates.transform",
+      "qualname": "cartesian_to_geodetic",
+      "kind": "function",
+      "signature": "(coords_cartesian: np.ndarray, a: float, f: float, max_iter: int=100, tol: float=1e-15)",
+      "path": "src/adam_core/coordinates/transform.py",
+      "line": 448
+    },
+    {
+      "module": "adam_core.coordinates.transform",
+      "qualname": "cartesian_to_spherical",
+      "kind": "function",
+      "signature": "(coords_cartesian: np.ndarray)",
+      "path": "src/adam_core/coordinates/transform.py",
+      "line": 498
+    },
+    {
+      "module": "adam_core.coordinates.transform",
+      "qualname": "spherical_to_cartesian",
+      "kind": "function",
+      "signature": "(coords_spherical: np.ndarray)",
+      "path": "src/adam_core/coordinates/transform.py",
+      "line": 537
+    },
+    {
+      "module": "adam_core.coordinates.transform",
+      "qualname": "cartesian_to_keplerian",
+      "kind": "function",
+      "signature": "(coords_cartesian: np.ndarray, t0: np.ndarray, mu: np.ndarray)",
+      "path": "src/adam_core/coordinates/transform.py",
+      "line": 578
+    },
+    {
+      "module": "adam_core.coordinates.transform",
+      "qualname": "keplerian_to_cartesian",
+      "kind": "function",
+      "signature": "(coords_keplerian: np.ndarray, mu: np.ndarray, max_iter: int=100, tol: float=1e-15)",
+      "path": "src/adam_core/coordinates/transform.py",
+      "line": 641
+    },
+    {
+      "module": "adam_core.coordinates.transform",
+      "qualname": "cartesian_to_cometary",
+      "kind": "function",
+      "signature": "(coords_cartesian: np.ndarray, t0: np.ndarray, mu: np.ndarray)",
+      "path": "src/adam_core/coordinates/transform.py",
+      "line": 738
+    },
+    {
+      "module": "adam_core.coordinates.transform",
+      "qualname": "cometary_to_cartesian",
+      "kind": "function",
+      "signature": "(coords_cometary: np.ndarray, t0: np.ndarray, mu: np.ndarray, max_iter: int=100, tol: float=1e-15)",
+      "path": "src/adam_core/coordinates/transform.py",
+      "line": 782
+    },
+    {
+      "module": "adam_core.coordinates.transform",
+      "qualname": "cartesian_to_origin",
+      "kind": "function",
+      "signature": "(coords: CartesianCoordinates, origin: OriginCodes)",
+      "path": "src/adam_core/coordinates/transform.py",
+      "line": 904
+    },
+    {
+      "module": "adam_core.coordinates.transform",
+      "qualname": "apply_time_varying_rotation",
+      "kind": "function",
+      "signature": "(coords: CartesianCoordinates, frame_out: Literal['ecliptic', 'equatorial', 'itrf93'])",
+      "path": "src/adam_core/coordinates/transform.py",
+      "line": 935
+    },
+    {
+      "module": "adam_core.coordinates.transform",
+      "qualname": "cartesian_to_frame",
+      "kind": "function",
+      "signature": "(coords: CartesianCoordinates, frame: Literal['ecliptic', 'equatorial', 'itrf93'])",
+      "path": "src/adam_core/coordinates/transform.py",
+      "line": 1065
+    },
+    {
+      "module": "adam_core.coordinates.transform",
+      "qualname": "transform_coordinates",
+      "kind": "function",
+      "signature": "(coords: types.CoordinateType, representation_out: Optional[type[types.CoordinateType]]=None, frame_out: Optional[Literal['ecliptic', 'equatorial', 'itrf93']]=None, origin_out: Optional[OriginCodes]=None)",
+      "path": "src/adam_core/coordinates/transform.py",
+      "line": 1098
+    },
+    {
+      "module": "adam_core.coordinates.units",
+      "qualname": "au_to_km",
+      "kind": "function",
+      "signature": "(values_au: Union[float, np.ndarray])",
+      "path": "src/adam_core/coordinates/units.py",
+      "line": 26
+    },
+    {
+      "module": "adam_core.coordinates.units",
+      "qualname": "km_to_au",
+      "kind": "function",
+      "signature": "(values_km: Union[float, np.ndarray])",
+      "path": "src/adam_core/coordinates/units.py",
+      "line": 43
+    },
+    {
+      "module": "adam_core.coordinates.units",
+      "qualname": "au_per_day_to_km_per_s",
+      "kind": "function",
+      "signature": "(values_au_day: Union[float, np.ndarray])",
+      "path": "src/adam_core/coordinates/units.py",
+      "line": 60
+    },
+    {
+      "module": "adam_core.coordinates.units",
+      "qualname": "km_per_s_to_au_per_day",
+      "kind": "function",
+      "signature": "(values_km_s: Union[float, np.ndarray])",
+      "path": "src/adam_core/coordinates/units.py",
+      "line": 79
+    },
+    {
+      "module": "adam_core.coordinates.units",
+      "qualname": "convert_cartesian_values_au_to_km",
+      "kind": "function",
+      "signature": "(values_au: np.ndarray)",
+      "path": "src/adam_core/coordinates/units.py",
+      "line": 98
+    },
+    {
+      "module": "adam_core.coordinates.units",
+      "qualname": "convert_cartesian_values_km_to_au",
+      "kind": "function",
+      "signature": "(values_km: np.ndarray)",
+      "path": "src/adam_core/coordinates/units.py",
+      "line": 120
+    },
+    {
+      "module": "adam_core.coordinates.units",
+      "qualname": "convert_cartesian_covariance_au_to_km",
+      "kind": "function",
+      "signature": "(covariance_au: np.ndarray)",
+      "path": "src/adam_core/coordinates/units.py",
+      "line": 142
+    },
+    {
+      "module": "adam_core.coordinates.units",
+      "qualname": "convert_cartesian_covariance_km_to_au",
+      "kind": "function",
+      "signature": "(covariance_km: np.ndarray)",
+      "path": "src/adam_core/coordinates/units.py",
+      "line": 181
+    },
+    {
+      "module": "adam_core.coordinates.variants",
+      "qualname": "VariantCoordinatesTable",
+      "kind": "class",
+      "signature": "(Generic[T], Protocol)",
+      "path": "src/adam_core/coordinates/variants.py",
+      "line": 25
+    },
+    {
+      "module": "adam_core.coordinates.variants",
+      "qualname": "VariantCoordinatesTable.index",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/variants.py",
+      "line": 31
+    },
+    {
+      "module": "adam_core.coordinates.variants",
+      "qualname": "VariantCoordinatesTable.sample",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/variants.py",
+      "line": 34
+    },
+    {
+      "module": "adam_core.coordinates.variants",
+      "qualname": "VariantCoordinatesTable.weight",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/variants.py",
+      "line": 37
+    },
+    {
+      "module": "adam_core.coordinates.variants",
+      "qualname": "VariantCoordinatesTable.weight_cov",
+      "kind": "property",
+      "signature": "(self)",
+      "path": "src/adam_core/coordinates/variants.py",
+      "line": 40
+    },
+    {
+      "module": "adam_core.coordinates.variants",
+      "qualname": "create_coordinate_variants",
+      "kind": "function",
+      "signature": "(coordinates: types.CoordinateType, method: Literal['auto', 'sigma-point', 'monte-carlo']='auto', num_samples: int=10000, alpha: float=1, beta: float=0, kappa: float=0, seed: Optional[int]=None)",
+      "path": "src/adam_core/coordinates/variants.py",
+      "line": 151
+    },
+    {
+      "module": "adam_core.dynamics._rust_compat",
+      "qualname": "require_rust",
+      "kind": "function",
+      "signature": "(result: T | None, api_name: str)",
+      "path": "src/adam_core/dynamics/_rust_compat.py",
+      "line": 12
+    },
+    {
+      "module": "adam_core.dynamics._rust_compat",
+      "qualname": "as_rows",
+      "kind": "function",
+      "signature": "(values: npt.ArrayLike, *, name: str, width: int)",
+      "path": "src/adam_core/dynamics/_rust_compat.py",
+      "line": 18
+    },
+    {
+      "module": "adam_core.dynamics._rust_compat",
+      "qualname": "broadcast_to_rows",
+      "kind": "function",
+      "signature": "(values: npt.ArrayLike, n: int, *, name: str)",
+      "path": "src/adam_core/dynamics/_rust_compat.py",
+      "line": 29
+    },
+    {
+      "module": "adam_core.dynamics._rust_compat",
+      "qualname": "broadcast_pair",
+      "kind": "function",
+      "signature": "(left: npt.ArrayLike, right: npt.ArrayLike)",
+      "path": "src/adam_core/dynamics/_rust_compat.py",
+      "line": 39
+    },
+    {
+      "module": "adam_core.dynamics._rust_compat",
+      "qualname": "flatten_input",
+      "kind": "function",
+      "signature": "(values: npt.ArrayLike)",
+      "path": "src/adam_core/dynamics/_rust_compat.py",
+      "line": 57
+    },
+    {
+      "module": "adam_core.dynamics._rust_compat",
+      "qualname": "restore_shape",
+      "kind": "function",
+      "signature": "(values: npt.ArrayLike, shape: tuple[int, ...])",
+      "path": "src/adam_core/dynamics/_rust_compat.py",
+      "line": 62
+    },
+    {
+      "module": "adam_core.dynamics.aberrations",
+      "qualname": "add_light_time",
+      "kind": "function",
+      "signature": "(orbits: npt.ArrayLike, t0: npt.ArrayLike, observer_positions: npt.ArrayLike, lt_tol: float=1e-10, mu: npt.ArrayLike=MU, max_iter: int=1000, tol: float=1e-15, max_lt_iter: int=10)",
+      "path": "src/adam_core/dynamics/aberrations.py",
+      "line": 75
+    },
+    {
+      "module": "adam_core.dynamics.aberrations",
+      "qualname": "add_stellar_aberration",
+      "kind": "function",
+      "signature": "(orbits: npt.ArrayLike, observer_states: npt.ArrayLike)",
+      "path": "src/adam_core/dynamics/aberrations.py",
+      "line": 109
+    },
+    {
+      "module": "adam_core.dynamics.barker",
+      "qualname": "solve_barker",
+      "kind": "function",
+      "signature": "(M: npt.ArrayLike)",
+      "path": "src/adam_core/dynamics/barker.py",
+      "line": 9
+    },
+    {
+      "module": "adam_core.dynamics.chi",
+      "qualname": "ChiDiagnostics",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/dynamics/chi.py",
+      "line": 31
+    },
+    {
+      "module": "adam_core.dynamics.chi",
+      "qualname": "calc_chi",
+      "kind": "function",
+      "signature": "(r: npt.ArrayLike, v: npt.ArrayLike, dt: npt.ArrayLike, mu: npt.ArrayLike=MU, max_iter: int=100, tol: float=1e-15)",
+      "path": "src/adam_core/dynamics/chi.py",
+      "line": 53
+    },
+    {
+      "module": "adam_core.dynamics.chi",
+      "qualname": "calc_chi_diagnostics",
+      "kind": "function",
+      "signature": "(r: np.ndarray, v: np.ndarray, dt: float, mu: float=MU, max_iter: int=100, tol: float=1e-15)",
+      "path": "src/adam_core/dynamics/chi.py",
+      "line": 84
+    },
+    {
+      "module": "adam_core.dynamics.ephemeris",
+      "qualname": "generate_ephemeris_2body",
+      "kind": "function",
+      "signature": "(propagated_orbits: Orbits, observers: Observers, lt_tol: float=1e-10, max_iter: int=1000, tol: float=1e-15, stellar_aberration: bool=False, predict_magnitudes: bool=True, *, predict_phase_angle: bool=False, max_processes: Optional[int]=1, chunk_size: int=100)",
+      "path": "src/adam_core/dynamics/ephemeris.py",
+      "line": 116
+    },
+    {
+      "module": "adam_core.dynamics.exceptions",
+      "qualname": "DynamicsNumericalError",
+      "kind": "class",
+      "signature": "(RuntimeError)",
+      "path": "src/adam_core/dynamics/exceptions.py",
+      "line": 8
+    },
+    {
+      "module": "adam_core.dynamics.impacts",
+      "qualname": "ImpactProbabilities",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/dynamics/impacts.py",
+      "line": 41
+    },
+    {
+      "module": "adam_core.dynamics.impacts",
+      "qualname": "CollisionConditions",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/dynamics/impacts.py",
+      "line": 53
+    },
+    {
+      "module": "adam_core.dynamics.impacts",
+      "qualname": "CollisionConditions.default",
+      "kind": "classmethod",
+      "signature": "(cls)",
+      "path": "src/adam_core/dynamics/impacts.py",
+      "line": 64
+    },
+    {
+      "module": "adam_core.dynamics.impacts",
+      "qualname": "CollisionEvent",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/dynamics/impacts.py",
+      "line": 73
+    },
+    {
+      "module": "adam_core.dynamics.impacts",
+      "qualname": "CollisionEvent.preview",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/dynamics/impacts.py",
+      "line": 90
+    },
+    {
+      "module": "adam_core.dynamics.impacts",
+      "qualname": "ImpactMixin",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/dynamics/impacts.py",
+      "line": 100
+    },
+    {
+      "module": "adam_core.dynamics.impacts",
+      "qualname": "ImpactMixin.detect_collisions",
+      "kind": "method",
+      "signature": "(self, orbits: OrbitType, num_days: int, conditions: Optional[CollisionConditions]=None, max_processes: Optional[int]=1, chunk_size: Optional[int]=100)",
+      "path": "src/adam_core/dynamics/impacts.py",
+      "line": 117
+    },
+    {
+      "module": "adam_core.dynamics.impacts",
+      "qualname": "calculate_impacts",
+      "kind": "function",
+      "signature": "(orbits: Orbits, num_days: int, propagator: Propagator, num_samples: int=1000, processes: Optional[int]=None, seed: Optional[int]=None, conditions: Optional[CollisionConditions]=None)",
+      "path": "src/adam_core/dynamics/impacts.py",
+      "line": 204
+    },
+    {
+      "module": "adam_core.dynamics.impacts",
+      "qualname": "calculate_impact_probabilities",
+      "kind": "function",
+      "signature": "(variants: VariantOrbits, collision_events: CollisionEvent, conditions: Optional[CollisionConditions]=None)",
+      "path": "src/adam_core/dynamics/impacts.py",
+      "line": 260
+    },
+    {
+      "module": "adam_core.dynamics.impacts",
+      "qualname": "link_impacting_variants",
+      "kind": "function",
+      "signature": "(variants, impacts)",
+      "path": "src/adam_core/dynamics/impacts.py",
+      "line": 344
+    },
+    {
+      "module": "adam_core.dynamics.impacts",
+      "qualname": "calculate_mahalanobis_distance",
+      "kind": "function",
+      "signature": "(observed_orbit: OrbitType, predicted_orbit: OrbitType)",
+      "path": "src/adam_core/dynamics/impacts.py",
+      "line": 371
+    },
+    {
+      "module": "adam_core.dynamics.kepler",
+      "qualname": "calc_period",
+      "kind": "function",
+      "signature": "(a: npt.ArrayLike, mu: npt.ArrayLike)",
+      "path": "src/adam_core/dynamics/kepler.py",
+      "line": 22
+    },
+    {
+      "module": "adam_core.dynamics.kepler",
+      "qualname": "calc_periapsis_distance",
+      "kind": "function",
+      "signature": "(a: npt.ArrayLike, e: npt.ArrayLike)",
+      "path": "src/adam_core/dynamics/kepler.py",
+      "line": 29
+    },
+    {
+      "module": "adam_core.dynamics.kepler",
+      "qualname": "calc_apoapsis_distance",
+      "kind": "function",
+      "signature": "(a: npt.ArrayLike, e: npt.ArrayLike)",
+      "path": "src/adam_core/dynamics/kepler.py",
+      "line": 39
+    },
+    {
+      "module": "adam_core.dynamics.kepler",
+      "qualname": "calc_semi_major_axis",
+      "kind": "function",
+      "signature": "(q: npt.ArrayLike, e: npt.ArrayLike)",
+      "path": "src/adam_core/dynamics/kepler.py",
+      "line": 49
+    },
+    {
+      "module": "adam_core.dynamics.kepler",
+      "qualname": "calc_semi_latus_rectum",
+      "kind": "function",
+      "signature": "(a: npt.ArrayLike, e: npt.ArrayLike)",
+      "path": "src/adam_core/dynamics/kepler.py",
+      "line": 59
+    },
+    {
+      "module": "adam_core.dynamics.kepler",
+      "qualname": "calc_mean_motion",
+      "kind": "function",
+      "signature": "(a: npt.ArrayLike, mu: npt.ArrayLike)",
+      "path": "src/adam_core/dynamics/kepler.py",
+      "line": 69
+    },
+    {
+      "module": "adam_core.dynamics.kepler",
+      "qualname": "calc_mean_anomaly",
+      "kind": "function",
+      "signature": "(nu: npt.ArrayLike, e: npt.ArrayLike)",
+      "path": "src/adam_core/dynamics/kepler.py",
+      "line": 79
+    },
+    {
+      "module": "adam_core.dynamics.kepler",
+      "qualname": "solve_kepler",
+      "kind": "function",
+      "signature": "(e: npt.ArrayLike, M: npt.ArrayLike, max_iter: int=100, tol: float=1e-15)",
+      "path": "src/adam_core/dynamics/kepler.py",
+      "line": 89
+    },
+    {
+      "module": "adam_core.dynamics.lagrange",
+      "qualname": "calc_lagrange_coefficients",
+      "kind": "function",
+      "signature": "(r: npt.ArrayLike, v: npt.ArrayLike, dt: npt.ArrayLike, mu: npt.ArrayLike=MU, max_iter: int=100, tol: float=1e-15)",
+      "path": "src/adam_core/dynamics/lagrange.py",
+      "line": 41
+    },
+    {
+      "module": "adam_core.dynamics.lagrange",
+      "qualname": "apply_lagrange_coefficients",
+      "kind": "function",
+      "signature": "(r: npt.ArrayLike, v: npt.ArrayLike, f: npt.ArrayLike, g: npt.ArrayLike, f_dot: npt.ArrayLike, g_dot: npt.ArrayLike)",
+      "path": "src/adam_core/dynamics/lagrange.py",
+      "line": 85
+    },
+    {
+      "module": "adam_core.dynamics.lambert",
+      "qualname": "solve_lambert",
+      "kind": "function",
+      "signature": "(r1: np.ndarray, r2: np.ndarray, tof: Union[np.ndarray, float], mu: float=MU, prograde: bool=True, max_iter: int=35, tol: float=1e-10)",
+      "path": "src/adam_core/dynamics/lambert.py",
+      "line": 18
+    },
+    {
+      "module": "adam_core.dynamics.lambert",
+      "qualname": "calculate_c3",
+      "kind": "function",
+      "signature": "(v1: np.ndarray, body_v: np.ndarray)",
+      "path": "src/adam_core/dynamics/lambert.py",
+      "line": 82
+    },
+    {
+      "module": "adam_core.dynamics.moid",
+      "qualname": "PerturberMOIDs",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/dynamics/moid.py",
+      "line": 35
+    },
+    {
+      "module": "adam_core.dynamics.moid",
+      "qualname": "calculate_moid",
+      "kind": "function",
+      "signature": "(primary_ellipse: Orbits, secondary_ellipse: Orbits)",
+      "path": "src/adam_core/dynamics/moid.py",
+      "line": 42
+    },
+    {
+      "module": "adam_core.dynamics.moid",
+      "qualname": "calculate_perturber_moids",
+      "kind": "function",
+      "signature": "(orbits: Orbits, perturber: Union[OriginCodes, List[OriginCodes]], chunk_size: int=100, max_processes: Optional[int]=1)",
+      "path": "src/adam_core/dynamics/moid.py",
+      "line": 71
+    },
+    {
+      "module": "adam_core.dynamics.plots",
+      "qualname": "prepare_propagated_variants",
+      "kind": "function",
+      "signature": "(propagated_variants: Orbits, impacts: CollisionEvent)",
+      "path": "src/adam_core/dynamics/plots.py",
+      "line": 43
+    },
+    {
+      "module": "adam_core.dynamics.plots",
+      "qualname": "generate_impact_visualization_data",
+      "kind": "function",
+      "signature": "(orbit: Orbits, variant_orbits: VariantOrbits, impacts: CollisionEvent, propagator: Propagator, time_step: float=5, time_range: float=60, max_processes: Optional[int]=None)",
+      "path": "src/adam_core/dynamics/plots.py",
+      "line": 166
+    },
+    {
+      "module": "adam_core.dynamics.plots",
+      "qualname": "create_sphere",
+      "kind": "function",
+      "signature": "(radius, offset=None)",
+      "path": "src/adam_core/dynamics/plots.py",
+      "line": 276
+    },
+    {
+      "module": "adam_core.dynamics.plots",
+      "qualname": "add_earth",
+      "kind": "function",
+      "signature": "(time, coastlines: bool=True, origin: OriginCodes=OriginCodes.EARTH, frame: str='ecliptic', show: bool=True)",
+      "path": "src/adam_core/dynamics/plots.py",
+      "line": 305
+    },
+    {
+      "module": "adam_core.dynamics.plots",
+      "qualname": "add_moon",
+      "kind": "function",
+      "signature": "(time: Timestamp, origin: OriginCodes=OriginCodes.EARTH, frame: Literal['ecliptic', 'equatorial', 'itrf93']='ecliptic', show: bool=True)",
+      "path": "src/adam_core/dynamics/plots.py",
+      "line": 406
+    },
+    {
+      "module": "adam_core.dynamics.plots",
+      "qualname": "plot_impact_simulation",
+      "kind": "function",
+      "signature": "(propagation_times: Timestamp, propagated_best_fit_orbit: Orbits, propagated_variants: dict[str, Orbits], impacts: CollisionEvent, grid: bool=True, title: str=None, logo: bool=True, show_impacting: bool=True, show_non_impacting: bool=True, show_best_fit: bool=True, show_earth: bool=True, show_moon: bool=True, sample_impactors: Optional[float]=None, sample_non_impactors: Optional[float]=None, height: Optional[int]=None, width: Optional[int]=None)",
+      "path": "src/adam_core/dynamics/plots.py",
+      "line": 450
+    },
+    {
+      "module": "adam_core.dynamics.plots",
+      "qualname": "plot_risk_corridor",
+      "kind": "function",
+      "signature": "(impacts: CollisionEvent, title: Optional[str]=None, logo: bool=True, height: Optional[int]=None, width: Optional[int]=None, map_style: Literal['carto-positron', 'open-street-map', 'white-bg']='carto-positron')",
+      "path": "src/adam_core/dynamics/plots.py",
+      "line": 871
+    },
+    {
+      "module": "adam_core.dynamics.propagation",
+      "qualname": "ChiDiagnostics",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/dynamics/propagation.py",
+      "line": 25
+    },
+    {
+      "module": "adam_core.dynamics.propagation",
+      "qualname": "propagate_2body",
+      "kind": "function",
+      "signature": "(orbits: Orbits, times: Timestamp, max_iter: int=1000, tol: float=1e-14, *, max_processes: Optional[int]=1, chunk_size: int=100)",
+      "path": "src/adam_core/dynamics/propagation.py",
+      "line": 332
+    },
+    {
+      "module": "adam_core.dynamics.stumpff",
+      "qualname": "calc_stumpff",
+      "kind": "function",
+      "signature": "(psi: npt.ArrayLike)",
+      "path": "src/adam_core/dynamics/stumpff.py",
+      "line": 21
+    },
+    {
+      "module": "adam_core.dynamics.tisserand",
+      "qualname": "calc_tisserand_parameter",
+      "kind": "function",
+      "signature": "(a, e, i, third_body='jupiter')",
+      "path": "src/adam_core/dynamics/tisserand.py",
+      "line": 33
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "generate_saturated_colorscale",
+      "kind": "function",
+      "signature": "(base_color: str, n_levels: int=8, max_alpha: float=0.8, min_alpha: float=0.1)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 46
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "generate_perceptual_colorscale",
+      "kind": "function",
+      "signature": "(base_color: str, n_levels: int=8, min_lightness: float=0.3, max_lightness: float=0.9, max_alpha: float=0.8, min_alpha: float=0.1)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 127
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "LambertSolutions",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 226
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "LambertSolutions.departure_body_orbit",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 254
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "LambertSolutions.arrival_body_orbit",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 273
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "LambertSolutions.solution_departure_orbit",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 292
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "LambertSolutions.solution_arrival_orbit",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 315
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "LambertSolutions.c3_departure",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 337
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "LambertSolutions.c3_arrival",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 358
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "LambertSolutions.vinf_departure",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 379
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "LambertSolutions.vinf_arrival",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 401
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "LambertSolutions.time_of_flight",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 423
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "departure_spherical_coordinates",
+      "kind": "function",
+      "signature": "(departure_origin: OriginCodes, times: Timestamp, frame: str, vx: npt.NDArray[np.float64], vy: npt.NDArray[np.float64], vz: npt.NDArray[np.float64])",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 432
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "prepare_and_propagate_orbits",
+      "kind": "function",
+      "signature": "(body: Union[Orbits, OriginCodes], start_time: Timestamp, end_time: Timestamp, propagation_origin: OriginCodes=OriginCodes.SUN, step_size: float=1.0, propagator_class: Optional[type[Propagator]]=None, max_processes: Optional[int]=1)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 502
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "generate_porkchop_data",
+      "kind": "function",
+      "signature": "(departure_orbits: Orbits, arrival_orbits: Orbits, propagation_origin: OriginCodes=OriginCodes.SUN, prograde: bool=True, max_iter: int=35, tol: float=1e-10, max_processes: Optional[int]=1)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 576
+    },
+    {
+      "module": "adam_core.missions.porkchop",
+      "qualname": "plot_porkchop_plotly",
+      "kind": "function",
+      "signature": "(porkchop_data: LambertSolutions, width: int=900, height: int=700, c3_departure_min: Optional[float]=None, c3_departure_max: Optional[float]=None, vinf_arrival_min: Optional[float]=None, vinf_arrival_max: Optional[float]=None, tof_min: Optional[float]=None, tof_max: Optional[float]=None, c3_base_colorscale: str='Reds', vinf_base_colorscale: str='Blues', tof_line_color: str='black', xlim_mjd: Optional[Tuple[float, float]]=None, ylim_mjd: Optional[Tuple[float, float]]=None, title: str='Porkchop Plot', show_optimal: bool=True, show_hover: bool=False, logo: bool=True)",
+      "path": "src/adam_core/missions/porkchop.py",
+      "line": 679
+    },
+    {
+      "module": "adam_core.observations.ades",
+      "qualname": "ObservatoryObsContext",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/observations/ades.py",
+      "line": 19
+    },
+    {
+      "module": "adam_core.observations.ades",
+      "qualname": "SubmitterObsContext",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/observations/ades.py",
+      "line": 30
+    },
+    {
+      "module": "adam_core.observations.ades",
+      "qualname": "TelescopeObsContext",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/observations/ades.py",
+      "line": 41
+    },
+    {
+      "module": "adam_core.observations.ades",
+      "qualname": "SoftwareObsContext",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/observations/ades.py",
+      "line": 68
+    },
+    {
+      "module": "adam_core.observations.ades",
+      "qualname": "ObsContext",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/observations/ades.py",
+      "line": 86
+    },
+    {
+      "module": "adam_core.observations.ades",
+      "qualname": "ObsContext.to_string",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/observations/ades.py",
+      "line": 119
+    },
+    {
+      "module": "adam_core.observations.ades",
+      "qualname": "ADESObservations",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/observations/ades.py",
+      "line": 148
+    },
+    {
+      "module": "adam_core.observations.ades",
+      "qualname": "ADES_to_string",
+      "kind": "function",
+      "signature": "(observations: ADESObservations, obs_contexts: dict[str, ObsContext], seconds_precision: int=3, columns_precision: dict[str, int]={'ra': 9, 'dec': 9, 'rmsRACosDec': 5, 'rmsDec': 5, 'rmsCorr': 8, 'mag': 4, 'rmsMag': 4, 'exp': 2, 'logSNR': 2, 'seeing': 2})",
+      "path": "src/adam_core/observations/ades.py",
+      "line": 182
+    },
+    {
+      "module": "adam_core.observations.ades",
+      "qualname": "ADES_string_to_tables",
+      "kind": "function",
+      "signature": "(ades_string: str)",
+      "path": "src/adam_core/observations/ades.py",
+      "line": 380
+    },
+    {
+      "module": "adam_core.observations.associations",
+      "qualname": "Associations",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/observations/associations.py",
+      "line": 11
+    },
+    {
+      "module": "adam_core.observations.associations",
+      "qualname": "Associations.group_by_object",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/observations/associations.py",
+      "line": 21
+    },
+    {
+      "module": "adam_core.observations.associations",
+      "qualname": "Associations.link_to_detections",
+      "kind": "method",
+      "signature": "(self, detections: PointSourceDetections)",
+      "path": "src/adam_core/observations/associations.py",
+      "line": 46
+    },
+    {
+      "module": "adam_core.observations.detections",
+      "qualname": "PointSourceDetections",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/observations/detections.py",
+      "line": 17
+    },
+    {
+      "module": "adam_core.observations.detections",
+      "qualname": "PointSourceDetections.group_by_exposure",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/observations/detections.py",
+      "line": 36
+    },
+    {
+      "module": "adam_core.observations.detections",
+      "qualname": "PointSourceDetections.healpixels",
+      "kind": "method",
+      "signature": "(self, nside: int, nest: bool=True)",
+      "path": "src/adam_core/observations/detections.py",
+      "line": 48
+    },
+    {
+      "module": "adam_core.observations.detections",
+      "qualname": "PointSourceDetections.group_by_healpixel",
+      "kind": "method",
+      "signature": "(self, nside: int, nest: bool=True)",
+      "path": "src/adam_core/observations/detections.py",
+      "line": 54
+    },
+    {
+      "module": "adam_core.observations.detections",
+      "qualname": "PointSourceDetections.link_to_exposures",
+      "kind": "method",
+      "signature": "(self, exposures: Exposures)",
+      "path": "src/adam_core/observations/detections.py",
+      "line": 67
+    },
+    {
+      "module": "adam_core.observations.exposures",
+      "qualname": "Exposures",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/observations/exposures.py",
+      "line": 15
+    },
+    {
+      "module": "adam_core.observations.exposures",
+      "qualname": "Exposures.group_by_observatory_code",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/observations/exposures.py",
+      "line": 28
+    },
+    {
+      "module": "adam_core.observations.exposures",
+      "qualname": "Exposures.observers",
+      "kind": "method",
+      "signature": "(self, frame: Literal['ecliptic', 'equatorial', 'itrf93']='ecliptic', origin: OriginCodes=OriginCodes.SUN)",
+      "path": "src/adam_core/observations/exposures.py",
+      "line": 37
+    },
+    {
+      "module": "adam_core.observations.exposures",
+      "qualname": "Exposures.midpoint",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/observations/exposures.py",
+      "line": 76
+    },
+    {
+      "module": "adam_core.observations.photometry",
+      "qualname": "Photometry",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/observations/photometry.py",
+      "line": 6
+    },
+    {
+      "module": "adam_core.observations.source_catalog",
+      "qualname": "SourceCatalog",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/observations/source_catalog.py",
+      "line": 20
+    },
+    {
+      "module": "adam_core.observations.source_catalog",
+      "qualname": "SourceCatalog.detections",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/observations/source_catalog.py",
+      "line": 85
+    },
+    {
+      "module": "adam_core.observations.source_catalog",
+      "qualname": "SourceCatalog.exposures",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/observations/source_catalog.py",
+      "line": 106
+    },
+    {
+      "module": "adam_core.observations.source_catalog",
+      "qualname": "SourceCatalog.associations",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/observations/source_catalog.py",
+      "line": 127
+    },
+    {
+      "module": "adam_core.observations.source_catalog",
+      "qualname": "SourceCatalog.photometry",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/observations/source_catalog.py",
+      "line": 142
+    },
+    {
+      "module": "adam_core.observations.source_catalog",
+      "qualname": "SourceCatalog.coordinates",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/observations/source_catalog.py",
+      "line": 159
+    },
+    {
+      "module": "adam_core.observations.source_catalog",
+      "qualname": "SourceCatalog.observers",
+      "kind": "method",
+      "signature": "(self, exposure_midpoint: bool=False)",
+      "path": "src/adam_core/observations/source_catalog.py",
+      "line": 199
+    },
+    {
+      "module": "adam_core.observations.source_catalog",
+      "qualname": "SourceCatalog.healpixels",
+      "kind": "method",
+      "signature": "(self, nside: int=16, nest: bool=True)",
+      "path": "src/adam_core/observations/source_catalog.py",
+      "line": 231
+    },
+    {
+      "module": "adam_core.observers.observers",
+      "qualname": "ObservatoryParallaxCoefficients",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/observers/observers.py",
+      "line": 24
+    },
+    {
+      "module": "adam_core.observers.observers",
+      "qualname": "ObservatoryParallaxCoefficients.lon_lat",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/observers/observers.py",
+      "line": 31
+    },
+    {
+      "module": "adam_core.observers.observers",
+      "qualname": "ObservatoryParallaxCoefficients.timezone",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/observers/observers.py",
+      "line": 65
+    },
+    {
+      "module": "adam_core.observers.observers",
+      "qualname": "Observers",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/observers/observers.py",
+      "line": 115
+    },
+    {
+      "module": "adam_core.observers.observers",
+      "qualname": "Observers.from_codes",
+      "kind": "classmethod",
+      "signature": "(cls, codes: Union[list, npt.NDArray[np.str_], pa.Array], times: Timestamp)",
+      "path": "src/adam_core/observers/observers.py",
+      "line": 120
+    },
+    {
+      "module": "adam_core.observers.observers",
+      "qualname": "Observers.from_code",
+      "kind": "classmethod",
+      "signature": "(cls, code: Union[str, OriginCodes], times: Timestamp)",
+      "path": "src/adam_core/observers/observers.py",
+      "line": 178
+    },
+    {
+      "module": "adam_core.observers.observers",
+      "qualname": "Observers.iterate_codes",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/observers/observers.py",
+      "line": 225
+    },
+    {
+      "module": "adam_core.observers.state",
+      "qualname": "clear_observer_state_cache",
+      "kind": "function",
+      "signature": "()",
+      "path": "src/adam_core/observers/state.py",
+      "line": 63
+    },
+    {
+      "module": "adam_core.observers.state",
+      "qualname": "get_mpc_observer_state",
+      "kind": "function",
+      "signature": "(code: str, times: Timestamp, frame: Literal['ecliptic', 'equatorial', 'itrf93']='ecliptic', origin: OriginCodes=OriginCodes.SUN)",
+      "path": "src/adam_core/observers/state.py",
+      "line": 70
+    },
+    {
+      "module": "adam_core.observers.state",
+      "qualname": "get_observer_state",
+      "kind": "function",
+      "signature": "(code: Union[str, OriginCodes], times: Timestamp, frame: Literal['ecliptic', 'equatorial', 'itrf93']='ecliptic', origin: OriginCodes=OriginCodes.SUN)",
+      "path": "src/adam_core/observers/state.py",
+      "line": 227
+    },
+    {
+      "module": "adam_core.observers.utils",
+      "qualname": "calculate_observing_night",
+      "kind": "function",
+      "signature": "(codes: pa.Array, times: Timestamp)",
+      "path": "src/adam_core/observers/utils.py",
+      "line": 13
+    },
+    {
+      "module": "adam_core.orbit_determination.differential_correction",
+      "qualname": "residual_function",
+      "kind": "function",
+      "signature": "(state_vector: npt.NDArray[np.float64], mjd_tdb: float, observations: OrbitDeterminationObservations, propagator: Propagator)",
+      "path": "src/adam_core/orbit_determination/differential_correction.py",
+      "line": 21
+    },
+    {
+      "module": "adam_core.orbit_determination.differential_correction",
+      "qualname": "fit_least_squares",
+      "kind": "function",
+      "signature": "(orbit: Orbits, observations: OrbitDeterminationObservations, propagator: Propagator, ignore: Optional[List[str]]=None, **kwargs)",
+      "path": "src/adam_core/orbit_determination/differential_correction.py",
+      "line": 73
+    },
+    {
+      "module": "adam_core.orbit_determination.evaluate",
+      "qualname": "OrbitDeterminationPhotometry",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/orbit_determination/evaluate.py",
+      "line": 17
+    },
+    {
+      "module": "adam_core.orbit_determination.evaluate",
+      "qualname": "OrbitDeterminationObservations",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/orbit_determination/evaluate.py",
+      "line": 23
+    },
+    {
+      "module": "adam_core.orbit_determination.evaluate",
+      "qualname": "evaluate_orbits",
+      "kind": "function",
+      "signature": "(orbits: Union[Orbits, FittedOrbits], observations: OrbitDeterminationObservations, propagator: Propagator, parameters: int=6, ignore: Optional[List[str]]=None)",
+      "path": "src/adam_core/orbit_determination/evaluate.py",
+      "line": 87
+    },
+    {
+      "module": "adam_core.orbit_determination.fitted_orbits",
+      "qualname": "assign_duplicate_observations",
+      "kind": "function",
+      "signature": "(orbits: 'FittedOrbits', orbit_members: 'FittedOrbitMembers')",
+      "path": "src/adam_core/orbit_determination/fitted_orbits.py",
+      "line": 13
+    },
+    {
+      "module": "adam_core.orbit_determination.fitted_orbits",
+      "qualname": "drop_duplicate_orbits",
+      "kind": "function",
+      "signature": "(orbits: 'FittedOrbits', orbit_members: 'FittedOrbitMembers', subset: Optional[List[str]]=None, keep: Literal['first', 'last']='first')",
+      "path": "src/adam_core/orbit_determination/fitted_orbits.py",
+      "line": 80
+    },
+    {
+      "module": "adam_core.orbit_determination.fitted_orbits",
+      "qualname": "FittedOrbits",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/orbit_determination/fitted_orbits.py",
+      "line": 128
+    },
+    {
+      "module": "adam_core.orbit_determination.fitted_orbits",
+      "qualname": "FittedOrbits.to_orbits",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/orbit_determination/fitted_orbits.py",
+      "line": 141
+    },
+    {
+      "module": "adam_core.orbit_determination.fitted_orbits",
+      "qualname": "FittedOrbitMembers",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/orbit_determination/fitted_orbits.py",
+      "line": 158
+    },
+    {
+      "module": "adam_core.orbit_determination.gauss",
+      "qualname": "calcGauss",
+      "kind": "function",
+      "signature": "(r1, r2, r3, t1, t2, t3)",
+      "path": "src/adam_core/orbit_determination/gauss.py",
+      "line": 31
+    },
+    {
+      "module": "adam_core.orbit_determination.gauss",
+      "qualname": "gaussIOD",
+      "kind": "function",
+      "signature": "(coords, observation_times, coords_obs, velocity_method='gibbs', light_time=True, mu=MU, max_iter=10, tol=1e-15)",
+      "path": "src/adam_core/orbit_determination/gauss.py",
+      "line": 68
+    },
+    {
+      "module": "adam_core.orbit_determination.gibbs",
+      "qualname": "calcGibbs",
+      "kind": "function",
+      "signature": "(r1, r2, r3)",
+      "path": "src/adam_core/orbit_determination/gibbs.py",
+      "line": 11
+    },
+    {
+      "module": "adam_core.orbit_determination.herrick_gibbs",
+      "qualname": "calcHerrickGibbs",
+      "kind": "function",
+      "signature": "(r1, r2, r3, t1, t2, t3)",
+      "path": "src/adam_core/orbit_determination/herrick_gibbs.py",
+      "line": 11
+    },
+    {
+      "module": "adam_core.orbit_determination.iod",
+      "qualname": "sort_by_id_and_time",
+      "kind": "function",
+      "signature": "(linkages: qv.AnyTable, members: qv.AnyTable, observations: OrbitDeterminationObservations, linkage_column: str)",
+      "path": "src/adam_core/orbit_determination/iod.py",
+      "line": 30
+    },
+    {
+      "module": "adam_core.orbit_determination.iod",
+      "qualname": "select_observations",
+      "kind": "function",
+      "signature": "(observations: OrbitDeterminationObservations, method: Literal['combinations', 'first+middle+last', 'thirds']='combinations')",
+      "path": "src/adam_core/orbit_determination/iod.py",
+      "line": 99
+    },
+    {
+      "module": "adam_core.orbit_determination.iod",
+      "qualname": "iod_worker",
+      "kind": "function",
+      "signature": "(linkage_ids: npt.NDArray[np.str_], observations: Union[OrbitDeterminationObservations, ray.ObjectRef], linkage_members: Union[FittedOrbitMembers, ray.ObjectRef], propagator: Type[Propagator], min_obs: int=6, min_arc_length: float=1.0, contamination_percentage: float=0.0, rchi2_threshold: float=200, observation_selection_method: Literal['combinations', 'first+middle+last', 'thirds']='combinations', linkage_id_col: str='cluster_id', iterate: bool=False, light_time: bool=True, propagator_kwargs: dict={})",
+      "path": "src/adam_core/orbit_determination/iod.py",
+      "line": 185
+    },
+    {
+      "module": "adam_core.orbit_determination.iod",
+      "qualname": "iod",
+      "kind": "function",
+      "signature": "(observations: OrbitDeterminationObservations, propagator: Type[Propagator], min_obs: int=6, min_arc_length: float=1.0, contamination_percentage: float=0.0, rchi2_threshold: float=200, observation_selection_method: Literal['combinations', 'first+middle+last', 'thirds']='combinations', iterate: bool=False, light_time: bool=True, propagator_kwargs: dict={})",
+      "path": "src/adam_core/orbit_determination/iod.py",
+      "line": 314
+    },
+    {
+      "module": "adam_core.orbit_determination.iod",
+      "qualname": "initial_orbit_determination",
+      "kind": "function",
+      "signature": "(observations: Union[OrbitDeterminationObservations, ray.ObjectRef], linkage_members: Union[FittedOrbitMembers, ray.ObjectRef], propagator: Type[Propagator], min_obs: int=6, min_arc_length: float=1.0, contamination_percentage: float=20.0, rchi2_threshold: float=10 ** 3, observation_selection_method: Literal['combinations', 'first+middle+last', 'thirds']='combinations', iterate: bool=False, light_time: bool=True, linkage_id_col: str='cluster_id', propagator_kwargs: dict={}, chunk_size: int=1, max_processes: Optional[int]=1)",
+      "path": "src/adam_core/orbit_determination/iod.py",
+      "line": 585
+    },
+    {
+      "module": "adam_core.orbit_determination.least_squares",
+      "qualname": "LeastSquares",
+      "kind": "class",
+      "signature": "(ABC)",
+      "path": "src/adam_core/orbit_determination/least_squares.py",
+      "line": 91
+    },
+    {
+      "module": "adam_core.orbit_determination.least_squares",
+      "qualname": "LeastSquares.least_squares",
+      "kind": "method",
+      "signature": "(self, initial_orbit: FittedOrbits | Orbits, observations: OrbitDeterminationObservations, prop: Propagator, perturbation_initial_fraction: float=1e-06, perturbation_multiplier: float=0.5, rms_epsilon: float=0.001, max_iterations: float=20, debug_info: Dict[str, Any] | None=None)",
+      "path": "src/adam_core/orbit_determination/least_squares.py",
+      "line": 313
+    },
+    {
+      "module": "adam_core.orbit_determination.od",
+      "qualname": "od_worker",
+      "kind": "function",
+      "signature": "(orbit_ids: npt.NDArray[np.str_], orbits: FittedOrbits, orbit_members: FittedOrbitMembers, observations: OrbitDeterminationObservations, propagator: Type[Propagator], rchi2_threshold: float=100, min_obs: int=5, min_arc_length: float=1.0, contamination_percentage: float=0.0, delta: float=1e-06, max_iter: int=20, method: Literal['central', 'finite']='central', propagator_kwargs: dict={})",
+      "path": "src/adam_core/orbit_determination/od.py",
+      "line": 29
+    },
+    {
+      "module": "adam_core.orbit_determination.od",
+      "qualname": "od",
+      "kind": "function",
+      "signature": "(orbit: FittedOrbits, observations: OrbitDeterminationObservations, propagator: Type[Propagator], rchi2_threshold: float=100, min_obs: int=5, min_arc_length: float=1.0, contamination_percentage: float=0.0, delta: float=1e-06, max_iter: int=20, method: Literal['central', 'finite']='central', propagator_kwargs: dict={})",
+      "path": "src/adam_core/orbit_determination/od.py",
+      "line": 150
+    },
+    {
+      "module": "adam_core.orbit_determination.od",
+      "qualname": "differential_correction",
+      "kind": "function",
+      "signature": "(orbits: Union[FittedOrbits, ray.ObjectRef], orbit_members: Union[FittedOrbitMembers, ray.ObjectRef], observations: Union[OrbitDeterminationObservations, ray.ObjectRef], propagator: Type[Propagator], min_obs: int=5, min_arc_length: float=1.0, contamination_percentage: float=20, rchi2_threshold: float=100, delta: float=1e-08, max_iter: int=20, method: Literal['central', 'finite']='central', propagator_kwargs: dict={}, chunk_size: int=10, max_processes: Optional[int]=1, orbit_ids: Optional[npt.NDArray[np.str_]]=None, obs_ids: Optional[npt.NDArray[np.str_]]=None)",
+      "path": "src/adam_core/orbit_determination/od.py",
+      "line": 578
+    },
+    {
+      "module": "adam_core.orbit_determination.orbit_fitter",
+      "qualname": "OrbitFitter",
+      "kind": "class",
+      "signature": "(ABC)",
+      "path": "src/adam_core/orbit_determination/orbit_fitter.py",
+      "line": 12
+    },
+    {
+      "module": "adam_core.orbit_determination.orbit_fitter",
+      "qualname": "OrbitFitter.initial_fit",
+      "kind": "method",
+      "signature": "(self, object_id: str | pa.LargeStringScalar, observations: OrbitDeterminationObservations)",
+      "path": "src/adam_core/orbit_determination/orbit_fitter.py",
+      "line": 51
+    },
+    {
+      "module": "adam_core.orbit_determination.outliers",
+      "qualname": "calculate_max_outliers",
+      "kind": "function",
+      "signature": "(num_obs: int, min_obs: int, contamination_percentage: float)",
+      "path": "src/adam_core/orbit_determination/outliers.py",
+      "line": 24
+    },
+    {
+      "module": "adam_core.orbit_determination.outliers",
+      "qualname": "remove_lowest_probability_observation",
+      "kind": "function",
+      "signature": "(orbit_members: FittedOrbitMembers, observations: OrbitDeterminationObservations)",
+      "path": "src/adam_core/orbit_determination/outliers.py",
+      "line": 59
+    },
+    {
+      "module": "adam_core.orbits.classification",
+      "qualname": "calc_orbit_class",
+      "kind": "function",
+      "signature": "(elements: Union[KeplerianCoordinates, CometaryCoordinates])",
+      "path": "src/adam_core/orbits/classification.py",
+      "line": 29
+    },
+    {
+      "module": "adam_core.orbits.ephemeris",
+      "qualname": "Ephemeris",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/orbits/ephemeris.py",
+      "line": 11
+    },
+    {
+      "module": "adam_core.orbits.ephemeris",
+      "qualname": "Ephemeris.link_to_observers",
+      "kind": "method",
+      "signature": "(self, observers: Observers, precision='ns')",
+      "path": "src/adam_core/orbits/ephemeris.py",
+      "line": 28
+    },
+    {
+      "module": "adam_core.orbits.oem_io",
+      "qualname": "orbit_to_oem",
+      "kind": "function",
+      "signature": "(orbits: Orbits, output_file: str, originator: str='ADAM CORE USER')",
+      "path": "src/adam_core/orbits/oem_io.py",
+      "line": 303
+    },
+    {
+      "module": "adam_core.orbits.oem_io",
+      "qualname": "orbit_to_oem_propagated",
+      "kind": "function",
+      "signature": "(orbits: Orbits, output_file: str, times: Timestamp, propagator_klass: Type[Propagator], originator: str='ADAM CORE USER')",
+      "path": "src/adam_core/orbits/oem_io.py",
+      "line": 410
+    },
+    {
+      "module": "adam_core.orbits.oem_io",
+      "qualname": "orbit_from_oem",
+      "kind": "function",
+      "signature": "(input_file: str)",
+      "path": "src/adam_core/orbits/oem_io.py",
+      "line": 520
+    },
+    {
+      "module": "adam_core.orbits.openspace.assets",
+      "qualname": "Gui",
+      "kind": "class",
+      "signature": "(LuaDict)",
+      "path": "src/adam_core/orbits/openspace/assets.py",
+      "line": 43
+    },
+    {
+      "module": "adam_core.orbits.openspace.assets",
+      "qualname": "Asset",
+      "kind": "class",
+      "signature": "(LuaDict)",
+      "path": "src/adam_core/orbits/openspace/assets.py",
+      "line": 49
+    },
+    {
+      "module": "adam_core.orbits.openspace.assets",
+      "qualname": "orbits_to_sbdb_file",
+      "kind": "function",
+      "signature": "(orbits: Orbits, path: str)",
+      "path": "src/adam_core/orbits/openspace/assets.py",
+      "line": 57
+    },
+    {
+      "module": "adam_core.orbits.openspace.assets",
+      "qualname": "create_initialization",
+      "kind": "function",
+      "signature": "(assets: List[str])",
+      "path": "src/adam_core/orbits/openspace/assets.py",
+      "line": 93
+    },
+    {
+      "module": "adam_core.orbits.openspace.assets",
+      "qualname": "create_renderable_orbital_kepler",
+      "kind": "function",
+      "signature": "(orbits: Orbits, out_dir: str, identifier: str, gui_name: Optional[str]=None, gui_path: Optional[str]=None, color: Tuple[float, float, float]=(1.0, 1.0, 1.0), segment_quality: int=10, contiguous_mode: Optional[bool]=None, enable_max_size: Optional[bool]=None, enable_outline: Optional[bool]=None, max_size: Optional[float]=None, outline_color: Optional[Tuple[float, float, float]]=None, outline_width: Optional[float]=None, point_size_exponent: Optional[float]=None, rendering: Optional[Literal['Trail', 'Point', 'PointsTrails']]=None, render_size: Optional[int]=None, start_render_idx: Optional[int]=None, trail_fade: Optional[float]=None, trail_width: Optional[float]=None, dim_in_atmosphere: Optional[bool]=None, enabled: Optional[bool]=None, opacity: Optional[float]=None, render_bin_mode: Literal['Opaque', 'Transparent', 'Both']=None, tag: Optional[Union[str, List[str]]]=None)",
+      "path": "src/adam_core/orbits/openspace/assets.py",
+      "line": 107
+    },
+    {
+      "module": "adam_core.orbits.openspace.assets",
+      "qualname": "create_renderable_trail_orbit",
+      "kind": "function",
+      "signature": "(orbits, out_dir: str, identifier: str, trail_head: Optional[bool]=True, gui_name: Optional[str]=None, gui_path: Optional[str]=None, color: Tuple[float, float, float]=(1.0, 1.0, 1.0), resolution: int=86400, translation_type: Literal['Kepler', 'Spice']='Kepler', enable_fade: Optional[bool]=None, line_fade_amount: Optional[float]=None, line_length: Optional[float]=None, line_width: Optional[float]=None, point_size: Optional[int]=None, rendering: Literal['Lines', 'Points', 'Lines+Points']=None, dim_in_atmosphere: Optional[bool]=None, enabled: Optional[bool]=None, opacity: Optional[float]=None, period: Optional[float]=None, render_bin_mode: Literal['Opaque', 'Transparent', 'Both']=None, tag: Optional[Union[str, List[str]]]=None, spice_kernel_path: Optional[str]=None, spice_id_mappings: Optional[dict]=None)",
+      "path": "src/adam_core/orbits/openspace/assets.py",
+      "line": 259
+    },
+    {
+      "module": "adam_core.orbits.openspace.lua",
+      "qualname": "LuaDict",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/orbits/openspace/lua.py",
+      "line": 4
+    },
+    {
+      "module": "adam_core.orbits.openspace.lua",
+      "qualname": "LuaDict.to_pascal_case",
+      "kind": "method",
+      "signature": "(self, s: str)",
+      "path": "src/adam_core/orbits/openspace/lua.py",
+      "line": 10
+    },
+    {
+      "module": "adam_core.orbits.openspace.lua",
+      "qualname": "LuaDict.to_string",
+      "kind": "method",
+      "signature": "(self, indent: int=0)",
+      "path": "src/adam_core/orbits/openspace/lua.py",
+      "line": 13
+    },
+    {
+      "module": "adam_core.orbits.openspace.renderable",
+      "qualname": "RenderBinMode",
+      "kind": "class",
+      "signature": "(Enum)",
+      "path": "src/adam_core/orbits/openspace/renderable.py",
+      "line": 9
+    },
+    {
+      "module": "adam_core.orbits.openspace.renderable",
+      "qualname": "RenderableOrbitalKeplerFormat",
+      "kind": "class",
+      "signature": "(Enum)",
+      "path": "src/adam_core/orbits/openspace/renderable.py",
+      "line": 18
+    },
+    {
+      "module": "adam_core.orbits.openspace.renderable",
+      "qualname": "RenderableOrbitalKeplerRendering",
+      "kind": "class",
+      "signature": "(Enum)",
+      "path": "src/adam_core/orbits/openspace/renderable.py",
+      "line": 24
+    },
+    {
+      "module": "adam_core.orbits.openspace.renderable",
+      "qualname": "RenderableTrailRendering",
+      "kind": "class",
+      "signature": "(Enum)",
+      "path": "src/adam_core/orbits/openspace/renderable.py",
+      "line": 30
+    },
+    {
+      "module": "adam_core.orbits.openspace.renderable",
+      "qualname": "Resource",
+      "kind": "class",
+      "signature": "(LuaDict)",
+      "path": "src/adam_core/orbits/openspace/renderable.py",
+      "line": 37
+    },
+    {
+      "module": "adam_core.orbits.openspace.renderable",
+      "qualname": "Resource.to_string",
+      "kind": "method",
+      "signature": "(self, indent: int=0)",
+      "path": "src/adam_core/orbits/openspace/renderable.py",
+      "line": 42
+    },
+    {
+      "module": "adam_core.orbits.openspace.renderable",
+      "qualname": "Renderable",
+      "kind": "class",
+      "signature": "(LuaDict)",
+      "path": "src/adam_core/orbits/openspace/renderable.py",
+      "line": 47
+    },
+    {
+      "module": "adam_core.orbits.openspace.renderable",
+      "qualname": "RenderableOrbitalKepler",
+      "kind": "class",
+      "signature": "(Renderable)",
+      "path": "src/adam_core/orbits/openspace/renderable.py",
+      "line": 59
+    },
+    {
+      "module": "adam_core.orbits.openspace.renderable",
+      "qualname": "RenderableTrailOrbit",
+      "kind": "class",
+      "signature": "(Renderable)",
+      "path": "src/adam_core/orbits/openspace/renderable.py",
+      "line": 82
+    },
+    {
+      "module": "adam_core.orbits.openspace.renderable",
+      "qualname": "RenderableTrailTrajectory",
+      "kind": "class",
+      "signature": "(Renderable)",
+      "path": "src/adam_core/orbits/openspace/renderable.py",
+      "line": 99
+    },
+    {
+      "module": "adam_core.orbits.openspace.translation",
+      "qualname": "Translation",
+      "kind": "class",
+      "signature": "(LuaDict)",
+      "path": "src/adam_core/orbits/openspace/translation.py",
+      "line": 8
+    },
+    {
+      "module": "adam_core.orbits.openspace.translation",
+      "qualname": "Transform",
+      "kind": "class",
+      "signature": "(LuaDict)",
+      "path": "src/adam_core/orbits/openspace/translation.py",
+      "line": 13
+    },
+    {
+      "module": "adam_core.orbits.openspace.translation",
+      "qualname": "KeplerTranslation",
+      "kind": "class",
+      "signature": "(Translation)",
+      "path": "src/adam_core/orbits/openspace/translation.py",
+      "line": 18
+    },
+    {
+      "module": "adam_core.orbits.openspace.translation",
+      "qualname": "SpiceTranslation",
+      "kind": "class",
+      "signature": "(Translation)",
+      "path": "src/adam_core/orbits/openspace/translation.py",
+      "line": 32
+    },
+    {
+      "module": "adam_core.orbits.orbits",
+      "qualname": "Orbits",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/orbits/orbits.py",
+      "line": 19
+    },
+    {
+      "module": "adam_core.orbits.orbits",
+      "qualname": "Orbits.group_by_orbit_id",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/orbits/orbits.py",
+      "line": 26
+    },
+    {
+      "module": "adam_core.orbits.orbits",
+      "qualname": "Orbits.dynamical_class",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/orbits/orbits.py",
+      "line": 42
+    },
+    {
+      "module": "adam_core.orbits.orbits",
+      "qualname": "Orbits.preview",
+      "kind": "method",
+      "signature": "(self, propagator: 'Propagator')",
+      "path": "src/adam_core/orbits/orbits.py",
+      "line": 55
+    },
+    {
+      "module": "adam_core.orbits.physical_parameters",
+      "qualname": "PhysicalParameters",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/orbits/physical_parameters.py",
+      "line": 4
+    },
+    {
+      "module": "adam_core.orbits.plots",
+      "qualname": "plot_orbit",
+      "kind": "function",
+      "signature": "(orbit: Orbits, propagator: Propagator, start_time: Optional[Timestamp]=None, logo: bool=True)",
+      "path": "src/adam_core/orbits/plots.py",
+      "line": 18
+    },
+    {
+      "module": "adam_core.orbits.plots",
+      "qualname": "ellipsoid",
+      "kind": "function",
+      "signature": "(center, radii, rotation, num_points=100)",
+      "path": "src/adam_core/orbits/plots.py",
+      "line": 209
+    },
+    {
+      "module": "adam_core.orbits.plots",
+      "qualname": "add_observation_plot",
+      "kind": "function",
+      "signature": "(fig: go.Figure, observed: CartesianCoordinates, radius_mult: float)",
+      "path": "src/adam_core/orbits/plots.py",
+      "line": 228
+    },
+    {
+      "module": "adam_core.orbits.query.horizons",
+      "qualname": "query_horizons_ephemeris",
+      "kind": "function",
+      "signature": "(object_ids: Union[List, npt.ArrayLike], observers: Observers)",
+      "path": "src/adam_core/orbits/query/horizons.py",
+      "line": 194
+    },
+    {
+      "module": "adam_core.orbits.query.horizons",
+      "qualname": "query_horizons",
+      "kind": "function",
+      "signature": "(object_ids: Union[List, npt.ArrayLike], times: Timestamp, coordinate_type: str='cartesian', location: str='@sun', aberrations: str='geometric', id_type: Optional[str]=None)",
+      "path": "src/adam_core/orbits/query/horizons.py",
+      "line": 249
+    },
+    {
+      "module": "adam_core.orbits.query.neocc",
+      "qualname": "query_neocc",
+      "kind": "function",
+      "signature": "(object_ids: Union[List, npt.ArrayLike], orbit_type: Literal['ke', 'eq']='ke', orbit_epoch: Literal['middle', 'present-day']='present-day')",
+      "path": "src/adam_core/orbits/query/neocc.py",
+      "line": 213
+    },
+    {
+      "module": "adam_core.orbits.query.sbdb",
+      "qualname": "query_sbdb",
+      "kind": "function",
+      "signature": "(ids: npt.ArrayLike)",
+      "path": "src/adam_core/orbits/query/sbdb.py",
+      "line": 252
+    },
+    {
+      "module": "adam_core.orbits.query.sbdb",
+      "qualname": "query_sbdb_new",
+      "kind": "function",
+      "signature": "(ids: npt.ArrayLike, *, max_concurrent_requests: int=1, timeout_s: float=60.0, max_attempts: int=5, allow_missing: bool=False, orbit_id_from_input: bool=False)",
+      "path": "src/adam_core/orbits/query/sbdb.py",
+      "line": 666
+    },
+    {
+      "module": "adam_core.orbits.query.sbdb",
+      "qualname": "NotFoundError",
+      "kind": "class",
+      "signature": "(Exception)",
+      "path": "src/adam_core/orbits/query/sbdb.py",
+      "line": 736
+    },
+    {
+      "module": "adam_core.orbits.query.scout",
+      "qualname": "ScoutObjectSummary",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/orbits/query/scout.py",
+      "line": 17
+    },
+    {
+      "module": "adam_core.orbits.query.scout",
+      "qualname": "get_scout_objects",
+      "kind": "function",
+      "signature": "()",
+      "path": "src/adam_core/orbits/query/scout.py",
+      "line": 76
+    },
+    {
+      "module": "adam_core.orbits.query.scout",
+      "qualname": "ScoutOrbit",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/orbits/query/scout.py",
+      "line": 94
+    },
+    {
+      "module": "adam_core.orbits.query.scout",
+      "qualname": "scout_orbits_to_variant_orbits",
+      "kind": "function",
+      "signature": "(object_id: str, scout_orbits: ScoutOrbit)",
+      "path": "src/adam_core/orbits/query/scout.py",
+      "line": 137
+    },
+    {
+      "module": "adam_core.orbits.query.scout",
+      "qualname": "query_scout",
+      "kind": "function",
+      "signature": "(ids: npt.ArrayLike)",
+      "path": "src/adam_core/orbits/query/scout.py",
+      "line": 179
+    },
+    {
+      "module": "adam_core.orbits.spice_kernel",
+      "qualname": "fit_chebyshev",
+      "kind": "function",
+      "signature": "(coordinates: CartesianCoordinates, window_start: float, window_end: float, degree: int, mid_time: Optional[float]=None, half_interval: Optional[float]=None)",
+      "path": "src/adam_core/orbits/spice_kernel.py",
+      "line": 44
+    },
+    {
+      "module": "adam_core.orbits.spice_kernel",
+      "qualname": "orbits_to_spk",
+      "kind": "function",
+      "signature": "(orbits: Orbits, output_file: str, start_time: Timestamp, end_time: Timestamp, propagator: Optional[Propagator]=None, max_processes: Optional[int]=None, step_days: float=1.0 / 4, target_id_start: int=1000000, window_days: float=32.0, comment: str='SPK file generated from adam_core Orbits', kernel_type: str='w03')",
+      "path": "src/adam_core/orbits/spice_kernel.py",
+      "line": 99
+    },
+    {
+      "module": "adam_core.orbits.spice_kernel",
+      "qualname": "write_spkw03_segment",
+      "kind": "function",
+      "signature": "(propagated_orbit: Orbits, handle, target_id: int, start_time: float, end_time: float, window_seconds: float=86400.0, cheby_degree: int=15)",
+      "path": "src/adam_core/orbits/spice_kernel.py",
+      "line": 315
+    },
+    {
+      "module": "adam_core.orbits.spice_kernel",
+      "qualname": "write_spkw09_segment",
+      "kind": "function",
+      "signature": "(propagated_orbit: Orbits, handle, target_id: int, start_time: float, end_time: float)",
+      "path": "src/adam_core/orbits/spice_kernel.py",
+      "line": 340
+    },
+    {
+      "module": "adam_core.orbits.variants",
+      "qualname": "VariantOrbits",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/orbits/variants.py",
+      "line": 24
+    },
+    {
+      "module": "adam_core.orbits.variants",
+      "qualname": "VariantOrbits.create",
+      "kind": "classmethod",
+      "signature": "(cls, orbits: Orbits, method: Literal['auto', 'sigma-point', 'monte-carlo']='auto', num_samples: int=10000, alpha: float=1, beta: float=0, kappa: float=0, seed: Optional[int]=None)",
+      "path": "src/adam_core/orbits/variants.py",
+      "line": 34
+    },
+    {
+      "module": "adam_core.orbits.variants",
+      "qualname": "VariantOrbits.link_to_orbits",
+      "kind": "method",
+      "signature": "(self, orbits: Orbits)",
+      "path": "src/adam_core/orbits/variants.py",
+      "line": 103
+    },
+    {
+      "module": "adam_core.orbits.variants",
+      "qualname": "VariantOrbits.collapse",
+      "kind": "method",
+      "signature": "(self, orbits: Orbits)",
+      "path": "src/adam_core/orbits/variants.py",
+      "line": 138
+    },
+    {
+      "module": "adam_core.orbits.variants",
+      "qualname": "VariantOrbits.collapse_by_object_id",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/orbits/variants.py",
+      "line": 183
+    },
+    {
+      "module": "adam_core.orbits.variants",
+      "qualname": "VariantEphemeris",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/orbits/variants.py",
+      "line": 251
+    },
+    {
+      "module": "adam_core.orbits.variants",
+      "qualname": "VariantEphemeris.link_to_ephemeris",
+      "kind": "method",
+      "signature": "(self, ephemeris: Ephemeris)",
+      "path": "src/adam_core/orbits/variants.py",
+      "line": 264
+    },
+    {
+      "module": "adam_core.orbits.variants",
+      "qualname": "VariantEphemeris.collapse",
+      "kind": "method",
+      "signature": "(self, ephemeris: Ephemeris)",
+      "path": "src/adam_core/orbits/variants.py",
+      "line": 299
+    },
+    {
+      "module": "adam_core.orbits.variants",
+      "qualname": "VariantEphemeris.collapse_by_object_id",
+      "kind": "method",
+      "signature": "(self, *, aberration_mode: Literal['recompute', 'collapse', 'none']='recompute', group_chunk_size: int=200000)",
+      "path": "src/adam_core/orbits/variants.py",
+      "line": 363
+    },
+    {
+      "module": "adam_core.orbits.variants",
+      "qualname": "VariantEphemeris.collapse_sigma_points_orbit_major",
+      "kind": "method",
+      "signature": "(self, *, n_times: int, n_variants: int=13)",
+      "path": "src/adam_core/orbits/variants.py",
+      "line": 743
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "resolve_max_processes",
+      "kind": "function",
+      "signature": "(max_processes: Optional[int])",
+      "path": "src/adam_core/parallel.py",
+      "line": 49
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "ParallelBackend",
+      "kind": "class",
+      "signature": "(Protocol)",
+      "path": "src/adam_core/parallel.py",
+      "line": 61
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "ParallelBackend.put",
+      "kind": "method",
+      "signature": "(self, obj: Any)",
+      "path": "src/adam_core/parallel.py",
+      "line": 72
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "ParallelBackend.get",
+      "kind": "method",
+      "signature": "(self, ref: Any)",
+      "path": "src/adam_core/parallel.py",
+      "line": 82
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "ParallelBackend.is_ref",
+      "kind": "method",
+      "signature": "(self, obj: Any)",
+      "path": "src/adam_core/parallel.py",
+      "line": 85
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "ParallelBackend.free",
+      "kind": "method",
+      "signature": "(self, refs: list)",
+      "path": "src/adam_core/parallel.py",
+      "line": 88
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "ParallelBackend.map_unordered",
+      "kind": "method",
+      "signature": "(self, fn: Callable[..., Any], args_iter: Iterable[Tuple[Any, ...]], *, max_outstanding: Optional[int]=None, worker_options: Optional[dict]=None)",
+      "path": "src/adam_core/parallel.py",
+      "line": 91
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "SequentialBackend",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/parallel.py",
+      "line": 108
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "SequentialBackend.put",
+      "kind": "method",
+      "signature": "(self, obj: Any)",
+      "path": "src/adam_core/parallel.py",
+      "line": 113
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "SequentialBackend.get",
+      "kind": "method",
+      "signature": "(self, ref: Any)",
+      "path": "src/adam_core/parallel.py",
+      "line": 116
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "SequentialBackend.is_ref",
+      "kind": "method",
+      "signature": "(self, obj: Any)",
+      "path": "src/adam_core/parallel.py",
+      "line": 119
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "SequentialBackend.free",
+      "kind": "method",
+      "signature": "(self, refs: list)",
+      "path": "src/adam_core/parallel.py",
+      "line": 122
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "SequentialBackend.map_unordered",
+      "kind": "method",
+      "signature": "(self, fn: Callable[..., Any], args_iter: Iterable[Tuple[Any, ...]], *, max_outstanding: Optional[int]=None, worker_options: Optional[dict]=None)",
+      "path": "src/adam_core/parallel.py",
+      "line": 125
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "RayBackend",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/parallel.py",
+      "line": 137
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "RayBackend.put",
+      "kind": "method",
+      "signature": "(self, obj: Any)",
+      "path": "src/adam_core/parallel.py",
+      "line": 174
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "RayBackend.get",
+      "kind": "method",
+      "signature": "(self, ref: Any)",
+      "path": "src/adam_core/parallel.py",
+      "line": 179
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "RayBackend.is_ref",
+      "kind": "method",
+      "signature": "(self, obj: Any)",
+      "path": "src/adam_core/parallel.py",
+      "line": 184
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "RayBackend.free",
+      "kind": "method",
+      "signature": "(self, refs: list)",
+      "path": "src/adam_core/parallel.py",
+      "line": 187
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "RayBackend.map_unordered",
+      "kind": "method",
+      "signature": "(self, fn: Callable[..., Any], args_iter: Iterable[Tuple[Any, ...]], *, max_outstanding: Optional[int]=None, worker_options: Optional[dict]=None)",
+      "path": "src/adam_core/parallel.py",
+      "line": 192
+    },
+    {
+      "module": "adam_core.parallel",
+      "qualname": "get_backend",
+      "kind": "function",
+      "signature": "(max_processes: Optional[int], *, object_store_bytes: Optional[int]=None, **ray_init_kwargs: Any)",
+      "path": "src/adam_core/parallel.py",
+      "line": 218
+    },
+    {
+      "module": "adam_core.photometry.absolute_magnitude",
+      "qualname": "GroupedPhysicalParameters",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/photometry/absolute_magnitude.py",
+      "line": 20
+    },
+    {
+      "module": "adam_core.photometry.absolute_magnitude",
+      "qualname": "estimate_absolute_magnitude_v_from_detections",
+      "kind": "function",
+      "signature": "(detections: PointSourceDetections, exposures: Exposures, object_coords: CartesianCoordinates, *, composition: BandpassComposition, G: float=0.15, strict_band_mapping: bool=False, reference_filter: str='V')",
+      "path": "src/adam_core/photometry/absolute_magnitude.py",
+      "line": 78
+    },
+    {
+      "module": "adam_core.photometry.absolute_magnitude",
+      "qualname": "estimate_absolute_magnitude_v_from_detections_grouped",
+      "kind": "function",
+      "signature": "(detections: PointSourceDetections, exposures: Exposures, object_coords: CartesianCoordinates, object_ids: pa.Array | pa.ChunkedArray | Sequence[str | None], *, composition: BandpassComposition, G: float=0.15, strict_band_mapping: bool=False, reference_filter: str='V')",
+      "path": "src/adam_core/photometry/absolute_magnitude.py",
+      "line": 195
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.api",
+      "qualname": "load_bandpass_curves",
+      "kind": "function",
+      "signature": "()",
+      "path": "src/adam_core/photometry/bandpasses/api.py",
+      "line": 103
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.api",
+      "qualname": "load_observatory_band_map",
+      "kind": "function",
+      "signature": "()",
+      "path": "src/adam_core/photometry/bandpasses/api.py",
+      "line": 109
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.api",
+      "qualname": "load_asteroid_templates",
+      "kind": "function",
+      "signature": "()",
+      "path": "src/adam_core/photometry/bandpasses/api.py",
+      "line": 115
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.api",
+      "qualname": "load_template_integrals",
+      "kind": "function",
+      "signature": "()",
+      "path": "src/adam_core/photometry/bandpasses/api.py",
+      "line": 121
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.api",
+      "qualname": "map_to_canonical_filter_bands",
+      "kind": "function",
+      "signature": "(observatory_codes: pa.Array | pa.ChunkedArray | npt.NDArray[np.object_] | Iterable[str], bands: pa.Array | pa.ChunkedArray | npt.NDArray[np.object_] | Iterable[str], *, allow_fallback_filters: bool=True)",
+      "path": "src/adam_core/photometry/bandpasses/api.py",
+      "line": 223
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.api",
+      "qualname": "assert_filter_ids_have_curves",
+      "kind": "function",
+      "signature": "(filter_ids: pa.Array | pa.ChunkedArray | npt.NDArray[np.object_] | Iterable[str])",
+      "path": "src/adam_core/photometry/bandpasses/api.py",
+      "line": 373
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.api",
+      "qualname": "get_integrals",
+      "kind": "function",
+      "signature": "(template_id: str, filter_ids: npt.NDArray[np.object_])",
+      "path": "src/adam_core/photometry/bandpasses/api.py",
+      "line": 429
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.api",
+      "qualname": "compute_mix_integrals",
+      "kind": "function",
+      "signature": "(weight_C: float, weight_S: float, filter_ids: npt.NDArray[np.object_])",
+      "path": "src/adam_core/photometry/bandpasses/api.py",
+      "line": 470
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.api",
+      "qualname": "bandpass_delta_mag",
+      "kind": "function",
+      "signature": "(composition: str | tuple[float, float], source_filter_id: str, target_filter_id: str)",
+      "path": "src/adam_core/photometry/bandpasses/api.py",
+      "line": 498
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.api",
+      "qualname": "bandpass_color_terms",
+      "kind": "function",
+      "signature": "(composition: str | tuple[float, float], *, source_filter_id: str='V', target_filter_ids: Iterable[str] | None=None)",
+      "path": "src/adam_core/photometry/bandpasses/api.py",
+      "line": 534
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.api",
+      "qualname": "register_custom_template",
+      "kind": "function",
+      "signature": "(template_id: str, wavelength_nm: npt.NDArray[np.float64], reflectance: npt.NDArray[np.float64])",
+      "path": "src/adam_core/photometry/bandpasses/api.py",
+      "line": 586
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.constants",
+      "qualname": "TemplateSpec",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/photometry/bandpasses/constants.py",
+      "line": 8
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.tables",
+      "qualname": "BandpassCurves",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/photometry/bandpasses/tables.py",
+      "line": 7
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.tables",
+      "qualname": "ObservatoryBandMap",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/photometry/bandpasses/tables.py",
+      "line": 23
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.tables",
+      "qualname": "AsteroidTemplates",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/photometry/bandpasses/tables.py",
+      "line": 36
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.tables",
+      "qualname": "TemplateBandpassIntegrals",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/photometry/bandpasses/tables.py",
+      "line": 51
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.vendor",
+      "qualname": "build_bandpass_curves",
+      "kind": "function",
+      "signature": "(out_dir: Path, *, specs: Iterable[_SvoBandpassSpec] | None=None, timeout_s: int=60)",
+      "path": "src/adam_core/photometry/bandpasses/vendor.py",
+      "line": 158
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.vendor",
+      "qualname": "build_observatory_band_map",
+      "kind": "function",
+      "signature": "(out_dir: Path)",
+      "path": "src/adam_core/photometry/bandpasses/vendor.py",
+      "line": 217
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.vendor",
+      "qualname": "build_asteroid_templates",
+      "kind": "function",
+      "signature": "(out_dir: Path)",
+      "path": "src/adam_core/photometry/bandpasses/vendor.py",
+      "line": 277
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.vendor",
+      "qualname": "build_solar_spectrum",
+      "kind": "function",
+      "signature": "(out_dir: Path)",
+      "path": "src/adam_core/photometry/bandpasses/vendor.py",
+      "line": 349
+    },
+    {
+      "module": "adam_core.photometry.bandpasses.vendor",
+      "qualname": "build_template_bandpass_integrals",
+      "kind": "function",
+      "signature": "(out_dir: Path)",
+      "path": "src/adam_core/photometry/bandpasses/vendor.py",
+      "line": 385
+    },
+    {
+      "module": "adam_core.photometry.magnitude",
+      "qualname": "calculate_phase_angle",
+      "kind": "function",
+      "signature": "(object_coords: CartesianCoordinates, observers: Observers)",
+      "path": "src/adam_core/photometry/magnitude.py",
+      "line": 67
+    },
+    {
+      "module": "adam_core.photometry.magnitude",
+      "qualname": "convert_magnitude",
+      "kind": "function",
+      "signature": "(magnitude: npt.NDArray[np.float64], source_filter_id: npt.NDArray[np.object_], target_filter_id: npt.NDArray[np.object_], *, composition: BandpassComposition)",
+      "path": "src/adam_core/photometry/magnitude.py",
+      "line": 159
+    },
+    {
+      "module": "adam_core.photometry.magnitude",
+      "qualname": "calculate_apparent_magnitude_v",
+      "kind": "function",
+      "signature": "(H_v: Union[float, npt.NDArray[np.float64]], object_coords: CartesianCoordinates, observer: Observers, G: Union[float, npt.NDArray[np.float64]]=0.15)",
+      "path": "src/adam_core/photometry/magnitude.py",
+      "line": 233
+    },
+    {
+      "module": "adam_core.photometry.magnitude",
+      "qualname": "calculate_apparent_magnitude_v_and_phase_angle",
+      "kind": "function",
+      "signature": "(H_v: Union[float, npt.NDArray[np.float64]], object_coords: CartesianCoordinates, observer: Observers, G: Union[float, npt.NDArray[np.float64]]=0.15)",
+      "path": "src/adam_core/photometry/magnitude.py",
+      "line": 282
+    },
+    {
+      "module": "adam_core.photometry.magnitude",
+      "qualname": "predict_magnitudes",
+      "kind": "function",
+      "signature": "(H: Union[float, npt.NDArray[np.float64]], object_coords: CartesianCoordinates, exposures: Exposures, G: Union[float, npt.NDArray[np.float64]]=0.15, reference_filter: str='V', *, composition: BandpassComposition)",
+      "path": "src/adam_core/photometry/magnitude.py",
+      "line": 331
+    },
+    {
+      "module": "adam_core.photometry.magnitude_common",
+      "qualname": "bandpass_filter_id_table",
+      "kind": "function",
+      "signature": "()",
+      "path": "src/adam_core/photometry/magnitude_common.py",
+      "line": 19
+    },
+    {
+      "module": "adam_core.photometry.magnitude_common",
+      "qualname": "bandpass_integrals_for_composition",
+      "kind": "function",
+      "signature": "(composition: BandpassComposition, filter_ids: npt.NDArray[np.object_])",
+      "path": "src/adam_core/photometry/magnitude_common.py",
+      "line": 42
+    },
+    {
+      "module": "adam_core.photometry.magnitude_common",
+      "qualname": "bandpass_composition_key",
+      "kind": "function",
+      "signature": "(composition: BandpassComposition)",
+      "path": "src/adam_core/photometry/magnitude_common.py",
+      "line": 57
+    },
+    {
+      "module": "adam_core.photometry.magnitude_common",
+      "qualname": "bandpass_delta_table_for_composition_cached",
+      "kind": "function",
+      "signature": "(composition_key: BandpassComposition)",
+      "path": "src/adam_core/photometry/magnitude_common.py",
+      "line": 82
+    },
+    {
+      "module": "adam_core.photometry.magnitude_common",
+      "qualname": "bandpass_delta_table_for_composition",
+      "kind": "function",
+      "signature": "(composition: BandpassComposition)",
+      "path": "src/adam_core/photometry/magnitude_common.py",
+      "line": 103
+    },
+    {
+      "module": "adam_core.propagator.propagator",
+      "qualname": "propagation_worker",
+      "kind": "function",
+      "signature": "(orbits: Union[Orbits, VariantOrbits], times: Timestamp, propagator: Type['Propagator'], **kwargs)",
+      "path": "src/adam_core/propagator/propagator.py",
+      "line": 159
+    },
+    {
+      "module": "adam_core.propagator.propagator",
+      "qualname": "attach_magnitude_or_phase",
+      "kind": "function",
+      "signature": "(ephemeris: EphemerisType, orbits: OrbitType, observers: ObserverType, predict_magnitudes: bool, predict_phase_angle: bool)",
+      "path": "src/adam_core/propagator/propagator.py",
+      "line": 170
+    },
+    {
+      "module": "adam_core.propagator.propagator",
+      "qualname": "EphemerisMixin",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/propagator/propagator.py",
+      "line": 334
+    },
+    {
+      "module": "adam_core.propagator.propagator",
+      "qualname": "EphemerisMixin.generate_ephemeris",
+      "kind": "method",
+      "signature": "(self, orbits: OrbitType, observers: ObserverType, covariance: bool=False, covariance_method: Literal['auto', 'sigma-point', 'monte-carlo']='monte-carlo', num_samples: int=1000, chunk_size: int=100, max_processes: Optional[int]=1, seed: Optional[int]=None, predict_magnitudes: bool=True, predict_phase_angle: bool=False)",
+      "path": "src/adam_core/propagator/propagator.py",
+      "line": 521
+    },
+    {
+      "module": "adam_core.propagator.propagator",
+      "qualname": "Propagator",
+      "kind": "class",
+      "signature": "(ABC, EphemerisMixin)",
+      "path": "src/adam_core/propagator/propagator.py",
+      "line": 779
+    },
+    {
+      "module": "adam_core.propagator.propagator",
+      "qualname": "Propagator.propagate_orbits",
+      "kind": "method",
+      "signature": "(self, orbits: Union[OrbitType, ObjectRef], times: Union[TimestampType, ObjectRef], covariance: bool=False, covariance_method: Literal['auto', 'sigma-point', 'monte-carlo']='monte-carlo', num_samples: int=1000, chunk_size: int=100, max_processes: Optional[int]=1, seed: Optional[int]=None)",
+      "path": "src/adam_core/propagator/propagator.py",
+      "line": 842
+    },
+    {
+      "module": "adam_core.propagator.utils",
+      "qualname": "ensure_input_time_scale",
+      "kind": "function",
+      "signature": "(results: Union[OrbitType, EphemerisType], times: Timestamp)",
+      "path": "src/adam_core/propagator/utils.py",
+      "line": 11
+    },
+    {
+      "module": "adam_core.propagator.utils",
+      "qualname": "ensure_input_origin_and_frame",
+      "kind": "function",
+      "signature": "(inputs: Union[OrbitType, EphemerisType], results: Union[OrbitType, EphemerisType])",
+      "path": "src/adam_core/propagator/utils.py",
+      "line": 22
+    },
+    {
+      "module": "adam_core.ray_cluster",
+      "qualname": "initialize_use_ray",
+      "kind": "function",
+      "signature": "(num_cpus: Optional[int]=None, object_store_bytes: Optional[int]=None, **kwargs)",
+      "path": "src/adam_core/ray_cluster.py",
+      "line": 20
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp",
+      "kind": "class",
+      "signature": "(qv.Table)",
+      "path": "src/adam_core/time/time.py",
+      "line": 69
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.micros",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/time/time.py",
+      "line": 79
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.millis",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/time/time.py",
+      "line": 82
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.seconds",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/time/time.py",
+      "line": 85
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.key",
+      "kind": "method",
+      "signature": "(self, *, scale: str | None='tdb')",
+      "path": "src/adam_core/time/time.py",
+      "line": 88
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.signature",
+      "kind": "method",
+      "signature": "(self, *, scale: str | None='tdb')",
+      "path": "src/adam_core/time/time.py",
+      "line": 103
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.cache_digest",
+      "kind": "method",
+      "signature": "(self, *, scale: str | None='tdb')",
+      "path": "src/adam_core/time/time.py",
+      "line": 119
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.mjd",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/time/time.py",
+      "line": 133
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.jd",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/time/time.py",
+      "line": 136
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.et",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/time/time.py",
+      "line": 139
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.to_numpy",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/time/time.py",
+      "line": 147
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.to_iso8601",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/time/time.py",
+      "line": 153
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.from_iso8601",
+      "kind": "classmethod",
+      "signature": "(cls, iso: pa.lib.StringArray | list[str], scale='utc')",
+      "path": "src/adam_core/time/time.py",
+      "line": 162
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.from_mjd",
+      "kind": "classmethod",
+      "signature": "(cls, mjd: pa.lib.DoubleArray, scale: str='tai')",
+      "path": "src/adam_core/time/time.py",
+      "line": 171
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.from_jd",
+      "kind": "classmethod",
+      "signature": "(cls, jd: pa.lib.DoubleArray, scale: str='tai')",
+      "path": "src/adam_core/time/time.py",
+      "line": 181
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.from_et",
+      "kind": "classmethod",
+      "signature": "(cls, et: pa.lib.DoubleArray, scale: str='tdb')",
+      "path": "src/adam_core/time/time.py",
+      "line": 185
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.fractional_days",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/time/time.py",
+      "line": 188
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.rounded",
+      "kind": "method",
+      "signature": "(self, precision: str='ns')",
+      "path": "src/adam_core/time/time.py",
+      "line": 192
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.equals",
+      "kind": "method",
+      "signature": "(self, other: Timestamp, precision: str='ns')",
+      "path": "src/adam_core/time/time.py",
+      "line": 205
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.equals_scalar",
+      "kind": "method",
+      "signature": "(self, days: int, nanos: int, precision: str='ns')",
+      "path": "src/adam_core/time/time.py",
+      "line": 213
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.equals_array",
+      "kind": "method",
+      "signature": "(self, other: Timestamp, precision: str='ns')",
+      "path": "src/adam_core/time/time.py",
+      "line": 229
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.max",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/time/time.py",
+      "line": 254
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.min",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/time/time.py",
+      "line": 274
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.from_astropy",
+      "kind": "classmethod",
+      "signature": "(cls, astropy_time: astropy.time.Time)",
+      "path": "src/adam_core/time/time.py",
+      "line": 295
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.to_astropy",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/time/time.py",
+      "line": 361
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.add_nanos",
+      "kind": "method",
+      "signature": "(self, nanos: pa.lib.Int64Array | int, check_range: bool=True)",
+      "path": "src/adam_core/time/time.py",
+      "line": 373
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.add_seconds",
+      "kind": "method",
+      "signature": "(self, seconds: pa.lib.Int64Array | int | pa.DoubleArray | float)",
+      "path": "src/adam_core/time/time.py",
+      "line": 426
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.add_millis",
+      "kind": "method",
+      "signature": "(self, millis: pa.lib.Int64Array | int)",
+      "path": "src/adam_core/time/time.py",
+      "line": 446
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.add_micros",
+      "kind": "method",
+      "signature": "(self, micros: pa.lib.Int64Array | int)",
+      "path": "src/adam_core/time/time.py",
+      "line": 465
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.add_days",
+      "kind": "method",
+      "signature": "(self, days: pa.lib.Int64Array | int)",
+      "path": "src/adam_core/time/time.py",
+      "line": 484
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.add_fractional_days",
+      "kind": "method",
+      "signature": "(self, fractional_days: pa.lib.DoubleArray | float)",
+      "path": "src/adam_core/time/time.py",
+      "line": 496
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.difference_scalar",
+      "kind": "method",
+      "signature": "(self, days: int, nanos: int)",
+      "path": "src/adam_core/time/time.py",
+      "line": 518
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.difference",
+      "kind": "method",
+      "signature": "(self, other: Timestamp)",
+      "path": "src/adam_core/time/time.py",
+      "line": 572
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.unique",
+      "kind": "method",
+      "signature": "(self)",
+      "path": "src/adam_core/time/time.py",
+      "line": 602
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.rescale_astropy",
+      "kind": "method",
+      "signature": "(self, new_scale: str)",
+      "path": "src/adam_core/time/time.py",
+      "line": 611
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.rescale",
+      "kind": "method",
+      "signature": "(self, new_scale: str)",
+      "path": "src/adam_core/time/time.py",
+      "line": 677
+    },
+    {
+      "module": "adam_core.time.time",
+      "qualname": "Timestamp.link",
+      "kind": "method",
+      "signature": "(self, other: Timestamp, precision: str='ns')",
+      "path": "src/adam_core/time/time.py",
+      "line": 755
+    },
+    {
+      "module": "adam_core.utils.bounded_lru",
+      "qualname": "bounded_lru_get",
+      "kind": "function",
+      "signature": "(cache: 'OrderedDict[K, V]', key: K, *, maxsize: int)",
+      "path": "src/adam_core/utils/bounded_lru.py",
+      "line": 11
+    },
+    {
+      "module": "adam_core.utils.bounded_lru",
+      "qualname": "bounded_lru_put",
+      "kind": "function",
+      "signature": "(cache: 'OrderedDict[K, V]', key: K, value: V, *, maxsize: int)",
+      "path": "src/adam_core/utils/bounded_lru.py",
+      "line": 27
+    },
+    {
+      "module": "adam_core.utils.chunking",
+      "qualname": "pad_to_fixed_size",
+      "kind": "function",
+      "signature": "(array, target_shape, pad_value=0)",
+      "path": "src/adam_core/utils/chunking.py",
+      "line": 4
+    },
+    {
+      "module": "adam_core.utils.chunking",
+      "qualname": "process_in_chunks",
+      "kind": "function",
+      "signature": "(array, chunk_size)",
+      "path": "src/adam_core/utils/chunking.py",
+      "line": 26
+    },
+    {
+      "module": "adam_core.utils.helpers.observations",
+      "qualname": "make_observations",
+      "kind": "function",
+      "signature": "()",
+      "path": "src/adam_core/utils/helpers/observations.py",
+      "line": 13
+    },
+    {
+      "module": "adam_core.utils.helpers.orbits",
+      "qualname": "make_real_orbits",
+      "kind": "function",
+      "signature": "(num_orbits: Optional[int]=None)",
+      "path": "src/adam_core/utils/helpers/orbits.py",
+      "line": 13
+    },
+    {
+      "module": "adam_core.utils.helpers.orbits",
+      "qualname": "make_simple_orbits",
+      "kind": "function",
+      "signature": "(num_orbits: int=10)",
+      "path": "src/adam_core/utils/helpers/orbits.py",
+      "line": 43
+    },
+    {
+      "module": "adam_core.utils.mpc",
+      "qualname": "convert_mpc_packed_dates",
+      "kind": "function",
+      "signature": "(pf_tt: npt.ArrayLike)",
+      "path": "src/adam_core/utils/mpc.py",
+      "line": 31
+    },
+    {
+      "module": "adam_core.utils.mpc",
+      "qualname": "pack_numbered_designation",
+      "kind": "function",
+      "signature": "(designation: str)",
+      "path": "src/adam_core/utils/mpc.py",
+      "line": 54
+    },
+    {
+      "module": "adam_core.utils.mpc",
+      "qualname": "pack_provisional_designation",
+      "kind": "function",
+      "signature": "(designation: str)",
+      "path": "src/adam_core/utils/mpc.py",
+      "line": 107
+    },
+    {
+      "module": "adam_core.utils.mpc",
+      "qualname": "pack_survey_designation",
+      "kind": "function",
+      "signature": "(designation: str)",
+      "path": "src/adam_core/utils/mpc.py",
+      "line": 179
+    },
+    {
+      "module": "adam_core.utils.mpc",
+      "qualname": "pack_mpc_designation",
+      "kind": "function",
+      "signature": "(designation: str)",
+      "path": "src/adam_core/utils/mpc.py",
+      "line": 221
+    },
+    {
+      "module": "adam_core.utils.mpc",
+      "qualname": "unpack_numbered_designation",
+      "kind": "function",
+      "signature": "(designation_pf: str)",
+      "path": "src/adam_core/utils/mpc.py",
+      "line": 271
+    },
+    {
+      "module": "adam_core.utils.mpc",
+      "qualname": "unpack_provisional_designation",
+      "kind": "function",
+      "signature": "(designation_pf: str)",
+      "path": "src/adam_core/utils/mpc.py",
+      "line": 327
+    },
+    {
+      "module": "adam_core.utils.mpc",
+      "qualname": "unpack_survey_designation",
+      "kind": "function",
+      "signature": "(designation_pf: str)",
+      "path": "src/adam_core/utils/mpc.py",
+      "line": 382
+    },
+    {
+      "module": "adam_core.utils.mpc",
+      "qualname": "unpack_mpc_designation",
+      "kind": "function",
+      "signature": "(designation_pf: str)",
+      "path": "src/adam_core/utils/mpc.py",
+      "line": 425
+    },
+    {
+      "module": "adam_core.utils.plots.logos",
+      "qualname": "get_logo_base64",
+      "kind": "function",
+      "signature": "(logo_path: Path)",
+      "path": "src/adam_core/utils/plots/logos/__init__.py",
+      "line": 17
+    },
+    {
+      "module": "adam_core.utils.spice",
+      "qualname": "clear_spkez_cache",
+      "kind": "function",
+      "signature": "()",
+      "path": "src/adam_core/utils/spice.py",
+      "line": 90
+    },
+    {
+      "module": "adam_core.utils.spice",
+      "qualname": "setup_SPICE",
+      "kind": "function",
+      "signature": "(kernels: Optional[List[str]]=None, force: bool=False)",
+      "path": "src/adam_core/utils/spice.py",
+      "line": 122
+    },
+    {
+      "module": "adam_core.utils.spice",
+      "qualname": "get_perturber_state",
+      "kind": "function",
+      "signature": "(perturber: OriginCodes, times: Timestamp, frame: Literal['ecliptic', 'equatorial', 'itrf93']='ecliptic', origin: OriginCodes=OriginCodes.SUN)",
+      "path": "src/adam_core/utils/spice.py",
+      "line": 163
+    },
+    {
+      "module": "adam_core.utils.spice",
+      "qualname": "list_registered_kernels",
+      "kind": "function",
+      "signature": "()",
+      "path": "src/adam_core/utils/spice.py",
+      "line": 313
+    },
+    {
+      "module": "adam_core.utils.spice",
+      "qualname": "register_spice_kernel",
+      "kind": "function",
+      "signature": "(kernel_path: str)",
+      "path": "src/adam_core/utils/spice.py",
+      "line": 325
+    },
+    {
+      "module": "adam_core.utils.spice",
+      "qualname": "unregister_spice_kernel",
+      "kind": "function",
+      "signature": "(kernel_path: str)",
+      "path": "src/adam_core/utils/spice.py",
+      "line": 339
+    },
+    {
+      "module": "adam_core.utils.spice",
+      "qualname": "get_spice_body_state",
+      "kind": "function",
+      "signature": "(body_id: int, times: Timestamp, frame: Literal['ecliptic', 'equatorial', 'itrf93']='ecliptic', origin: OriginCodes=OriginCodes.SUN)",
+      "path": "src/adam_core/utils/spice.py",
+      "line": 353
+    },
+    {
+      "module": "adam_core.utils.spice_backend",
+      "qualname": "NotCovered",
+      "kind": "class",
+      "signature": "(Exception)",
+      "path": "src/adam_core/utils/spice_backend.py",
+      "line": 26
+    },
+    {
+      "module": "adam_core.utils.spice_backend",
+      "qualname": "RustBackend",
+      "kind": "class",
+      "signature": "()",
+      "path": "src/adam_core/utils/spice_backend.py",
+      "line": 30
+    },
+    {
+      "module": "adam_core.utils.spice_backend",
+      "qualname": "RustBackend.furnsh",
+      "kind": "method",
+      "signature": "(self, path: str)",
+      "path": "src/adam_core/utils/spice_backend.py",
+      "line": 41
+    },
+    {
+      "module": "adam_core.utils.spice_backend",
+      "qualname": "RustBackend.unload",
+      "kind": "method",
+      "signature": "(self, path: str)",
+      "path": "src/adam_core/utils/spice_backend.py",
+      "line": 45
+    },
+    {
+      "module": "adam_core.utils.spice_backend",
+      "qualname": "RustBackend.spkez",
+      "kind": "method",
+      "signature": "(self, target: int, et: float, frame: str, observer: int)",
+      "path": "src/adam_core/utils/spice_backend.py",
+      "line": 49
+    },
+    {
+      "module": "adam_core.utils.spice_backend",
+      "qualname": "RustBackend.spkez_batch",
+      "kind": "method",
+      "signature": "(self, target: int, observer: int, frame: str, ets: np.ndarray)",
+      "path": "src/adam_core/utils/spice_backend.py",
+      "line": 59
+    },
+    {
+      "module": "adam_core.utils.spice_backend",
+      "qualname": "RustBackend.pxform_batch",
+      "kind": "method",
+      "signature": "(self, frame_from: str, frame_to: str, ets: np.ndarray)",
+      "path": "src/adam_core/utils/spice_backend.py",
+      "line": 79
+    },
+    {
+      "module": "adam_core.utils.spice_backend",
+      "qualname": "RustBackend.sxform_batch",
+      "kind": "method",
+      "signature": "(self, frame_from: str, frame_to: str, ets: np.ndarray)",
+      "path": "src/adam_core/utils/spice_backend.py",
+      "line": 97
+    },
+    {
+      "module": "adam_core.utils.spice_backend",
+      "qualname": "RustBackend.bodn2c",
+      "kind": "method",
+      "signature": "(self, name: str)",
+      "path": "src/adam_core/utils/spice_backend.py",
+      "line": 115
+    },
+    {
+      "module": "adam_core.utils.spice_backend",
+      "qualname": "get_backend",
+      "kind": "function",
+      "signature": "()",
+      "path": "src/adam_core/utils/spice_backend.py",
+      "line": 131
+    }
+  ]
+}

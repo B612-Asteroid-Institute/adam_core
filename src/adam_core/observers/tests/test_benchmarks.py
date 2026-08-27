@@ -3,7 +3,9 @@ import pytest
 
 from ...coordinates.origin import OriginCodes
 from ...observers import get_observer_state
+from ...observers.state import clear_observer_state_cache
 from ...time import Timestamp
+from ...utils.spice import clear_spkez_cache
 
 
 @pytest.mark.parametrize(
@@ -20,8 +22,8 @@ from ...time import Timestamp
     [OriginCodes.SUN, OriginCodes.SOLAR_SYSTEM_BARYCENTER],
     ids=lambda x: f"origin={x.name},",
 )
-@pytest.mark.benchmark(group="observer_states")
-def test_benchmark_get_observer_state(benchmark, times, code, frame, origin):
+@pytest.mark.benchmark(group="observer_states_compute")
+def test_benchmark_get_observer_state_compute(benchmark, times, code, frame, origin):
     # We can expect needing to get the observer states for duplicated observation
     # times in the future, so we should benchmark this case
     if times == 10000:
@@ -36,11 +38,17 @@ def test_benchmark_get_observer_state(benchmark, times, code, frame, origin):
     )
     times = Timestamp.from_mjd(np.sort(times_array), scale="tdb")
 
-    result = benchmark(
+    def clear_result_caches() -> None:
+        clear_observer_state_cache()
+        clear_spkez_cache()
+
+    result = benchmark.pedantic(
         get_observer_state,
-        code,
-        times,
-        frame=frame,
-        origin=origin,
+        args=(code, times),
+        kwargs={"frame": frame, "origin": origin},
+        setup=clear_result_caches,
+        rounds=7,
+        warmup_rounds=1,
+        iterations=1,
     )
     assert len(result) == len(times)

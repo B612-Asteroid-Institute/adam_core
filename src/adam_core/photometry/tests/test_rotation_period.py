@@ -22,10 +22,21 @@ from ..rotation.core import (
 from ..rotation.estimator import (
     MAX_PLAUSIBLE_SINGLE_PERIOD_HOURS,
     _build_frequency_grid,
+    _frequency_consensus_order,
     _grid_was_capped,
     _observation_count_sufficient,
     estimate_rotation_period,
 )
+
+
+def test_frequency_consensus_rejects_high_order_daily_alias() -> None:
+    candidates = [(2, 5.0048), (3, 5.0043), (4, 5.0043), (5, 5.0043), (6, 3.0028)]
+    assert _frequency_consensus_order(candidates, 6, 0.02) == (5, True)
+
+
+def test_frequency_consensus_requires_a_majority() -> None:
+    candidates = [(2, 5.0), (3, 5.0), (4, 4.0), (5, 3.0), (6, 3.0)]
+    assert _frequency_consensus_order(candidates, 6, 0.02) == (None, False)
 
 
 def _scalar(value) -> object:

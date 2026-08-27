@@ -2,6 +2,8 @@ import pyarrow as pa
 import pytest
 import quivr as qv
 
+from adam_core import _rust_native
+
 from ...coordinates.origin import Origin
 from ...coordinates.spherical import SphericalCoordinates
 from ...observers.observers import Observers
@@ -88,3 +90,38 @@ def test_Ephemeris_link_to_observers():
     assert len(e1) == len(o1) == 3
     e2, o2 = linkage.select((59000, 0, "500"))
     assert len(e2) == len(o2) == 3
+
+
+def test_Ephemeris_link_to_observers_has_rust_owned_timing():
+    from ...coordinates.transform import _coordinate_record_batch
+    from ..arrow_bridge import observers_to_record_batch
+
+    observers = Observers.from_code(
+        "X05",
+        Timestamp.from_kwargs(days=[59000, 59001], nanos=[0, 500], scale="utc"),
+    )
+    ephemeris = Ephemeris.from_kwargs(
+        orbit_id=["0", "1"],
+        object_id=["0", "1"],
+        coordinates=SphericalCoordinates.from_kwargs(
+            time=Timestamp.from_kwargs(
+                days=[59000, 59001], nanos=[0, 500], scale="utc"
+            ),
+            lon=[0, 1],
+            lat=[0, 1],
+            frame="equatorial",
+            origin=Origin.from_kwargs(code=["X05", "X05"]),
+        ),
+    )
+
+    samples = _rust_native.benchmark_prepare_ephemeris_observer_linkage_arrow(
+        _coordinate_record_batch(ephemeris.coordinates, "spherical"),
+        observers_to_record_batch(observers),
+        "ns",
+        2,
+        2,
+        1,
+    )
+    assert len(samples) == 2
+    assert all(len(trial) == 2 for trial in samples)
+    assert all(value > 0.0 for trial in samples for value in trial)

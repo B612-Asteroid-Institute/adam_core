@@ -4,7 +4,7 @@ import re
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import TYPE_CHECKING, Iterable, Sequence
 
 import astropy.time
 import numpy as np
@@ -12,7 +12,6 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import requests
 from google.cloud import bigquery
-from mpcq.client import BigQueryMPCClient
 
 from adam_core.coordinates.cartesian import CartesianCoordinates
 from adam_core.coordinates.origin import Origin
@@ -25,6 +24,9 @@ from adam_core.photometry.bandpasses import (
 )
 from adam_core.photometry.magnitude import predict_magnitudes
 from adam_core.time import Timestamp
+
+if TYPE_CHECKING:
+    from mpcq.client import BigQueryMPCClient
 
 
 def _extract_float(value) -> float | None:

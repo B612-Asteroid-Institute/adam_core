@@ -1,0 +1,46 @@
+{
+  "all_non_yanked": true,
+  "platform_counts": {
+    "macos-arm64": 3,
+    "macos-x86_64": 3,
+    "manylinux-aarch64": 3,
+    "manylinux-x86_64": 3
+  },
+  "requires_dist": [
+    "adam-core==0.5.6rc2",
+    "naif-de440",
+    "jpl-small-bodies-de441-n16",
+    "numpy",
+    "pyarrow",
+    "quivr",
+    "ruff; extra == \"dev\"",
+    "pdm; extra == \"dev\"",
+    "mypy; extra == \"dev\"",
+    "maturin<2,>=1.7; extra == \"dev\"",
+    "pytest; extra == \"dev\"",
+    "pytest-cov; extra == \"dev\"",
+    "pytest-mock; extra == \"dev\"",
+    "pytest-benchmark; extra == \"dev\"",
+    "black; extra == \"dev\"",
+    "isort; extra == \"dev\"",
+    "astropy; extra == \"dev\""
+  ],
+  "requires_python": "<3.14,>=3.11",
+  "sdist_count": 0,
+  "sha256": {
+    "adam_assist-0.4.0rc3-cp311-cp311-macosx_10_12_x86_64.whl": "b406efe5ad02aadfafbcad1ed646eb117905a71c298c8f66ac640efea9d90714",
+    "adam_assist-0.4.0rc3-cp311-cp311-macosx_11_0_arm64.whl": "f87645027a9be6e118d00f49436ee323ee0ecb047818f67f0d2a380d9a0542d7",
+    "adam_assist-0.4.0rc3-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl": "c8c75d12c94c4cacbf5406259c2ab299ba932a9c9551278be37f1d7402afb397",
+    "adam_assist-0.4.0rc3-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl": "390355bf6edbf5d5d2b16f3ddee8619c2d0a4cd888017d9c04acbbf9b418f487",
+    "adam_assist-0.4.0rc3-cp312-cp312-macosx_10_12_x86_64.whl": "8ed356ff8e44befe82823fcf0650aa1cc4fcfa5fe0806eadd7e99445e5716c92",
+    "adam_assist-0.4.0rc3-cp312-cp312-macosx_11_0_arm64.whl": "e285cb461a61e0f1fec26a72c3f8939812c1beea13662bba635c4ed8ddb7416a",
+    "adam_assist-0.4.0rc3-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl": "41fc1be00642b0a023fbdd322d054ed06abc70892169a122fed4e5b2cbd427a9",
+    "adam_assist-0.4.0rc3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl": "833f73c900c0fc3bb7a422e8622ee2653cfbfd79d71d510a07e73e8ef89a8904",
+    "adam_assist-0.4.0rc3-cp313-cp313-macosx_10_12_x86_64.whl": "d9fb417e1cf188c05b59b7e303f37c85c17e6b83a73a3f080aea0abee136f35a",
+    "adam_assist-0.4.0rc3-cp313-cp313-macosx_11_0_arm64.whl": "495e1453add1ca39124683efe75bded0828a8a18ed0268b048943744886e05a2",
+    "adam_assist-0.4.0rc3-cp313-cp313-manylinux_2_17_aarch64.manylinux2014_aarch64.whl": "e63b4d2dd56fc19fd332000fc9bcb9a81d65525f3d5554ec6daa37dfcb1335b2",
+    "adam_assist-0.4.0rc3-cp313-cp313-manylinux_2_17_x86_64.manylinux2014_x86_64.whl": "c1401bda3b77533488e918ab8884e16236961e498aae0cdf4f8df0e16921bae9"
+  },
+  "version": "0.4.0rc3",
+  "wheel_count": 12
+}

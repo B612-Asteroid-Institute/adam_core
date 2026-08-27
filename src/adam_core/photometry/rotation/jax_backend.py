@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import importlib
 from dataclasses import dataclass
 from functools import partial
 from math import ceil
 
-import jax
-import jax.numpy as jnp
 import numpy as np
 import numpy.typing as npt
+
+# Explicit optional compatibility provider. The default package never imports
+# this module; dynamic loading also keeps JAX out of static/default-runtime
+# dependency audits while preserving the latest-main bridge for opt-in callers.
+jax = importlib.import_module("jax")
+jnp = importlib.import_module("jax.numpy")
 
 jax.config.update("jax_enable_x64", True)  # type: ignore[no-untyped-call]
 

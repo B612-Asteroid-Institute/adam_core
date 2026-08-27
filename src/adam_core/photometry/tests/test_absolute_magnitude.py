@@ -13,7 +13,7 @@ from ..absolute_magnitude import (
     estimate_absolute_magnitude_v_from_detections,
     estimate_absolute_magnitude_v_from_detections_grouped,
 )
-from ..bandpasses.api import map_to_canonical_filter_bands
+from ..bandpasses.api import _data_dir_str, map_to_canonical_filter_bands
 from ..magnitude import predict_magnitudes
 
 
@@ -248,3 +248,65 @@ def test_estimate_absolute_magnitude_grouped_matches_single(monkeypatch):
     )
     assert int(by_id["A"]["n_fit_detections"]) == 3
     assert int(by_id["B"]["n_fit_detections"]) == 3
+
+
+def test_complete_fit_path_owns_join_observers_and_arrow_assembly():
+    rows = 4
+    exposure = Exposures.from_kwargs(
+        id=["e1"],
+        start_time=Timestamp.from_mjd([60000], scale="tdb"),
+        duration=[0.0],
+        filter=["V"],
+        observatory_code=["500"],
+        seeing=[None],
+        depth_5sigma=[None],
+    )
+    detections = PointSourceDetections.from_kwargs(
+        id=[f"d{i}" for i in range(rows)],
+        exposure_id=["e1"] * rows,
+        time=Timestamp.from_mjd([60000] * rows, scale="tdb"),
+        ra=[0.0] * rows,
+        dec=[0.0] * rows,
+        mag=[None] * rows,
+        mag_sigma=[0.1] * rows,
+    )
+    object_coords, _ = _make_geometry(rows)
+    magnitudes = predict_magnitudes(
+        19.25,
+        object_coords,
+        exposure.take(pa.array([0] * rows, type=pa.int32())),
+        composition="C",
+    )
+    detections = detections.set_column("mag", magnitudes)
+
+    fitted = estimate_absolute_magnitude_v_from_detections(
+        detections, exposure, object_coords, composition="C"
+    )
+    assert fitted.H_v[0].as_py() == pytest.approx(19.25, abs=1e-12)
+
+    grouped = estimate_absolute_magnitude_v_from_detections_grouped(
+        detections,
+        exposure,
+        object_coords,
+        pa.array(["A", "A", "B", "B"], type=pa.large_string()),
+        composition="C",
+    )
+    assert grouped.object_id.to_pylist() == ["A", "B"]
+    assert grouped.physical_parameters.H_v.to_pylist() == pytest.approx(
+        [19.25, 19.25], abs=1e-12
+    )
+
+
+def test_complete_photometry_facades_have_rust_owned_timing():
+    from adam_core import _rust_native
+    from adam_core._rust.arrow import ensure_spice_backend
+
+    ensure_spice_backend()
+    surfaces = _rust_native.benchmark_complete_photometry_facades(
+        _data_dir_str(), 2, 2, 1
+    )
+    assert len(surfaces) == 3
+    for trials in surfaces:
+        samples = np.asarray(trials, dtype=np.float64)
+        assert samples.shape == (2, 2)
+        assert np.all(samples > 0.0)

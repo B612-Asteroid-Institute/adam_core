@@ -1,0 +1,615 @@
+{
+  "created_at": "2026-08-12T16:50:23.856538+00:00",
+  "comparison_mode": "gpl_rust_assist_backend_vs_legacy_python_adam_assist",
+  "performance_columns": {
+    "legacy_adam_core": "frozen updated-upstream adam_assist over frozen adam_core",
+    "current_python": "current adam_assist public Python method",
+    "native_rust": "direct Rust call timed inside Rust with std::time::Instant",
+    "gate": "legacy/current_python; native_rust is diagnostic"
+  },
+  "repeats": 5,
+  "warmups": 1,
+  "workloads": [
+    {
+      "lane": "tiny",
+      "name": "gravity_5x2",
+      "description": "Gravity-only ephemeris: 5 orbits by 2 X05 observer epochs.",
+      "workload_shape": {
+        "n_orbits": 5,
+        "n_observers": 2,
+        "output_rows": 10,
+        "covariance_dimension": null
+      },
+      "options": {
+        "covariance": false,
+        "max_processes": 1,
+        "predict_magnitudes": false,
+        "predict_phase_angle": false,
+        "include_nongrav": true
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.0134452935308218,
+            0.013748500496149063,
+            0.014156833291053772,
+            0.013893624767661095,
+            0.014004917815327644
+          ],
+          "p50": 0.013893624767661095,
+          "p95": 0.014126450195908547
+        },
+        "legacy_adam_core": {
+          "p50": 0.013893624767661095,
+          "p95": 0.014126450195908547,
+          "samples_alias": "python.values"
+        },
+        "rust": {
+          "values": [
+            0.0022004172205924988,
+            0.0018964167684316635,
+            0.001971958205103874,
+            0.0018172096461057663,
+            0.0017247926443815231
+          ],
+          "p50": 0.0018964167684316635,
+          "p95": 0.0021547254174947737
+        },
+        "current_python": {
+          "p50": 0.0018964167684316635,
+          "p95": 0.0021547254174947737,
+          "samples_alias": "rust.values"
+        },
+        "native_rust": {
+          "status": "measured",
+          "operation": "ephemeris",
+          "timer": "std::time::Instant",
+          "values": [
+            0.000759,
+            0.000752417,
+            0.000764958,
+            0.000787334,
+            0.00074
+          ],
+          "p50": 0.000759,
+          "p95": 0.0007828588
+        },
+        "speedup": {
+          "p50_python_over_rust": 7.326250747693568,
+          "p95_python_over_rust": 6.556032653261636,
+          "p50_legacy_over_current_python": 7.326250747693568,
+          "p95_legacy_over_current_python": 6.556032653261636
+        }
+      },
+      "residuals": {
+        "rows": 10,
+        "range_abs_au": 2.382849473292481e-11,
+        "range_abs_m": 3.5646920740317167,
+        "longitude_abs_deg": 3.199467357717367e-10,
+        "latitude_abs_deg": 1.241566849330411e-10,
+        "range_rate_abs_au_per_day": 4.1346015993521876e-09,
+        "range_rate_abs_m_per_s": 0.007158884206665529,
+        "longitude_rate_abs_deg_per_day": 1.0676488271244011e-07,
+        "latitude_rate_abs_deg_per_day": 3.1396677868666956e-08,
+        "time_abs_ns": 0,
+        "covariance_max_abs": null
+      }
+    },
+    {
+      "lane": "small",
+      "name": "gravity_40x20",
+      "description": "Gravity-only ephemeris: 40 orbits by 20 X05 observer epochs.",
+      "workload_shape": {
+        "n_orbits": 40,
+        "n_observers": 20,
+        "output_rows": 800,
+        "covariance_dimension": null
+      },
+      "options": {
+        "covariance": false,
+        "max_processes": 1,
+        "predict_magnitudes": false,
+        "predict_phase_angle": false,
+        "include_nongrav": true
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.0403542909771204,
+            0.041042957454919815,
+            0.03993541561067104,
+            0.03968704119324684,
+            0.04034029133617878
+          ],
+          "p50": 0.04034029133617878,
+          "p95": 0.04090522415935993
+        },
+        "legacy_adam_core": {
+          "p50": 0.04034029133617878,
+          "p95": 0.04090522415935993,
+          "samples_alias": "python.values"
+        },
+        "rust": {
+          "values": [
+            0.01761133410036564,
+            0.01725483313202858,
+            0.017152082175016403,
+            0.01682295836508274,
+            0.01772891730070114
+          ],
+          "p50": 0.01725483313202858,
+          "p95": 0.01770540066063404
+        },
+        "current_python": {
+          "p50": 0.01725483313202858,
+          "p95": 0.01770540066063404,
+          "samples_alias": "rust.values"
+        },
+        "native_rust": {
+          "status": "measured",
+          "operation": "ephemeris",
+          "timer": "std::time::Instant",
+          "values": [
+            0.017592083,
+            0.01626125,
+            0.015563125,
+            0.016770792,
+            0.015854667
+          ],
+          "p50": 0.01626125,
+          "p95": 0.017427824800000002
+        },
+        "speedup": {
+          "p50_python_over_rust": 2.337912573683414,
+          "p95_python_over_rust": 2.310324682474319,
+          "p50_legacy_over_current_python": 2.337912573683414,
+          "p95_legacy_over_current_python": 2.310324682474319
+        }
+      },
+      "residuals": {
+        "rows": 800,
+        "range_abs_au": 2.490141426392256e-11,
+        "range_abs_m": 3.725198551301423,
+        "longitude_abs_deg": 3.7687186704715714e-10,
+        "latitude_abs_deg": 1.2895107204258238e-10,
+        "range_rate_abs_au_per_day": 4.1742898279671994e-09,
+        "range_rate_abs_m_per_s": 0.007227602661441694,
+        "longitude_rate_abs_deg_per_day": 1.2645809110978234e-07,
+        "latitude_rate_abs_deg_per_day": 3.585276658890635e-08,
+        "time_abs_ns": 0,
+        "covariance_max_abs": null
+      }
+    },
+    {
+      "lane": "large",
+      "name": "gravity_200x50_1yr",
+      "description": "Gravity-only ephemeris: 200 orbits by 50 X05 observer epochs over one year.",
+      "workload_shape": {
+        "n_orbits": 200,
+        "n_observers": 50,
+        "output_rows": 10000,
+        "covariance_dimension": null
+      },
+      "options": {
+        "covariance": false,
+        "max_processes": 1,
+        "predict_magnitudes": false,
+        "predict_phase_angle": false,
+        "include_nongrav": true
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.35737291537225246,
+            0.37540987506508827,
+            0.3548160418868065,
+            0.3542946260422468,
+            0.35080612637102604
+          ],
+          "p50": 0.3548160418868065,
+          "p95": 0.3718024831265211
+        },
+        "legacy_adam_core": {
+          "p50": 0.3548160418868065,
+          "p95": 0.3718024831265211,
+          "samples_alias": "python.values"
+        },
+        "rust": {
+          "values": [
+            0.21933883242309093,
+            0.22012608498334885,
+            0.21714620850980282,
+            0.22203833423554897,
+            0.21912041492760181
+          ],
+          "p50": 0.21933883242309093,
+          "p95": 0.22165588438510894
+        },
+        "current_python": {
+          "p50": 0.21933883242309093,
+          "p95": 0.22165588438510894,
+          "samples_alias": "rust.values"
+        },
+        "native_rust": {
+          "status": "measured",
+          "operation": "ephemeris",
+          "timer": "std::time::Instant",
+          "values": [
+            0.211773042,
+            0.216305417,
+            0.210365333,
+            0.216590416,
+            0.212843166
+          ],
+          "p50": 0.212843166,
+          "p95": 0.2165334162
+        },
+        "speedup": {
+          "p50_python_over_rust": 1.6176617608795714,
+          "p95_python_over_rust": 1.6773860263531049,
+          "p50_legacy_over_current_python": 1.6176617608795714,
+          "p95_legacy_over_current_python": 1.6773860263531049
+        }
+      },
+      "residuals": {
+        "rows": 10000,
+        "range_abs_au": 2.637623452983462e-11,
+        "range_abs_m": 3.9458285227470746,
+        "longitude_abs_deg": 3.9960923459148034e-10,
+        "latitude_abs_deg": 1.4603185327644042e-10,
+        "range_rate_abs_au_per_day": 4.511787736656298e-09,
+        "range_rate_abs_m_per_s": 0.00781196572284901,
+        "longitude_rate_abs_deg_per_day": 1.382628875834513e-07,
+        "latitude_rate_abs_deg_per_day": 4.9780273181365686e-08,
+        "time_abs_ns": 0,
+        "covariance_max_abs": null
+      }
+    },
+    {
+      "lane": "small",
+      "name": "nongrav_40x20",
+      "description": "A1/A2 non-gravitational ephemeris: 40 orbits by 20 X05 observer epochs.",
+      "workload_shape": {
+        "n_orbits": 40,
+        "n_observers": 20,
+        "output_rows": 800,
+        "covariance_dimension": null
+      },
+      "options": {
+        "covariance": false,
+        "max_processes": 1,
+        "predict_magnitudes": false,
+        "predict_phase_angle": false,
+        "include_nongrav": true
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.04255254194140434,
+            0.04298933409154415,
+            0.044122373685240746,
+            0.043313292786478996,
+            0.04434991627931595
+          ],
+          "p50": 0.043313292786478996,
+          "p95": 0.04430440776050091
+        },
+        "legacy_adam_core": {
+          "p50": 0.043313292786478996,
+          "p95": 0.04430440776050091,
+          "samples_alias": "python.values"
+        },
+        "rust": {
+          "values": [
+            0.021571580320596695,
+            0.020940039306879044,
+            0.021269747987389565,
+            0.02115333452820778,
+            0.021658292040228844
+          ],
+          "p50": 0.021269747987389565,
+          "p95": 0.021640949696302415
+        },
+        "current_python": {
+          "p50": 0.021269747987389565,
+          "p95": 0.021640949696302415,
+          "samples_alias": "rust.values"
+        },
+        "native_rust": {
+          "status": "measured",
+          "operation": "ephemeris",
+          "timer": "std::time::Instant",
+          "values": [
+            0.019705334,
+            0.018738417,
+            0.019090458,
+            0.01953975,
+            0.019846209
+          ],
+          "p50": 0.01953975,
+          "p95": 0.019818034
+        },
+        "speedup": {
+          "p50_python_over_rust": 2.036380158907319,
+          "p95_python_over_rust": 2.0472487752268465,
+          "p50_legacy_over_current_python": 2.036380158907319,
+          "p95_legacy_over_current_python": 2.0472487752268465
+        }
+      },
+      "residuals": {
+        "rows": 800,
+        "range_abs_au": 2.490008199629301e-11,
+        "range_abs_m": 3.7249992469008397,
+        "longitude_abs_deg": 3.7692871046601795e-10,
+        "latitude_abs_deg": 1.2894396661522478e-10,
+        "range_rate_abs_au_per_day": 4.174289819185162e-09,
+        "range_rate_abs_m_per_s": 0.007227602646235975,
+        "longitude_rate_abs_deg_per_day": 1.2645809133182695e-07,
+        "latitude_rate_abs_deg_per_day": 3.5852765534194475e-08,
+        "time_abs_ns": 0,
+        "covariance_max_abs": null
+      }
+    },
+    {
+      "lane": "large",
+      "name": "nongrav_200x50_1yr",
+      "description": "A1/A2 non-gravitational ephemeris: 200 orbits by 50 X05 observer epochs over one year.",
+      "workload_shape": {
+        "n_orbits": 200,
+        "n_observers": 50,
+        "output_rows": 10000,
+        "covariance_dimension": null
+      },
+      "options": {
+        "covariance": false,
+        "max_processes": 1,
+        "predict_magnitudes": false,
+        "predict_phase_angle": false,
+        "include_nongrav": true
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.3998656664043665,
+            0.3991132490336895,
+            0.4058409184217453,
+            0.40578291565179825,
+            0.40048803947865963
+          ],
+          "p50": 0.40048803947865963,
+          "p95": 0.4058293178677559
+        },
+        "legacy_adam_core": {
+          "p50": 0.40048803947865963,
+          "p95": 0.4058293178677559,
+          "samples_alias": "python.values"
+        },
+        "rust": {
+          "values": [
+            0.27153758332133293,
+            0.27502662502229214,
+            0.26906595937907696,
+            0.2714072931557894,
+            0.2692907489836216
+          ],
+          "p50": 0.2714072931557894,
+          "p95": 0.2743288166821003
+        },
+        "current_python": {
+          "p50": 0.2714072931557894,
+          "p95": 0.2743288166821003,
+          "samples_alias": "rust.values"
+        },
+        "native_rust": {
+          "status": "measured",
+          "operation": "ephemeris",
+          "timer": "std::time::Instant",
+          "values": [
+            0.260421166,
+            0.252850834,
+            0.26366025,
+            0.266030416,
+            0.262650625
+          ],
+          "p50": 0.262650625,
+          "p95": 0.2655563828
+        },
+        "speedup": {
+          "p50_python_over_rust": 1.4755979281985512,
+          "p95_python_over_rust": 1.4793535829596858,
+          "p50_legacy_over_current_python": 1.4755979281985512,
+          "p95_legacy_over_current_python": 1.4793535829596858
+        }
+      },
+      "residuals": {
+        "rows": 10000,
+        "range_abs_au": 2.638245177877252e-11,
+        "range_abs_m": 3.9467586099497964,
+        "longitude_abs_deg": 3.979181428803713e-10,
+        "latitude_abs_deg": 1.4506529311120175e-10,
+        "range_rate_abs_au_per_day": 4.5117877078707305e-09,
+        "range_rate_abs_m_per_s": 0.007811965673008043,
+        "longitude_rate_abs_deg_per_day": 1.382628431745303e-07,
+        "latitude_rate_abs_deg_per_day": 4.9780275845900945e-08,
+        "time_abs_ns": 0,
+        "covariance_max_abs": null
+      }
+    },
+    {
+      "lane": "small",
+      "name": "covariance_6d_sigma_point_10x10",
+      "description": "Deterministic 6D sigma-point covariance ephemeris: 10 orbits by 10 X05 epochs.",
+      "workload_shape": {
+        "n_orbits": 10,
+        "n_observers": 10,
+        "output_rows": 100,
+        "covariance_dimension": 6
+      },
+      "options": {
+        "covariance": true,
+        "max_processes": 1,
+        "predict_magnitudes": false,
+        "predict_phase_angle": false,
+        "include_nongrav": true,
+        "covariance_method": "sigma-point",
+        "num_samples": 1000,
+        "seed": null
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.22167329117655754,
+            0.22411633469164371,
+            0.22553121112287045,
+            0.22485570795834064,
+            0.2243677917867899
+          ],
+          "p50": 0.2243677917867899,
+          "p95": 0.2253961104899645
+        },
+        "legacy_adam_core": {
+          "p50": 0.2243677917867899,
+          "p95": 0.2253961104899645,
+          "samples_alias": "python.values"
+        },
+        "rust": {
+          "values": [
+            0.03147291764616966,
+            0.03222908079624176,
+            0.03151841461658478,
+            0.0330437496304512,
+            0.03221825137734413
+          ],
+          "p50": 0.03221825137734413,
+          "p95": 0.03288081586360932
+        },
+        "current_python": {
+          "p50": 0.03221825137734413,
+          "p95": 0.03288081586360932,
+          "samples_alias": "rust.values"
+        },
+        "native_rust": {
+          "status": "measured",
+          "operation": "ephemeris",
+          "timer": "std::time::Instant",
+          "values": [
+            0.032270708,
+            0.030399834,
+            0.030608708,
+            0.030335541,
+            0.0310585
+          ],
+          "p50": 0.030608708,
+          "p95": 0.0320282664
+        },
+        "speedup": {
+          "p50_python_over_rust": 6.96399656079924,
+          "p95_python_over_rust": 6.854942755219786,
+          "p50_legacy_over_current_python": 6.96399656079924,
+          "p95_legacy_over_current_python": 6.854942755219786
+        }
+      },
+      "residuals": {
+        "rows": 100,
+        "range_abs_au": 2.5091484445738388e-11,
+        "range_abs_m": 3.7536326457846325,
+        "longitude_abs_deg": 3.5004177334485576e-10,
+        "latitude_abs_deg": 1.2224621315226614e-10,
+        "range_rate_abs_au_per_day": 4.291971826051832e-09,
+        "range_rate_abs_m_per_s": 0.007431363961594269,
+        "longitude_rate_abs_deg_per_day": 1.1022380952407929e-07,
+        "latitude_rate_abs_deg_per_day": 3.062916203999677e-08,
+        "time_abs_ns": 0,
+        "covariance_max_abs": 1.2447242098167408e-17
+      }
+    },
+    {
+      "lane": "small",
+      "name": "covariance_9d_nongrav_sigma_point_10x10",
+      "description": "Deterministic full 9D A1/A2/A3 sigma-point covariance ephemeris: 10 orbits by 10 X05 epochs.",
+      "workload_shape": {
+        "n_orbits": 10,
+        "n_observers": 10,
+        "output_rows": 100,
+        "covariance_dimension": 9
+      },
+      "options": {
+        "covariance": true,
+        "max_processes": 1,
+        "predict_magnitudes": false,
+        "predict_phase_angle": false,
+        "include_nongrav": true,
+        "covariance_method": "sigma-point",
+        "num_samples": 1000,
+        "seed": null
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.25455883145332336,
+            0.2542181257158518,
+            0.25361104123294353,
+            0.2516725417226553,
+            0.25479712523519993
+          ],
+          "p50": 0.2542181257158518,
+          "p95": 0.2547494664788246
+        },
+        "legacy_adam_core": {
+          "p50": 0.2542181257158518,
+          "p95": 0.2547494664788246,
+          "samples_alias": "python.values"
+        },
+        "rust": {
+          "values": [
+            0.044875042513012886,
+            0.0446733757853508,
+            0.044177500531077385,
+            0.04457783326506615,
+            0.04554116539657116
+          ],
+          "p50": 0.0446733757853508,
+          "p95": 0.04540794081985951
+        },
+        "current_python": {
+          "p50": 0.0446733757853508,
+          "p95": 0.04540794081985951,
+          "samples_alias": "rust.values"
+        },
+        "native_rust": {
+          "status": "measured",
+          "operation": "ephemeris",
+          "timer": "std::time::Instant",
+          "values": [
+            0.041815083,
+            0.0428565,
+            0.04155125,
+            0.041159875,
+            0.042712833
+          ],
+          "p50": 0.041815083,
+          "p95": 0.0428277666
+        },
+        "speedup": {
+          "p50_python_over_rust": 5.690595824621216,
+          "p95_python_over_rust": 5.6102404530841,
+          "p50_legacy_over_current_python": 5.690595824621216,
+          "p95_legacy_over_current_python": 5.6102404530841
+        }
+      },
+      "residuals": {
+        "rows": 100,
+        "range_abs_au": 2.5091928534948238e-11,
+        "range_abs_m": 3.753699080584827,
+        "longitude_abs_deg": 3.4998492992599495e-10,
+        "latitude_abs_deg": 1.2224887768752524e-10,
+        "range_rate_abs_au_per_day": 4.291971821030621e-09,
+        "range_rate_abs_m_per_s": 0.0074313639529002586,
+        "longitude_rate_abs_deg_per_day": 1.102238104122577e-07,
+        "latitude_rate_abs_deg_per_day": 3.0629162206530225e-08,
+        "time_abs_ns": 0,
+        "covariance_max_abs": 2.4558194802835338e-17
+      }
+    }
+  ]
+}

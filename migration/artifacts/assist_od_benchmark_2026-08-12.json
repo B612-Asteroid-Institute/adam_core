@@ -1,0 +1,207 @@
+{
+  "created_at": "2026-08-12T15:26:25.550300+00:00",
+  "comparison_mode": "gpl_rust_assist_backend_vs_legacy_python_adam_assist",
+  "performance_columns": {
+    "legacy_adam_core": "frozen updated-upstream adam_assist over frozen adam_core",
+    "current_python": "current adam_assist public Python method",
+    "native_rust": "direct Rust call timed inside Rust with std::time::Instant",
+    "gate": "legacy/current_python; native_rust is diagnostic"
+  },
+  "repeats": 3,
+  "warmups": 1,
+  "workloads": [
+    {
+      "lane": "small",
+      "name": "fit_least_squares",
+      "description": "Noise-free one-orbit fit_least_squares with 8 X05 astrometric observations over a 21-day arc.",
+      "workload_shape": {
+        "n_starting_orbits": 1,
+        "n_observations": 8,
+        "arc_days": 21.0,
+        "state_parameters": 6
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            5.962278291583061,
+            5.9955521654337645,
+            6.0066417921334505
+          ],
+          "p50": 5.9955521654337645,
+          "p95": 6.0055328294634815
+        },
+        "legacy_adam_core": {
+          "p50": 5.9955521654337645,
+          "p95": 6.0055328294634815,
+          "samples_alias": "python.values"
+        },
+        "rust": {
+          "values": [
+            0.038520749658346176,
+            0.038493918254971504,
+            0.03791145980358124
+          ],
+          "p50": 0.038493918254971504,
+          "p95": 0.03851806651800871
+        },
+        "current_python": {
+          "p50": 0.038493918254971504,
+          "p95": 0.03851806651800871,
+          "samples_alias": "rust.values"
+        },
+        "native_rust": {
+          "status": "measured",
+          "operation": "fit_least_squares",
+          "timer": "std::time::Instant",
+          "values": [
+            0.036709917,
+            0.036094084,
+            0.036619292
+          ],
+          "p50": 0.036619292,
+          "p95": 0.0367008545
+        },
+        "speedup": {
+          "p50_python_over_rust": 155.7532316071627,
+          "p95_python_over_rust": 155.9147011352623,
+          "p50_legacy_over_current_python": 155.7532316071627,
+          "p95_legacy_over_current_python": 155.9147011352623
+        }
+      },
+      "residuals": {
+        "state_max_abs_current_vs_updated_upstream": 8.963614206214388e-06,
+        "state_max_abs_current_vs_truth": 2.4534920051166864e-07
+      }
+    },
+    {
+      "lane": "small",
+      "name": "od_fit",
+      "description": "Noise-free one-orbit od_fit with 8 X05 astrometric observations over a 21-day arc.",
+      "workload_shape": {
+        "n_starting_orbits": 1,
+        "n_observations": 8,
+        "arc_days": 21.0,
+        "state_parameters": 6
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.1961660012602806,
+            0.19307983480393887,
+            0.20194187574088573
+          ],
+          "p50": 0.1961660012602806,
+          "p95": 0.2013642882928252
+        },
+        "legacy_adam_core": {
+          "p50": 0.1961660012602806,
+          "p95": 0.2013642882928252,
+          "samples_alias": "python.values"
+        },
+        "rust": {
+          "values": [
+            0.005026416853070259,
+            0.005330624058842659,
+            0.0047721657902002335
+          ],
+          "p50": 0.005026416853070259,
+          "p95": 0.005300203338265419
+        },
+        "current_python": {
+          "p50": 0.005026416853070259,
+          "p95": 0.005300203338265419,
+          "samples_alias": "rust.values"
+        },
+        "native_rust": {
+          "status": "measured",
+          "operation": "od_fit",
+          "timer": "std::time::Instant",
+          "values": [
+            0.004263917,
+            0.004192458,
+            0.004918084
+          ],
+          "p50": 0.004263917,
+          "p95": 0.004852667299999999
+        },
+        "speedup": {
+          "p50_python_over_rust": 39.027006114794794,
+          "p95_python_over_rust": 37.99180435947672,
+          "p50_legacy_over_current_python": 39.027006114794794,
+          "p95_legacy_over_current_python": 37.99180435947672
+        }
+      },
+      "residuals": {
+        "state_max_abs_current_vs_updated_upstream": 6.909189886883382e-09,
+        "state_max_abs_current_vs_truth": 1.2347387943201227e-06
+      }
+    },
+    {
+      "lane": "small",
+      "name": "vallado_least_squares",
+      "description": "Noise-free one-orbit vallado_least_squares with 8 X05 astrometric observations over a 21-day arc.",
+      "workload_shape": {
+        "n_starting_orbits": 1,
+        "n_observations": 8,
+        "arc_days": 21.0,
+        "state_parameters": 6
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            2.805150916799903,
+            2.8674607910215855,
+            2.888692542910576
+          ],
+          "p50": 2.8674607910215855,
+          "p95": 2.886569367721677
+        },
+        "legacy_adam_core": {
+          "p50": 2.8674607910215855,
+          "p95": 2.886569367721677,
+          "samples_alias": "python.values"
+        },
+        "rust": {
+          "values": [
+            0.045480042695999146,
+            0.04514070972800255,
+            0.045121168717741966
+          ],
+          "p50": 0.04514070972800255,
+          "p95": 0.045446109399199484
+        },
+        "current_python": {
+          "p50": 0.04514070972800255,
+          "p95": 0.045446109399199484,
+          "samples_alias": "rust.values"
+        },
+        "native_rust": {
+          "status": "measured",
+          "operation": "vallado_least_squares",
+          "timer": "std::time::Instant",
+          "values": [
+            0.04398025,
+            0.045357917,
+            0.053182334
+          ],
+          "p50": 0.045357917,
+          "p95": 0.0523998923
+        },
+        "speedup": {
+          "p50_python_over_rust": 63.52272279943325,
+          "p95_python_over_rust": 63.51631428701623,
+          "p50_legacy_over_current_python": 63.52272279943325,
+          "p95_legacy_over_current_python": 63.51631428701623
+        }
+      },
+      "residuals": {
+        "state_max_abs_current_vs_updated_upstream": 4.2371939290575256e-12,
+        "state_max_abs_current_vs_truth": 6.372680161348399e-14
+      }
+    }
+  ],
+  "iod": {
+    "status": "parity-and-native-timing-tested; no frozen updated-upstream performance row",
+    "reason": "The frozen oracle adapter has no timing/result request for public initial_orbit_determination; do not mislabel a non-equivalent Python composition as an apples-to-apples performance comparison."
+  }
+}

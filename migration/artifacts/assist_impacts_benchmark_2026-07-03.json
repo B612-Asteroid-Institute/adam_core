@@ -1,0 +1,140 @@
+{
+  "comparison_mode": "gpl_rust_assist_backend_vs_legacy_python_adam_assist",
+  "description": "Two-runtime: legacy adam_assist.detect_collisions timed inside the isolated .legacy-assist-venv vs Rust adam_assist.detect_collisions timed locally, on identical same-epoch impactor/safe workloads; parity of impact and survivor sets asserted per lane before timing.",
+  "generated_at_utc": "2026-08-12T14:02:47Z",
+  "impactor_fraction": 0.2,
+  "lanes": [
+    {
+      "current_python_p50_s": 0.012871377170085907,
+      "current_python_p95_s": 0.01306142844259739,
+      "current_python_samples_alias": "rust_samples_s",
+      "legacy_adam_core_p50_s": 0.10701045580208302,
+      "legacy_adam_core_p95_s": 0.10828256886452436,
+      "legacy_adam_core_samples_alias": "python_samples_s",
+      "max_impact_time_diff_days": 0.00017516035586595535,
+      "n_impacts": 2,
+      "n_orbits": 10,
+      "native_rust_operation": "collisions",
+      "native_rust_p50_s": 0.007865917,
+      "native_rust_p95_s": 0.007921942,
+      "native_rust_samples_s": [
+        0.007928167,
+        0.007740667,
+        0.007865917
+      ],
+      "native_rust_status": "measured",
+      "native_rust_timer": "std::time::Instant",
+      "num_days": 30,
+      "python_p50_s": 0.10701045580208302,
+      "python_p95_s": 0.10828256886452436,
+      "python_samples_s": [
+        0.10519241541624069,
+        0.10701045580208302,
+        0.10842391476035118
+      ],
+      "rust_p50_s": 0.012871377170085907,
+      "rust_p95_s": 0.01306142844259739,
+      "rust_samples_s": [
+        0.01308254525065422,
+        0.012638291344046593,
+        0.012871377170085907
+      ],
+      "speedup_p50": 8.31383109888068,
+      "speedup_p95": 8.290254725232131
+    },
+    {
+      "current_python_p50_s": 0.062092626467347145,
+      "current_python_p95_s": 0.06316906064748765,
+      "current_python_samples_alias": "rust_samples_s",
+      "legacy_adam_core_p50_s": 0.2660226672887802,
+      "legacy_adam_core_p95_s": 0.266370402276516,
+      "legacy_adam_core_samples_alias": "python_samples_s",
+      "max_impact_time_diff_days": 0.0004323190078139305,
+      "n_impacts": 10,
+      "n_orbits": 50,
+      "native_rust_operation": "collisions",
+      "native_rust_p50_s": 0.057897833,
+      "native_rust_p95_s": 0.058589295799999996,
+      "native_rust_samples_s": [
+        0.058666125,
+        0.056474708,
+        0.057897833
+      ],
+      "native_rust_status": "measured",
+      "native_rust_timer": "std::time::Instant",
+      "num_days": 30,
+      "python_p50_s": 0.2660226672887802,
+      "python_p95_s": 0.266370402276516,
+      "python_samples_s": [
+        0.2664090394973755,
+        0.26206991635262966,
+        0.2660226672887802
+      ],
+      "rust_p50_s": 0.062092626467347145,
+      "rust_p95_s": 0.06316906064748765,
+      "rust_samples_s": [
+        0.06328866444528103,
+        0.06118237413465977,
+        0.062092626467347145
+      ],
+      "speedup_p50": 4.2842875623674,
+      "speedup_p95": 4.216785868686335
+    },
+    {
+      "current_python_p50_s": 0.5792608354240656,
+      "current_python_p95_s": 0.6194637605920434,
+      "current_python_samples_alias": "rust_samples_s",
+      "legacy_adam_core_p50_s": 1.119418416172266,
+      "legacy_adam_core_p95_s": 1.1407231403514744,
+      "legacy_adam_core_samples_alias": "python_samples_s",
+      "max_impact_time_diff_days": 0.0007328265346586704,
+      "n_impacts": 40,
+      "n_orbits": 200,
+      "native_rust_operation": "collisions",
+      "native_rust_p50_s": 0.707440208,
+      "native_rust_p95_s": 0.7920637961,
+      "native_rust_samples_s": [
+        0.707440208,
+        0.801466417,
+        0.562984459
+      ],
+      "native_rust_status": "measured",
+      "native_rust_timer": "std::time::Instant",
+      "num_days": 30,
+      "python_p50_s": 1.119418416172266,
+      "python_p95_s": 1.1407231403514744,
+      "python_samples_s": [
+        1.1430903319269419,
+        1.1030212491750717,
+        1.119418416172266
+      ],
+      "rust_p50_s": 0.5792608354240656,
+      "rust_p95_s": 0.6194637605920434,
+      "rust_samples_s": [
+        0.5792608354240656,
+        0.5761854164302349,
+        0.6239307522773743
+      ],
+      "speedup_p50": 1.9324945649963743,
+      "speedup_p95": 1.8414687233055327
+    }
+  ],
+  "machine": {
+    "cpu_brand": "Apple M1 Max",
+    "machine": "arm64",
+    "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O"
+  },
+  "packages": {
+    "adam_assist": "0.4.0",
+    "adam_core": "0.5.6rc2"
+  },
+  "performance_columns": {
+    "current_python": "current adam_assist public Python method",
+    "gate": "legacy/current_python; native_rust is diagnostic",
+    "legacy_adam_core": "frozen updated-upstream adam_assist over frozen adam_core",
+    "native_rust": "direct Rust call timed inside Rust with std::time::Instant"
+  },
+  "repeats": 3,
+  "schema_version": 3,
+  "warmups": 1
+}

@@ -15,12 +15,16 @@ from ...observations.detections import PointSourceDetections
 from ...observations.exposures import Exposures
 from ...observers.observers import Observers
 from ...observers.utils import calculate_observing_night
+from ...time import Timestamp
 from ..magnitude import calculate_phase_angle
 from .core import (
     GroupedRotationPeriodResults,
     RotationPeriodObservations,
     RotationPeriodResult,
 )
+
+_DEFAULT_EXPOSURES_OBSERVERS = Exposures.observers
+
 
 __all__ = [
     "build_rotation_period_observations_from_detections",
@@ -32,6 +36,64 @@ __all__ = [
 
 def _as_float64_nan(array: pa.Array | pa.ChunkedArray) -> np.ndarray:
     return np.asarray(array.to_numpy(zero_copy_only=False), dtype=np.float64)
+
+
+def _native_detection_inputs(
+    detections: PointSourceDetections,
+    exposures: Exposures,
+    object_coords: CartesianCoordinates,
+) -> tuple[Any, ...]:
+    return (
+        detections.exposure_id.to_pylist(),
+        np.ascontiguousarray(_as_float64_nan(detections.mag)),
+        np.ascontiguousarray(_as_float64_nan(detections.mag_sigma)),
+        [str(value) for value in exposures.id.to_pylist()],
+        [str(value) for value in exposures.observatory_code.to_pylist()],
+        [
+            None if value is None else str(value)
+            for value in exposures.filter.to_pylist()
+        ],
+        exposures.start_time.days.to_pylist(),
+        exposures.start_time.nanos.to_pylist(),
+        _as_float64_nan(exposures.duration).tolist(),
+        exposures.start_time.scale,
+        np.ascontiguousarray(
+            np.column_stack(
+                [
+                    _as_float64_nan(object_coords.x),
+                    _as_float64_nan(object_coords.y),
+                    _as_float64_nan(object_coords.z),
+                ]
+            ),
+            dtype=np.float64,
+        ),
+        object_coords.time.days.to_pylist(),
+        object_coords.time.nanos.to_pylist(),
+        object_coords.time.scale,
+        object_coords.frame,
+    )
+
+
+def _native_rotation_path_available(object_coords: CartesianCoordinates) -> bool:
+    return (
+        Exposures.observers is _DEFAULT_EXPOSURES_OBSERVERS
+        and object_coords.frame in {"ecliptic", "equatorial"}
+    )
+
+
+def _validate_detection_coordinates(
+    detections: PointSourceDetections,
+    object_coords: CartesianCoordinates,
+) -> None:
+    if len(object_coords) != len(detections):
+        raise ValueError(
+            f"object_coords length ({len(object_coords)}) must match detections length ({len(detections)})"
+        )
+    if not np.all(object_coords.origin == OriginCodes.SUN):
+        raise ValueError(
+            "object_coords must be heliocentric (origin=SUN). "
+            "Use transform_coordinates(..., origin_out=OriginCodes.SUN) first."
+        )
 
 
 def _align_exposures_to_detections(
@@ -91,14 +153,29 @@ def build_rotation_period_observations_from_detections(
     object_coords: CartesianCoordinates,
 ) -> RotationPeriodObservations:
     n_det = len(detections)
-    if len(object_coords) != n_det:
-        raise ValueError(
-            f"object_coords length ({len(object_coords)}) must match detections length ({n_det})"
+    _validate_detection_coordinates(detections, object_coords)
+
+    if _native_rotation_path_available(object_coords):
+        from adam_core import _rust_native as _rn
+        from adam_core._rust.arrow import ensure_spice_backend
+
+        ensure_spice_backend()
+        native = _rn.rotation_period_observations_from_detections(
+            *_native_detection_inputs(detections, exposures, object_coords)
         )
-    if not np.all(object_coords.origin == OriginCodes.SUN):
-        raise ValueError(
-            "object_coords must be heliocentric (origin=SUN). "
-            "Use transform_coordinates(..., origin_out=OriginCodes.SUN) first."
+        return RotationPeriodObservations.from_kwargs(
+            time=Timestamp.from_kwargs(
+                days=native["time_days"],
+                nanos=native["time_nanos"],
+                scale="tdb",
+            ),
+            mag=native["magnitude"],
+            mag_sigma=native["magnitude_sigma"],
+            filter=native["filter"],
+            session_id=native["session_id"],
+            r_au=native["r_au"],
+            delta_au=native["delta_au"],
+            phase_angle_deg=native["phase_angle_deg"],
         )
 
     exposures_aligned = _align_exposures_to_detections(detections, exposures)
@@ -188,17 +265,31 @@ def estimate_rotation_period_from_detections(
     object_coords: CartesianCoordinates,
     **search_kwargs: Any,
 ) -> RotationPeriodResult:
+    from . import estimator as estimator_module
+
+    if (
+        estimator_module.estimate_rotation_period
+        is estimator_module._ESTIMATE_ROTATION_PERIOD_CANONICAL
+        and _native_rotation_path_available(object_coords)
+    ):
+        from adam_core._rust.arrow import ensure_spice_backend
+
+        _validate_detection_coordinates(detections, object_coords)
+        ensure_spice_backend()
+        result = (
+            estimator_module._estimate_rotation_period_from_detection_inputs_native(
+                _native_detection_inputs(detections, exposures, object_coords),
+                None,
+                **search_kwargs,
+            )
+        )
+        assert isinstance(result, RotationPeriodResult)
+        return result
+
     observations = build_rotation_period_observations_from_detections(
         detections, exposures, object_coords
     )
-
-    # Lazy import keeps this wrapper module importable without the solver kernel.
-    from .estimator import estimate_rotation_period as _estimate_rotation_period
-
-    return _estimate_rotation_period(
-        observations,
-        **search_kwargs,
-    )
+    return estimator_module.estimate_rotation_period(observations, **search_kwargs)
 
 
 def estimate_rotation_period_from_detections_grouped(
@@ -235,6 +326,36 @@ def estimate_rotation_period_from_detections_grouped(
         return GroupedRotationPeriodResults.from_kwargs(
             object_id=[],
             result=RotationPeriodResult.empty(),
+        )
+
+    from . import estimator as estimator_module
+
+    if (
+        estimator_module.estimate_rotation_period
+        is estimator_module._ESTIMATE_ROTATION_PERIOD_CANONICAL
+    ):
+        object_ids_native = [None if value is None else str(value) for value in ids_np]
+        if _native_rotation_path_available(object_coords):
+            from adam_core._rust.arrow import ensure_spice_backend
+
+            _validate_detection_coordinates(detections, object_coords)
+            ensure_spice_backend()
+            grouped = (
+                estimator_module._estimate_rotation_period_from_detection_inputs_native(
+                    _native_detection_inputs(detections, exposures, object_coords),
+                    object_ids_native,
+                    **search_kwargs,
+                )
+            )
+            assert isinstance(grouped, GroupedRotationPeriodResults)
+            return grouped
+        observations = build_rotation_period_observations_from_detections(
+            detections, exposures, object_coords
+        )
+        return estimator_module._estimate_rotation_period_grouped_native(
+            observations,
+            object_ids_native,
+            **search_kwargs,
         )
 
     valid_ids = ids_np[valid_mask].astype(str)
@@ -361,15 +482,25 @@ def estimate_rotation_period_best_apparition(
     error is re-raised with the apparition attached. Apparitions solve
     serially; for large batches, parallelize per apparition yourself.
     """
+    # Lazy import keeps this wrapper module importable without the solver kernel.
+    from . import estimator as estimator_module
+
+    _estimate_rotation_period = estimator_module.estimate_rotation_period
+    if (
+        _estimate_rotation_period
+        is estimator_module._ESTIMATE_ROTATION_PERIOD_CANONICAL
+    ):
+        return estimator_module._estimate_rotation_period_best_apparition_native(
+            observations,
+            float(apparition_gap_days),
+            **solver_kwargs,
+        )
+
     n_obs = len(observations)
     mjd = np.asarray(
         observations.time.rescale("tdb").mjd().to_numpy(False), dtype=np.float64
     )
     groups = _apparition_index_groups(mjd, apparition_gap_days)
-
-    # Lazy import keeps this wrapper module importable without the solver kernel.
-    from .estimator import estimate_rotation_period as _estimate_rotation_period
-
     if n_obs == 0 or len(groups) <= 1:
         # Single apparition (or empty, where the solver raises its canonical
         # error): delegate wholesale so behavior matches the direct call.

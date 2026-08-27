@@ -90,7 +90,11 @@ def test_convert_mpc_packed_dates():
     mjd_desired = Time(isot_tt, format="isot", scale="tt")
 
     np.testing.assert_equal(mjd_actual.tt.mjd, mjd_desired.tt.mjd)
-    return
+
+    from adam_core import _rust_native
+
+    samples = _rust_native.benchmark_unpack_mpc_dates_isot(pf_tt.tolist(), 2, 2, 1)
+    assert all(sample > 0.0 for trial in samples for sample in trial)
 
 
 def test_unpack_numbered_designation():

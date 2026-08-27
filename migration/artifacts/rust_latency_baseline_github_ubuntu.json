@@ -1,0 +1,430 @@
+{
+  "_metadata": {
+    "baseline_id": "github-actions-ubuntu-latest-x64-2026-05-14",
+    "source": "GitHub Actions CI rust-smoke latency gate log summary",
+    "run_id": 25885429759,
+    "job_id": 76076544263,
+    "head_sha": "18d28412d458a9db43b53454cc148499cf20b569",
+    "runner_os": "Linux",
+    "runner_arch": "X64",
+    "runner_label": "ubuntu-latest",
+    "thread_mode": "single",
+    "repeats": 7,
+    "latency_trials": 3,
+    "note": "Baseline seeded from p50/p95 values printed by CI before artifact upload was changed to always run after failures; future intentional rebases should use --capture-baseline so raw samples are preserved."
+  },
+  "cartesian_to_spherical": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.006952,
+    "rust_seconds_p95": 0.007524,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "cartesian_to_geodetic": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.017954,
+    "rust_seconds_p95": 0.018136,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "cartesian_to_keplerian": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.030633,
+    "rust_seconds_p95": 0.031236,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "keplerian_to_cartesian": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.057964,
+    "rust_seconds_p95": 0.058019,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "spherical_to_cartesian": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.006193,
+    "rust_seconds_p95": 0.006699,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "calculate_chi2": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.004861,
+    "rust_seconds_p95": 0.00489,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "cartesian_to_cometary": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.030127,
+    "rust_seconds_p95": 0.03022,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "cometary_to_cartesian": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.046377,
+    "rust_seconds_p95": 0.046507,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "calc_mean_motion": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.000114,
+    "rust_seconds_p95": 0.000123,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "propagate_2body": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.018486,
+    "rust_seconds_p95": 0.018521,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "propagate_2body_with_covariance": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.002474,
+    "rust_seconds_p95": 0.002492,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "generate_ephemeris_2body": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.036296,
+    "rust_seconds_p95": 0.036374,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "generate_ephemeris_2body_with_covariance": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.045818,
+    "rust_seconds_p95": 0.046215,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "calculate_phase_angle": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.004266,
+    "rust_seconds_p95": 0.005092,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "calculate_apparent_magnitude_v": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.010117,
+    "rust_seconds_p95": 0.010181,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "calculate_apparent_magnitude_v_and_phase_angle": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.011877,
+    "rust_seconds_p95": 0.011969,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "calc_gibbs": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.011269,
+    "rust_seconds_p95": 0.011329,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "calc_herrick_gibbs": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.012469,
+    "rust_seconds_p95": 0.012518,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "calc_gauss": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.012305,
+    "rust_seconds_p95": 0.012338,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "transform_coordinates": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.009322,
+    "rust_seconds_p95": 0.009388,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "solve_lambert": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.004207,
+    "rust_seconds_p95": 0.004214,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "predict_magnitudes": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.009718,
+    "rust_seconds_p95": 0.009755,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  },
+  "gauss_iod": {
+    "latency_trials": 3,
+    "rust_seconds_p50": 0.002019,
+    "rust_seconds_p95": 0.002026,
+    "latency_aggregation": "median-of-trial-percentiles",
+    "thread_mode": "single",
+    "thread_env": {
+      "RAYON_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1",
+      "JAX_NUM_THREADS": "1",
+      "XLA_FLAGS": "--xla_cpu_multi_thread_eigen=false intra_op_parallelism_threads=1"
+    },
+    "baseline_source": "GitHub Actions run 25885429759 job 76076544263 log summary"
+  }
+}

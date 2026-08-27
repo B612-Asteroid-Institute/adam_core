@@ -1,0 +1,282 @@
+[
+  {
+    "kernel": "dynamics.calc_tisserand_parameter",
+    "n": 10,
+    "rust_p50_s": 5.487492308020592e-05,
+    "legacy_p50_s": 5.375128239393234e-06,
+    "speedup": 0.09795236034384733
+  },
+  {
+    "kernel": "dynamics.calc_tisserand_parameter",
+    "n": 100,
+    "rust_p50_s": 3.9832666516304016e-05,
+    "legacy_p50_s": 5.458015948534012e-06,
+    "speedup": 0.13702361468318916
+  },
+  {
+    "kernel": "dynamics.calc_tisserand_parameter",
+    "n": 1000,
+    "rust_p50_s": 6.033293902873993e-05,
+    "legacy_p50_s": 1.4207791537046432e-05,
+    "speedup": 0.23548979654842395
+  },
+  {
+    "kernel": "dynamics.calc_tisserand_parameter",
+    "n": 10000,
+    "rust_p50_s": 0.00011866586282849312,
+    "legacy_p50_s": 0.00010470813140273094,
+    "speedup": 0.8823778709978692
+  },
+  {
+    "kernel": "dynamics.calc_tisserand_parameter",
+    "n": 100000,
+    "rust_p50_s": 0.0003991248086094856,
+    "legacy_p50_s": 0.001212417148053646,
+    "speedup": 3.037689268872052
+  },
+  {
+    "kernel": "orbits.classification (numpy core)",
+    "n": 10,
+    "rust_p50_s": 5.66248781979084e-05,
+    "legacy_p50_s": 3.058323636651039e-05,
+    "speedup": 0.5401024662626129
+  },
+  {
+    "kernel": "orbits.classification (numpy core)",
+    "n": 100,
+    "rust_p50_s": 5.00003807246685e-05,
+    "legacy_p50_s": 3.38749960064888e-05,
+    "speedup": 0.6774947613504074
+  },
+  {
+    "kernel": "orbits.classification (numpy core)",
+    "n": 1000,
+    "rust_p50_s": 5.7499855756759644e-05,
+    "legacy_p50_s": 6.933417171239853e-05,
+    "speedup": 1.205814706835115
+  },
+  {
+    "kernel": "orbits.classification (numpy core)",
+    "n": 10000,
+    "rust_p50_s": 0.0001032920554280281,
+    "legacy_p50_s": 0.00039670802652835846,
+    "speedup": 3.8406441316755178
+  },
+  {
+    "kernel": "orbits.classification (numpy core)",
+    "n": 100000,
+    "rust_p50_s": 0.0003071250393986702,
+    "legacy_p50_s": 0.003724082838743925,
+    "speedup": 12.125624293074328
+  },
+  {
+    "kernel": "coordinates.residuals.calculate_chi2 (D=2)",
+    "n": 10,
+    "rust_p50_s": 3.0292198061943054e-05,
+    "legacy_p50_s": 8.791685104370117e-06,
+    "speedup": 0.2902293549775564
+  },
+  {
+    "kernel": "coordinates.residuals.calculate_chi2 (D=2)",
+    "n": 100,
+    "rust_p50_s": 5.208281800150871e-05,
+    "legacy_p50_s": 2.8125010430812836e-05,
+    "speedup": 0.5400055432868115
+  },
+  {
+    "kernel": "coordinates.residuals.calculate_chi2 (D=2)",
+    "n": 1000,
+    "rust_p50_s": 7.9374760389328e-05,
+    "legacy_p50_s": 0.00023058289662003517,
+    "speedup": 2.904990144084104
+  },
+  {
+    "kernel": "coordinates.residuals.calculate_chi2 (D=2)",
+    "n": 10000,
+    "rust_p50_s": 0.00031054113060235977,
+    "legacy_p50_s": 0.002367790788412094,
+    "speedup": 7.624725213755957
+  },
+  {
+    "kernel": "coordinates.residuals.calculate_chi2 (D=2)",
+    "n": 100000,
+    "rust_p50_s": 0.0011202921159565449,
+    "legacy_p50_s": 0.021262624766677618,
+    "speedup": 18.97953619759507
+  },
+  {
+    "kernel": "coordinates.covariances.weighted_mean",
+    "n": 10,
+    "rust_p50_s": 1.125037670135498e-06,
+    "legacy_p50_s": 7.078051567077637e-07,
+    "speedup": 0.6291390728476821
+  },
+  {
+    "kernel": "coordinates.covariances.weighted_mean",
+    "n": 100,
+    "rust_p50_s": 2.125278115272522e-06,
+    "legacy_p50_s": 7.501803338527679e-07,
+    "speedup": 0.3529798422436459
+  },
+  {
+    "kernel": "coordinates.covariances.weighted_mean",
+    "n": 1000,
+    "rust_p50_s": 1.2375414371490479e-05,
+    "legacy_p50_s": 1.9171275198459625e-06,
+    "speedup": 0.15491420830824804
+  },
+  {
+    "kernel": "coordinates.covariances.weighted_mean",
+    "n": 10000,
+    "rust_p50_s": 0.0001127081923186779,
+    "legacy_p50_s": 1.3875309377908707e-05,
+    "speedup": 0.12310825941273927
+  },
+  {
+    "kernel": "coordinates.covariances.weighted_mean",
+    "n": 100000,
+    "rust_p50_s": 0.0010496671311557293,
+    "legacy_p50_s": 0.00013066688552498817,
+    "speedup": 0.12448411658000402
+  },
+  {
+    "kernel": "coordinates.covariances.weighted_covariance",
+    "n": 10,
+    "rust_p50_s": 1.7499551177024841e-06,
+    "legacy_p50_s": 2.709217369556427e-06,
+    "speedup": 1.5481639169771155
+  },
+  {
+    "kernel": "coordinates.covariances.weighted_covariance",
+    "n": 100,
+    "rust_p50_s": 4.792120307683945e-06,
+    "legacy_p50_s": 4.791188985109329e-06,
+    "speedup": 0.9998056554270722
+  },
+  {
+    "kernel": "coordinates.covariances.weighted_covariance",
+    "n": 1000,
+    "rust_p50_s": 3.4833792597055435e-05,
+    "legacy_p50_s": 1.8041115254163742e-05,
+    "speedup": 0.5179199251386939
+  },
+  {
+    "kernel": "coordinates.covariances.weighted_covariance",
+    "n": 10000,
+    "rust_p50_s": 0.000337792094796896,
+    "legacy_p50_s": 0.000125042162835598,
+    "speedup": 0.37017492345634084
+  },
+  {
+    "kernel": "coordinates.covariances.weighted_covariance",
+    "n": 100000,
+    "rust_p50_s": 0.0034028328955173492,
+    "legacy_p50_s": 0.001814916729927063,
+    "speedup": 0.5333546446896953
+  },
+  {
+    "kernel": "photometry.absolute_magnitude._fit_absolute_magnitude_rows",
+    "n": 10,
+    "rust_p50_s": 1.2498348951339722e-06,
+    "legacy_p50_s": 3.7041958421468735e-05,
+    "speedup": 29.63748137108793
+  },
+  {
+    "kernel": "photometry.absolute_magnitude._fit_absolute_magnitude_rows",
+    "n": 100,
+    "rust_p50_s": 2.4996697902679443e-06,
+    "legacy_p50_s": 3.529200330376625e-05,
+    "speedup": 14.118666169895677
+  },
+  {
+    "kernel": "photometry.absolute_magnitude._fit_absolute_magnitude_rows",
+    "n": 1000,
+    "rust_p50_s": 1.0292045772075653e-05,
+    "legacy_p50_s": 5.008280277252197e-05,
+    "speedup": 4.86616595783187
+  },
+  {
+    "kernel": "photometry.absolute_magnitude._fit_absolute_magnitude_rows",
+    "n": 10000,
+    "rust_p50_s": 0.00011650007218122482,
+    "legacy_p50_s": 0.0002525416202843189,
+    "speedup": 2.1677378868183963
+  },
+  {
+    "kernel": "photometry.absolute_magnitude._fit_absolute_magnitude_rows",
+    "n": 100000,
+    "rust_p50_s": 0.00103004090487957,
+    "legacy_p50_s": 0.002064458094537258,
+    "speedup": 2.004248651444216
+  },
+  {
+    "kernel": "coordinates.residuals.bound_longitude_residuals",
+    "n": 10,
+    "rust_p50_s": 4.66667115688324e-05,
+    "legacy_p50_s": 8.750241249799728e-06,
+    "speedup": 0.1875049892232777
+  },
+  {
+    "kernel": "coordinates.residuals.bound_longitude_residuals",
+    "n": 100,
+    "rust_p50_s": 5.2166637033224106e-05,
+    "legacy_p50_s": 9.458977729082108e-06,
+    "speedup": 0.18132235978826533
+  },
+  {
+    "kernel": "coordinates.residuals.bound_longitude_residuals",
+    "n": 1000,
+    "rust_p50_s": 5.1083043217658997e-05,
+    "legacy_p50_s": 1.691700890660286e-05,
+    "speedup": 0.33116681859617136
+  },
+  {
+    "kernel": "coordinates.residuals.bound_longitude_residuals",
+    "n": 10000,
+    "rust_p50_s": 8.174963295459747e-05,
+    "legacy_p50_s": 7.004197686910629e-05,
+    "speedup": 0.8567864385153455
+  },
+  {
+    "kernel": "coordinates.residuals.bound_longitude_residuals",
+    "n": 100000,
+    "rust_p50_s": 0.0007269997149705887,
+    "legacy_p50_s": 0.0012493329122662544,
+    "speedup": 1.718477857060504
+  },
+  {
+    "kernel": "coordinates.residuals.apply_cosine_latitude_correction",
+    "n": 10,
+    "rust_p50_s": 2.1374784409999847e-05,
+    "legacy_p50_s": 1.3542361557483673e-05,
+    "speedup": 0.6335671648294192
+  },
+  {
+    "kernel": "coordinates.residuals.apply_cosine_latitude_correction",
+    "n": 100,
+    "rust_p50_s": 4.570791497826576e-05,
+    "legacy_p50_s": 3.641704097390175e-05,
+    "speedup": 0.796733804007865
+  },
+  {
+    "kernel": "coordinates.residuals.apply_cosine_latitude_correction",
+    "n": 1000,
+    "rust_p50_s": 0.00013695796951651573,
+    "legacy_p50_s": 0.0002642497420310974,
+    "speedup": 1.9294221647994831
+  },
+  {
+    "kernel": "coordinates.residuals.apply_cosine_latitude_correction",
+    "n": 10000,
+    "rust_p50_s": 0.0005947919562458992,
+    "legacy_p50_s": 0.003550250083208084,
+    "speedup": 5.968893906393613
+  },
+  {
+    "kernel": "coordinates.residuals.apply_cosine_latitude_correction",
+    "n": 100000,
+    "rust_p50_s": 0.0046899160370230675,
+    "legacy_p50_s": 0.03470254084095359,
+    "speedup": 7.399394907500538
+  }
+]

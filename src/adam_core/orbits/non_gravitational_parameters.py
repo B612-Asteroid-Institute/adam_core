@@ -127,7 +127,9 @@ class NonGravitationalParameters(qv.Table):
         return np.stack(columns, axis=1)
 
     @classmethod
-    def nulls(cls, length: int) -> "NonGravitationalParameters":
+    def nulls(
+        cls, length: int, **kwargs: int | float | str
+    ) -> "NonGravitationalParameters":
         null_float = [None] * length
         null_str = [None] * length
         return cls.from_kwargs(
@@ -140,4 +142,5 @@ class NonGravitationalParameters(qv.Table):
             NM=null_float,
             NN=null_float,
             R0=null_float,
+            **kwargs,
         )

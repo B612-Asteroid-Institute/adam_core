@@ -6,19 +6,11 @@ import numpy.typing as npt
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
-from scipy.linalg import sqrtm
-from scipy.stats import multivariate_normal
-
-from .jacobian import calc_jacobian
 
 logger = logging.getLogger(__name__)
 
 COVARIANCE_FILL_VALUE = np.nan
-
-# Dimensionality of the coordinate (orbital) block of a covariance matrix.
 COORD_DIM = 6
-# Orbits fitted with non-gravitational parameters extend the covariance with
-# the fixed trailing dimensions (A1, A2, A3), giving a 9x9 matrix.
 FULL_DIM = 9
 
 
@@ -37,56 +29,80 @@ def sigmas_to_covariances(sigmas: np.ndarray) -> np.ndarray:
     covariances : `numpy.ndarray` (N, D, D)
         Covariance matrices for N coordinates in D dimensions.
     """
-    D = sigmas.shape[1]
-    identity = np.identity(D, dtype=sigmas.dtype)
-    covariances = np.einsum("kj,ji->kij", sigmas**2, identity, order="C")
-    return covariances
+    from adam_core import _rust_native
+
+    return np.asarray(
+        _rust_native.sigmas_to_covariances_numpy(
+            np.ascontiguousarray(sigmas, dtype=np.float64)
+        ),
+        dtype=np.float64,
+    )
 
 
 class CoordinateCovariances(qv.Table):
-    # Each row holds either a 6x6 coordinate covariance (36 values) or, for
-    # orbits fitted with non-gravitational parameters, a 9x9 covariance
-    # (81 values) over the fixed basis (x, y, z, vx, vy, vz, A1, A2, A3) --
-    # or the equivalent first-six elements of the current representation.
-    # Non-gravitational parameters that were not estimated carry zero
-    # rows/columns (held fixed); rows without a non-gravitational solution
-    # store only the 6x6 block.
+    """Per-row 6D coordinate or 9D coordinate+A1/A2/A3 covariance."""
 
     values = qv.LargeListColumn(pa.float64(), nullable=True)
+    # When fixed, we should revert to:
+    # values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
 
     @property
-    def sigmas(self):
-        cov_diag = np.diagonal(self.to_matrix(), axis1=1, axis2=2)
-        # NOTE: coordinate (6x6) block only; the non-gravitational
-        # (A1, A2, A3) dimensions of extended rows are not included --
-        # take the diagonal of `to_full_matrix` for those.
-        sigmas = np.sqrt(cov_diag)
-        return sigmas
+    def sigmas(self) -> npt.NDArray[np.float64]:
+        from adam_core import _rust_native
+
+        # Public sigmas remain the six coordinate dimensions for compatibility.
+        return np.asarray(
+            _rust_native.covariance_sigmas_numpy(self.to_matrix()), dtype=np.float64
+        )
 
     def nongrav_block_mask(self) -> npt.NDArray[np.bool_]:
-        """
-        Return a per-row boolean mask that is True where the covariance
-        carries the trailing non-gravitational (A1, A2, A3) block.
-        """
+        """Return rows whose covariance carries the trailing A1/A2/A3 block."""
         lengths = pc.list_value_length(self.values)
-        return (
-            pc.fill_null(pc.equal(lengths, FULL_DIM * FULL_DIM), False)
-            .to_numpy(zero_copy_only=False)
-            .astype(bool)
+        return np.asarray(
+            pc.fill_null(pc.equal(lengths, FULL_DIM * FULL_DIM), False).to_numpy(
+                zero_copy_only=False
+            ),
+            dtype=np.bool_,
         )
 
     def has_nongrav_block(self) -> bool:
-        """
-        Return True if any row carries the non-gravitational (A1, A2, A3) block.
-        """
+        """Return whether any row carries the trailing non-grav block."""
         return bool(self.nongrav_block_mask().any())
+
+    def _fast_to_matrix(self) -> Optional[np.ndarray]:
+        """
+        Return (N, 6, 6) by reshaping the underlying flat buffer when the
+        LargeListArray has uniform stride-36 offsets and no nulls. Returns
+        None to signal the caller to use the slower stack-based fallback
+        when those invariants do not hold (ragged rows, arrow-level nulls,
+        or chunked arrays that fail to combine).
+        """
+        n = len(self)
+        arr = self.values
+        if hasattr(arr, "combine_chunks"):
+            arr = arr.combine_chunks()
+        if not hasattr(arr, "offsets") or not hasattr(arr, "values"):
+            return None
+        if arr.null_count != 0:
+            return None
+        offsets = np.asarray(arr.offsets)
+        if len(offsets) != n + 1 or offsets[0] != 0 or offsets[-1] != n * 36:
+            return None
+        if n > 0 and not np.array_equal(
+            np.diff(offsets), np.full(n, 36, dtype=offsets.dtype)
+        ):
+            return None
+        flat = arr.values.to_numpy(zero_copy_only=False)
+        if len(flat) != n * 36:
+            return None
+        # np.copy() so the caller owns a writable, arrow-independent buffer —
+        # matching the existing to_matrix contract (callers routinely mutate
+        # the result, e.g. near-zero cleanup in CartesianCoordinates.rotate).
+        return np.ascontiguousarray(flat).reshape(n, 6, 6).copy()
 
     def to_matrix(self) -> np.ndarray:
         """
-        Return the coordinate block of the covariance matrices as a 3D array
-        of shape (N, 6, 6). For rows carrying the non-gravitational block,
-        this is the leading 6x6 block; use `to_full_matrix` to retrieve the
-        full 9x9 matrices.
+        Return the covariance matrices as a 3D array of shape (N, 6, 6).
 
         Returns
         -------
@@ -94,8 +110,16 @@ class CoordinateCovariances(qv.Table):
             Covariance matrices for N coordinates in 6 dimensions.
         """
         if self.has_nongrav_block():
-            return self.to_full_matrix()[:, :COORD_DIM, :COORD_DIM]
+            return np.ascontiguousarray(
+                self.to_full_matrix()[:, :COORD_DIM, :COORD_DIM]
+            )
 
+        # Fast path: LargeListArray with uniform stride-36 offsets and no nulls.
+        fast = self._fast_to_matrix()
+        if fast is not None:
+            return fast
+
+        # return self.values.combine_chunks().to_numpy_ndarray()
         values = self.values.to_numpy(zero_copy_only=False)
 
         # Try and see if all covariance matrices are None, if so return
@@ -135,22 +159,8 @@ class CoordinateCovariances(qv.Table):
         return cov
 
     def to_full_matrix(self) -> np.ndarray:
-        """
-        Return the covariance matrices as a 3D array of shape (N, 9, 9) over
-        the basis (coordinates, A1, A2, A3). Rows without a non-gravitational
-        block have their trailing rows and columns filled with NaN.
-
-        Returns
-        -------
-        covariances : `numpy.ndarray` (N, 9, 9)
-            Covariance matrices for N coordinates plus the three
-            non-gravitational parameters.
-        """
+        """Return normalized (N, 9, 9) coordinate+A1/A2/A3 covariance rows."""
         full = np.full((len(self), FULL_DIM, FULL_DIM), np.nan)
-        if not self.has_nongrav_block():
-            full[:, :COORD_DIM, :COORD_DIM] = self.to_matrix()
-            return full
-
         arr = self.values
         if isinstance(arr, pa.ChunkedArray):
             arr = arr.combine_chunks()
@@ -159,37 +169,25 @@ class CoordinateCovariances(qv.Table):
         starts = offsets[:-1]
         lengths = np.diff(offsets)
         valid = ~arr.is_null().to_numpy(zero_copy_only=False)
-
         is6 = valid & (lengths == COORD_DIM * COORD_DIM)
         is9 = valid & (lengths == FULL_DIM * FULL_DIM)
         bad = valid & ~is6 & ~is9
         if bad.any():
-            i = int(np.flatnonzero(bad)[0])
+            row = int(np.flatnonzero(bad)[0])
             raise ValueError(
-                f"Covariance row {i} has {lengths[i]} values; expected "
-                f"{COORD_DIM * COORD_DIM} or {FULL_DIM * FULL_DIM}."
+                f"Covariance row {row} has {lengths[row]} values; expected 36 or 81."
             )
         if is6.any():
             gather = starts[is6, None] + np.arange(COORD_DIM * COORD_DIM)
-            full[is6, :COORD_DIM, :COORD_DIM] = flat[gather].reshape(
-                -1, COORD_DIM, COORD_DIM
-            )
+            full[is6, :COORD_DIM, :COORD_DIM] = flat[gather].reshape(-1, 6, 6)
         if is9.any():
             gather = starts[is9, None] + np.arange(FULL_DIM * FULL_DIM)
-            full[is9] = flat[gather].reshape(-1, FULL_DIM, FULL_DIM)
+            full[is9] = flat[gather].reshape(-1, 9, 9)
         return full
 
     def to_transform_matrix(self) -> np.ndarray:
-        """
-        Return the covariance matrices in the widest layout present:
-        (N, 6, 6) when no row carries the non-gravitational block, otherwise
-        (N, 9, 9). Intended for feeding `transform_covariances_jacobian` or
-        `apply_linear_covariance_transform`, which carry the
-        non-gravitational block through the transform when it is present.
-        """
-        if self.has_nongrav_block():
-            return self.to_full_matrix()
-        return self.to_matrix()
+        """Return 9D rows when present, otherwise the ordinary 6D matrix."""
+        return self.to_full_matrix() if self.has_nongrav_block() else self.to_matrix()
 
     @classmethod
     def from_matrix(cls, covariances: np.ndarray) -> "CoordinateCovariances":
@@ -198,55 +196,49 @@ class CoordinateCovariances(qv.Table):
 
         Parameters
         ----------
-        covariances : `numpy.ndarray` (N, 6, 6) or (N, 9, 9)
-            Covariance matrices for N coordinates in 6 dimensions, or in
-            6 dimensions plus the non-gravitational parameters (A1, A2, A3).
-            For (N, 9, 9) input, rows whose trailing non-gravitational rows
-            and columns are all NaN are stored as plain 6x6 covariances.
+        covariances : `numpy.ndarray` (N, 6, 6)
+            Covariance matrices for N coordinates in 6 dimensions.
 
         Returns
         -------
         covariances : `Covariances`
-            Covariance matrices for N coordinates.
+            Covariance matrices for N coordinates in 6 dimensions.
 
         Raises
         ------
-        ValueError : If the covariance matrices are not (N, 6, 6) or (N, 9, 9)
+        ValueError : If the covariance matrices are not (N, 6, 6)
         """
+        covariances = np.asarray(covariances, dtype=np.float64)
         if covariances.shape[1:] == (COORD_DIM, COORD_DIM):
-            cov = covariances.flatten()
-            offsets = np.arange(0, (len(covariances) + 1) * 36, 36, dtype=np.int64)
-            return cls.from_kwargs(values=pa.LargeListArray.from_arrays(offsets, cov))
-
+            flat = covariances.reshape(-1)
+            offsets = np.arange(
+                0,
+                (len(covariances) + 1) * COORD_DIM * COORD_DIM,
+                COORD_DIM * COORD_DIM,
+                dtype=np.int64,
+            )
+            return cls.from_kwargs(values=pa.LargeListArray.from_arrays(offsets, flat))
         if covariances.shape[1:] != (FULL_DIM, FULL_DIM):
             raise ValueError(
                 "Covariance matrices should have shape (N, 6, 6) or (N, 9, 9) "
                 f"but got {covariances.shape}"
             )
-
         is6 = np.isnan(covariances[:, COORD_DIM:, :]).all(axis=(1, 2)) & np.isnan(
             covariances[:, :, COORD_DIM:]
         ).all(axis=(1, 2))
-        lengths = np.where(is6, COORD_DIM * COORD_DIM, FULL_DIM * FULL_DIM).astype(
-            np.int64
-        )
+        lengths = np.where(is6, COORD_DIM * COORD_DIM, FULL_DIM * FULL_DIM)
         offsets = np.zeros(len(covariances) + 1, dtype=np.int64)
         np.cumsum(lengths, out=offsets[1:])
-        flat = np.empty(offsets[-1], dtype=np.float64)
+        flat = np.empty(int(offsets[-1]), dtype=np.float64)
         if is6.any():
-            scatter = offsets[:-1][is6, None] + np.arange(COORD_DIM * COORD_DIM)
-            flat[scatter] = covariances[is6][:, :COORD_DIM, :COORD_DIM].reshape(
-                scatter.shape[0], -1
-            )
+            positions = offsets[:-1][is6, None] + np.arange(COORD_DIM * COORD_DIM)
+            flat[positions.reshape(-1)] = covariances[
+                is6, :COORD_DIM, :COORD_DIM
+            ].reshape(-1)
         if (~is6).any():
-            scatter = offsets[:-1][~is6, None] + np.arange(FULL_DIM * FULL_DIM)
-            flat[scatter] = covariances[~is6].reshape(scatter.shape[0], -1)
-        return cls.from_kwargs(
-            values=pa.LargeListArray.from_arrays(
-                pa.array(offsets, type=pa.int64()),
-                pa.array(flat, type=pa.float64()),
-            )
-        )
+            positions = offsets[:-1][~is6, None] + np.arange(FULL_DIM * FULL_DIM)
+            flat[positions.reshape(-1)] = covariances[~is6].reshape(-1)
+        return cls.from_kwargs(values=pa.LargeListArray.from_arrays(offsets, flat))
 
     @classmethod
     def from_sigmas(cls, sigmas: np.ndarray) -> "CoordinateCovariances":
@@ -268,7 +260,7 @@ class CoordinateCovariances(qv.Table):
         return cls.from_matrix(sigmas_to_covariances(sigmas))
 
     @classmethod
-    def nulls(cls, length: int) -> "CoordinateCovariances":
+    def nulls(cls, length: int, **kwargs: int | float | str) -> "CoordinateCovariances":
         """
         Create a Covariances object with all covariance matrix elements set to NaN.
         Parameters
@@ -285,7 +277,8 @@ class CoordinateCovariances(qv.Table):
             values=pa.ListArray.from_arrays(
                 pa.array(np.arange(0, 36 * (length + 1), 36)),
                 pa.nulls(36 * length, pa.float64()),
-            )
+            ),
+            **kwargs,
         )
 
     def is_all_nan(self) -> bool:
@@ -297,7 +290,9 @@ class CoordinateCovariances(qv.Table):
         is_all_nan : bool
             True if all covariance matrix elements are NaN, False otherwise.
         """
-        return np.all(np.isnan(self.to_matrix()))
+        from adam_core import _rust_native
+
+        return _rust_native.covariance_is_all_nan_numpy(self.to_matrix())
 
 
 def make_positive_semidefinite(
@@ -378,6 +373,9 @@ def sample_covariance_random(
     # that something has gone wrong with the covariance. However, when the negative eigenvalues
     # are very close to zero, they can be flipped to positive without an issue. This is due to
     # the way the covariance matrix is calculated.
+    #
+    # Governance note: this validation intentionally remains a NumPy/LAPACK
+    # boundary (eigvals); the sampling itself is Rust-owned below.
     if np.any(np.linalg.eigvals(cov) < 0):
         if np.any(np.linalg.eigvals(cov) < -1 * semidef_tol):
             raise ValueError(
@@ -388,11 +386,22 @@ def sample_covariance_random(
                 "Covariance matrix is not positive semidefinite, but within tolerance, adjusting..."
             )
             cov = make_positive_semidefinite(cov)
-    normal = multivariate_normal(mean=mean, cov=cov, allow_singular=True, seed=seed)
-    samples = normal.rvs(num_samples)
-    W = np.full(num_samples, 1 / num_samples)
-    W_cov = np.full(num_samples, 1 / num_samples)
-    return samples, W, W_cov
+
+    # Rust-native RNG (decision 2026-07-03): statistically equivalent to, but
+    # not bit-identical with, the legacy scipy multivariate_normal sampler.
+    from adam_core import _rust_native
+
+    samples, W, W_cov = _rust_native.sample_covariance_random_numpy(
+        np.ascontiguousarray(mean, dtype=np.float64),
+        np.ascontiguousarray(cov, dtype=np.float64),
+        int(num_samples),
+        seed,
+    )
+    return (
+        np.asarray(samples, dtype=np.float64),
+        np.asarray(W, dtype=np.float64),
+        np.asarray(W_cov, dtype=np.float64),
+    )
 
 
 def sample_covariance_sigma_points(
@@ -435,53 +444,38 @@ def sample_covariance_sigma_points(
         Communications, and Control Symposium, 153-158.
         https://doi.org/10.1109/ASSPCC.2000.882463
     """
-    # Calculate the dimensionality of the distribution
-    D = mean.shape[0]
+    # Rust-owned sigma-point sampling: mean row first, then mean +/- rows of
+    # the symmetric square root of (D + lambda) * cov. The Rust Jacobi
+    # symmetric square root replaces scipy.linalg.sqrtm and reconstructs the
+    # input covariance within the same tolerances validated for
+    # VariantOrbits.create sigma-point parity.
+    from adam_core import _rust_native
 
-    # See equation 15 in Wan & Van Der Merwe (2000) [1]
-    N = 2 * D + 1
-    sigma_points = np.empty((N, D))
-    W = np.empty(N)
-    W_cov = np.empty(N)
-
-    # Calculate the scaling parameter lambda
-    lambd = alpha**2 * (D + kappa) - D
-
-    # First sigma point is the mean
-    sigma_points[0] = mean
-
-    # Beta is used to encode prior knowledge about the distribution.
-    # If the distribution is a well-constrained Gaussian, beta = 2 is optimal
-    # but lets set beta to 0 for now which has the effect of not weighting the mean state
-    # with 0 for the covariance matrix. This is generally better for more distributions.
-    # Calculate the weights for mean and the covariance matrix
-    # Weight are used to reconstruct the mean and covariance matrix from the sigma points
-    W[0] = lambd / (D + lambd)
-    W_cov[0] = W[0] + (1 - alpha**2 + beta)
-
-    # Take the matrix square root of the scaled covariance matrix.
-    # Sometimes you'll see this done with a Cholesky decomposition for speed
-    # but sqrtm is sufficiently optimized for this use case and typically provides
-    # better results
-    L = sqrtm((D + lambd) * cov)
-
-    # Calculate the remaining sigma points
-    for i in range(D):
-        offset = L[i]
-        sigma_points[i + 1] = mean + offset
-        sigma_points[i + 1 + D] = mean - offset
-
-    # The weights for the remaining sigma points are the same
-    # for the mean and the covariance matrix
-    W[1:] = 1 / (2 * (D + lambd))
-    W_cov[1:] = 1 / (2 * (D + lambd))
-
-    return sigma_points, W, W_cov
+    sigma_points, W, W_cov = _rust_native.sample_covariance_sigma_points_numpy(
+        np.ascontiguousarray(mean, dtype=np.float64),
+        np.ascontiguousarray(cov, dtype=np.float64),
+        float(alpha),
+        float(beta),
+        float(kappa),
+    )
+    return (
+        np.asarray(sigma_points, dtype=np.float64),
+        np.asarray(W, dtype=np.float64),
+        np.asarray(W_cov, dtype=np.float64),
+    )
 
 
 def weighted_mean(samples: np.ndarray, W: np.ndarray) -> np.ndarray:
     """
     Calculate the weighted mean of a set of samples.
+
+    NOTE: this dispatches to numpy `np.dot`, NOT a rust kernel. Apple
+    Accelerate / OpenBLAS GEMV is hand-tuned NEON/AVX SIMD and beats
+    every pure-rust loop we tried (faer, hand-rolled rayon, hand-rolled
+    serial — see journal 2026-04-27 perf measurements). Rust would need
+    sleef-vectorized FMA to compete; deferred until we add SIMD math
+    crate. The function exists as a vectored entry point but is BLAS
+    underneath.
 
     Parameters
     ----------
@@ -505,6 +499,10 @@ def weighted_covariance(
     """
     Calculate a covariance matrix from samples and their corresponding weights.
 
+    NOTE: this dispatches to numpy (BLAS GEMM), NOT rust — same reason
+    as `weighted_mean` above (BLAS hand-tuned SIMD wins until we add a
+    rust SIMD math crate).
+
     Parameters
     ----------
     mean : `~numpy.ndarray` (D)
@@ -521,13 +519,8 @@ def weighted_covariance(
     cov : `~numpy.ndarray` (D, D)
         Covariance matrix calculated from the samples and weights.
     """
-    # Calculate the covariance matrix from the sigma points and weights
-    # `~numpy.cov` does not support negative weights so we will calculate
-    # the covariance manually
-    # cov = np.cov(samples, aweights=W_cov, rowvar=False, bias=True)
     residual = samples - mean
-    cov = (W_cov * residual.T) @ residual
-    return cov
+    return (W_cov * residual.T) @ residual
 
 
 def transform_covariances_sampling(
@@ -571,29 +564,11 @@ def apply_linear_covariance_transform(
     transform_matrices: np.ndarray,
     covariances: np.ndarray,
 ) -> np.ndarray:
-    """
-    Apply a linear 6x6 coordinate transform to covariance matrices.
+    """Apply a 6x6 linear transform to 6D or extended 9D covariance rows."""
+    from adam_core import _rust_native
 
-    For (N, 6, 6) covariances this is the usual similarity transform. For
-    (N, 9, 9) covariances the coordinate block is transformed, the
-    coordinate/non-gravitational cross-covariances are rotated with it, and
-    the non-gravitational (A1, A2, A3) block is preserved unchanged --
-    equivalent to a block-diagonal transform with an identity block on the
-    non-gravitational dimensions.
-
-    Parameters
-    ----------
-    transform_matrices : `~numpy.ndarray` (6, 6) or (N, 6, 6)
-        Linear transform(s) applied to the coordinate block.
-    covariances : `~numpy.ndarray` (N, 6, 6) or (N, 9, 9)
-        Covariance matrices to transform.
-
-    Returns
-    -------
-    covariances_out : `~numpy.ndarray`
-        Transformed covariance matrices with the same shape as the input.
-    """
     matrices = np.asarray(transform_matrices, dtype=np.float64)
+    covariance_values = np.asarray(covariances, dtype=np.float64)
     if matrices.shape == (COORD_DIM, COORD_DIM):
         matrices = matrices.reshape(1, COORD_DIM, COORD_DIM)
     if matrices.ndim != 3 or matrices.shape[1:] != (COORD_DIM, COORD_DIM):
@@ -601,65 +576,82 @@ def apply_linear_covariance_transform(
             "transform_matrices must have shape (6, 6) or (N, 6, 6), "
             f"got {matrices.shape}"
         )
-    if len(matrices) not in (1, len(covariances)):
+    if covariance_values.ndim != 3 or covariance_values.shape[1:] not in (
+        (COORD_DIM, COORD_DIM),
+        (FULL_DIM, FULL_DIM),
+    ):
+        raise ValueError(
+            "Covariance matrices should have shape (N, 6, 6) or (N, 9, 9), "
+            f"got {covariance_values.shape}"
+        )
+    if len(matrices) not in (1, len(covariance_values)):
         raise ValueError(
             "Number of transform matrices must be 1 or match the number of covariances."
         )
-    matrices_T = np.transpose(matrices, axes=(0, 2, 1))
-
-    if covariances.shape[1:] == (COORD_DIM, COORD_DIM):
-        return matrices @ covariances @ matrices_T
-
-    if covariances.shape[1:] != (FULL_DIM, FULL_DIM):
-        raise ValueError(
-            f"Covariance matrices should have shape (N, 6, 6) or (N, 9, 9), "
-            f"got {covariances.shape}"
-        )
-
-    out = np.empty_like(covariances)
-    out[:, :COORD_DIM, :COORD_DIM] = (
-        matrices @ covariances[:, :COORD_DIM, :COORD_DIM] @ matrices_T
+    return np.asarray(
+        _rust_native.apply_linear_covariance_transform_numpy(
+            np.ascontiguousarray(matrices),
+            np.ascontiguousarray(covariance_values),
+        ),
+        dtype=np.float64,
     )
-    out[:, :COORD_DIM, COORD_DIM:] = matrices @ covariances[:, :COORD_DIM, COORD_DIM:]
-    out[:, COORD_DIM:, :COORD_DIM] = np.transpose(
-        out[:, :COORD_DIM, COORD_DIM:], axes=(0, 2, 1)
-    )
-    out[:, COORD_DIM:, COORD_DIM:] = covariances[:, COORD_DIM:, COORD_DIM:]
-    return out
 
 
-def transform_covariances_jacobian(
-    coords: np.ndarray,
+def rust_covariance_transform(
+    coords_values: np.ndarray,
     covariances: np.ndarray,
-    _func: Callable,
-    **kwargs,
-) -> np.ndarray:
+    representation_in: str,
+    representation_out: str,
+    *,
+    t0: Optional[np.ndarray] = None,
+    mu: Optional[np.ndarray] = None,
+    a: Optional[float] = None,
+    f: Optional[float] = None,
+    frame_in: str = "ecliptic",
+    frame_out: Optional[str] = None,
+) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Transform covariance matrices by calculating the Jacobian of the transformation function
-    using `~jax.jacfwd`.
+    Run the Rust forward-mode autodiff covariance transform in a single batched
+    pass. Returns ``(coords_out [N, 6], cov_out [N, 6, 6])``.
 
-    Parameters
-    ----------
-    coords : `~numpy.ndarray` (N, 6)
-        Coordinates that correspond to the input covariance matrices.
-    covariances : `~numpy.ndarray` (N, 6, 6) or (N, 9, 9)
-        Covariance matrices to transform via numerical differentiation.
-        For (N, 9, 9) input the trailing non-gravitational dimensions
-        (A1, A2, A3) are carried through an identity block: the cross
-        covariances rotate with the coordinate Jacobian and the
-        non-gravitational block is preserved.
-    _func : function
-        A function that takes a single coord (6) as input and return the transformed
-        coordinate (6). See for example: `thor.coordinates._cartesian_to_spherical`
-        or `thor.coordinates._cartesian_to_keplerian`.
-
-    Returns
-    -------
-    covariances_out : `~numpy.ndarray`
-        Transformed covariance matrices with the same shape as the input.
+    The kernel evaluates every rep-in -> cartesian(frame_in) -> cartesian(frame_out)
+    -> rep-out function as ``Dual<6>`` and reads the propagated covariance as
+    ``J @ Sigma @ J^T``. NaN covariance rows pass NaN through (consistent with
+    the legacy policy).
     """
-    jacobian = calc_jacobian(coords, _func, **kwargs)
-    return apply_linear_covariance_transform(jacobian, covariances)
+    # Local import avoids a module-level cycle.
+    from .._rust.api import transform_coordinates_with_covariance_numpy
+
+    coords_values = np.ascontiguousarray(coords_values, dtype=np.float64)
+    if coords_values.ndim != 2 or coords_values.shape[1] != 6:
+        raise ValueError("coords_values must have shape (N, 6)")
+    n = coords_values.shape[0]
+    if covariances.shape not in ((n, 6, 6), (n, 9, 9)):
+        raise ValueError("covariances must have shape (N, 6, 6) or (N, 9, 9)")
+    dimension = covariances.shape[1]
+
+    cov_flat = np.ascontiguousarray(
+        np.asarray(covariances, dtype=np.float64).reshape(n, dimension * dimension)
+    )
+    result = transform_coordinates_with_covariance_numpy(
+        coords_values,
+        cov_flat,
+        representation_in,
+        representation_out,
+        t0=t0,
+        mu=mu,
+        a=a,
+        f=f,
+        max_iter=100,
+        tol=1e-15,
+        frame_in=frame_in,
+        frame_out=frame_out,
+    )
+    coords_out, cov_flat_out = result
+    return (
+        np.asarray(coords_out, dtype=np.float64),
+        np.asarray(cov_flat_out, dtype=np.float64).reshape(n, dimension, dimension),
+    )
 
 
 def _upper_triangular_to_full(

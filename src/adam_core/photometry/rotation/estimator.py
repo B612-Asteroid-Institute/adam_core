@@ -2,13 +2,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from math import ceil
+from typing import Any
 
 import numpy as np
 import numpy.typing as npt
+import quivr as qv
 
 from ..lightcurve import reduced_magnitude
 from .core import (
     PROFILES,
+    GroupedRotationPeriodResults,
     RotationPeriodObservations,
     RotationPeriodResult,
     _amplitude_from_fit,
@@ -117,6 +120,8 @@ class _FourierSolution:
     used_session_offsets: bool
     fit_summary: _FitResult
     sigma_curve: npt.NDArray[np.float64]
+    order_consensus_corrected: bool
+    order_consensus_supported: bool | None
 
 
 @dataclass(slots=True)
@@ -178,6 +183,148 @@ def _resolve_profile(profile: str) -> _FourierProfile:
     if profile not in PROFILES:
         raise ValueError("profile must be 'default'")
     return PROFILES[profile]
+
+
+def _rotation_period_result_from_native(native: dict[str, Any]) -> RotationPeriodResult:
+    return RotationPeriodResult.from_kwargs(
+        period_days=[native["period_days"]],
+        period_hours=[native["period_hours"]],
+        frequency_cycles_per_day=[native["frequency_cycles_per_day"]],
+        profile=["default"],
+        period_verdict=[native["period_verdict"]],
+        reliability_code=[native["reliability_code"]],
+        confidence_flags=[native["confidence_flags"]],
+        insufficiency_reasons=[native["insufficiency_reasons"]],
+        is_valid=[native["is_valid"]],
+        is_reliable=[native["is_reliable"]],
+        period_lower_days=[native["period_lower_days"]],
+        period_upper_days=[native["period_upper_days"]],
+        relative_period_uncertainty=[native["relative_period_uncertainty"]],
+        alternate_period_days=[native["alternate_period_days"]],
+        fourier_period_days=[native["fourier_period_days"]],
+        fourier_order=[native["fourier_order"]],
+        fourier_sigma_threshold=[native["fourier_sigma_threshold"]],
+        fourier_phase_c1=[native["fourier_phase_c1"]],
+        fourier_phase_c2=[native["fourier_phase_c2"]],
+        residual_sigma_mag=[native["residual_sigma_mag"]],
+        fourier_is_valid=[native["fourier_is_valid"]],
+        fourier_is_reliable=[native["fourier_is_reliable"]],
+        fourier_alternate_period_days=[native["fourier_alternate_period_days"]],
+        phase_coverage_fraction=[native["phase_coverage_fraction"]],
+        n_rotations_spanned=[native["n_rotations_spanned"]],
+        amplitude_snr=[native["amplitude_snr"]],
+        n_significant_aliases=[native["n_significant_aliases"]],
+        n_observations=[native["n_observations"]],
+        n_fit_observations=[native["n_fit_observations"]],
+        n_clipped=[native["n_clipped"]],
+        n_filters=[native["n_filters"]],
+        n_sessions=[native["n_sessions"]],
+        used_session_offsets=[native["used_session_offsets"]],
+        is_period_doubled=[native["is_period_doubled"]],
+    )
+
+
+def _rotation_period_native_inputs(
+    observations: RotationPeriodObservations,
+) -> tuple[Any, ...]:
+    filters = [
+        "__missing_filter__" if value is None else str(value)
+        for value in observations.filter.to_pylist()
+    ]
+    sessions = [
+        None if value is None else str(value)
+        for value in observations.session_id.to_pylist()
+    ]
+    return (
+        np.ascontiguousarray(
+            observations.time.days.to_numpy(zero_copy_only=False), dtype=np.int64
+        ),
+        np.ascontiguousarray(
+            observations.time.nanos.to_numpy(zero_copy_only=False), dtype=np.int64
+        ),
+        observations.time.scale,
+        np.ascontiguousarray(
+            observations.mag.to_numpy(zero_copy_only=False), dtype=np.float64
+        ),
+        np.ascontiguousarray(
+            observations.mag_sigma.to_numpy(zero_copy_only=False), dtype=np.float64
+        ),
+        filters,
+        sessions,
+        np.ascontiguousarray(
+            observations.r_au.to_numpy(zero_copy_only=False), dtype=np.float64
+        ),
+        np.ascontiguousarray(
+            observations.delta_au.to_numpy(zero_copy_only=False), dtype=np.float64
+        ),
+        np.ascontiguousarray(
+            observations.phase_angle_deg.to_numpy(zero_copy_only=False),
+            dtype=np.float64,
+        ),
+    )
+
+
+def _estimate_rotation_period_native(
+    observations: RotationPeriodObservations,
+    *,
+    search_fidelity: str,
+    fourier_orders: tuple[int, ...] | None,
+    clip_sigma: float,
+    min_rotations_in_span: float,
+    max_frequency_cycles_per_day: float,
+    frequency_grid_scale: float,
+    max_search_period_hours: float | None,
+    early_exit_on_insufficient: bool,
+    session_mode: str,
+    auto_session_min_observations_per_group: int,
+    auto_session_bic_improvement: float,
+    claim_doubled_fold: bool,
+    apparition_gap_days: float | None = None,
+    object_ids: list[str | None] | None = None,
+) -> RotationPeriodResult | GroupedRotationPeriodResults:
+    """One-crossing Python veneer over the Rust rotation-period pipeline."""
+    from adam_core import _rust_native as _rn
+
+    native_inputs = _rotation_period_native_inputs(observations)
+    solver_inputs = (
+        search_fidelity,
+        None if fourier_orders is None else list(fourier_orders),
+        float(clip_sigma),
+        float(min_rotations_in_span),
+        float(max_frequency_cycles_per_day),
+        float(frequency_grid_scale),
+        max_search_period_hours,
+        bool(early_exit_on_insufficient),
+        session_mode,
+        int(auto_session_min_observations_per_group),
+        float(auto_session_bic_improvement),
+        bool(claim_doubled_fold),
+    )
+    if object_ids is not None:
+        native_rows = _rn.rotation_period_estimate_grouped(
+            *native_inputs, object_ids, *solver_inputs
+        )
+        object_id_out: list[str] = []
+        result_out: list[RotationPeriodResult] = []
+        for object_id, row in native_rows:
+            object_id_out.append(str(object_id))
+            result_out.append(_rotation_period_result_from_native(row))
+        results = (
+            RotationPeriodResult.empty()
+            if not result_out
+            else qv.concatenate(result_out)
+        )
+        return GroupedRotationPeriodResults.from_kwargs(
+            object_id=object_id_out,
+            result=results,
+        )
+    if apparition_gap_days is None:
+        native = _rn.rotation_period_estimate(*native_inputs, *solver_inputs)
+    else:
+        native = _rn.rotation_period_estimate_best_apparition(
+            *native_inputs, float(apparition_gap_days), *solver_inputs
+        )
+    return _rotation_period_result_from_native(native)
 
 
 def _merge_intervals(intervals: list[tuple[int, int]]) -> list[tuple[int, int]]:
@@ -737,6 +884,55 @@ def _max_cluster_period_deviation(
     )
 
 
+def _frequency_consensus_order(
+    order_frequencies: list[tuple[int, float]],
+    statistical_order: int,
+    tolerance: float,
+) -> tuple[int | None, bool | None]:
+    finite = sorted(
+        (
+            (int(order), float(frequency))
+            for order, frequency in order_frequencies
+            if np.isfinite(frequency) and frequency > 0.0
+        ),
+        key=lambda item: item[1],
+    )
+    if len(finite) < 4:
+        return None, None
+
+    groups: list[list[tuple[int, float]]] = [[finite[0]]]
+    for item in finite[1:]:
+        if item[1] - groups[-1][-1][1] <= tolerance:
+            groups[-1].append(item)
+        else:
+            groups.append([item])
+    groups.sort(key=lambda group: (-len(group), group[0][1]))
+    consensus = groups[0]
+    if len(consensus) < 3 or len(consensus) * 2 <= len(order_frequencies):
+        return None, False
+    if any(order == statistical_order for order, _ in consensus):
+        return None, True
+
+    selected_frequency = next(
+        (
+            frequency
+            for order, frequency in order_frequencies
+            if order == statistical_order
+        ),
+        None,
+    )
+    if selected_frequency is None:
+        return None, False
+    consensus_frequency = float(np.mean([frequency for _, frequency in consensus]))
+    separation = abs(float(selected_frequency) - consensus_frequency)
+    nearest_daily_alias = round(separation)
+    if nearest_daily_alias not in {1, 2}:
+        return None, False
+    if abs(separation - nearest_daily_alias) > tolerance:
+        return None, False
+    return max(order for order, _ in consensus), True
+
+
 def _derive_fourier_solution(
     *,
     t_rel: npt.NDArray[np.float64],
@@ -777,7 +973,21 @@ def _derive_fourier_solution(
     if not candidate_fits:
         raise ValueError("no valid rotation-period fit could be found")
 
-    chosen_order_fit = _select_order(candidate_fits, profile.order_selection_confidence)
+    statistical_order_fit = _select_order(
+        candidate_fits, profile.order_selection_confidence
+    )
+    order_frequencies = [
+        (order, 1.0 / _fit_with_period(fit).period_days)
+        for order, fit in candidate_fits.items()
+    ]
+    # Treat optima within four shared search-grid bins as one physical frequency.
+    consensus_tolerance = 4.0 * float(abs(frequencies[1] - frequencies[0]))
+    consensus_order, order_consensus_supported = _frequency_consensus_order(
+        order_frequencies,
+        statistical_order_fit.fourier_order,
+        consensus_tolerance,
+    )
+    chosen_order_fit = candidate_fits.get(consensus_order, statistical_order_fit)
     sigma_curve, fits = _evaluate_full_order_curve(
         t_rel=t_rel,
         y=y,
@@ -888,6 +1098,8 @@ def _derive_fourier_solution(
         used_session_offsets=bool(used_session_offsets),
         fit_summary=best_fit,
         sigma_curve=sigma_curve,
+        order_consensus_corrected=consensus_order is not None,
+        order_consensus_supported=order_consensus_supported,
     )
 
 
@@ -1201,6 +1413,9 @@ def _primary_from_method(
     )
 
 
+_PRIMARY_FROM_METHOD_CANONICAL = _primary_from_method
+
+
 def _pre_solve_insufficiency(
     *,
     n_obs: int,
@@ -1466,16 +1681,15 @@ def estimate_rotation_period(
 
     Notes
     -----
-    The confidence verdict is **measured, not guaranteed.** The solver is designed to
-    downgrade harmonic and sampling aliases to ``period_family`` instead of asserting a
-    confident ``single_period``, but this is calibrated behaviour with a known, nonzero
-    residual false-confidence risk: a ``single_period`` result can occasionally be a
-    harmonic or sampling alias of the true period. Measured strict ``single_period``
-    precision on the LCDB/DAMIT standard-candle set is ~0.88, and one tracked case
-    (1627 Ivar, a ~5/3 diurnal-sampling alias) is still reported confidently at the
-    wrong period. When a period that is wrong by an integer factor would be costly,
-    cross-check a ``single_period`` result against ``alternate_period_days`` and
-    ``reliability_code`` rather than treating the verdict as infallible.
+    The confidence verdict is **measured, not guaranteed.** The solver downgrades
+    unresolved harmonic and sampling aliases to ``period_family``. Order selection
+    also compares the physical frequencies preferred independently by each Fourier
+    order: when a majority agree and the F-test-selected high order lands on a one- or
+    two-cycle/day cadence alias, the highest order in the consensus family is used and
+    ``diurnal_order_consensus`` is reported. If four or more orders are evaluated but
+    no majority physical-frequency family exists, confidence is capped at
+    ``period_family`` with ``fourier_order_disagreement``. Callers should still inspect
+    ``alternate_period_days`` and ``reliability_code`` for high-consequence uses.
     """
     if clip_sigma <= 0.0:
         raise ValueError("clip_sigma must be positive")
@@ -1497,6 +1711,22 @@ def estimate_rotation_period(
         raise ValueError("exact_evaluation_backend must be one of {'numpy', 'jax'}")
     resolved_fidelity = _resolve_search_fidelity(search_fidelity)
     resolved_profile = _resolve_profile(profile)
+    if _primary_from_method is _PRIMARY_FROM_METHOD_CANONICAL:
+        return _estimate_rotation_period_native(  # type: ignore[return-value]
+            observations,
+            search_fidelity=resolved_fidelity,
+            fourier_orders=fourier_orders,
+            clip_sigma=clip_sigma,
+            min_rotations_in_span=min_rotations_in_span,
+            max_frequency_cycles_per_day=max_frequency_cycles_per_day,
+            frequency_grid_scale=frequency_grid_scale,
+            max_search_period_hours=max_search_period_hours,
+            early_exit_on_insufficient=early_exit_on_insufficient,
+            session_mode=session_mode,
+            auto_session_min_observations_per_group=auto_session_min_observations_per_group,
+            auto_session_bic_improvement=auto_session_bic_improvement,
+            claim_doubled_fold=claim_doubled_fold,
+        )
 
     (
         time,
@@ -1642,6 +1872,16 @@ def estimate_rotation_period(
         primary.is_valid = True
         primary.is_reliable = False
 
+    if (
+        primary.period_verdict == _VERDICT_SINGLE
+        and fourier_solution.order_consensus_supported is False
+    ):
+        primary.period_verdict = _VERDICT_FAMILY
+        primary.reliability_code = _RELIABILITY_BY_VERDICT[_VERDICT_FAMILY]
+        primary.insufficiency_reasons.append("fourier_order_disagreement")
+        primary.is_valid = True
+        primary.is_reliable = False
+
     # Sub-harmonic confidence guardrail.  When the span is short enough that the
     # recovered period sits at the long-period edge of the search grid -- fewer
     # than ~4 rotations spanned, so HALF the recovered frequency falls below the
@@ -1689,6 +1929,8 @@ def estimate_rotation_period(
     # the hard cap, so callers can see the recovered period/uncertainty came from a
     # coarsened or heuristically-searched grid rather than the requested resolution.
     diagnostic_flags: list[str] = []
+    if fourier_solution.order_consensus_corrected:
+        diagnostic_flags.append("diurnal_order_consensus")
     if resolved_fidelity == "validated_staged" and int(frequencies.size) > 2048:
         diagnostic_flags.append("staged_search_used")
     if _grid_was_capped(
@@ -1710,3 +1952,169 @@ def estimate_rotation_period(
         used_session_offsets=used_session_offsets,
         extra_flags=diagnostic_flags,
     )
+
+
+_ESTIMATE_ROTATION_PERIOD_CANONICAL = estimate_rotation_period
+
+
+def _native_options_from_kwargs(
+    observations: RotationPeriodObservations | None,
+    search_kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    """Bind the public solver signature once for fused wrapper entrypoints."""
+    from inspect import signature
+
+    bound = signature(_ESTIMATE_ROTATION_PERIOD_CANONICAL).bind(
+        observations, **search_kwargs
+    )
+    bound.apply_defaults()
+    options = bound.arguments
+    _resolve_profile(str(options["profile"]))
+    backend = str(options["exact_evaluation_backend"])
+    if backend not in {"numpy", "jax"}:
+        raise ValueError("exact_evaluation_backend must be one of {'numpy', 'jax'}")
+    return options
+
+
+def _solver_inputs_from_options(options: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        _resolve_search_fidelity(options["search_fidelity"]),
+        (
+            None
+            if options["fourier_orders"] is None
+            else list(options["fourier_orders"])
+        ),
+        float(options["clip_sigma"]),
+        float(options["min_rotations_in_span"]),
+        float(options["max_frequency_cycles_per_day"]),
+        float(options["frequency_grid_scale"]),
+        options["max_search_period_hours"],
+        bool(options["early_exit_on_insufficient"]),
+        str(options["session_mode"]),
+        int(options["auto_session_min_observations_per_group"]),
+        float(options["auto_session_bic_improvement"]),
+        bool(options["claim_doubled_fold"]),
+    )
+
+
+def _estimate_rotation_period_from_detection_inputs_native(
+    native_inputs: tuple[Any, ...],
+    object_ids: list[str | None] | None,
+    **search_kwargs: Any,
+) -> RotationPeriodResult | GroupedRotationPeriodResults:
+    from adam_core import _rust_native as _rn
+
+    options = _native_options_from_kwargs(None, search_kwargs)
+    native = _rn.rotation_period_estimate_from_detections(
+        *native_inputs,
+        object_ids,
+        *_solver_inputs_from_options(options),
+    )
+    if object_ids is None:
+        assert isinstance(native, dict)
+        return _rotation_period_result_from_native(native)
+    object_id_out: list[str] = []
+    result_out: list[RotationPeriodResult] = []
+    for object_id, row in native:
+        object_id_out.append(str(object_id))
+        result_out.append(_rotation_period_result_from_native(row))
+    results = (
+        RotationPeriodResult.empty() if not result_out else qv.concatenate(result_out)
+    )
+    return GroupedRotationPeriodResults.from_kwargs(
+        object_id=object_id_out,
+        result=results,
+    )
+
+
+def _estimate_rotation_period_grouped_native(
+    observations: RotationPeriodObservations,
+    object_ids: list[str | None],
+    **search_kwargs: Any,
+) -> GroupedRotationPeriodResults:
+    options = _native_options_from_kwargs(observations, search_kwargs)
+    grouped = _estimate_rotation_period_native(
+        observations,
+        search_fidelity=_resolve_search_fidelity(options["search_fidelity"]),
+        fourier_orders=options["fourier_orders"],
+        clip_sigma=float(options["clip_sigma"]),
+        min_rotations_in_span=float(options["min_rotations_in_span"]),
+        max_frequency_cycles_per_day=float(options["max_frequency_cycles_per_day"]),
+        frequency_grid_scale=float(options["frequency_grid_scale"]),
+        max_search_period_hours=options["max_search_period_hours"],
+        early_exit_on_insufficient=bool(options["early_exit_on_insufficient"]),
+        session_mode=str(options["session_mode"]),
+        auto_session_min_observations_per_group=int(
+            options["auto_session_min_observations_per_group"]
+        ),
+        auto_session_bic_improvement=float(options["auto_session_bic_improvement"]),
+        claim_doubled_fold=bool(options["claim_doubled_fold"]),
+        object_ids=object_ids,
+    )
+    assert isinstance(grouped, GroupedRotationPeriodResults)
+    return grouped
+
+
+def _estimate_rotation_period_best_apparition_native(
+    observations: RotationPeriodObservations,
+    apparition_gap_days: float,
+    **search_kwargs: Any,
+) -> RotationPeriodResult:
+    options = _native_options_from_kwargs(observations, search_kwargs)
+    result = _estimate_rotation_period_native(
+        observations,
+        search_fidelity=_resolve_search_fidelity(options["search_fidelity"]),
+        fourier_orders=options["fourier_orders"],
+        clip_sigma=float(options["clip_sigma"]),
+        min_rotations_in_span=float(options["min_rotations_in_span"]),
+        max_frequency_cycles_per_day=float(options["max_frequency_cycles_per_day"]),
+        frequency_grid_scale=float(options["frequency_grid_scale"]),
+        max_search_period_hours=options["max_search_period_hours"],
+        early_exit_on_insufficient=bool(options["early_exit_on_insufficient"]),
+        session_mode=str(options["session_mode"]),
+        auto_session_min_observations_per_group=int(
+            options["auto_session_min_observations_per_group"]
+        ),
+        auto_session_bic_improvement=float(options["auto_session_bic_improvement"]),
+        claim_doubled_fold=bool(options["claim_doubled_fold"]),
+        apparition_gap_days=apparition_gap_days,
+    )
+    assert isinstance(result, RotationPeriodResult)
+    return result
+
+
+def _benchmark_rotation_period_native(
+    observations: RotationPeriodObservations,
+    *,
+    reps: int,
+    trials: int,
+    warmup_reps: int = 1,
+    **search_kwargs: Any,
+) -> list[list[float]]:
+    """Return Rust ``Instant`` samples; Python/NumPy conversion is outside timing."""
+    from adam_core import _rust_native as _rn
+
+    options = _native_options_from_kwargs(observations, search_kwargs)
+    samples = _rn.benchmark_rotation_period_native(
+        *_rotation_period_native_inputs(observations),
+        int(reps),
+        int(trials),
+        int(warmup_reps),
+        _resolve_search_fidelity(options["search_fidelity"]),
+        (
+            None
+            if options["fourier_orders"] is None
+            else list(options["fourier_orders"])
+        ),
+        float(options["clip_sigma"]),
+        float(options["min_rotations_in_span"]),
+        float(options["max_frequency_cycles_per_day"]),
+        float(options["frequency_grid_scale"]),
+        options["max_search_period_hours"],
+        bool(options["early_exit_on_insufficient"]),
+        str(options["session_mode"]),
+        int(options["auto_session_min_observations_per_group"]),
+        float(options["auto_session_bic_improvement"]),
+        bool(options["claim_doubled_fold"]),
+    )
+    return [[float(sample) for sample in trial] for trial in samples]

@@ -1,0 +1,1718 @@
+# Rust Migration Review Task Backlog
+
+Created: 2026-04-28
+
+Purpose: handoff task list for the adam-core Rust migration after reviewing:
+
+- `adam_core_rust_migration_review_handoff_2026-04-27.md`
+- `/Users/aleck/Code/adam-core/rust-migration-from-claude.txt`
+- `decisions.md`
+- `journal.md`
+- `migration/TODO.md`
+- `migration/parity/README.md`
+- `migration/artifacts/history/README.md`
+
+Do not treat this as a wishlist. These are the concrete open tasks that must be either completed, explicitly waived, or intentionally deferred with owner/rationale before the migration branch is merge-ready.
+
+## Current Operating Rule
+
+Do not start more Rust kernel work before the integration hardening tasks unless the user explicitly reprioritizes. The numerical Rust work is strong enough to continue, but the branch is not merge-safe until packaging, CI, public compatibility, runtime contract, baseline integration, and governance are repaired.
+
+## Baseline And Verification Discipline
+
+Every functional or performance-significant change must be verified against the baseline main implementation as it existed before the Rust migration behavior changed.
+
+Baseline setup:
+
+- Baseline checkout: `/Users/aleck/Code/adam-core`
+- Migration checkout: `/Users/aleck/Code/adam-core-rust-migration`
+- Legacy oracle venv: `.legacy-venv` inside the migration checkout
+- The parity harness assumes baseline `adam_core` is installed in `.legacy-venv` from `/Users/aleck/Code/adam-core`.
+
+For every new Rust-default API or public dispatch change:
+
+1. Add or update `src/adam_core/_rust/status.py`.
+2. Add or update `migration/parity/tolerances.py`.
+3. Add or update `migration/parity/_inputs.py`.
+4. Add or update `migration/parity/_rust_runner.py`.
+5. Add or update `migration/parity/_legacy_runner.py`.
+6. Run the single-API parity and speed gate before deleting or contaminating the legacy reference path.
+7. Preserve fair historical speed data if the legacy path is about to be removed.
+8. If live legacy measurement is already contaminated, cite the frozen historical snapshot or mark the surface un-comparable; do not invent a live Rust-vs-legacy number.
+
+Current commands:
+
+```bash
+.venv/bin/python -m migration.parity.parity_main --apis <api_id> --speed-n 2000
+.venv/bin/python -m migration.parity.parity_fuzz --seeds 8 --n 128 --output migration/artifacts/parity_fuzz.json
+.venv/bin/python -m migration.parity.parity_speed --n 2000 --reps 7 --output migration/artifacts/parity_speed.json
+.venv/bin/python -m migration.parity.parity_speed --n 2000 --reps 21 --warmup 3 --cold --output migration/artifacts/parity_speed_cold_warm.json
+```
+
+Current quality gate commands:
+
+```bash
+cargo fmt --all --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+ADAM_CORE_REQUIRE_RUST_BACKEND=1 pdm run pytest --benchmark-skip -m 'not profile'
+```
+
+Rules:
+
+- The default promotion gate remains at least 1.2x speedup at p50 and p95 unless the user approves a specific waiver.
+- Cold-start wins may justify a waiver, but the waiver must be explicit and tied to workload reality.
+- `migration/scripts/rust_backend_benchmark_gate.py` must not be used as a live Rust-vs-legacy gate unless it is proven to avoid Rust-backed fallthrough contamination. In the post-legacy world it is only acceptable as Rust-only latency regression tracking against `migration/artifacts/rust_latency_baseline.json`.
+- Raw Rust kernel parity does not prove public API parity unless the public dispatcher actually calls that raw kernel for the tested shape.
+- If a legacy oracle is removed, fixed trusted vectors or frozen historical artifacts must be created first.
+
+## P0 Merge Blockers
+
+### RM-P0-001: Direct Rust `spicekit` Integration For Standalone `adam-core-rs`
+
+Status: complete; direct Rust-to-Rust `spicekit` integration validated (2026-04-28)
+
+Reason: the current SPICE path is Python adam-core -> Python `RustBackend` -> Python package `spicekit` -> PyO3 -> Rust `spicekit`. That is Rust-backed for heavy work, but it is not direct Rust-to-Rust and is not suitable as the final architecture for a separately shipped `adam-core-rs`.
+
+Scope:
+
+- Add a direct Cargo dependency on public `spicekit = "0.1"` in the Rust crate that owns adam-core SPICE behavior.
+- Introduce a Rust-side adam-core SPICE backend module or crate that owns kernel registration, SPK/PCK readers, text-kernel body bindings, last-loaded-wins semantics, `NotCovered` behavior, and batched `spkez`, `pxform`, `sxform`, and `bodn2c` access.
+- Expose a Rust public API usable by standalone Rust consumers without Python.
+- Expose thin PyO3 wrappers from `adam_core_py` over the adam-core Rust backend.
+- Rewire Python `utils/spice_backend.py` so adam-core calls its own native extension for SPICE instead of importing Python `spicekit` objects.
+- Decide whether the Python `spicekit>=0.1.0` dependency remains needed for any adam-core Python runtime behavior after this refactor. If it is no longer needed, remove it from runtime dependencies and validate clean install.
+
+Acceptance:
+
+- A Rust consumer can call adam-core SPICE functions through Rust APIs with no Python interpreter.
+- adam-core Python SPICE operations work without importing the Python `spicekit` package unless an explicit retained dependency decision says otherwise.
+- Existing `src/adam_core/utils/tests/test_spice_backend.py` coverage passes.
+- CSpice parity remains owned by the `spicekit` repo's `spicekit-bench`; adam-core tests validate adam-core wiring and semantics.
+- Clean wheel install exercises SPICE backend operations from adam-core without relying on editable sibling checkouts.
+
+Verification:
+
+```bash
+cargo check --workspace
+cargo test --workspace
+ADAM_CORE_REQUIRE_RUST_BACKEND=1 pdm run pytest --benchmark-skip src/adam_core/utils/tests/test_spice_backend.py src/adam_core/utils/tests/test_spice.py src/adam_core/orbits/tests/test_spice_kernel.py
+```
+
+2026-04-28 implementation notes:
+
+- Added `rust/adam_core_rs_spice`, an adam-core Rust crate that depends
+  directly on public crates.io `spicekit = "0.1"`.
+- Moved adam-core's SPICE backend state into Rust:
+  `AdamCoreSpiceBackend` owns kernel registration, DAF idword dispatch,
+  SPK/PCK reader lists, text-kernel body bindings, last-loaded-wins name
+  resolution, and batched `spkez`, `pxform`, `sxform`, and `bodn2c`.
+- Exposed the backend plus compatibility `NaifSpk`, `NaifPck`,
+  `NaifSpkWriter`, and `naif_*` wrappers through `adam_core_py`.
+- Rewrote `src/adam_core/utils/spice_backend.py` so Python owns only a
+  process-local native backend object, a lock, and `NotCovered`
+  exception mapping. It no longer imports Python `spicekit` objects.
+- Removed Python runtime dependency `spicekit>=0.1.0` from
+  `pyproject.toml` and `uv.lock`; adam-core runtime SPICE now reaches
+  spicekit through Cargo, not through the Python package boundary.
+- Direct smoke verification loaded DE440, resolved `EARTH`, executed
+  `spkez_batch`, and confirmed Python `spicekit` was not imported.
+- Targeted SPICE validation passed after rebuilding the extension:
+  `19 passed` across `test_spice_backend.py`, `test_spice.py`, and
+  `test_spice_kernel.py`.
+- Full validation passed after rebuilding the editable extension:
+  `cargo check --workspace`, `cargo fmt --all --check`,
+  `cargo clippy --workspace --all-targets -- -D warnings`,
+  `cargo test --workspace`, Python ruff/black/py_compile checks on the
+  touched Python files, and `pdm run test-rust-full`
+  (`708 passed, 144 skipped, 2 deselected`).
+- Baseline-main parity/performance validation passed against the
+  `.legacy-venv` oracle installed from `/Users/aleck/Code/adam-core`:
+  `migration.parity.parity_main --speed-n 2000` wrote
+  `migration/artifacts/parity_gate.json` with all 22 wired APIs passing
+  fuzz parity and warm speed passing after applying only the known
+  temporary photometry warm-performance waiver.
+- Full cold/warm performance artifact regenerated with
+  `migration.parity.parity_speed --n 2000 --reps 7 --cold`; final
+  `migration/artifacts/parity_speed_cold_warm.json` has
+  `all_passed=true`, no unwaived failed speed rows, and the four expected
+  photometry waiver rows. Canonical review tables were regenerated in
+  `migration/artifacts/parity_report.md` and
+  `migration/artifacts/parity_table_rca.json`.
+- One cold/warm timing run observed a transient scheduler outlier on
+  `orbit_determination.calcGauss` (`2.29x` p50 but `0.36x` p95 due a
+  single ~20 ms Rust sample). An isolated 21-rep calcGauss run was stable
+  at `2.42x` p50 / `2.40x` p95, and the repeated full cold/warm artifact
+  passed at `2.36x` p50 / `2.40x` p95 / `28.60x` cold.
+
+### RM-P0-002: Verify Authoritative Branch, Remotes, And Baseline Main
+
+Status: complete; parity/performance gate green with temporary photometry warm-performance waiver (2026-04-28)
+
+Reason: the transcript records a push to GitHub, but local migration checkout origin was observed pointing at the sibling `/Users/aleck/Code/adam-core` at review time. Baseline main integration is also stale around baseline commit `22a1efa3` or newer.
+
+Scope:
+
+- Verify remotes and branch tracking in both checkouts.
+- Decide the authoritative branch: migration checkout branch, baseline checkout branch, or GitHub `rust-migration-waves-d-e`.
+- Rebase or merge current baseline main into the migration branch.
+- Record the exact baseline commit used by the parity oracle after updating.
+
+Acceptance:
+
+- `git remote -v`, `git branch -vv`, and `git status` are unambiguous in both checkouts.
+- Migration branch contains current baseline docs, CI, metadata, and source changes unless explicitly waived.
+- The parity harness points at the intended baseline checkout and commit.
+
+2026-04-28 execution notes:
+
+- Baseline checkout `/Users/aleck/Code/adam-core` was verified on `main` at `22a1efa3979cad5651e3f0765b2536983be6ab99`.
+- Migration checkout `/Users/aleck/Code/adam-core-rust-migration` was verified on `rust-migration-waves-d-e`.
+- Merged `origin/main` into the migration branch as commit `795dda758d495342e343ea828dc47924029361b8`.
+- Resolved baseline docs/RTD conflicts by keeping the new generated `docs/source/reference/` tree and moving `rust_backend_contracts` under `docs/source/reference/index.rst`.
+- Preserved Rust migration ignores and, at that point, the public
+  `spicekit>=0.1.0` Python dependency introduced during the packaging
+  carve-out. RM-P0-001 later removed that Python runtime dependency in
+  favor of the direct Cargo `spicekit` dependency in `adam_core_rs_spice`.
+- Validation repaired unrelated/pre-existing quality issues exposed by the required gate: Rust files needed `cargo fmt`, several Wave E2 Rust files failed `clippy -D warnings`, and the inherited Python 3.13 fixture test collection path imported `mpcq` despite the dependency being marker-gated to `<3.13`.
+- Green checks after repairs: `pdm run rust-quality`; `pdm run test-rust-full` with `ADAM_CORE_REQUIRE_RUST_BACKEND=1` (`708 passed, 144 skipped, 2 deselected`).
+- Parity fuzz gate passed for all 22 wired APIs.
+- Required performance gate was red because warm photometry timings missed the 1.2x p50/p95 policy threshold. This is the known unresolved photometry warm-policy issue, not a baseline merge parity failure. The user approved a temporary waiver on 2026-04-28; enforcement is tracked as `waiver-20260428-photometry-warm-performance-temporary`. Artifacts: `migration/artifacts/parity_gate.json` and `migration/artifacts/parity_speed_cold_warm.json`.
+- After waiver enforcement was wired into `migration.parity.parity_speed`, `migration.parity.parity_main` exits successfully with all 22 APIs passing parity and any remaining photometry warm misses marked as waived while preserving `raw_passed=false` in the JSON artifact.
+
+### RM-P0-003: Repair Stale PDM Scripts And CI Workflow References
+
+Status: complete; stale PDM/CI references repaired and validated (2026-04-28)
+
+Reason: `pyproject.toml` and `.github/workflows/pip-build-lint-test-coverage.yml` still reference missing or stale Rust migration scripts/tests.
+
+Known stale or suspect targets:
+
+- `src/adam_core/tests/test_rust_orbit_determination.py`
+- `src/adam_core/tests/test_rust_parity_randomized.py`
+- `src/adam_core/dynamics/tests/test_kepler.py`
+- `migration/scripts/rust_orbit_determination_benchmark.py`
+- `migration/scripts/rust_backend_benchmark_gate.py` when invoked with old live-legacy flags
+- `migration/artifacts/rust_benchmark_gate.json`
+
+Scope:
+
+- Replace stale PDM script targets with current `migration/parity/parity_main.py`, `migration/parity/parity_speed.py`, and current smoke tests.
+- Update workflow steps and uploaded artifact names/paths.
+- Add a small preflight that fails if a PDM script references a missing file.
+
+Acceptance:
+
+- Every PDM script referenced by CI exists and runs from a clean checkout.
+- CI uses the current parity/speed/Rust-latency governance path, not deleted randomized test files or deleted OD benchmark scripts.
+- `pdm run dev-loop` no longer calls missing paths.
+
+2026-04-28 execution notes:
+
+- Added `migration/scripts/check_pdm_ci_scripts.py` and PDM script
+  `script-preflight`. The preflight parses `[tool.pdm.scripts]`, checks
+  GitHub workflow `pdm run ...` references against defined PDM scripts,
+  rejects known stale deleted-test/deleted-script/old-live-legacy-gate
+  strings, and checks referenced repo paths exist while ignoring known
+  output directories.
+- Replaced stale `rust-smoke` targets with existing current smoke tests:
+  `test_rust_backends.py`, SPICE backend/API/kernel tests,
+  `test_rust_covariance_autodiff.py`, and OD `test_iod.py`, with
+  `ADAM_CORE_REQUIRE_RUST_BACKEND=1`.
+- Replaced deleted `rust-parity-randomized` and `rust-od-benchmark`
+  script usage with current parity scripts:
+  `rust-parity-fuzz`, `rust-parity-main`, `rust-parity-speed`, and
+  `rust-parity-speed-cold`.
+- Repointed `rust-perf-gate` to the current Rust-only latency regression
+  gate via `rust-latency-gate`; removed old `--max-rust-over-legacy`
+  usage and the obsolete `migration/artifacts/rust_benchmark_gate.json`
+  artifact path from CI.
+- Updated `.github/workflows/pip-build-lint-test-coverage.yml` to run
+  `pdm run script-preflight`, stop calling deleted randomized parity
+  scripts, run `pdm run rust-latency-gate`, and upload
+  `migration/artifacts/rust_latency_current.json` as
+  `rust-latency-current`.
+- Validation passed: `pdm run script-preflight`; ruff/black/py_compile
+  on the preflight script; `pdm run rust-smoke` (`72 passed`);
+  `pdm run rust-latency-gate`; compatibility alias
+  `pdm run rust-perf-gate`; `pdm run rust-quality`;
+  `pdm run test-rust-full` (`708 passed, 144 skipped, 2 deselected`);
+  baseline-main
+  `pdm run rust-parity-main`; cold/warm
+  `pdm run rust-parity-speed-cold`; regenerated canonical
+  `migration/artifacts/parity_report.md` and
+  `migration/artifacts/parity_table_rca.json`; `git diff --check`.
+
+### RM-P0-004: Clarify Packaging, Clean Install, And Wheel/Publish Path
+
+Status: completed 2026-04-28
+
+Reason: the branch uses maturin, Rust is mandatory, and the publish workflow must build the correct native-extension wheel. RM-P0-001 removed the Python `spicekit` runtime dependency from adam-core by routing adam-core's SPICE backend through native Rust-to-Rust `spicekit`, so this task focuses on the adam-core wheel itself.
+
+Scope:
+
+- Define one authoritative wheel build path for adam-core.
+- Align `pdm build`, `maturin build`, `rust-build`, and `.github/workflows/publish.yml`.
+- Validate that built wheels contain and import `adam_core._rust_native`.
+- Validate clean install in a fresh environment with no editable sibling packages.
+- Reconcile `uv.lock`, PDM lock behavior, and the existing `adam-assist` self-dependency lock issue.
+
+Acceptance:
+
+- A fresh environment can install the built wheel and import `adam_core`.
+- `adam_core._rust_native` imports from the wheel.
+- A minimal SPICE backend operation works from the installed wheel.
+- Publish workflow uploads only artifacts known to contain the native extension.
+
+2026-04-28 execution notes:
+
+- Defined `pdm run wheel-build` as the authoritative wheel path:
+  generate `src/adam_core/_version.py` from
+  `rust/adam_core_py/Cargo.toml`, then run
+  `pdm build --no-sdist --dest dist`.
+- Added `migration/scripts/write_maturin_version.py` because maturin uses
+  the Cargo package version when `[project].version` is dynamic. Set the
+  PyO3 package version to `0.5.6`, matching the latest repo tag available
+  in this checkout.
+- Added `migration/scripts/check_wheel_artifacts.py` and
+  `pdm run wheel-inspect`. The check fails on non-wheel publish artifacts,
+  verifies the wheel name/version metadata, requires
+  `adam_core/_version.py`, requires runtime version to match wheel
+  metadata, and requires an `adam_core._rust_native` extension file.
+- Added explicit maturin wheel inclusion for `adam_core/_version.py`
+  because the generated file is gitignored and was otherwise missing from
+  the native wheel.
+- Rewired `rust-build` to call `wheel-build`; rewired publish, CI, and
+  public dependent-package smoke workflows to build `dist/*.whl`, inspect the wheel,
+  and upload/install only the inspected wheel artifact.
+- Repaired `rust-develop` by removing `maturin develop --uv` and ensuring
+  pip is available before `maturin develop`. In this local environment,
+  `maturin develop --uv` and direct `uv pip install` of the local wheel
+  selected or retained PyPI `adam_core 0.5.5`, which lacks
+  `_rust_native`. Standard pip install of the built wheel installed the
+  correct local native wheel.
+- Added a narrow uv override/source for `adam-core` so the lock can resolve
+  adam-assist against this workspace instead of the published adam-core
+  version range embedded in adam-assist metadata. This is not a full PDM to
+  uv migration; local uv remains unsafe as the authoritative install path
+  until its group-sync/local-wheel behavior is validated on the intended
+  current release.
+- Validation passed: `pdm run wheel-build`; `pdm run wheel-inspect`;
+  clean temporary `python3.13 -m venv` plus `python -m pip install
+  dist/adam_core-0.5.6-...whl`; import of installed
+  `adam_core._rust_native`; minimal native SPICE backend `furnsh` +
+  `spkez_batch`; verified Python `spicekit` was not imported during that
+  smoke; `pdm run script-preflight`; ruff/black/py_compile on packaging
+  scripts; TOML parsing for `pyproject.toml`, `uv.lock`, and
+  `rust/adam_core_py/Cargo.toml`; `uv lock --check`; `cargo check
+  --workspace`; `pdm run rust-build`; `pdm run rust-quality`;
+  `pdm run test-rust-full` (`708 passed, 144 skipped, 2 deselected`);
+  baseline-main `pdm run rust-parity-main`; cold/warm
+  `pdm run rust-parity-speed-cold`; regenerated
+  `migration/artifacts/parity_report.md` and
+  `migration/artifacts/parity_table_rca.json`; `git diff --check`.
+
+### RM-P0-004F: Packaging Follow-Up Cleanup
+
+Status: completed 2026-04-28
+
+Reason: RM-P0-004 review found three non-blocking but real handoff risks:
+version-source confusion, uv local-install ambiguity, and unexplained
+full-suite skip-count drift relative to earlier sessions.
+
+Scope:
+
+- Consolidate version-source documentation so future releases do not confuse
+  PDM SCM metadata with maturin's Cargo-driven wheel metadata.
+- Document the current uv posture: lock resolution is expected to pass, but
+  PDM plus standard pip remain the authoritative build/install path until uv
+  local-wheel behavior is validated on the intended current uv release.
+- Confirm `dev-loop` no longer references retired parity scripts.
+- Explain the current `708 passed, 144 skipped, 2 deselected` validation
+  shape so it is not mistaken for an RM-P0-004 coverage regression.
+
+Acceptance:
+
+- `pyproject.toml` has one declared wheel version source.
+- Release-tag/version mismatches fail loudly.
+- Packaging handoff notes state the supported build/install commands and uv
+  caveat.
+- `pdm run script-preflight` remains green.
+
+2026-04-28 execution notes:
+
+- Removed the unused `[tool.pdm.version] source = "scm"` block from
+  `pyproject.toml`. The native wheel version source is now explicitly
+  `rust/adam_core_py/Cargo.toml` `[package].version`, which is the value
+  maturin uses for wheel metadata.
+- Extended `migration/scripts/write_maturin_version.py` to validate exact
+  `vX.Y.Z` release tags against the Cargo package version before writing
+  `src/adam_core/_version.py`.
+- Added `migration/packaging.md` with the supported PDM/maturin wheel path,
+  version-source contract, uv caveat, and current skip-count interpretation.
+- Confirmed current `dev-loop` uses live scripts (`rust-parity-main`,
+  `rust-parity-speed-cold`, and `rust-latency-gate`) and
+  `pdm run script-preflight` catches missing `pdm run ...` references.
+- `pdm run test-rust-full -- -rs` confirmed the current skip shape:
+  139 benchmark skips from `--benchmark-skip`, two explicit Lambert skips,
+  and three optional PYOORB skips; the two deselections are profile-marked
+  tests excluded by `-m 'not profile'`.
+
+### RM-P0-005: Restore Public Python Module Compatibility Or Document Breaking Changes
+
+Status: completed 2026-04-28
+
+Reason: migration deleted importable modules that exist on baseline main, which violates the stable Python package surface decision unless explicitly approved as breaking changes.
+
+Baseline module paths needing compatibility review:
+
+- `adam_core.dynamics.aberrations`
+- `adam_core.dynamics.barker`
+- `adam_core.dynamics.chi`
+- `adam_core.dynamics.kepler`
+- `adam_core.dynamics.lagrange`
+- `adam_core.dynamics.stumpff`
+- `adam_core.coordinates.jacobian`
+
+Scope:
+
+- Restore deleted modules as compatibility shims where possible.
+- Re-export Rust-backed or replacement implementations from those module paths.
+- Add import-compatibility tests comparing baseline-known public module paths to migration module paths.
+- If removal is intentional, record an explicit breaking-change decision and release-note entry.
+
+Acceptance:
+
+- Importing baseline public module paths does not fail unless there is an explicit approved breaking-change record.
+- Compatibility tests are part of CI.
+
+2026-04-28 execution notes:
+
+- Restored importable baseline module paths in the migration checkout:
+  `adam_core.dynamics.aberrations`, `adam_core.dynamics.barker`,
+  `adam_core.dynamics.chi`, `adam_core.dynamics.kepler`,
+  `adam_core.dynamics.lagrange`, `adam_core.dynamics.stumpff`, and
+  `adam_core.coordinates.jacobian`.
+- `dynamics.aberrations` is a compatibility shim over the mandatory Rust
+  light-time kernel for `_add_light_time`, `_add_light_time_vmap`, and
+  `add_light_time`.
+- Restored scalar/universal-variable helper modules from baseline for public
+  import compatibility. These are not wired into the current production
+  propagation/ephemeris paths, which remain Rust-backed. RM-P0-005G later
+  converted the supported restored helper implementations themselves to thin
+  Rust-backed wrappers.
+- The focused calc-mean-motion benchmark now uses the separate baseline-main
+  oracle instead of importing an in-checkout JAX reference alias.
+- Restored `coordinates.jacobian.calc_jacobian` for compatibility and tests;
+  production covariance transforms still use the Rust forward-mode AD path.
+- Added `src/adam_core/tests/test_public_module_compatibility.py` to guard
+  the restored module imports and smoke-test representative helpers.
+- Validation passed: `pdm run pytest -q
+  src/adam_core/tests/test_public_module_compatibility.py` (`11 passed`);
+  targeted compatibility/nearby surface suite
+  (`test_public_module_compatibility.py`, coordinate Keplerian/Cometary
+  tests, dynamics propagation/ephemeris tests) passed (`91 passed`) when
+  run outside the sandbox because local Ray tests need macOS process-list
+  access; ruff/black/py_compile passed for the restored modules and test.
+- Full rust-required suite after the compatibility restoration and coordinate
+  kernel stabilization passed: `719 passed, 144 skipped, 2 deselected,
+  56 warnings`.
+- Baseline-main parity/performance cadence passed after this task:
+  `pdm run rust-parity-main` passed all 22 fuzzed APIs and warm speed with
+  only the known photometry waivers displayed; `pdm run
+  rust-parity-speed-cold` passed with `all_passed=true`; canonical parity
+  tables were regenerated in `migration/artifacts/parity_report.md` and
+  `migration/artifacts/parity_table_rca.json`.
+- Validation exposed a repeated `coordinates.cartesian_to_spherical` warm
+  p95 instability in the full cold/warm artifact. The Rust kernel was
+  stabilized by chunking Rayon work at row-block granularity instead of
+  dispatching one Rayon task per row for spherical conversions. The final
+  cold/warm artifact raw-passed the coordinate row (`1.67x` p50, `1.57x`
+  p95, `18.77x` cold), but a temporary waiver remains attached and
+  RM-P1-014A tracks the permanent policy decision.
+- Non-timing validation passed after the final artifacts: `pdm run
+  script-preflight`; `pdm run rust-quality`; `git diff --check`.
+
+### RM-P0-005F: Audit Retained Python Public Surfaces And Rust-Native Ownership
+
+Status: completed 2026-04-29
+
+Reason: RM-P0-005 restored baseline Python module paths to avoid an accidental
+breaking change, but restoring an import path is not the same as deciding it
+deserves indefinite Python-level API support. The long-term architecture is
+`adam-core-rs` calling Rust helpers directly; Rust code must not route back
+through Python compatibility shims for orbital math helpers.
+
+Initial callsite audit:
+
+- Clear current multi-caller library families: `add_light_time` and
+  `calc_mean_motion`. These already have Rust kernels used by production
+  library paths.
+- Internal restored-helper chains: `solve_barker`, `calc_chi`, and
+  `calc_stumpff` are used inside restored Kepler/Lagrange/chi helper modules
+  but are not broad production entrypoints.
+- Mostly downstream/public compatibility surfaces today:
+  `calc_period`, `calc_periapsis_distance`, `calc_apoapsis_distance`,
+  `calc_semi_major_axis`, `calc_semi_latus_rectum`, `calc_mean_anomaly`,
+  `solve_kepler`, `calc_lagrange_coefficients`,
+  `apply_lagrange_coefficients`, `add_stellar_aberration`, and
+  `calc_jacobian`.
+
+Scope:
+
+- Produce an explicit inventory for every restored symbol under
+  `adam_core.dynamics.{aberrations,barker,chi,kepler,lagrange,stumpff}` and
+  `adam_core.coordinates.jacobian`.
+- Classify each symbol as one of: keep as supported Python public API, deprecate
+  and remove in a planned breaking release, or retain only as a test/parity
+  reference.
+- For every retained Python public API, decide whether it should be a thin
+  Rust-backed wrapper, a documented pure-Python/NumPy compatibility helper, or
+  a JAX-only reference excluded from production use.
+- Add Rust-native equivalents or expose existing Rust helpers for retained
+  orbital math surfaces where Rust callers would otherwise need to re-enter
+  Python.
+- Verify that `adam-core-rs` and Rust kernels call Rust functions directly for
+  Kepler/Stumpff/chi/lagrange/light-time math and never depend on Python module
+  compatibility shims.
+- Update docs/release notes with the support/deprecation decision for each
+  restored surface.
+
+Acceptance:
+
+- A maintained/deprecated/reference-only decision is recorded for every restored
+  symbol.
+- Rust-to-Rust call paths exist for any retained helper needed by Rust
+  algorithms.
+- No Rust implementation depends on Python compatibility modules for orbital
+  helper math.
+- Public import compatibility tests remain green for supported/deprecated
+  surfaces, and any planned removals have explicit release-note coverage.
+
+2026-04-29 execution notes:
+
+- Added `docs/source/reference/rust_public_compatibility.rst` and linked it
+  from the reference toctree. The page records every restored symbol, its
+  classification, its Python implementation posture, the Rust-native path
+  where one exists, and release-note language for the deprecated/private
+  light-time shims and reference-only `coordinates.jacobian.calc_jacobian`.
+- Classification outcome: `_add_light_time` and `_add_light_time_vmap` are
+  deprecated/private compatibility shims; `coordinates.jacobian.calc_jacobian`
+  is reference-only; all other restored helper symbols remain supported Python
+  APIs or supported diagnostics, with the caveat that production paths must use
+  Rust-native entrypoints directly.
+- Exposed Rust-to-Rust helper paths for retained orbital/helper surfaces:
+  `calc_period`, `calc_periapsis_distance`, `calc_apoapsis_distance`,
+  `calc_semi_major_axis`, `calc_semi_latus_rectum`, `calc_mean_motion`,
+  `calc_mean_anomaly`, `solve_barker`, `solve_kepler_true_anomaly`,
+  `apply_lagrange_coefficients`, and `apply_stellar_aberration_row`.
+  Existing public Rust paths already covered `calc_stumpff`, `calc_chi`,
+  `calc_chi_with_init`, `calc_lagrange_coefficients`, `add_light_time_row`,
+  and `add_light_time_batch_flat`.
+- Extended `test_public_module_compatibility.py` to assert that every restored
+  symbol is documented and to statically reject production imports of the
+  restored compatibility modules outside the modules themselves and tests. This
+  preserves import compatibility while preventing future Python production code
+  from re-routing Rust-owned orbital helper math through compatibility shims.
+- Validation passed: targeted compatibility test (`13 passed`);
+  ruff/black for the updated test; `cargo test -p adam_core_rs_coords`
+  (`57 passed`); `pdm run rust-develop`; `pdm run script-preflight`;
+  `pdm run rust-quality`; full rust-required pytest (`721 passed,
+  144 skipped, 2 deselected, 56 warnings`); baseline-main `pdm run
+  rust-parity-main` (22/22 fuzzed APIs and warm speed pass); cold/warm
+  `pdm run rust-parity-speed-cold` (`all_passed=true`); canonical parity
+  tables regenerated in `migration/artifacts/parity_report.md` and
+  `migration/artifacts/parity_table_rca.json`; `git diff --check`.
+
+### RM-P0-005G: Make Supported Python Compatibility Helpers Rust-Backed
+
+Status: complete (2026-04-29)
+
+Reason: RM-P0-005F exposed Rust-native helper functions for the retained
+orbital helper surfaces, but several supported Python wrappers still execute
+local JAX/NumPy compatibility implementations. If a symbol is a supported
+Python public API in this migration branch, it should be a thin wrapper over
+the Rust implementation unless there is an explicit composability reason to
+keep a separate Python/JAX implementation.
+
+Scope:
+
+- Add PyO3/native bindings and `adam_core._rust.api` wrappers for supported
+  helper surfaces that currently remain Python/JAX implementations:
+  `calc_stumpff`, `calc_chi`, `calc_lagrange_coefficients`,
+  `apply_lagrange_coefficients`, `solve_barker`, `solve_kepler`,
+  Kepler scalar helpers, and `add_stellar_aberration`.
+- Prefer batched/vectorized NumPy-boundary wrappers where callers may pass
+  arrays. Avoid replacing vectorized Python/JAX helpers with per-element
+  Python loops over scalar Rust calls.
+- Keep JAX compatibility only under a clearly private name if a current
+  migration script or test still needs in-checkout JAX composability. Otherwise
+  rely on the separate baseline-main checkout for legacy parity references.
+- Update `docs/source/reference/rust_public_compatibility.rst` so the Python
+  implementation column no longer claims these supported APIs are
+  JAX-compatible local implementations once they delegate to Rust.
+- Run the full baseline-main parity/performance cadence after changing wrappers.
+
+Acceptance:
+
+- Every supported restored Python API either delegates to Rust or has an
+  explicit documented exception.
+- No supported restored helper performs duplicate JAX/NumPy orbital math in
+  production package code without a concrete local reason.
+- Public compatibility tests still pass and cover representative scalar and
+  batched inputs where applicable.
+
+Completion notes:
+
+- Added PyO3 and `adam_core._rust.api` wrappers for Kepler scalar helpers,
+  `solve_barker`, `solve_kepler`, `calc_stumpff`, `calc_chi`,
+  `calc_lagrange_coefficients`, `apply_lagrange_coefficients`, and
+  `add_stellar_aberration`.
+- Rewrote the supported restored Python modules to delegate to Rust and fail
+  loudly if `_rust_native` is unavailable. The reference-only
+  `coordinates.jacobian.calc_jacobian` remains a separate RM-P0-005H concern.
+- Updated the focused `calc_mean_motion` benchmark script to use the
+  baseline-main oracle instead of importing an in-checkout JAX alias.
+- Added guardrails that reject JAX imports in supported restored helper
+  modules, while preserving the documented reference-only jacobian exception.
+- Validation: targeted public compatibility tests `15 passed`; `cargo check -p
+  adam_core_py`; `cargo test -p adam_core_rs_coords` `57 passed`;
+  `pdm run rust-quality`; full rust-required suite `723 passed / 144 skipped /
+  2 deselected / 56 warnings`; `pdm run rust-parity-main` passed 22/22 measured
+  APIs; `pdm run rust-parity-speed-cold` passed with the existing temporary
+  photometry waiver; parity report artifacts regenerated.
+
+2026-04-29 reviewer follow-up:
+
+- Aligned the supported `calc_chi` and `calc_lagrange_coefficients`
+  compatibility defaults to `tol=1e-15`, matching the production propagation
+  default and avoiding unnecessarily strict default iteration.
+- Removed stale JAX cache-clearing from the ephemeris profile test rather than
+  treating it as a local parity oracle.
+- Added smoke coverage for Kepler infinity contracts (`calc_period(a < 0)` and
+  `calc_apoapsis_distance(e >= 1)`).
+- Documented that the `calc_chi` compatibility wrapper is not the warm-started
+  single-orbit/many-dt hot path; callers should use the production propagation
+  path for that workload.
+- Clarified that broadcasted inputs are intentionally copied to contiguous
+  float64 arrays at the PyO3/FFI boundary.
+
+### RM-P0-005H: Remove Deprecated Private Shims And In-Repo Reference-Only JAX Helpers
+
+Status: complete (2026-04-29)
+
+Reason: The migration checkout now uses a separate baseline-main checkout and
+`.legacy-venv` for parity and benchmark references. Keeping duplicate
+reference-only JAX implementations inside the migrated package increases
+surface area and contradicts the mandatory-Rust direction unless there is a
+specific local diagnostic or downstream-compatibility need.
+
+Scope:
+
+- Audit `_add_light_time`, `_add_light_time_vmap`, and
+  `coordinates.jacobian.calc_jacobian` for in-repo usage and plausible
+  downstream utility.
+- Remove private/deprecated shims when they are not useful standalone utilities
+  and not required for known consumers. If removal is a breaking change for a
+  baseline-imported symbol, document it explicitly in release notes.
+- Remove or relocate any JAX-only reference helpers from package modules when
+  the baseline-main oracle already supplies the legacy implementation for
+  parity/benchmark comparisons.
+- Adjust public compatibility tests from "must import" to "documented removal"
+  for any symbol intentionally removed.
+
+Acceptance:
+
+- No in-package JAX reference implementation remains solely for parity with
+  baseline main.
+- Any removed private/reference-only symbol has explicit release-note coverage.
+- Existing production and parity/performance gates remain green.
+
+Completion notes:
+
+- Audited `_add_light_time`, `_add_light_time_vmap`, and
+  `coordinates.jacobian.calc_jacobian`. No production in-repo callers were
+  found. The only remaining `_add_light_time_vmap` reference is the legacy
+  parity runner importing from the separate baseline-main checkout, so it is not
+  a migration-package dependency.
+- Removed the private light-time shims from
+  `adam_core.dynamics.aberrations`; retained the supported Rust-backed
+  `add_light_time` and `add_stellar_aberration` APIs.
+- Deleted `src/adam_core/coordinates/jacobian.py`, removing the in-package JAX
+  reference-only jacfwd/vmap helper. Legacy JAX behavior remains available via
+  the baseline-main oracle checkout used by parity harnesses.
+- Updated `docs/source/reference/rust_public_compatibility.rst` release-note
+  coverage and inventory so removed private/reference-only symbols are
+  documented as absent with replacements/rationale.
+- Updated public compatibility tests to assert supported symbols remain
+  importable while removed private/reference-only symbols are documented and
+  absent.
+
+### RM-P0-006: Enforce One Runtime Contract For Rust Backend Availability
+
+Status: complete (2026-04-29)
+
+Reason: decisions say there is no rustless adam-core environment, but `_rust/api.py` still catches backend import exceptions, wrappers return `None`, and production code uses `assert out is not None`.
+
+Scope:
+
+- Choose and enforce one contract: Rust mandatory at import time, or optional backend with explicit exceptions. Current decisions prefer mandatory Rust.
+- Remove broad exception swallowing around `_rust_native` import unless it is test-only and explicit.
+- Replace production `assert out is not None` with explicit runtime errors or make wrappers raise directly.
+- Make backend availability checks CI-default, not only manually enabled through `ADAM_CORE_REQUIRE_RUST_BACKEND`.
+- Audit production asserts in coordinates, dynamics, photometry, OD, missions, propagator, variants, classification, MOID, Lambert, porkchop, and residuals.
+
+Acceptance:
+
+- `python -O` cannot change production behavior.
+- Missing or broken Rust extension fails loudly with a specific error.
+- No production path converts missing Rust into late `None` behavior.
+
+Completion notes:
+
+- `_rust/api.py` now imports `adam_core._rust_native` eagerly and raises a
+  specific `ImportError` if the native extension is missing.
+- `_rust/api.py` validates all required native symbols at import time and raises
+  a specific `ImportError` listing missing symbols if the installed extension is
+  stale or incomplete.
+- Native wrapper functions no longer return `None` for backend unavailability.
+  They return concrete native results or propagate native exceptions. The
+  remaining `None` returns in NAIF name helpers represent unresolved NAIF names,
+  not backend absence.
+- Removed production `assert rust_* is not None` checks that could disappear
+  under `python -O`; wrapper-level import/symbol validation now owns backend
+  availability.
+- Removed `ADAM_CORE_REQUIRE_RUST_BACKEND=1` from the default PDM Rust smoke and
+  full-suite scripts. The compiled extension is now required by import behavior
+  rather than an opt-in environment flag.
+- Updated `docs/source/reference/rust_backend_contracts.rst` and current
+  migration notes to document the mandatory Rust backend contract.
+
+### RM-P0-007: Retire Contaminated Live-Legacy Benchmark Governance From Active CI
+
+Status: complete (2026-04-29)
+
+Reason: the journal correctly records that some live legacy paths became contaminated by Rust-backed fallthroughs. Active script metadata still points at stale live-legacy concepts.
+
+Scope:
+
+- Decide the active performance gate: current parity speed harness against baseline subprocess for still-fair APIs, and Rust-only latency regression for post-legacy APIs.
+- Remove or rewrite old `--max-rust-over-legacy` uses.
+- Ensure uploaded CI artifacts match current files.
+- Preserve frozen history in `migration/artifacts/history/`.
+
+Acceptance:
+
+- CI cannot claim a Rust-vs-legacy speedup from a path that calls Rust on both sides.
+- Current artifacts are named and uploaded consistently.
+- Governance docs explain when to use parity speed vs Rust-latency baseline.
+
+Completion notes:
+
+- Added `migration/benchmark_governance.md` and
+  `docs/source/reference/rust_benchmark_governance.rst` to document the active
+  split: baseline-main parity/speed for fair APIs wired through
+  `migration/parity/`, and Rust-only latency regression for post-legacy APIs.
+- Updated `migration/parity/README.md`, `migration/parity/__init__.py`,
+  `parity_main.py`, and `parity_speed.py` wording so the active speed gate is
+  described as Rust vs baseline-main subprocess timing, not current-branch
+  live-legacy fallback timing.
+- Deleted the broken active one-off
+  `migration/scripts/ephemeris_wide_observer_bench.py`, whose legacy JAX helper
+  imports no longer exist after the Rust-only latency gate rewrite.
+- Preserved dated one-off historical outputs under
+  `migration/artifacts/history/`:
+  `ephemeris_wide_observer_bench_2026-04-22.json` and
+  `rust_orbit_determination_benchmark_2026-04-22.json`.
+- Strengthened `migration/scripts/check_pdm_ci_scripts.py` so preflight rejects
+  stale live-legacy artifacts in active paths and enforces that
+  `rust-latency-gate` writes `migration/artifacts/rust_latency_current.json`
+  while CI uploads it as `rust-latency-current`.
+- Validation passed: targeted compile/ruff/black; `pdm run script-preflight`;
+  `pdm run rust-latency-gate` after one transient microbenchmark p95 outlier
+  rerun; `pdm run rust-quality`; escalated `pdm run test-rust-full`
+  (`723 passed, 144 skipped, 2 deselected`); `pdm run rust-parity-main`;
+  `pdm run rust-parity-speed-cold`; regenerated canonical parity/performance
+  tables; `git diff --check`.
+  A non-escalated `pdm run test-rust-full` failed only from sandbox restrictions
+  (`psutil`/Ray macOS `sysctl` denial and DNS/network denial); the escalated
+  rerun passed.
+  `pdm run docs-check` could not run because the active environment lacks
+  Sphinx and `pdm install -G docs` wanted to refresh a stale lockfile; no
+  dependency files were changed.
+
+## P1 Stabilization Tasks
+
+Current state as of 2026-05-14:
+
+- All P0/P1 stabilization tasks through RM-P1-021 are complete.
+- RM-P1-020 is closed under the canonical multi-thread Rust-vs-baseline gate; tiny-n p95 is diagnostic only, and tiny-n p50 remains enforced at 1.2x.
+- Final targeted-test graduation is complete: canonical artifacts show 42 random-fuzz APIs, 0 targeted-test rows, 126 speed rows, and no active performance waivers.
+- Merge-readiness housekeeping should stay scoped to CI, current planning docs, and artifact cleanup. New implementation work should move to RM-WE2-003, RM-WE2-004, RM-WE3-001, then RM-PERF-001 broad benchmark-action surface audit, or the future ASSIST-compatible GPL `assist-rs` harness line after merge-readiness is settled.
+
+Reviewer-feedback disposition:
+
+- The reported `calc_chi_numpy` / `calc_lagrange_coefficients_numpy`
+  `tol=1e-16` issue is stale. RM-P0-005G reviewer follow-up already aligned
+  PyO3 signatures, `_rust.api`, and Python compatibility wrappers to
+  `tol=1e-15`.
+- The `calc_chi` compatibility wrapper still does not internally route
+  single-orbit/many-dt batches to the warm-started arc kernel. This was
+  deliberately handled as documentation, not a hidden routing optimization.
+  It is unrelated to the photometry warm-performance waiver. Revisit only if
+  direct downstream use of `adam_core.dynamics.chi.calc_chi` shows it is a hot
+  loop.
+- The RM-P0-007 latency-gate rerun is accepted as task validation, but the
+  statistical policy for the Rust-only latency gate is now tracked explicitly
+  in RM-P1-018.
+
+### RM-P1-008: Make `status.py` A Trustworthy Registry
+
+Status: complete (2026-04-29); RM-P1-015 folded into this task.
+
+Scope:
+
+- Extend status taxonomy beyond `legacy`, `dual`, and `rust-default`.
+- Represent `rust-only`, `raw-kernel-only`, `public-rust-default`, and subcase exclusions.
+- Encode broad API subcases, especially `coordinates.transform_coordinates`.
+- Encode `gaussIOD` randomized-fuzz exclusion. This folds RM-P1-015 into
+  RM-P1-008; do not do the same registry/exclusion work twice.
+- Fail governance generation if a row claims dual support but the legacy implementation is gone.
+
+Acceptance:
+
+- A reviewer can tell which APIs are public-rust-default, raw-kernel-only, rust-only, dual, waived, or partially covered.
+
+Completion notes:
+
+- `src/adam_core/_rust/status.py` now uses an explicit registry taxonomy:
+  `public-rust-default`, `raw-kernel-only`, `orchestration-rust-default`,
+  `rust-only`, `dual`, and `legacy`, with typed boundary, default-backend, and
+  parity-coverage metadata.
+- Registry rows encode direct randomized-fuzz coverage, raw-kernel-only
+  diagnostic speed coverage, orchestration-implied coverage, fixed fixtures,
+  and randomized-fuzz exclusions.
+- `orbit_determination.gaussIOD` was originally
+  `random-fuzz-excluded` because unconstrained random triplets can expose
+  root-subset divergence between Rust Laguerre+deflation and legacy
+  `np.roots`. Follow-up coverage on 2026-05-11 added constrained shared-root
+  random fuzz plus supplemental fixed fixtures, so the registry no longer has
+  a targeted-test-only `gaussIOD` row.
+- `coordinates.transform_coordinates` is marked as partial randomized-fuzz
+  coverage with supported and excluded subcases called out; RM-P1-009 later
+  moved the randomized parity case to the public dispatcher boundary, and the
+  2026-05-11 expansion covered the broader public-dispatch subcase matrix.
+- Later targeted-test graduation moved the Wave D3/E2/E3 helper/raw surfaces
+  listed in this historical RM-P1-008 section into random-fuzz rows or
+  diagnostic raw-kernel speed rows. Current artifacts have 0 targeted-test
+  rows; use `src/adam_core/_rust/status.py` and the canonical artifacts for
+  live coverage accounting.
+- `dynamics.add_light_time` was added to the registry so the fuzzed API set and
+  status registry agree.
+- `validate_api_migrations()` now fails import/report generation on duplicate
+  IDs, invalid enum values, dual rows without a current legacy implementation,
+  Rust-default rows without a Rust module, randomized-fuzz exclusions without
+  excluded subcases, and coverage states that require explanatory notes.
+- `migration/scripts/parity_table.py`,
+  `migration/scripts/rust_migration_state_report.py`, and
+  `migration/scripts/rust_backend_benchmark_gate.py` now consume the registry
+  metadata rather than inferring coverage from tolerance rationale text.
+- Added `src/adam_core/tests/test_rust_migration_status.py` guardrails that
+  validate registry invariants, fuzz-generator alignment, tolerance-manifest
+  alignment, `gaussIOD` exclusion visibility, transform partial-coverage
+  visibility, and latency-gate scope.
+
+Validation:
+
+- `pdm run script-preflight`: passed.
+- `pdm run rust-latency-gate`: passed; compared 22 latency-gate APIs against
+  the Rust-only latency baseline.
+- `pdm run rust-quality`: passed.
+- `pdm run test-rust-full`: passed with escalated permissions:
+  `730 passed, 144 skipped, 2 deselected, 56 warnings`.
+- A non-escalated full-suite run failed only from sandbox limits
+  (`psutil`/Ray macOS `sysctl` denial and DNS/network denial). The first
+  escalated rerun then exposed two deterministic-test hygiene failures in
+  observer tests caused by selecting an arbitrary `OBSERVATORY_CODES` set
+  member whose MPC parallax coefficients were `NaN`; the tests now choose a
+  sorted valid Earth-based MPC code.
+- `pdm run rust-parity-main`: passed; all 22 direct fuzz APIs passed
+  randomized parity against the baseline-main oracle with only existing
+  photometry warm waivers in speed output.
+- `pdm run rust-parity-speed-cold`: passed with existing temporary photometry
+  warm waivers only.
+- Canonical tables regenerated:
+  `migration/artifacts/parity_report.md` and
+  `migration/artifacts/parity_table_rca.json`.
+
+### RM-P1-009: Add Public Dispatch Parity For `coordinates.transform_coordinates`
+
+Status: complete (2026-04-29)
+
+Reason: raw Rust kernel parity does not prove the public dispatcher path, especially for Cartesian-to-Cartesian frame-only paths intentionally excluded from the raw Rust dispatcher.
+
+Scope:
+
+- Add public API parity tests for actual `transform_coordinates(...)` call shapes.
+- Separate raw NumPy kernel tests from public quivr/coordinate-object dispatch tests.
+- Document the cartesian-to-cartesian exclusion as intentional if retained.
+
+Acceptance:
+
+- Parity reports do not overstate public dispatch coverage.
+
+Completion notes:
+
+- The canonical `coordinates.transform_coordinates` baseline-main parity case
+  now builds `CartesianCoordinates` quivr objects in both the migration and
+  baseline-main subprocesses and calls public `transform_coordinates(...)`.
+  It no longer compares the raw `transform_coordinates_numpy` kernel directly
+  while labeling the row as the public API.
+- The fuzzed public case is `CartesianCoordinates` ecliptic -> equatorial into
+  `SphericalCoordinates`, which exercises the migration-side fused Rust
+  frame+representation path and the baseline-main public dispatcher.
+- The registry remains partial by design. It now lists the public dispatcher
+  subcase as covered and calls out remaining exclusions:
+  Cartesian-to-Cartesian frame-only fallthrough, ITRF93/time-varying rotations,
+  origin translation/user-kernel SPICE coverage, and remaining non-Cartesian
+  representation combinations.
+- `migration/parity/tolerances.py` rationale now describes the public
+  dispatcher case and the expected last-ulp rotation/transcendental drift.
+
+Validation:
+
+- Targeted diagnostic before broad validation:
+  `pdm run python -m migration.parity.parity_main --apis coordinates.transform_coordinates --fuzz-seeds 4 --fuzz-n 64 --speed-n 500 --speed-reps 5 --speed-warmup 1`
+  passed with `4/4` fuzz seeds, worst_abs `1.421e-14`, worst_rel `6.151e-15`,
+  and speed `2.03x` p50 / `2.16x` p95.
+- Full task validation passed: targeted ruff/black/status-registry tests;
+  `pdm run script-preflight`; `pdm run rust-quality`; escalated
+  `pdm run test-rust-full` (`730 passed, 144 skipped, 2 deselected,
+  56 warnings`); `pdm run rust-parity-main` (all 22 direct fuzz APIs passed,
+  public transform dispatch speed `2.92x` p50 / `3.01x` p95);
+  `pdm run rust-parity-speed-cold` (public transform dispatch `3.24x` warm p50
+  / `3.08x` warm p95 / `1.48x` cold; existing photometry warm waivers only);
+  regenerated canonical parity/RCA tables; `git diff --check`.
+- A non-escalated `pdm run test-rust-full` failed only from sandbox-denied
+  Ray/psutil macOS `sysctl` process inspection and DNS/network access; the
+  escalated rerun passed.
+
+### RM-P1-010: Re-Home Rust Docs Into Current Baseline RTD Structure
+
+Status: completed 2026-04-30
+
+Scope:
+
+- Preserve baseline docs extras and docs CI.
+- Move Rust backend docs into the new baseline `docs/source/reference/` structure.
+- Resolve lockfile/docs-dependency drift without smuggling unrelated
+  dependency changes into another task.
+- Ensure `pdm run docs-check` builds locally and in CI.
+
+Acceptance:
+
+- `pdm run docs-check` passes in a clean/current dev environment.
+- Docs build under the baseline RTD structure.
+- Rust migration docs are discoverable and not bolted onto stale docs layout.
+
+Completion notes:
+
+- The project docs were already under the current baseline
+  `docs/source/reference/` RTD structure; the stale blocker was local docs
+  dependency state.
+- Refreshed the ignored local PDM lock with `pdm lock -G test -G docs`, then
+  installed with `pdm install -G test -G docs`. `pdm.lock` remains ignored, so
+  no tracked dependency lockfile churn is part of this task.
+- Added contributor docs for the specific stale local lock failure:
+  `Requested groups not in lockfile: docs`.
+- Confirmed Sphinx-generated API reference files under
+  `docs/source/reference/api/` and build outputs under `docs/build*` remain
+  ignored/generated artifacts.
+- Non-escalated `pdm run docs-check` in this tool sandbox failed only from DNS
+  denial for intersphinx inventories and local socket denial inside
+  `sphinx_sitemap`; the escalated run passed.
+
+Validation:
+
+- `pdm run docs-check`: passed with network/socket permissions.
+- `pdm run docs`: passed with network/socket permissions.
+- `pdm run script-preflight`: passed (`27 PDM scripts`, `4 workflows`).
+- `pdm run rust-quality`: passed.
+- Escalated `pdm run test-rust-full`: `730 passed, 144 skipped, 2 deselected,
+  56 warnings`.
+- `pdm run rust-parity-main`: all 22 wired APIs passed randomized fuzz parity;
+  warm speed passed with existing photometry waivers only.
+- `pdm run rust-parity-speed-cold`: passed with existing temporary waivers only
+  (`coordinates.cartesian_to_spherical` warm waiver plus photometry warm
+  waivers).
+- Regenerated `migration/artifacts/parity_gate.json`,
+  `migration/artifacts/parity_speed_cold_warm.json`,
+  `migration/artifacts/parity_report.md`, and
+  `migration/artifacts/parity_table_rca.json`.
+
+### RM-P1-011: Audit Runtime Dependencies
+
+Status: complete (2026-04-30)
+
+Scope:
+
+- Audit production imports of `jax`, `jaxlib`, `numba`, `spiceypy`, and Python `spicekit`.
+- Move parity/test-only dependencies into optional/test groups.
+- Keep production dependencies aligned with mandatory Rust and direct Rust `spicekit` decisions.
+
+Completion notes:
+
+- AST import survey found no production imports of `jax`, `jaxlib`, `numba`, `spiceypy`, or Python `spicekit` in `src/adam_core` or `migration`.
+- Removed `jax`, `jaxlib`, and `numba` from project runtime dependencies and regenerated `uv.lock`, dropping their transitive lock entries.
+- Added static pytest coverage to guard production code, migration Python utilities, and runtime dependency metadata against reintroducing the retired Python backends.
+- Rust `spicekit` remains a Cargo dependency of `adam_core_rs_spice`; there is still no Python runtime dependency on `spiceypy` or Python `spicekit`.
+
+Acceptance:
+
+- Runtime dependencies are minimal and justified by production imports.
+
+### RM-P1-012: Restore Or Replace Independent Propagation Oracle
+
+Status: complete (2026-04-30)
+
+Reason: replacing `sp.prop2b` with forward/backward self-consistency is useful but not an independent oracle.
+
+Scope:
+
+- Add fixed trusted propagation vectors from an independent implementation, or restore a non-production oracle path in tests.
+- Reconcile velocity tolerance mismatch: decision says 1 mm/s, test comment allowed 1 m/s at review time.
+
+Completion notes:
+
+- Added fixed heliocentric and barycentric elliptical/hyperbolic expected-output vectors generated from CSPICE `spiceypy.prop2b` in the baseline-main `.legacy-venv`; this is two physics scenarios (one multi-revolution elliptical orbit and one hyperbolic orbit) evaluated under two origin/GM conventions.
+- The new public `propagate_2body` regression test compares against those fixed vectors at the pre-migration CSPICE oracle tolerances: 10 cm position and 1 mm/s velocity.
+- Tightened the existing forward/backward roundtrip self-consistency velocity tolerance/comment to 1 mm/s after measuring the worst current fixture drift at roughly 0.019 mm/s; the position tolerance remains 100 m.
+
+Acceptance:
+
+- Propagation tests include at least one independent expected-output check that does not call the same Rust implementation under test.
+
+### RM-P1-013: Document And Test `calculate_chi2` SPD Covariance Contract
+
+Status: complete (2026-05-01)
+
+Reason: Rust Cholesky rejects non-SPD covariance matrices that baseline `np.linalg.inv` may have accepted if merely invertible. This is correct for covariance inputs, but it is a public behavior change.
+
+Completed:
+
+- Documented that covariance matrices must be symmetric positive definite in the public residual helper docstring, residuals cookbook, Rust backend contracts, and changelog.
+- Added Rust and Python tests showing an invertible but indefinite covariance raises a clear `ValueError`/`NotPositiveDefinite` diagnostic.
+- Kept NaN policy explicit: NaN diagonal raises, NaN off-diagonal maps to zero with a Python warning to match legacy behavior.
+
+Acceptance:
+
+- Users get a clear error for non-SPD covariance input.
+- The behavior change is documented and release-noted.
+
+### RM-P1-014: Resolve Photometry Warm Performance Gate Policy
+
+Status: complete (2026-05-03)
+
+Scope:
+
+- Decide among SIMD/transcendental investment, cold-start waiver, or reverting/selective dispatch.
+- If waiving, add explicit waivers with workload rationale and review date.
+- If implementing SIMD, define crate/library choice and ULP validation plan.
+
+Acceptance:
+
+- Photometry Rust-default status is justified by measured warm gates or explicit waiver.
+
+2026-04-28 note:
+
+- Temporary waiver `waiver-20260428-photometry-warm-performance-temporary` is active for the four photometry APIs in the constitutional speed gate. This is not a permanent resolution; review by 2026-05-12.
+
+2026-04-30 review-fix note:
+
+- Accepted the reviewer concern that switching phase-angle output to `acos(cos)` is not safe without explicit small-angle and near-180° coverage; kept the half-angle form and added Rust unit coverage for those geometries.
+- Added a serial threshold for the standalone phase-angle kernel at the n=2000 gate size, which now raw-passes in targeted and full speed runs. Kept the original law-of-cosines geometry because a dot-product rewrite drifted too much on 0.001° stress geometry relative to the baseline formula.
+- Shared half-angle intermediates in the fused mag+phase row. The remaining warm misses are magnitude/fused/predict variability in the full cold/warm artifact; the SIMD/transcendental or permanent policy decision remains open.
+
+2026-05-01 review clarification:
+
+- Do not close RM-P1-014 from a single green warm rerun. The earlier canonical cold/warm artifact had three magnitude-style photometry APIs under `waiver-20260428-photometry-warm-performance-temporary`: `calculate_apparent_magnitude_v` (`1.19x` p50 / `1.24x` p95), `calculate_apparent_magnitude_v_and_phase_angle` (`1.21x` / `1.01x`), and `predict_magnitudes` (`1.17x` / `0.99x`). A later governance-only rerun after adding `calculate_chi2` to the parity manifest raw-passed `calculate_apparent_magnitude_v` and fused mag+phase, but still waived `calculate_phase_angle` (`1.34x` / `0.98x`) and `predict_magnitudes` (`1.14x` / `0.96x`). The active waiver therefore remains unresolved: the decision before 2026-05-12 is still whether to invest in SIMD/transcendental work, narrow/remove waivers based on repeated raw passes, or encode a permanent cold-start/workload policy.
+
+2026-05-03 resolution note:
+
+- Resolved `waiver-20260428-photometry-warm-performance-temporary` after repeated diagnostics and low-risk optimizations. Accepted reviewer feedback to hoist valid `target_ids` detection for `predict_magnitudes`, use a guarded unchecked lookup only on the all-valid fast path, retain the checked NaN-preserving slow path for direct invalid Rust callers, and avoid the Python wrapper's redundant int32 contiguous conversion for already-contiguous `target_ids`. The final canonical artifacts raw-pass all four photometry APIs: cold/warm artifact shows phase_angle 1.45x/1.68x, apparent_magnitude_v 1.61x/1.65x, fused mag+phase 1.23x/1.27x, and predict_magnitudes 1.43x/2.16x, with ~27-31x cold speedups; rust-parity-main passes all photometry rows including predict_magnitudes 1.42x/1.66x. The waiver is marked resolved in `migration/waivers.yaml` and removed from the photometry registry rows.
+
+### RM-P1-015: Make `gaussIOD` Randomized Parity Exclusion Visible
+
+Status: complete (2026-04-29); folded into RM-P1-008
+
+Scope:
+
+- Add registry/waiver visibility for the known randomized root-subset mismatch.
+- Separate fixed-fixture parity from randomized fuzz parity in reports.
+- Keep runner adapters for fixed-fixture/manual parity.
+
+Acceptance:
+
+- Governance output cannot imply randomized `gaussIOD` parity is enforced when it is intentionally unwired.
+
+### RM-P1-014A: Resolve Cartesian-To-Spherical Warm Performance Policy
+
+Status: complete (2026-05-03)
+
+Reason: RM-P0-005 validation exposed a repeated p95-only warm speed miss for
+`coordinates.cartesian_to_spherical` in the full n=2000 cold/warm artifact.
+Parity passes and cold-start speed is roughly 19x faster than the baseline JAX
+path, but warm steady-state speed is near the 1.2x threshold on Apple Silicon.
+The kernel does scalar `sqrt`/`atan2`/`asin` math, where XLA can use optimized
+vectorized transcendentals. A chunked-Rayon fix reduced per-row dispatch
+overhead but did not consistently clear the warm p95 gate.
+
+Scope:
+
+- Decide among SIMD/transcendental investment, cold-start waiver, or
+  reverting/selective dispatch for this small warm workload.
+- Keep raw p50/p95/cold timings visible in parity artifacts while the temporary
+  waiver is active.
+- If implementing SIMD, define crate/library choice and ULP validation plan.
+
+Acceptance:
+
+- `coordinates.cartesian_to_spherical` Rust-default status is justified by
+  measured warm gates or explicit waiver.
+
+2026-04-28 note:
+
+- Temporary waiver
+  `waiver-20260428-cartesian-to-spherical-warm-performance-temporary` is active;
+  review by 2026-05-12.
+- After chunking spherical conversion kernels, the latest full cold/warm
+  artifact raw-passed this API at `1.67x` p50, `1.57x` p95, and `18.77x`
+  cold. The waiver remains active because earlier full-artifact p95 misses
+  were reproducible enough that this still needs a permanent policy or SIMD
+  resolution rather than relying on one green run.
+
+2026-04-30 review-fix note:
+
+- Added an n≤4096 serial path for `cartesian_to_spherical_flat6`, hoisted `xy2`, and removed the dead post-`asin` latitude normalization branch. The full cold/warm artifact raw-passed at `1.97x` p50 / `2.57x` p95 / `18.02x` cold. The waiver is intentionally left attached until RM-P1-014A is closed explicitly rather than removed mid-review; if future artifacts keep raw-passing, close RM-P1-014A by updating waiver/status governance rather than treating this note as closure.
+
+2026-05-03 resolution note:
+
+- Resolved `waiver-20260428-cartesian-to-spherical-warm-performance-temporary` after subsequent canonical artifacts continued to raw-pass. Final cold/warm artifact shows `coordinates.cartesian_to_spherical` at 1.74x p50 / 1.81x p95 / 19.10x cold, and `rust-parity-main` shows 1.73x / 2.03x with parity fuzz 8/8. The waiver is marked resolved in `migration/waivers.yaml` and removed from the registry row.
+
+### RM-P1-016: Split Large PyO3 Binding File After Stabilization
+
+Status: complete (2026-05-07)
+
+Scope:
+
+- Split `rust/adam_core_py/src/lib.rs` into domain modules: coordinates, dynamics, photometry, orbit determination, SPICE.
+- Keep shape validation at the PyO3 boundary.
+- Avoid duplicating shape rules across Python and Rust.
+
+Acceptance:
+
+- Binding layer is maintainable and reviewable before the next large wave.
+
+Completion notes (2026-05-07):
+
+- `rust/adam_core_py/src/lib.rs` is now a 23-line `#[pymodule]` registry that calls `coordinates::register`, `dynamics::register`, `photometry::register`, `orbit_determination::register`, and `spice::register`.
+- 53 `#[pyfunction]`s redistributed by domain:
+  - `coordinates.rs` (915 lines, 17 fns): coord conversions, frame transforms, residuals/chi2, weighted stats, classification, Tisserand. Owns the `Representation`/`parse_representation`/`to_coords_rep`/`parse_frame` helpers used only by `transform_coordinates*_numpy`.
+  - `dynamics.rs` (1124 lines, 25 fns): orbital-element scalar helpers, Kepler/Lambert/Stumpff helpers, propagate, propagate-with-cov, ephemeris, ephemeris-with-cov, light-time, MOID single + batch, Lambert batch, porkchop grid.
+  - `photometry.rs` (290 lines, 6 fns): phase angle, apparent V magnitude (standalone + fused with phase), bandpass-delta predict, absolute-magnitude row + grouped fits.
+  - `orbit_determination.rs` (258 lines, 5 fns): calcGibbs, calcHerrickGibbs, calcGauss, gaussIOD orbits-from-roots, gaussIOD fused.
+  - `spice.rs` (441 lines): unchanged from the prior session; exports `AdamCoreSpiceBackend` PyO3 wrapper plus parsed-text-kernel and SPK-writer bindings.
+- Per-module imports list only the symbols each domain uses; shape validation stays at the PyO3 boundary as before; no Python-side wrapper changes were needed.
+- Validation against the new layout: `cargo fmt --all --check`, `pdm run rust-quality` (clippy `-D warnings`, full workspace tests), `pdm run rust-develop`, `pdm run test-rust-full` (754 passed / 144 skipped / 2 deselected), `pdm run rust-parity-main` exit 0, `pdm run rust-parity-speed-cold` exit 0; canonical artifacts regenerated.
+
+
+### RM-P1-017: Final Clean Validation Pass
+
+Status: complete (2026-05-07)
+
+Scope:
+
+- Run full Rust quality checks.
+- Run full rust-required pytest.
+- Run parity fuzz and speed gates.
+- Run clean-install/wheel validation.
+- Run docs build.
+- Run public import compatibility tests.
+
+Acceptance:
+
+- Final review can start from green, current artifacts rather than journal claims.
+
+Completion evidence (2026-05-07, against committed HEAD `a8ed274c`):
+
+- `pdm run rust-quality`: cargo fmt --all --check, cargo clippy --workspace --all-targets -D warnings, cargo test --workspace all green.
+- `pdm run test-rust-full`: 754 passed / 144 skipped / 2 deselected / 56 warnings in 206.95s. Includes `test_public_module_compatibility.py` (restored compatibility surfaces are documented and statically guarded) and `test_runtime_dependency_audit.py` (no unreferenced JAX/Numba imports).
+- `pdm run rust-parity-main`: all 25 direct fuzz APIs 8/8 seeds; speed gate `all_passed=True` across tiny/small/large lanes.
+- `pdm run rust-parity-speed-cold`: cold/warm artifact `all_passed=True`.
+- `pdm run rust-latency-gate`: all APIs within regression tolerance vs `migration/artifacts/rust_latency_baseline.json`.
+- `pdm run wheel-build`: built `dist/adam_core-0.5.6-cp313-cp313-macosx_11_0_arm64.whl`.
+- `pdm run wheel-inspect`: passed.
+- `pdm run docs-check`: Sphinx build succeeded; sitemap.xml generated.
+- `pdm run script-preflight`: 28 PDM scripts, 4 workflows, no stale references.
+- Canonical artifacts on HEAD: `migration/artifacts/parity_gate.json`, `parity_speed_cold_warm.json`, `parity_table_rca.json`, `parity_report.md`, `parity_legacy_speed_baseline.json`, `rust_latency_current.json` all green.
+
+
+### RM-P1-018: Harden Rust-Only Latency Gate Statistical Policy
+
+Status: complete (2026-05-03)
+
+Reason: RM-P0-007 validation accepted `rust-latency-gate` after one rerun
+cleared a transient p95 microbenchmark outlier. That is defensible for a
+documentation/governance task, but it is not a durable statistical policy for
+the active post-legacy performance regression signal.
+
+Scope:
+
+- Define the allowed rerun policy for `pdm run rust-latency-gate`.
+- Increase repeats or add repeated-trial aggregation if needed for microsecond
+  APIs.
+- Preserve raw samples and failed attempts when a rerun changes the outcome.
+- Document when a p95 miss is considered scheduler noise versus a real
+  regression requiring action.
+
+Acceptance:
+
+- A reviewer can reproduce the latency-gate decision policy without relying on
+  chat-time judgment.
+- CI/local artifacts expose enough raw data to audit pass-after-rerun cases.
+
+2026-05-03 resolution note:
+
+- Hardened the Rust-only latency gate by using three independent timing trials
+  by default and comparing the median of per-trial p50/p95 estimates while
+  preserving every raw sample and per-trial percentile in the artifact. The
+  default pass/fail thread policy is now single-process/single-thread, with the
+  committed `rust_latency_baseline.json` recaptured under `thread_mode: single`
+  and per-entry thread metadata. Native/multithread measurements remain allowed
+  only as separately labeled diagnostics with separate baseline/output paths.
+  `pdm run rust-latency-gate` passes under the final single-thread policy.
+
+### RM-P1-019: Add Dual-Size Baseline Speed Governance
+
+Status: complete (2026-05-04)
+
+Reason: current baseline-main Rust-vs-legacy speed governance measures one
+canonical small/medium lane (`n=2000`). The Rust-only latency gate covers larger
+post-legacy workloads, but it is not an apples-to-apples Rust-vs-baseline
+comparison. The user expects speed governance to expose both a small-N lane and
+a large-N lane (greater than 10k rows or API-appropriate equivalent shapes) for
+wired Rust-default APIs.
+
+Scope:
+
+- Extend the parity speed harness to support named size lanes while preserving
+  the existing `n=2000` comparison for historical continuity.
+- Define canonical large-lane shapes per API family instead of assuming one
+  scalar `n` fits every surface: simple vector kernels, propagation/ephemeris
+  `n_orbits × k_times` workloads, OD triplet counts, and public dispatch
+  orchestration where applicable.
+- Keep baseline-main comparisons single-process/single-thread by default, with
+  any native/multithread diagnostic lane separately labeled and excluded from
+  default pass/fail unless explicitly approved.
+- Update `parity_main`, PDM scripts, CI/preflight checks, artifact schema, and
+  `migration/scripts/parity_table.py` so tables show the lane name, size/shape,
+  p50/p95 speedups, cold timing where collected, waiver status, and thread
+  metadata.
+- Decide and document enforcement policy before turning the large lane into a
+  hard gate. Resolved 2026-05-04: all speed lanes, including large-n, are
+  enforced at the 1.2× p50/p95 threshold. Large-n misses are not hidden as
+  diagnostic-only rows; unresolved misses are tracked under RM-P1-020 unless the
+  user makes an explicit structural-acceptance decision outside routine waivers.
+- Regenerate the canonical parity/performance artifacts after implementation,
+  using the current direct Rust `spicekit` dependency state.
+
+Acceptance:
+
+- Review tables make it obvious which Rust-vs-baseline measurements are
+  small-N and which are large-N; no row can be mistaken for the current single
+  `n=2000` gate.
+- Artifacts preserve exact sizes/shapes and thread metadata for every speed
+  lane and reject unlabeled or mismatched thread-mode comparisons when used for
+  pass/fail.
+- The governance docs explain how the dual-size lanes relate to the Rust-only
+  latency regression gate.
+- Waivers, if any, identify the failing lane rather than waiving an API
+  wholesale without size context.
+
+Verification:
+
+- `pdm run rust-parity-main`
+- `pdm run rust-parity-speed-cold`
+- Dual-size parity table regeneration through `migration.scripts.parity_table`
+- `pdm run script-preflight`
+- `git diff --check`
+
+2026-05-04 resolution note:
+
+- Added named `tiny-n`, `small-n`, and `large-n` speed lanes to the baseline-main
+  parity speed harness and artifacts. The `tiny-n` lane records quick one-off
+  call behavior. The `small-n` lane preserves the historical `n=2000` promotion
+  gate at the standard 1.2× p50/p95 threshold. The `large-n` lane records
+  API-shaped larger workloads with structured axes and is enforced by default
+  with an initial no-regression threshold.
+- Moved canonical large workload shapes next to the input generators via
+  `WorkloadShape`, including multi-axis labels such as orbits × epochs and
+  orbits × observers. The JSON artifact now carries structured shape metadata,
+  per-lane thresholds, and a single `all_passed` result plus `lane_status`, so a
+  large-workload miss cannot be mistaken for an overall pass.
+- Initial lane-scoped waiver plumbing was added so size-specific misses cannot
+  be confused with API-wide passes, then the 2026-05-04 no-large-waiver user
+  decision removed active large-n waivers. Current unresolved misses must remain
+  red and are tracked in RM-P1-020 until optimized or explicitly accepted by the
+  user outside the routine waiver mechanism.
+- Updated `parity_main`, `parity_speed`, PDM scripts, script preflight,
+  `parity_table`, benchmark-governance docs, parity README, and status tests.
+  The review table now pivots speed results to one row per API with lane column
+  groups; the old lane-per-row form remains available with `--speed-long` for
+  debugging. Baseline-main legacy warm/cold timings are serialized in
+  `migration/artifacts/parity_legacy_speed_baseline.json` and invalidated by
+  API/shape/process/thread/legacy-checkout changes.
+
+### RM-P1-020: Resolve Remaining 1.2x Speed Misses
+
+Status: complete (2026-05-07); final artifact counts refreshed 2026-05-14
+
+Reason: 2026-05-07 experiments showed the earlier single-thread Rust-vs-legacy
+gate was not apples-to-apples on macOS Apple Silicon: legacy JAX/XLA continued
+using several cores for vectorized kernels despite the single-thread caps. The
+canonical parity speed comparison therefore uses `multi-thread` on both sides
+(Rust Rayon and legacy NumPy/JAX/XLA/BLAS uncapped). The Rust-only latency gate
+keeps single-thread policy for regression tracking, and
+`pdm run rust-parity-speed-singlethread` remains a labeled diagnostic.
+
+Completion summary:
+
+- Multi-thread canonical artifacts replaced the asymmetric single-thread pass/fail
+  evidence. The historical multi-thread artifact showed the previously red
+  photometry large-n rows clearing with production-realistic scaling.
+- Serial-dispatch thresholds eliminated small-workload Rayon-spawn overhead for
+  `coordinates.residuals.calculate_chi2` (n <= 256),
+  `dynamics.propagate_2body` (n <= 64),
+  `coordinates.cartesian_to_geodetic` (n <= 64), and
+  `orbits.classify_orbits` (n < 16384).
+- Tiny-n p95 enforcement is disabled because microsecond-scale rows are dominated
+  by scheduler jitter; tiny-n p50 remains enforced at the 1.2x policy floor.
+- No permanent large-n waivers were added. Historical photometry and
+  cartesian-to-spherical waivers remain resolved in `migration/waivers.yaml` for
+  provenance only.
+- The 2026-05-14 final targeted-test cleanup refreshed the broader counts: the
+  canonical artifacts now show 42 random-fuzz APIs, 0 targeted-test rows, and
+  126 speed rows. Enforced speed rows pass; raw-kernel-only rows such as
+  statistics, rotation, transform covariance, propagation arc helpers, MOID
+  batch, and porkchop grid are diagnostic speed rows rather than promotion gates.
+
+Acceptance evidence:
+
+- `migration/artifacts/parity_gate.json`,
+  `migration/artifacts/parity_speed_cold_warm.json`, and
+  `migration/artifacts/parity_report.md` reflect the multi-thread policy, the
+  tiny-n p95 diagnostic policy, and no active waiver IDs.
+- The single-thread artifact/script is diagnostic-only and must not be used as
+  the merge-readiness pass/fail gate unless the policy is explicitly changed.
+
+Verification cadence for future changes:
+
+```bash
+pdm run rust-develop
+pdm run rust-parity-main
+pdm run rust-parity-speed-cold
+pdm run python -m migration.scripts.parity_table \
+  --parity-artifact migration/artifacts/parity_gate.json \
+  --speed-artifact migration/artifacts/parity_speed_cold_warm.json \
+  --json-output migration/artifacts/parity_table_rca.json \
+  --markdown-output migration/artifacts/parity_report.md
+git diff --check
+```
+
+### RM-P1-021: Add Direct `classify_orbits` And `calculate_moid` Fuzz/Speed Coverage
+
+Status: completed 2026-05-07
+
+Reason: `orbits.classify_orbits` and `dynamics.calculate_moid` are already Rust-backed, but current registry coverage marks them as targeted-test-only. The historical Wave E1 classification artifact and the direct MOID/batch MOID speed notes prove useful implementation work, but they are not enough for final coverage accounting because they do not place these public surfaces in the canonical baseline-main randomized parity and shaped speed tables.
+
+Scope:
+
+- Add baseline-main randomized parity generators for `orbits.classify_orbits` and `dynamics.calculate_moid`.
+- Add matching Rust and legacy dispatch entries in the parity runners. For classification, prefer the public `calc_orbit_class`/coordinate-table boundary when practical; if the NumPy-core boundary is retained because that is the registered Rust surface, label it explicitly and do not overclaim quivr construction coverage. For MOID, compare the direct single-pair API and keep `dynamics.calculate_perturber_moids` orchestration coverage tracked separately under RM-WE3-002.
+- Add tolerance specs and status-registry updates so both rows move from `targeted-tests` to `random-fuzz` only after the harness is wired.
+- Add tiny/small/large workload lanes so both APIs enter canonical Rust-vs-baseline performance governance; include representative large shapes rather than relying only on historical ad-hoc timings.
+- Regenerate the full parity table/report artifacts from committed HEAD after this component lands.
+
+Acceptance:
+
+- `orbits.classify_orbits` and `dynamics.calculate_moid` appear in canonical random-fuzz artifacts with passing seed counts and meaningful tolerance rationales.
+- Both APIs appear in canonical speed artifacts with p50/p95 single-thread lane results, or any misses are explicitly tracked under the same no-waiver policy as RM-P1-020.
+- The registry/report distinguish direct MOID coverage from `calculate_perturber_moids` orchestration coverage.
+
+Completion evidence:
+
+- Source/cache commit `e5017a3f` wires the generators, rust/legacy dispatchers, tolerances, status rows, serial tiny/single-thread classification path, upstream-like MOID oracle tolerances, and additive source-hash-only legacy-cache refresh handling.
+- Regenerated `migration/artifacts/parity_gate.json`, `migration/artifacts/parity_speed_cold_warm.json`, `migration/artifacts/parity_table_rca.json`, and `migration/artifacts/parity_report.md` from committed HEAD. Both new APIs pass 8/8 fuzz seeds and all tiny/small/large speed lanes; remaining red performance rows are unrelated and tracked under RM-P1-020.
+
+Verification:
+
+```bash
+pdm run rust-develop
+pdm run python -m migration.parity.parity_main \
+  --apis orbits.classify_orbits dynamics.calculate_moid --threads single \
+  --speed-large --speed-legacy-cache migration/artifacts/parity_legacy_speed_baseline.json
+pdm run rust-parity-main
+pdm run rust-parity-speed-cold
+```
+
+## Other Agent Backlog And Wave Status
+
+### Completed Or Do Not Redo Without New Evidence
+
+- Task #135: `.legacy-venv` baseline oracle setup.
+- Task #136: `migration/parity/` constitutional harness.
+- Task #137: cartesian-to-keplerian/cometary tolerance tightened by data.
+- Task #138: hyperbolic universal-Kepler divergence fixed by reverting to Newton after Laguerre regression.
+- Task #140: `propagate_2body_along_arc` consumed in `_run_2body_propagate` for OD inner-loop single-orbit/many-dt patterns.
+- Wave E1: tisserand, classification, and absolute-magnitude fitting kernels completed.
+- Wave E2 completed pieces: `calculate_chi2`, `bound_longitude_residuals`, `apply_cosine_latitude_correction`, and fused `Residuals.calculate` public governance.
+- Final targeted-test graduation (2026-05-14): constrained `gaussIOD` fuzz/fixed governance, transform covariance/rotation raw-kernel rows, propagation arc helpers, MOID batch, and porkchop grid all have canonical parity governance; no targeted-test rows remain.
+- Weighted mean/covariance: attempted and reverted to NumPy/BLAS in production because BLAS wins; Rust kernels remain under diagnostic raw-kernel governance and should not be re-promoted without new SIMD evidence.
+
+### RM-WD3-001: Wave D3 Parallel Backend Abstraction
+
+Status: step 1 complete + dynamics-only step 2/3 closed (2026-05-07); ASSIST-touching surfaces deferred until n-body line is migrated to Rust (see RM-FUTURE-002)
+
+Source task: #134 from transcript.
+
+Reason: Ray has been removed from MOID and porkchop but remains in propagator/OD paths where n-body ASSIST or propagator-bound work dominates. The code needs an explicit abstraction for choosing rayon, Ray, or sequential execution rather than ad hoc per-module choices.
+
+Known remaining Ray surfaces (before step 1):
+
+- `src/adam_core/propagator/propagator.py`
+- `src/adam_core/orbit_determination/od.py`
+- `src/adam_core/orbit_determination/iod.py`
+- `src/adam_core/dynamics/impacts.py`
+- `src/adam_core/dynamics/ephemeris.py`
+- `src/adam_core/dynamics/propagation.py`
+
+Scope (option B, approved 2026-05-07):
+
+1. Land a centralized `parallel_backend` abstraction. Behavior unchanged: same Ray underneath, just one place to read/maintain.
+2. Profile per-callsite at `max_processes ∈ {1, 4, 8}` to compare Sequential vs Ray on representative production input now that the Rust kernels are Rayon-parallel internally.
+3. Default-drop Ray on callsites where the data shows it does not earn its keep (likely propagator/dynamics/impacts where Rust+Rayon already saturates cores). Keep Ray for OD/IOD where each per-orbit fit is heavy and the object-store sharing is a real win.
+4. Preserve the public `Propagator(max_processes=N)` signature; the implementation can stop sharding across Ray workers without changing any caller's code.
+
+Step 1 completion notes (2026-05-07):
+
+- Added `src/adam_core/parallel.py` exposing `ParallelBackend` Protocol, `SequentialBackend`, `RayBackend`, and `get_backend(max_processes, ...)`/`resolve_max_processes(...)` helpers. `RayBackend` lazily decorates plain Python workers with `ray.remote` (cached per fn+options), wraps `ray.put`/`ray.get`/`ray.wait`/`ray.internal.free`, and preserves the historical `len(pending) >= num_cpus * 1.5` throttle.
+- Refactored all six Ray callsites onto the abstraction:
+  - `dynamics/propagation.py` — `_propagate_2body_chunk_worker`
+  - `dynamics/ephemeris.py` — `_ephemeris_2body_chunk_worker`
+  - `dynamics/impacts.py` — `_impact_chunk_worker`
+  - `propagator/propagator.py` — `_propagation_chunk_worker`, `_ephemeris_chunk_worker`
+  - `orbit_determination/iod.py` — `_iod_chunk_worker`
+  - `orbit_determination/od.py` — `_od_chunk_worker`
+  Workers are now plain Python functions; the `@ray.remote` decoration happens once per fn inside `RayBackend._remote()`. Each callsite now reads as: pick backend by `max_processes`, `backend.put` shared inputs, build an `args_iter`, drain `backend.map_unordered(...)`. Public signatures unchanged.
+- `import multiprocessing as mp` and `from ..ray_cluster import initialize_use_ray` removed from the dynamics callsites; `propagator.py`, `iod.py`, `od.py`, and `impacts.py` retain `import ray` only for the `ObjectRef` isinstance compatibility check on caller-provided refs.
+- Added `src/adam_core/tests/test_parallel.py` (7 tests). Full validation: `pdm run black --check`, `pdm run ruff check`, `pdm run python -m py_compile`, `pdm run rust-quality`, `pdm run pytest src/adam_core/dynamics src/adam_core/propagator src/adam_core/orbit_determination -q` (74 + 43 + 9 passed plus skips), `pdm run test-rust-full` (761 passed / 144 skipped / 2 deselected, up from 754 with the new parallel tests), `pdm run rust-parity-main` exit 0, `pdm run rust-parity-speed-cold` exit 0 (initial post-test-rust-full sweep captured a single multi-thread p95 thermal-variance dip on `coordinates.cartesian_to_spherical` large-n; cleared on standalone rerun and 3 isolated targeted reps).
+
+Step 2/3 dynamics-only closeout (2026-05-07):
+
+Framing correction. The original profiling-first plan treated this as a Ray-vs-Sequential horse race. That was the wrong test. Ray exists for large parallel workloads where each per-task chunk is seconds-to-minutes of real compute, or for distributed multi-machine setups. Microsecond-to-millisecond Rust kernels are not Ray's target audience and a benchmark there does not disqualify Ray on its own merit.
+
+The operative decision driver for the dynamics-direct surfaces is structural, not benchmark-driven:
+
+- `dynamics.propagation.propagate_2body` and `dynamics.ephemeris.generate_ephemeris_2body` delegate to Rust kernels that are already Rayon-parallel internally. A single call saturates all cores at the kernel level.
+- Sharding those calls across N Ray workers means N Python processes each launching a Rust kernel that itself wants every core. That is parallelism on parallelism (core contention), not speedup, and the structural picture does not improve at larger n because the Rust kernel scales to fill cores at every n.
+- These two functions already default to `max_processes=1` in their public signatures, so the `SequentialBackend` is in fact the production default. No code change is needed; explicit `max_processes>1` opt-in still routes through `RayBackend`.
+
+The profile harness at `migration/scripts/parallel_profile.py` measures only the four surfaces that do *not* touch the n-body line, using a tiny `_HarnessPropagator` backed by `propagate_2body`. The artifact at `migration/artifacts/parallel_profile.json` / `.md` is evidence for the structural argument; it is not driving any default change. Headline numbers (warm median, M3 Pro, 2026-05-07):
+
+| surface | seq (mp=1) | ray-4 | ray-8 | seq vs ray-4 |
+|---|---|---|---|---|
+| `propagate_2body` (999×100) | 36 ms | 104 ms | 107 ms | 2.9× faster sequential |
+| `generate_ephemeris_2body` (12,960 paired) | 14 ms | 571 ms | 530 ms | 41× faster sequential |
+| `propagator.propagate_orbits` (999×100, 2body) | 80 ms | 152 ms | 156 ms | 1.9× faster sequential |
+| `propagator.generate_ephemeris` (216×60, 2body) | 58 ms | 54 ms | 84 ms | tied at 4, slower at 8 |
+
+Plus 1.7–2.4 s of cold Ray cluster init on every fresh process. Wrapper-Propagator surfaces only show this profile when delegating to a 2-body (Rust-parallel) kernel; with ASSIST underneath, the cost shape is entirely different, which is why those defaults are explicitly deferred.
+
+Deferred until RM-FUTURE-002 lands (n-body propagation in Rust):
+
+- `Propagator.propagate_orbits` and `Propagator.generate_ephemeris` Ray default — dependent on whether the underlying propagator is Rust-parallel (no Ray needed) or Python-bound (Ray helps).
+- `dynamics/impacts.py` `detect_collisions` Ray default — today wraps an ASSIST/n-body propagator.
+- `orbit_determination/od.py` `differential_correction` Ray default — today shards heavy ASSIST-bound per-orbit fits.
+- `orbit_determination/iod.py` `iod` Ray default — today shards heavy ASSIST-bound per-cluster Gauss IOD.
+
+Step 1 abstraction continues to serve those deferred surfaces unchanged: same Ray plumbing, just centralized in `parallel.py`.
+
+Verification recorded:
+
+- `pdm run black --check` + `ruff` + `py_compile` on the harness — clean.
+- `pdm run python migration/scripts/parallel_profile.py` — exit 0; artifact written.
+- No production code changes from step 2/3 closeout; step 1 validation (test-rust-full 761 passed, parity-main exit 0, parity-speed-cold exit 0) still stands.
+
+Verification when ASSIST-touching surfaces are unblocked (RM-FUTURE-002):
+
+- Profile `differential_correction`, `iod`, `Propagator.propagate_orbits` at production scale (hundreds-thousands of orbits, real ASSIST per-orbit cost).
+- Decide per-callsite default based on the post-Rust-port shape, not the current Python-ASSIST shape.
+- Run full rust-required tests and targeted OD/IOD/propagator tests after each default change.
+
+### RM-WE2-001: Wave E2 `calculate_chi2` Follow-Up
+
+Status: complete (2026-05-01)
+
+Completed:
+
+- Rust Cholesky kernel is implemented and production-dispatched.
+- Cargo, residuals, OD, and full pytest sweeps were recorded green during Wave E2.
+- RM-P1-013 documented and tested the symmetric-positive-definite covariance contract, including the public non-SPD diagnostic behavior.
+- `coordinates.residuals.calculate_chi2` is now represented in baseline-main random-fuzz parity and warm/cold speed governance for representative 2-D SPD astrometric covariance rows. The canonical run passed parity at `8/8` seeds with worst_abs `2.487e-14` / worst_rel `9.289e-16`, and passed speed at `4.12x` p50 / `2.21x` p95 warm and `16.80x` cold.
+
+### RM-WE2-002: Fuse `Residuals.calculate`
+
+Status: complete (2026-05-07)
+
+Reason: small-N PyO3 overhead dominated because `Residuals.calculate` previously composed four Rust kernels (`bound_longitude_residuals`, `apply_cosine_latitude_correction` × 2, `calculate_chi2`) plus a Python-side per-batch loop. OD inner loops care about N around 10-100, not only large-N throughput.
+
+Delivered:
+
+- New Rust kernel `compute_residuals_chi2_flat` in `rust/adam_core_rs_coords/src/residuals.rs`. Composition only (no algorithmic change): calls the existing `bound_longitude_residuals_flat`, `apply_cosine_latitude_correction_flat`, and `calculate_chi2_flat` in sequence and groups rows by NaN mask before the Cholesky-solve so each chi² sees a uniform-D batch. Returns `(residuals[N,D], chi2[N], dof[N], had_off_diagonal_nan)`.
+- New PyO3 binding `compute_residuals_chi2_numpy` in `rust/adam_core_py/src/coordinates.rs`, exposed in `_rust/api.py`.
+- `Residuals.calculate` rewritten to a single PyO3 crossing: validation + broadcast + NaN-replacement-in-predicted-cov are still in Python, then one fused Rust call, then `1 - scipy.stats.chi2.cdf` (preserved for numerical-equivalence), then the quivr table assembly. The legacy off-diagonal NaN `UserWarning` and diagonal NaN `ValueError` semantics are preserved (the warning is bubbled back via the `had_off_diagonal_nan` flag; the error message is unchanged).
+- `compute_residuals_ndarray` fast path preserved as-is (it already only used `bound_longitude_residuals` + inline cos-lat).
+- 5 new Rust unit tests in `residuals.rs` covering Cartesian unit-cov, multi-batch dof matching the Python fixture, off-diagonal-NaN warning flag, diagonal-NaN error path, and the spherical wrap+cos-lat composition.
+- `calculate_chi2_numpy` PyO3 binding's diagonal-NaN error message harmonized with the fused path so both surface `"Covariance matrix has NaNs on the diagonal."` (the existing test regex already required that exact wording; the rust message previously diverged into a more verbose form that was never actually surfaced because the Python wrapper short-circuited). The behavioral test continues to pass.
+
+Verification:
+
+- `cargo test -p adam_core_rs_coords --release residuals` — 5/5 passed.
+- `pdm run pytest src/adam_core/coordinates/tests/test_residuals.py -q` — 17/17 passed.
+- `pdm run rust-quality` — clean after `cargo fmt`.
+- `pdm run test-rust-full` — 761 passed / 144 skipped / 2 deselected (unchanged from baseline).
+- `pdm run rust-parity-main` — exit 0; SPEEDUP GATE + PARITY FUZZ GATE pass.
+- `pdm run rust-parity-speed-cold` — exit 0; canonical artifacts both `all_passed=True` with 0 fails.
+- A/B microbench (M3 Pro warm, median of 5 trials, pre-fusion checkout via `git checkout abb0a616~1 -- src/adam_core/coordinates/residuals.py`):
+
+  | n | spherical before | spherical after | speedup | cartesian before | cartesian after | speedup |
+  |---|---|---|---|---|---|---|
+  | 10 | 419 µs | 319 µs | 1.31× | 228 µs | 159 µs | 1.43× |
+  | 50 | 484 µs | 369 µs | 1.31× | 259 µs | 179 µs | 1.45× |
+  | 100 | 570 µs | 425 µs | 1.34× | 316 µs | 205 µs | 1.54× |
+  | 500 | 1235 µs | 704 µs | 1.75× | 970 µs | 571 µs | 1.70× |
+  | 5000 | 9058 µs | 4100 µs | 2.21× | 8377 µs | 3242 µs | 2.58× |
+
+  At small n the gain is ~70-100 µs per call (collapsing 4 PyO3 crossings into 1). At large n the gain grows to 5 ms per call because the per-batch Python loop and the multiple covariance-buffer copies through Python were also eating real time — not just the PyO3 boundary. Per-call cost at small n is now dominated by quivr `from_kwargs(values=residuals.tolist(), ...)` table assembly; further small-n wins on this surface require either skipping the quivr table assembly (already covered by the `compute_residuals_ndarray` fast path used in OD inner loops) or attacking the quivr table-construction path itself (RM-WE3-002 territory).
+
+Callers that bypass `Residuals.calculate` for hot loops should keep using `compute_residuals_ndarray`. The fused path is the right choice when the quivr table fields (chi2, dof, probability) are actually consumed.
+
+### RM-WE2-003: Variants And Covariance Sampling Linear Algebra
+
+Status: complete (2026-05-14)
+
+Source task: #148 follow-up.
+
+Scope:
+
+- Decide and document the linalg crate strategy for Cholesky, symmetric eigen, and SVD needs. `faer 0.22` is already present but not production-critical.
+- Port or refactor `sample_covariance_sigma_points`, `sample_covariance_random`, and `VariantOrbits.create` hot paths where data shows wins.
+- Avoid re-promoting weighted mean/covariance unless a new SIMD strategy beats BLAS.
+
+Verification:
+
+- Parity for sigma-point and Monte Carlo sampling shape/statistical contracts.
+- Performance at realistic variant counts.
+
+Completion notes:
+
+- Profiling showed the hot cost in `VariantOrbits.create(method="sigma-point")` was not `scipy.linalg.sqrtm` itself (~7 µs/row) but the per-coordinate quivr table assembly and repeated `qv.concatenate` of per-sample time/origin rows. A Rust/faer sigma-point port would not address that dominant Python/table overhead.
+- Refactored `coordinates.variants.create_coordinate_variants` to sample each covariance row into NumPy blocks, concatenate the blocks once, and build one variant coordinate table with Arrow `take` for repeated time/origin metadata. This preserves the existing SciPy `sqrtm` sigma-point semantics, Monte Carlo seed behavior, auto-mode fallback behavior, and BLAS-backed weighted mean/covariance policy.
+- Local benchmark on 28 real orbit fixtures after the refactor: `create_coordinate_variants(..., method="sigma-point")` p50 is ~0.60 ms for 10 orbits and ~0.98 ms for 28 orbits; `VariantOrbits.create(..., method="sigma-point")` p50 is ~0.97 ms for 10 orbits and ~1.30 ms for 28 orbits. The pre-refactor measurements were ~8.1 ms and ~22.6 ms for `create_coordinate_variants` at the same sizes, so the table-assembly refactor yields the meaningful win without changing numerical linear algebra.
+- Linalg strategy remains: keep public weighted mean/covariance on NumPy/BLAS; keep `sample_covariance_sigma_points` on SciPy `sqrtm` for exact legacy behavior; use `faer` for future Cholesky/symmetric-eigen/SVD production ports only when profiling shows the linalg kernel, not table orchestration, is the bottleneck.
+- Validation passed targeted covariance/variant/propagator tests (`52 passed`), representation smoke for Cartesian/Spherical/Keplerian/Cometary variants, static formatting/lint/compile checks, and `git diff --check`.
+
+### RM-WE2-004: OD Evaluation And Outlier Helpers
+
+Status: complete (2026-05-15)
+
+Scope:
+
+- Review `orbit_determination/evaluate.py` and `orbit_determination/outliers.py` for small pure-numeric kernels.
+- Do not port orchestration blindly; focus on fused hot paths around residual/chi2/outlier scoring.
+
+Verification:
+
+- Parity against baseline evaluation outputs.
+- Bench in realistic OD loops, not isolated toy calls only.
+
+Completion notes:
+
+- Profiling showed `evaluate_orbits` still spent meaningful time in Python/quivr orchestration after residual calculation: repeated full observation-table concatenation and per-orbit Arrow masks for chi2/reduced-chi2 aggregation. The residual/chi2 numeric kernel is already Rust-backed through `Residuals.calculate`, so no new Rust port was needed for this pass.
+- Refactored `evaluate_orbits` to take repeated observation coordinates by index, validate the documented ephemeris orbit-major grouping, compute per-orbit chi2/reduced-chi2 by reshaping the residual arrays, and construct fitted-member `obs_id`/`outlier` arrays with vectorized Arrow/NumPy operations. This preserves existing residual semantics and fails loudly if a custom ephemeris provider violates the row-order contract instead of silently producing mismatched residual/member rows.
+- Simplified `calculate_max_outliers` to scalar `min`/`int` and refactored `remove_lowest_probability_observation` to identify the lowest-probability row by index before filtering, avoiding construction of an intermediate one-row `FittedOrbitMembers` table on the normal path.
+- Local synthetic fixed-ephemeris benchmark after the refactor: `evaluate_orbits` p50 improved from ~5.1 ms to ~1.4 ms for 10 orbits × 30 observations, from ~11.7 ms to ~2.5 ms for 28 × 50, and from ~13.5 ms to ~4.2 ms for 28 × 100. The inner chi2 aggregation dropped from ~0.44/1.31/1.49 ms p50 to ~0.010/0.013/0.017 ms for those same sizes.
+- `remove_lowest_probability_observation` remains table-filter dominated but improved modestly in local synthetic checks, e.g. n=10 non-tie p50 ~176 µs → ~151 µs and n=100 all-tie p50 ~291 µs → ~231 µs.
+- Validation covered deterministic evaluate/outlier tests without requiring pyoorb, the OD test suite, targeted compile/format/lint checks, and diff checks.
+
+### RM-WE3-001: Least-Squares Inner-Loop Fusion
+
+Status: complete (2026-05-15)
+
+Reason: next high-leverage performance lever after Wave E2 is fusing LSQ inner-loop linear algebra and residual scoring to avoid PyO3 and quivr overhead at small N.
+
+Scope:
+
+- Investigate ATWA/normal-equation solve path in `orbit_determination/least_squares.py`.
+- Use `faer` or another approved linalg strategy for Cholesky/QR as appropriate.
+- Preserve numerical diagnostics and convergence behavior.
+
+Verification:
+
+- Baseline parity on deterministic OD cases.
+- Existing least-squares tests, including order-dependent flake awareness.
+- Performance comparison on representative OD fits.
+
+Completion notes:
+
+- Profiling the deterministic `test_least_squares` fixture showed full-fit wall time is dominated by `Propagator.generate_ephemeris` / ASSIST propagation and associated coordinate transforms (~0.75-0.84 s of a ~0.81-0.90 s fit). A Rust/faer normal-equation solve would not move the full-fit wall clock because 6×6 inversion/solve is not the bottleneck.
+- Refactored the measured Python overhead that remained local to `least_squares.py`: `_compute_partials` now avoids per-parameter `ephemeris_all.select(...)` / quivr table construction by grouping ephemeris values by orbit_id once and computing RA/Dec residual columns directly from spherical value arrays; the existing public `_residual_columns` path now uses the same direct value helper. The helper preserves longitude wrap, 0°/360° sign convention, cos(latitude) scaling, single-predicted-row broadcast, and mismatch errors.
+- Replaced the per-observation Python normal-equation accumulation loop with `_normal_equations`, an `einsum`-based batched accumulation of `AᵀWA` and `AᵀWb`. Kept `np.linalg.inv(ATWA)` for covariance/diagnostic parity rather than switching to a solve-only Cholesky path, because the covariance matrix is part of the current output behavior and the solve is negligible in profiling.
+- Local microbenchmarks: one-sided partials assembly for the six-observation deterministic fixture improved from ~1110 µs p50 to ~166 µs p50; normal-equation accumulation improved from ~22 µs to ~4 µs at N=6, ~374 µs to ~10 µs at N=100, ~3.7 ms to ~68 µs at N=1000, and ~37 ms to ~0.66 ms at N=10000. Direct residual columns are neutral at tiny N but faster at large N (~488 µs to ~326 µs at N=10000).
+- Full-fit profiling after the refactor still runs ~0.81-0.90 s on the deterministic fixture because propagation dominates. The next meaningful LSQ/OD wall-clock work would have to reduce `generate_ephemeris`/ASSIST propagation and transform overhead, likely in the deferred ASSIST-compatible GPL `assist-rs` harness propagator line rather than another local normal-equation port.
+- Validation passed deterministic least-squares tests, the full OD test suite, compile/format/lint checks, script-preflight, full lint, and diff checks.
+
+### RM-PERF-001: Audit PR #195 Broad Benchmark-Action Slow Rows
+
+Status: open; intentionally after RM-WE2-003, RM-WE2-004, and RM-WE3-001
+
+Reason: PR #195's GitHub `benchmark-action` report is a broad pytest-benchmark
+trend smoke rather than the canonical Rust migration gate. It still surfaced
+slower rows outside the main canonical migration artifacts, especially one-off
+observer/perturber SPICE wrappers, time rescale benches, covariance matrix
+conversion helpers, large-n bandpass conversion, and propagator helper benches.
+The user wants those rows investigated as clues for additional surface area,
+not ignored just because the canonical parity/speed gates are green.
+
+Scope:
+
+- Reproduce the PR #195 benchmark-action slow clusters with a controlled
+  back-to-back baseline-main vs migration run before making code changes.
+- Classify each slow cluster as measurement noise, fixed Python/quivr overhead,
+  intentional semantics/architecture tradeoff, or a real optimization candidate.
+- For real candidates, decide whether they deserve a new canonical parity/speed
+  row, a dedicated future migration task, or no action because the surface is
+  cold or dominated by external libraries.
+- Preserve the existing no-semantics-change policy: do not alter time/ERFA,
+  SPICE validity, observer-state, or photometry behavior just to improve a broad
+  microbenchmark.
+
+Acceptance:
+
+- Produce a short triage table mapping each benchmark-action slow cluster to a
+  decision and follow-up task, if any.
+- Any implementation follow-up has its own baseline-main parity/performance
+  evidence and does not reuse the broad benchmark-action table as the sole gate.
+
+Verification:
+
+- `pytest --benchmark-only`/benchmark-action evidence is used for discovery.
+- Canonical `migration/parity` artifacts remain the promotion/merge gate for
+  Rust-replaced numerical surfaces.
+
+### RM-WE3-002: Quivr-Bound Constitutional Gaps
+
+Status: complete (2026-05-14)
+
+Source task: #139.
+
+Completion:
+
+- `dynamics.calculate_perturber_moids` has public quivr orchestration
+  random-fuzz and speed governance under RM-WE2-003.
+- `dynamics.generate_porkchop_data` has public quivr orchestration random-fuzz
+  and speed governance under RM-WE2-004.
+- `coordinates.transform_coordinates` now covers the broader public-dispatch
+  matrix, including inverse frame directions, non-Cartesian representations,
+  SUN/EARTH origin translations, and ITRF93 time-varying cases, with remaining
+  exclusions explicitly labeled.
+- `orbit_determination.gaussIOD` has constrained shared-root random-fuzz
+  governance and supplemental fixed fixtures instead of a targeted-test-only
+  row.
+- Raw-kernel-only helpers that are not public promotion gates
+  (`transform_coordinates_with_covariance`, rotation, propagation arc helpers,
+  MOID batch, porkchop grid, and weighted statistics) have direct parity rows
+  and diagnostic speed rows where feasible.
+
+Verification:
+
+- Reports distinguish raw-kernel diagnostic rows, public dispatch rows, fixed
+  fixtures, and public orchestration rows. The 2026-05-14 canonical artifacts
+  report 42 random-fuzz APIs, 0 targeted-test rows, and 126 speed rows.
+
+### RM-WE4-001: I/O And External Client Cold Paths
+
+Status: deferred
+
+Scope:
+
+- Only optimize if profiling shows a bottleneck.
+- Keep prior qv.concatenate cleanup pattern: accumulate lists and concatenate once.
+- Avoid new entrypoints or scripts for cold convenience paths.
+
+### RM-WE5-001: Schema-Level Work
+
+Status: deferred
+
+Scope:
+
+- Low priority unless schema construction becomes a measured bottleneck.
+- Do not port quivr schemas to Rust without a broader Arrow-native design.
+
+### RM-WE6-001: Time/ERFA Exploration
+
+Status: exploratory
+
+Scope:
+
+- Time handling is backed by ERFA/C; treat as a separate investigation, not a Rust migration default target.
+
+### RM-FUTURE-001: N-Body Propagation Port
+
+Status: future major project
+
+Scope:
+
+- Rust adaptive-step n-body integrator with covariance support.
+- SPICE-backed perturber lookup.
+- Integration with existing `Propagator` abstraction.
+- This is a multi-day or multi-week project and should not be mixed into stabilization work.
+
+### RM-FUTURE-002: Trait-Based N-Body Propagator Backed By GPL `assist-rs` Harness
+
+Status: future major project (proposed 2026-05-07); refined/superseded by `RM-STANDALONE-007` in `standalone_rust_surface_roadmap_2026-05-15.md`. Updated 2026-05-19: `assist-rs` exists as the intended GPL-licensed ASSIST/REBOUND Rust harness, and RM-STANDALONE-007A selects a GPL adapter/package boundary that implements adam-core's core `Propagator` contracts without pulling GPL dependencies into permissive core crates.
+
+Reason: The current Python `Propagator` class lets users plug in ASSIST or other n-body backends via subclassing, with parallelism dispatched at the Python level via Ray. Once an `assist-rs` harness implements the core `Propagator` contracts, the propagator interface can move down into Rust, with parallelism handled by Rayon over chunks instead of Ray over Python processes. That collapses an entire layer of dispatch and removes the GIL-bound per-task pickling that motivates Ray today.
+
+Scope:
+
+- Define a Rust `Propagator` trait for propagation and keep ephemeris/impact generation as backend-agnostic workflows over that trait. The standalone roadmap refines this trait scope to include covariance transport, variant/sigma-point propagation, and Rayon-side chunk/thread controls.
+- Implement the trait for the 2-body kernel (already in Rust).
+- Implement the trait for n-body by adapting GPL-licensed `assist-rs`; map its data loading, propagation, STM/covariance, observatory, error, and diagnostic surfaces into adam-core's typed contracts.
+- Re-expose the trait via PyO3 so the existing Python `Propagator` API stays intact.
+- Move per-orbit chunk dispatch into Rust (Rayon) for the n-body backend, mirroring how the 2-body kernel already parallelizes.
+- Revisit RM-WD3-001 step 3 for the deferred surfaces (`Propagator.propagate_orbits`, `Propagator.generate_ephemeris`, `dynamics.impacts`, `orbit_determination.od`, `orbit_determination.iod`) once the underlying compute is Rust-parallel: the in-process Ray default likely becomes Sequential the same way it did for the dynamics-direct surfaces.
+- Keep `RayBackend` available for distributed multi-machine use; just stop defaulting to it for in-process work.
+
+Verification:
+
+- Parity against baseline ASSIST output for representative orbits, including covariance.
+- Performance comparison vs current Python `ASSISTPropagator` on representative OD/IOD/impact workloads.
+- Full rust-required tests and full OD/IOD/impacts pytest sweep after the port.
+- Re-run `migration/scripts/parallel_profile.py` extended to include the deferred surfaces; replace deferred-default decisions with data-driven defaults.
+
+This depends on (or supersedes) RM-FUTURE-001.
+
+## Final Agent Instruction
+
+Before changing implementation code, read this file plus `decisions.md` and `journal.md`. If the next task touches performance, establish the baseline comparison method first. If the next task deletes or replaces legacy behavior, preserve the oracle or historical artifact first.

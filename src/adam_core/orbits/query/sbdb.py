@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -11,23 +12,12 @@ import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 import requests
-from astroquery.jplsbdb import SBDB
 
 from ...coordinates.cometary import CometaryCoordinates
-from ...coordinates.covariances import (
-    COORD_DIM,
-    FULL_DIM,
-    CoordinateCovariances,
-    sigmas_to_covariances,
-)
+from ...coordinates.covariances import CoordinateCovariances, sigmas_to_covariances
 from ...coordinates.origin import Origin
 from ...time import Timestamp
-from ..non_gravitational_parameters import (
-    MARSDEN_CONSTANT_FIELDS,
-    MARSDEN_STANDARD_CONSTANTS,
-    NON_GRAVITATIONAL_VALUE_FIELDS,
-    NonGravitationalParameters,
-)
+from ..non_gravitational_parameters import NonGravitationalParameters
 from ..orbits import Orbits
 from ..physical_parameters import PhysicalParameters
 
@@ -37,6 +27,29 @@ _SBDB_API_URL = "https://ssd-api.jpl.nasa.gov/sbdb.api"
 _SBDB_API_FAIR_USE_MAX_CONCURRENT_REQUESTS = 1
 
 _thread_local = threading.local()
+
+
+class _SBDBCompatibilityShim:
+    """Patch target for legacy tests/callers without importing Astroquery.
+
+    The ordinary public path is Rust HTTP. Historical users that patched
+    ``adam_core.orbits.query.sbdb.SBDB.query`` can still supply processed
+    payloads; the default sentinel is never called.
+    """
+
+    @staticmethod
+    def clear_cache() -> None:
+        return None
+
+    @staticmethod
+    def query(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("legacy SBDB.query compatibility hook was not patched")
+
+
+_sbdb_compatibility = _SBDBCompatibilityShim
+globals()["SBDB"] = _sbdb_compatibility
+_DEFAULT_SBDB_QUERY = _sbdb_compatibility.query
 
 
 def _get_requests_session() -> requests.Session:
@@ -118,52 +131,6 @@ def _convert_SBDB_covariances(
     return covariances
 
 
-def _convert_sbdb_full_covariance(
-    covariance: np.ndarray,
-    labels: list[str],
-) -> tuple[np.ndarray, list[str]]:
-    """
-    Convert an SBDB covariance with non-gravitational parameter labels into a
-    9x9 covariance over the fixed cometary basis
-    (q, e, i, raan, ap, tp, A1, A2, A3).
-
-    Non-gravitational parameters that were not estimated carry zero
-    rows/columns (held fixed at their nominal value). Estimated parameters
-    other than A1/A2/A3 are not supported for storage and are marginalized
-    out; their names are returned so the caller can warn.
-    """
-    if covariance.shape[0] != covariance.shape[1]:
-        raise ValueError("SBDB covariance must be square.")
-    if covariance.shape[0] != len(labels):
-        raise ValueError("SBDB covariance labels must match matrix size.")
-    if len(labels) < 6:
-        raise ValueError("SBDB covariance must include at least 6 labels.")
-    if list(labels[:6]) != ["e", "q", "tp", "node", "peri", "i"]:
-        raise ValueError(
-            "Expected SBDB covariance labels to start with "
-            f"['e', 'q', 'tp', 'node', 'peri', 'i'], got {labels[:6]}."
-        )
-
-    # Reorder SBDB's (e, q, tp, node, peri, i) basis into our cometary order
-    # (q, e, i, raan, ap, tp).
-    orbit_permutation = [1, 0, 5, 3, 4, 2]
-    extras = [str(label) for label in labels[6:]]
-    dropped = [name for name in extras if name not in NON_GRAVITATIONAL_VALUE_FIELDS]
-
-    source_indices = list(orbit_permutation)
-    target_indices = list(range(COORD_DIM))
-    for offset, name in enumerate(NON_GRAVITATIONAL_VALUE_FIELDS):
-        if name in extras:
-            source_indices.append(COORD_DIM + extras.index(name))
-            target_indices.append(COORD_DIM + offset)
-
-    full = np.zeros((FULL_DIM, FULL_DIM), dtype=np.float64)
-    full[np.ix_(target_indices, target_indices)] = covariance[
-        np.ix_(source_indices, source_indices)
-    ]
-    return full, dropped
-
-
 def _get_sbdb_elements(obj_ids: List[str]) -> List[OrderedDict]:
     """
     Get orbital elements and other object properties
@@ -180,9 +147,9 @@ def _get_sbdb_elements(obj_ids: List[str]) -> List[OrderedDict]:
         List of dictionaries containing orbital elements and other object properties.
     """
     results = []
-    SBDB.clear_cache()  # Yikes!
+    _sbdb_compatibility.clear_cache()  # Yikes!
     for obj_id in obj_ids:
-        result = SBDB.query(
+        result = _sbdb_compatibility.query(
             obj_id,
             covariance="mat",
             id_type="search",
@@ -294,17 +261,16 @@ def _orbits_from_sbdb_results(ids: npt.ArrayLike, results: List[OrderedDict]) ->
     orbit_ids = np.array(orbit_ids, dtype="object")
     object_ids = np.array(object_ids, dtype="object")
     classes = np.array(classes)
-    # Legacy astroquery path does not request phys-par or model_pars; fill with nulls.
+    # Legacy astroquery path does not request phys-par; fill with nulls.
     phys_rows = [(None, None, None, None)] * len(results)
     physical_parameters = _physical_parameters_from_sbdb(phys_rows)
-    nongrav = NonGravitationalParameters.nulls(len(results))
 
     return Orbits.from_kwargs(
         orbit_id=orbit_ids,
         object_id=object_ids,
         coordinates=coordinates.to_cartesian(),
         physical_parameters=physical_parameters,
-        non_gravitational_parameters=nongrav,
+        non_gravitational_parameters=NonGravitationalParameters.nulls(len(results)),
     )
 
 
@@ -323,10 +289,9 @@ def query_sbdb(ids: npt.ArrayLike, *, include_nongrav: bool = True) -> Orbits:
     ids : list
         List of object IDs to query.
     include_nongrav : bool, optional
-        Accepted for signature compatibility with `query_sbdb_new`. The legacy
-        astroquery path never populates the non-gravitational parameter
-        columns, so this flag is effectively a no-op here; use
-        `query_sbdb_new` for non-grav support.
+        Include the non-gravitational solution when the active Rust-backed
+        query path supplies one. False strips parameter values and reduces an
+        extended covariance to its 6x6 coordinate block.
 
     Returns
     -------
@@ -337,8 +302,31 @@ def query_sbdb(ids: npt.ArrayLike, *, include_nongrav: bool = True) -> Orbits:
     ------
     NotFoundError: If any of the queries object IDs are not found.
     """
-    results = _get_sbdb_elements(ids)
-    orbits = _orbits_from_sbdb_results(ids, results)
+    if _sbdb_compatibility.query is not _DEFAULT_SBDB_QUERY:
+        orbits = _orbits_from_sbdb_results(ids, _get_sbdb_elements(ids))
+        return (
+            orbits if include_nongrav else orbits.without_non_gravitational_parameters()
+        )
+
+    from adam_core import _rust_native
+
+    from ..._rust.arrow import table_from_record_batch
+    from ...utils.http import _raise_compatible_http_error
+
+    object_ids = [str(value) for value in ids]
+    try:
+        batch, warnings = _rust_native.query_sbdb_arrow(
+            object_ids, False, 60.0, 5, False, False
+        )
+        for warning in warnings:
+            logger.warning("%s", warning)
+    except RuntimeError as error:
+        _raise_compatible_http_error(error)
+    except ValueError as error:
+        if str(error).startswith("__NOT_FOUND__:"):
+            raise NotFoundError("object {} was not found", str(error).split(":", 1)[1])
+        raise
+    orbits = table_from_record_batch(Orbits, batch)
     return orbits if include_nongrav else orbits.without_non_gravitational_parameters()
 
 
@@ -402,6 +390,9 @@ def _sbdb_api_get_json(
         time.sleep(sleep_s)
 
     raise RuntimeError(f"SBDB query failed after {max_attempts} attempts: {last_err}")
+
+
+_DEFAULT_SBDB_API_GET_JSON = _sbdb_api_get_json
 
 
 def _sbdb_float(value: Any) -> float:
@@ -547,70 +538,6 @@ def _physical_parameters_from_sbdb(
     )
 
 
-def _empty_nongrav_row() -> dict[str, Any]:
-    row: dict[str, Any] = {
-        "source": None,
-        "A1": None,
-        "A2": None,
-        "A3": None,
-    }
-    for name in MARSDEN_CONSTANT_FIELDS:
-        row[name] = None
-    return row
-
-
-def _sbdb_nongrav_row(obj_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-    row = _empty_nongrav_row()
-    orbit = payload.get("orbit") or {}
-    model_pars = orbit.get("model_pars") or []
-    if not model_pars:
-        return row
-
-    row["source"] = "SBDB"
-    unsupported: list[str] = []
-    for param in model_pars:
-        if not isinstance(param, dict):
-            continue
-        name = param.get("name")
-        if name is None:
-            continue
-        name = str(name)
-        if name in NON_GRAVITATIONAL_VALUE_FIELDS or name in MARSDEN_CONSTANT_FIELDS:
-            row[name] = _sbdb_phys_par_value(param)
-        else:
-            unsupported.append(name)
-
-    # SBDB lists g(r) constants only when they differ from the classic
-    # Marsden, Sekanina & Yeomans (1973) standard, so for a solution with
-    # fitted accelerations any unlisted constants take the standard values
-    # (e.g. comet solutions list none; asteroid solutions list ALN=1, NK=0,
-    # NM=2, R0=1 and inherit the standard NN).
-    if any(row[name] is not None for name in NON_GRAVITATIONAL_VALUE_FIELDS):
-        for name in MARSDEN_CONSTANT_FIELDS:
-            if row[name] is None:
-                row[name] = MARSDEN_STANDARD_CONSTANTS[name]
-
-    if unsupported:
-        logger.warning(
-            "SBDB model parameters %s for object %s are not supported for "
-            "storage (only A1, A2, A3 and the Marsden g(r) constants); "
-            "dropping their values.",
-            unsupported,
-            obj_id,
-        )
-    return row
-
-
-def _non_gravitational_parameters_from_sbdb(
-    rows: list[dict[str, Any]],
-) -> NonGravitationalParameters:
-    if not rows:
-        return NonGravitationalParameters.nulls(0)
-
-    columns = {key: [row.get(key) for row in rows] for key in _empty_nongrav_row()}
-    return NonGravitationalParameters.from_kwargs(**columns)
-
-
 def _orbits_from_sbdb_payloads(
     ids: list[str],
     payloads: list[dict[str, Any]],
@@ -618,167 +545,39 @@ def _orbits_from_sbdb_payloads(
     """
     Convert raw SBDB JSON payloads into an `Orbits` table.
 
-    This mirrors the behavior of the legacy `query_sbdb` implementation:
-    - Prefer covariance-provided elements/epoch when present.
-    - Use covariance matrix when available; otherwise build a diagonal covariance from sigmas.
+    The deterministic payload normalization (element selection, covariance
+    matrix/label handling, SBDB->ADAM covariance ordering, and physical
+    parameter extraction) is Rust-backed behind this canonical helper; Python
+    remains the thin table-construction facade.
     """
+    from adam_core import _rust_native as _rn
+
     if len(ids) != len(payloads):
         raise ValueError("ids and payloads must have the same length.")
-
-    expected_labels = ["e", "q", "tp", "node", "peri", "i"]
-
-    orbit_ids: list[str] = []
-    object_ids: list[str] = []
-    phys_rows: list[tuple[float | None, float | None, float | None, float | None]] = []
-    nongrav_rows: list[dict[str, Any]] = []
-
-    coords_cometary = np.zeros((len(payloads), 6), dtype=np.float64)
-    covariances_sbdb = np.zeros((len(payloads), 6, 6), dtype=np.float64)
-    # Full 9x9 cometary-basis covariances (orbital block plus A1, A2, A3) for
-    # objects whose SBDB covariance includes non-gravitational parameters.
-    covariances_full = np.full(
-        (len(payloads), FULL_DIM, FULL_DIM), np.nan, dtype=np.float64
-    )
-    times_jd = np.zeros((len(payloads)), dtype=np.float64)
-
-    for i, (obj_id, payload) in enumerate(zip(ids, payloads)):
+    for obj_id, payload in zip(ids, payloads):
         if "object" not in payload:
             raise NotFoundError("object {} was not found", obj_id)
-        if "orbit" not in payload:
-            raise ValueError(f"SBDB payload for {obj_id!r} missing 'orbit'.")
 
-        obj = payload["object"] or {}
-        orbit_ids.append(f"{i:05d}")
-        object_ids.append(str(obj.get("fullname")))
-
-        orbit = payload["orbit"] or {}
-        elements_list = orbit.get("elements")
-        epoch_jd = _sbdb_float(orbit.get("epoch"))
-
-        cov = orbit.get("covariance")
-        cov_matrix: np.ndarray | None = None
-        cov_usable = True
-        if isinstance(cov, dict) and cov.get("data") is not None:
-            labels = cov.get("labels")
-            if isinstance(labels, list):
-                labels6 = [str(x) for x in labels[:6]]
-                if labels6 != expected_labels:
-                    logger.warning(
-                        "SBDB covariance labels for object %s start with %s, "
-                        "expected %s; discarding the covariance and falling "
-                        "back to per-element sigmas.",
-                        obj_id,
-                        labels6,
-                        expected_labels,
-                    )
-                    cov_usable = False
-
-            if cov_usable:
-                try:
-                    data = np.asarray(cov["data"], dtype=np.float64)
-                except (ValueError, TypeError):
-                    data = None
-                if (
-                    data is None
-                    or data.ndim != 2
-                    or data.shape[0] < 6
-                    or data.shape[1] < 6
-                ):
-                    logger.warning(
-                        "SBDB covariance matrix for object %s has shape %s, "
-                        "expected at least 6x6; discarding the covariance "
-                        "record and falling back to per-element sigmas.",
-                        obj_id,
-                        None if data is None else data.shape,
-                    )
-                else:
-                    cov_matrix = data[:6, :6]
-                    if data.shape[0] > 6:
-                        if isinstance(labels, list) and len(labels) == data.shape[0]:
-                            covariance_full, dropped = _convert_sbdb_full_covariance(
-                                data, [str(label) for label in labels]
-                            )
-                            if dropped:
-                                logger.warning(
-                                    "SBDB covariance for object %s includes estimated "
-                                    "parameters %s that are not supported for storage "
-                                    "(only A1, A2, A3); marginalizing them out.",
-                                    obj_id,
-                                    dropped,
-                                )
-                            if len(dropped) < data.shape[0] - 6:
-                                covariances_full[i] = covariance_full
-                        else:
-                            logger.warning(
-                                "SBDB covariance labels for object %s are missing or do "
-                                "not match the matrix size; discarding the "
-                                "non-gravitational covariance block.",
-                                obj_id,
-                            )
-
-                    # If covariance provides elements, prefer them (and the
-                    # covariance epoch).
-                    if "elements" in cov and cov["elements"] is not None:
-                        elements_list = cov["elements"]
-                        if cov.get("epoch") is not None:
-                            epoch_jd = _sbdb_float(cov.get("epoch"))
-
-        if elements_list is None:
-            raise ValueError(f"SBDB payload for {obj_id!r} missing orbit elements.")
-
-        elements_by_name = _sbdb_elements_map(elements_list)
-
-        if cov_matrix is None:
-            # Fallback: build a diagonal covariance from per-element sigmas.
-            sigmas = np.array(
-                [
-                    [
-                        _sbdb_element_sigma(elements_by_name, "e"),
-                        _sbdb_element_sigma(elements_by_name, "q"),
-                        _sbdb_element_sigma(elements_by_name, "tp"),
-                        _sbdb_element_sigma(elements_by_name, "om"),
-                        _sbdb_element_sigma(elements_by_name, "w"),
-                        _sbdb_element_sigma(elements_by_name, "i"),
-                    ]
-                ],
-                dtype=np.float64,
-            )
-            cov_matrix = sigmas_to_covariances(sigmas)[0]
-
-        covariances_sbdb[i, :, :] = cov_matrix
-
-        times_jd[i] = epoch_jd
-
-        q = _sbdb_element_value(elements_by_name, "q")
-        e = _sbdb_element_value(elements_by_name, "e")
-        inc = _sbdb_element_value(elements_by_name, "i")
-        om = _sbdb_element_value(elements_by_name, "om")
-        w = _sbdb_element_value(elements_by_name, "w")
-        tp_jd = _sbdb_element_value(elements_by_name, "tp")
-        tp_mjd = Timestamp.from_jd([tp_jd], scale="tdb").mjd()[0].as_py()
-
-        coords_cometary[i, 0] = q
-        coords_cometary[i, 1] = e
-        coords_cometary[i, 2] = inc
-        coords_cometary[i, 3] = om
-        coords_cometary[i, 4] = w
-        coords_cometary[i, 5] = tp_mjd
-
-        phys_rows.append(_sbdb_phys_par_from_payload(payload))
-        nongrav_rows.append(_sbdb_nongrav_row(obj_id, payload))
-
-    # Embed the 6x6 cometary covariances in the (N, 9, 9) array; rows with a
-    # non-gravitational block already carry their full covariance and rows
-    # without one keep NaN trailing dimensions, which `from_matrix` stores as
-    # plain 6x6 covariances.
-    covariances_cometary = _convert_SBDB_covariances(covariances_sbdb)
-    nongrav_missing = np.isnan(covariances_full[:, COORD_DIM:, COORD_DIM:]).all(
-        axis=(1, 2)
+    normalized = json.loads(
+        _rn.query_sbdb_normalize_payloads(json.dumps(ids), json.dumps(payloads))
     )
-    covariances_full[nongrav_missing, :COORD_DIM, :COORD_DIM] = covariances_cometary[
-        nongrav_missing
-    ]
-    times = Timestamp.from_jd(times_jd, scale="tdb")
+    for warning in normalized.get("warnings", []):
+        logger.warning("%s", warning)
+    coords_cometary = np.asarray(normalized["coords_cometary"], dtype=np.float64)
+    covariance_rows = normalized["covariances_cometary"]
+    if any(len(row) == 81 for row in covariance_rows):
+        covariances_cometary = np.full((len(payloads), 9, 9), np.nan, dtype=np.float64)
+        for row_index, row in enumerate(covariance_rows):
+            dimension = int(np.sqrt(len(row)))
+            values = np.asarray(row, dtype=np.float64).reshape(dimension, dimension)
+            covariances_cometary[row_index, :dimension, :dimension] = values
+    else:
+        covariances_cometary = np.asarray(covariance_rows, dtype=np.float64).reshape(
+            len(payloads), 6, 6
+        )
+    times = Timestamp.from_jd(
+        pa.array(normalized["times_jd"], type=pa.float64()), scale="tdb"
+    )
     origin = Origin.from_kwargs(code=["SUN" for _ in range(len(times))])
 
     coordinates = CometaryCoordinates.from_kwargs(
@@ -789,19 +588,32 @@ def _orbits_from_sbdb_payloads(
         raan=coords_cometary[:, 3],
         ap=coords_cometary[:, 4],
         tp=coords_cometary[:, 5],
-        covariance=CoordinateCovariances.from_matrix(covariances_full),
+        covariance=CoordinateCovariances.from_matrix(covariances_cometary),
         origin=origin,
         frame="ecliptic",
     )
 
-    physical_parameters = _physical_parameters_from_sbdb(phys_rows)
-    nongrav = _non_gravitational_parameters_from_sbdb(nongrav_rows)
+    phys = normalized["physical_parameters"]
+    physical_parameters = PhysicalParameters.from_kwargs(
+        H_v=np.asarray(phys["H_v"], dtype=np.float64),
+        H_v_sigma=np.asarray(phys["H_v_sigma"], dtype=np.float64),
+        G=np.asarray(phys["G"], dtype=np.float64),
+        G_sigma=np.asarray(phys["G_sigma"], dtype=np.float64),
+    )
+    nongrav_rows = normalized["non_gravitational_parameters"]
+    nongrav_columns = {
+        field: [row.get(field) for row in nongrav_rows]
+        for field in ("source", "A1", "A2", "A3", "ALN", "NK", "NM", "NN", "R0")
+    }
+    non_gravitational_parameters = NonGravitationalParameters.from_kwargs(
+        **nongrav_columns
+    )
     return Orbits.from_kwargs(
-        orbit_id=np.array(orbit_ids, dtype="object"),
-        object_id=np.array(object_ids, dtype="object"),
+        orbit_id=np.array(normalized["orbit_id"], dtype="object"),
+        object_id=np.array(normalized["object_id"], dtype="object"),
         coordinates=coordinates.to_cartesian(),
         physical_parameters=physical_parameters,
-        non_gravitational_parameters=nongrav,
+        non_gravitational_parameters=non_gravitational_parameters,
     )
 
 
@@ -888,50 +700,79 @@ def query_sbdb_new(
         If True, set the returned `Orbits.orbit_id` values to the input IDs (after any missing
         filtering). This is useful when callers need to map rows back to the requested identifiers.
     include_nongrav : bool, optional
-        If True (default), populate the non-gravitational parameters (A1, A2,
-        A3) from the SBDB model parameters and extend the coordinate
-        covariance with their rows when the SBDB covariance includes them.
-        If False, the parameters are returned null and the covariance is
-        reduced to its 6x6 coordinate block.
+        Include A1/A2/A3, fixed Marsden constants, and the extended covariance.
+        If false, strip the parameters and reduce covariance to its 6D block.
     """
-    # Normalize ids into a list of strings while preserving the caller's order.
+    from adam_core import _rust_native
+
+    from ..._rust.arrow import table_from_record_batch
+    from ...utils.http import _raise_compatible_http_error
+
     if isinstance(ids, (str, bytes)):
         obj_ids = [str(ids)]
     else:
         obj_ids = [str(x) for x in ids]
-
-    payloads = _get_sbdb_payloads_new(
-        obj_ids,
-        max_concurrent_requests=max_concurrent_requests,
-        timeout_s=timeout_s,
-        max_attempts=max_attempts,
-    )
-    if allow_missing:
-        kept_ids: list[str] = []
-        kept_payloads: list[dict[str, Any]] = []
-        for obj_id, payload in zip(obj_ids, payloads):
-            if "object" not in payload:
-                continue
-            kept_ids.append(obj_id)
-            kept_payloads.append(payload)
-
-        if not kept_ids:
-            return Orbits.empty()
-
-        orbits = _orbits_from_sbdb_payloads(kept_ids, kept_payloads)
+    if max_concurrent_requests <= 0:
+        raise ValueError("max_concurrent_requests must be > 0")
+    if _sbdb_api_get_json is not _DEFAULT_SBDB_API_GET_JSON:
+        payloads = _get_sbdb_payloads_new(
+            obj_ids,
+            max_concurrent_requests=max_concurrent_requests,
+            timeout_s=timeout_s,
+            max_attempts=max_attempts,
+        )
+        if allow_missing:
+            kept = [
+                (obj_id, payload)
+                for obj_id, payload in zip(obj_ids, payloads)
+                if "object" in payload
+            ]
+            if not kept:
+                return Orbits.empty()
+            kept_ids, kept_payloads = map(list, zip(*kept))
+            orbits = _orbits_from_sbdb_payloads(kept_ids, kept_payloads)
+            if orbit_id_from_input:
+                orbits = orbits.set_column(
+                    "orbit_id", pa.array(kept_ids, type=pa.large_string())
+                )
+            return (
+                orbits
+                if include_nongrav
+                else orbits.without_non_gravitational_parameters()
+            )
+        orbits = _orbits_from_sbdb_payloads(obj_ids, payloads)
         if orbit_id_from_input:
             orbits = orbits.set_column(
-                "orbit_id", pa.array(kept_ids, type=pa.large_string())
+                "orbit_id", pa.array(obj_ids, type=pa.large_string())
             )
         return (
             orbits if include_nongrav else orbits.without_non_gravitational_parameters()
         )
-
-    orbits = _orbits_from_sbdb_payloads(obj_ids, payloads)
-    if orbit_id_from_input:
-        orbits = orbits.set_column(
-            "orbit_id", pa.array(obj_ids, type=pa.large_string())
+    if max_concurrent_requests > 1:
+        logger.warning(
+            "query_sbdb_new is configured with max_concurrent_requests=%s. "
+            "JPL's SSD/CNEOS API fair use policy requests only one in-flight request at a time; "
+            "Rust will execute these requests sequentially.",
+            max_concurrent_requests,
         )
+    try:
+        batch, warnings = _rust_native.query_sbdb_arrow(
+            obj_ids,
+            True,
+            float(timeout_s),
+            int(max_attempts),
+            bool(allow_missing),
+            bool(orbit_id_from_input),
+        )
+        for warning in warnings:
+            logger.warning("%s", warning)
+    except RuntimeError as error:
+        _raise_compatible_http_error(error)
+    except ValueError as error:
+        if str(error).startswith("__NOT_FOUND__:"):
+            raise NotFoundError("object {} was not found", str(error).split(":", 1)[1])
+        raise
+    orbits = table_from_record_batch(Orbits, batch)
     return orbits if include_nongrav else orbits.without_non_gravitational_parameters()
 
 

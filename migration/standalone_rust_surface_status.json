@@ -1,0 +1,851 @@
+{
+  "schema_version": 1,
+  "generated_at": "2026-07-05",
+  "purpose": "Standalone Rust surface status registry for planning a Python-independent adam-core-rs capability set. Refreshed 2026-07-05 (bead personal-cmy.18): statuses updated for the landed W1 data model + Arrow bridge + typed adapter, promoted variants/observers workflows, ASSIST impacts/ephemeris parity, and the Rust OD driver stack.",
+  "source_inventory": "migration/artifacts/adam_core_public_surface_inventory_2026-05-15.json",
+  "source_inventory_count": 507,
+  "source_inventory_entry_count_verified": 507,
+  "api_migrations_source": "src/adam_core/_rust/status.py",
+  "api_migrations_count": 42,
+  "api_migrations_ids": [
+    "coordinates.cartesian_to_spherical",
+    "coordinates.cartesian_to_geodetic",
+    "coordinates.cartesian_to_keplerian",
+    "coordinates.keplerian.to_cartesian",
+    "coordinates.cartesian_to_cometary",
+    "coordinates.cometary.to_cartesian",
+    "coordinates.transform_coordinates",
+    "coordinates.spherical.to_cartesian",
+    "coordinates.transform_coordinates_with_covariance",
+    "coordinates.rotate_cartesian_time_varying",
+    "coordinates.residuals.apply_cosine_latitude_correction",
+    "coordinates.residuals.bound_longitude_residuals",
+    "coordinates.residuals.Residuals.calculate",
+    "coordinates.residuals.calculate_chi2",
+    "dynamics.calc_mean_motion",
+    "dynamics.propagate_2body",
+    "dynamics.propagate_2body_along_arc",
+    "dynamics.propagate_2body_arc_batch",
+    "dynamics.propagate_2body_with_covariance",
+    "dynamics.generate_ephemeris_2body",
+    "dynamics.generate_ephemeris_2body_with_covariance",
+    "dynamics.add_light_time",
+    "dynamics.calculate_moid",
+    "dynamics.calculate_moid_batch",
+    "dynamics.calculate_perturber_moids",
+    "dynamics.solve_lambert",
+    "dynamics.tisserand_parameter",
+    "missions.porkchop_grid",
+    "dynamics.generate_porkchop_data",
+    "photometry.calculate_phase_angle",
+    "photometry.calculate_apparent_magnitude_v",
+    "photometry.calculate_apparent_magnitude_v_and_phase_angle",
+    "photometry.predict_magnitudes",
+    "photometry.fit_absolute_magnitude_rows",
+    "photometry.fit_absolute_magnitude_grouped",
+    "orbit_determination.calcGibbs",
+    "orbit_determination.calcHerrickGibbs",
+    "orbit_determination.calcGauss",
+    "orbit_determination.gaussIOD",
+    "orbits.classify_orbits",
+    "statistics.weighted_mean",
+    "statistics.weighted_covariance"
+  ],
+  "scope_decisions": {
+    "schema_ownership": {
+      "decision": "rust_schema_canonical_python_quivr_adapts",
+      "source": "user clarification 2026-05-15",
+      "implication": "RM-STANDALONE-002 should define Rust-native schemas first; Arrow/quivr schemas adapt to Rust contracts."
+    },
+    "time_strategy": {
+      "decision": "start_with_erfa_sofa_ffi",
+      "source": "user clarification 2026-05-15",
+      "next_step": "Use the RM-STANDALONE-004B time contract when implementing RM-STANDALONE-006 propagation; evaluate Rust-native time replacements only after they match the fixture and provider-boundary tests.",
+      "current_baseline": "Python Timestamp.rescale uses ERFA for UTC-TAI leap seconds, an exact TAI-TT offset, a project-local TT-TDB approximation, Astropy/IERS for UT1, and pure arithmetic MJD_TDB to ET. RM-STANDALONE-004A mirrors UTC/TAI/TT/TDB in Rust through erfars-backed ERFA calls plus project-local arithmetic; RM-STANDALONE-004B extends fixtures/tests to the full Python rescale matrix through an explicit TimeScaleProvider boundary while provider-less UT1/GPS fail loudly."
+    },
+    "nbody_backend": {
+      "decision": "assist_rs_gpl_harness_with_pluggable_backend_trait",
+      "source": "user clarification 2026-05-15; assist-rs/GPL boundary clarification 2026-05-19",
+      "implication": "RM-STANDALONE-006/007 should keep permissive core Propagator contracts backend-generic, then adapt GPL-licensed assist-rs from a separate harness/package boundary."
+    },
+    "network_clients": {
+      "decision": "included_in_first_standalone_scope",
+      "source": "user clarification 2026-05-15",
+      "implementation": "Optional net/companion layer with fixture-testable parsers and live-service tests kept opt-in."
+    },
+    "plotting": {
+      "decision": "included_in_first_standalone_scope_but_new_approach_expected",
+      "source": "user clarification 2026-05-15",
+      "implementation": "Prefer data/spec emitters or optional integrations instead of direct Python plotting dependency parity."
+    }
+  },
+  "state_definitions": {
+    "blocked_by_rust_data_model": "Needs Rust-native batch/data contracts before workflow porting is meaningful.",
+    "blocked_by_time_model": "Needs Rust-native time strategy/parity before standalone coverage.",
+    "kernel_governed_no_typed_workflow": "Rust kernels/governance exist for important parts, but standalone typed workflow/data-model API is missing.",
+    "rust_service_available_extend": "Rust service exists and should be extended into standalone workflow ownership.",
+    "blocked_by_pluggable_rust_propagator": "Cannot replace Python/Ray orchestration until a Rust Propagator trait and n-body backend exist.",
+    "blocked_by_rust_data_model_and_propagator": "Requires typed Rust data model plus pluggable propagation before workflow port.",
+    "kernel_governed_no_observation_workflow": "Numerical kernels exist but observation/exposure data workflow remains Python-owned.",
+    "blocked_by_observation_data_model": "Needs Rust observation/exposure/association schemas and parsing/validation.",
+    "first_scope_product_edge_new_plotting_approach": "In first standalone scope as product/visualization edge; likely data/spec or optional integration rather than core plotting dependency.",
+    "first_scope_optional_net_edge": "In first standalone scope as optional network/client edge with fixture-testable parsers.",
+    "rust_helper_gap": "Small helpers should become typed Rust parsers/utilities when needed by workflow ports.",
+    "adapter_only_to_retire": "Python shim/compat glue counted in inventory but not a Rust port target.",
+    "rust_data_model_landed_adapters_active": "Rust-canonical batches, nested Arrow codecs, the W1 quivr bridge, and the typed propagation adapter are landed; remaining work is surface breadth, not the data model.",
+    "typed_propagator_landed": "Typed Propagator trait, TwoBodyPropagator, the backend-generic ephemeris workflow, and the GPL ASSIST adapter (propagation, covariance, impacts, ephemeris) are landed and parity-gated.",
+    "rust_od_driver_landed": "IOD kernels rust-default; 2-body LSQ kernel gated vs scipy; the backend-generic Gauss-Newton OD driver is landed in the permissive core and dispatched from the public fit_least_squares.",
+    "kernel_governed_typed_via_batches": "The module's numeric kernels are Rust-native and parity/speed-gated; typed access flows through the canonical batch workflows (TwoBodyPropagator/generate_ephemeris, VariantOrbits.create, transform/rotate, Residuals.calculate, fit_least_squares). A dedicated per-module typed wrapper would duplicate the kernel surface, so this is a terminal state.",
+    "python_orchestration_over_rust_kernels": "Python-owned orchestration (grids, plotting, I/O glue) over Rust-native kernels; the numeric core is migrated, the orchestration intentionally stays Python.",
+    "python_surface_exempt": "Intentionally Python-only surface: trivial constant-scaling helpers, exception classes, or test-data fixture loaders where a Rust crossing adds cost without value. Terminal state (decision 2026-07-06).",
+    "rust_backed_thin_python_orchestration": "The numeric core is Rust-native and parity-gated behind the canonical public name; the module retains only thin Python orchestration (argument marshalling, quivr table assembly, outlier loops). Terminal for the current facade model; the rust-only flip replaces the orchestration with bindings.",
+    "distribution_orchestration_python_terminal": "Ray-based multi-node distribution and its Python helpers (chunking, bounded caches, worker plumbing). Obsolete-by-design in the rust-only model: Rayon parallelizes in-process on the Rust side, and multi-node distribution is out of scope for the Rust port (program decision 2026-07-06). Terminal state; these modules retire with the Python facade rather than being ported."
+  },
+  "summary": {
+    "workstream_count": 11,
+    "module_count": 83,
+    "entry_count": 507,
+    "status_entry_counts": {
+      "adapter_only_to_retire": 6,
+      "blocked_by_observation_data_model": 29,
+      "blocked_by_pluggable_rust_propagator": 33,
+      "blocked_by_rust_data_model": 167,
+      "blocked_by_rust_data_model_and_propagator": 28,
+      "blocked_by_time_model": 37,
+      "first_scope_optional_net_edge": 11,
+      "first_scope_product_edge_new_plotting_approach": 43,
+      "kernel_governed_no_observation_workflow": 35,
+      "kernel_governed_no_typed_workflow": 88,
+      "rust_helper_gap": 12,
+      "rust_service_available_extend": 18
+    }
+  },
+  "workstreams": [
+    {
+      "id": "W1",
+      "name": "core coordinate/time/orbit data model",
+      "modules": [
+        "adam_core.time.time",
+        "adam_core.coordinates.cartesian",
+        "adam_core.coordinates.spherical",
+        "adam_core.coordinates.keplerian",
+        "adam_core.coordinates.cometary",
+        "adam_core.coordinates.geodetics",
+        "adam_core.coordinates.origin",
+        "adam_core.coordinates.covariances",
+        "adam_core.orbits.orbits",
+        "adam_core.orbits.variants",
+        "adam_core.orbits.classification",
+        "adam_core.orbits.physical_parameters",
+        "adam_core.observers.observers",
+        "adam_core.observers.state"
+      ],
+      "status": "rust_data_model_landed_adapters_active",
+      "first_scope": true,
+      "implementation_direction": "Define Rust-canonical schemas and typed batches; Python/quivr adapts through Arrow/PyO3 adapters.",
+      "dependencies": [
+        "schema_ownership_decision",
+        "time_strategy_decision"
+      ],
+      "next_tasks": [
+        "RM-STANDALONE-002",
+        "RM-STANDALONE-003",
+        "RM-STANDALONE-004"
+      ],
+      "entry_count": 204,
+      "module_count": 14
+    },
+    {
+      "id": "W2",
+      "name": "coordinate transforms, units, residuals, variants",
+      "modules": [
+        "adam_core.coordinates.transform",
+        "adam_core.coordinates.units",
+        "adam_core.coordinates.residuals",
+        "adam_core.coordinates.variants"
+      ],
+      "status": "kernel_governed_typed_via_batches",
+      "first_scope": true,
+      "implementation_direction": "Lift existing Rust kernels onto CoordinateBatch/CovarianceBatch APIs; add Rust-native units, residuals, and variant generation after linalg policy is settled.",
+      "dependencies": [
+        "W1",
+        "RM-STANDALONE-002"
+      ],
+      "next_tasks": [
+        "RM-STANDALONE-003"
+      ],
+      "entry_count": 34,
+      "module_count": 4
+    },
+    {
+      "id": "W3",
+      "name": "SPICE, frames, origins, observers",
+      "modules": [
+        "adam_core.utils.spice_backend",
+        "adam_core.utils.spice",
+        "adam_core.observers.utils"
+      ],
+      "status": "rust_native_service_api",
+      "first_scope": true,
+      "implementation_direction": "adam_core_rs_spice now exposes typed Rust service APIs for kernel lifecycle, frame transforms, origin resolution, AU/AU-day state batches, origin translations, and Earth-fixed observer states; MPC observer-table ingestion remains future data-model work.",
+      "dependencies": [
+        "spicekit",
+        "time_strategy_decision"
+      ],
+      "next_tasks": [
+        "RM-STANDALONE-006"
+      ],
+      "entry_count": 18,
+      "module_count": 3
+    },
+    {
+      "id": "W4",
+      "name": "dynamics and mission design",
+      "modules": [
+        "adam_core.dynamics.kepler",
+        "adam_core.dynamics.barker",
+        "adam_core.dynamics.stumpff",
+        "adam_core.dynamics.chi",
+        "adam_core.dynamics.lagrange",
+        "adam_core.dynamics.propagation",
+        "adam_core.dynamics.ephemeris",
+        "adam_core.dynamics.aberrations",
+        "adam_core.dynamics.lambert",
+        "adam_core.dynamics.moid",
+        "adam_core.dynamics.tisserand",
+        "adam_core.dynamics.impacts",
+        "adam_core.dynamics.exceptions",
+        "adam_core.dynamics._rust_compat",
+        "adam_core.missions.porkchop"
+      ],
+      "status": "kernel_governed_typed_via_batches",
+      "first_scope": true,
+      "implementation_direction": "Expose governed Rust dynamics kernels through typed Rust APIs; keep _rust_compat adapter-only and retire it as workflows move down.",
+      "dependencies": [
+        "W1",
+        "W3",
+        "W5"
+      ],
+      "next_tasks": [
+        "RM-STANDALONE-006",
+        "RM-STANDALONE-007"
+      ],
+      "entry_count": 60,
+      "module_count": 15
+    },
+    {
+      "id": "W5",
+      "name": "propagator abstraction and execution model",
+      "modules": [
+        "adam_core.propagator.propagator",
+        "adam_core.propagator.utils",
+        "adam_core.parallel",
+        "adam_core.ray_cluster",
+        "adam_core.utils.chunking",
+        "adam_core.utils.bounded_lru"
+      ],
+      "status": "typed_propagator_landed",
+      "first_scope": true,
+      "implementation_direction": "Define pluggable Rust Propagator trait; start with TwoBodyPropagator and add an ASSIST-compatible backend by adapting GPL-licensed assist-rs while retaining backend pluggability.",
+      "dependencies": [
+        "W1",
+        "W3",
+        "assist_rs_gpl_harness_decision"
+      ],
+      "next_tasks": [
+        "RM-STANDALONE-006",
+        "RM-STANDALONE-007"
+      ],
+      "entry_count": 33,
+      "module_count": 6
+    },
+    {
+      "id": "W6",
+      "name": "orbit determination workflows",
+      "modules": [
+        "adam_core.orbit_determination.gibbs",
+        "adam_core.orbit_determination.herrick_gibbs",
+        "adam_core.orbit_determination.gauss",
+        "adam_core.orbit_determination.iod",
+        "adam_core.orbit_determination.od",
+        "adam_core.orbit_determination.least_squares",
+        "adam_core.orbit_determination.evaluate",
+        "adam_core.orbit_determination.outliers",
+        "adam_core.orbit_determination.differential_correction",
+        "adam_core.orbit_determination.orbit_fitter",
+        "adam_core.orbit_determination.fitted_orbits"
+      ],
+      "status": "rust_od_driver_landed",
+      "first_scope": true,
+      "implementation_direction": "Port OD/IOD/LSQ over typed observations, residuals, fit diagnostics, and the pluggable Propagator trait; reuse adam_core_rs_autodiff::Dual where appropriate.",
+      "dependencies": [
+        "W1",
+        "W5",
+        "W8"
+      ],
+      "next_tasks": [
+        "RM-STANDALONE-008"
+      ],
+      "entry_count": 28,
+      "module_count": 11
+    },
+    {
+      "id": "W7",
+      "name": "photometry and bandpasses",
+      "modules": [
+        "adam_core.photometry.magnitude",
+        "adam_core.photometry.magnitude_common",
+        "adam_core.photometry.absolute_magnitude",
+        "adam_core.photometry.bandpasses.api",
+        "adam_core.photometry.bandpasses.tables",
+        "adam_core.photometry.bandpasses.vendor",
+        "adam_core.photometry.bandpasses.constants",
+        "adam_core.observations.photometry"
+      ],
+      "status": "rust_native_service_api",
+      "first_scope": true,
+      "implementation_direction": "Keep governed Rust magnitude kernels; add Rust bandpass registry and observation/exposure joins after the observation model exists.",
+      "dependencies": [
+        "W1",
+        "W8"
+      ],
+      "next_tasks": [
+        "RM-STANDALONE-009"
+      ],
+      "entry_count": 35,
+      "module_count": 8
+    },
+    {
+      "id": "W8",
+      "name": "observations, exposures, catalogs, associations",
+      "modules": [
+        "adam_core.observations.ades",
+        "adam_core.observations.detections",
+        "adam_core.observations.exposures",
+        "adam_core.observations.associations",
+        "adam_core.observations.source_catalog"
+      ],
+      "status": "rust_data_model_landed_adapters_active",
+      "first_scope": true,
+      "implementation_direction": "Create Rust-native observation/exposure/association/source catalog batches plus ADES/MPC parse/serialize contracts.",
+      "dependencies": [
+        "W1",
+        "schema_ownership_decision"
+      ],
+      "next_tasks": [
+        "RM-STANDALONE-009"
+      ],
+      "entry_count": 29,
+      "module_count": 5
+    },
+    {
+      "id": "W9",
+      "name": "orbit products, I/O, and visualization products",
+      "modules": [
+        "adam_core.orbits.spice_kernel",
+        "adam_core.orbits.oem_io",
+        "adam_core.orbits.ephemeris",
+        "adam_core.orbits.openspace.assets",
+        "adam_core.orbits.openspace.renderable",
+        "adam_core.orbits.openspace.translation",
+        "adam_core.orbits.openspace.lua",
+        "adam_core.orbits.plots",
+        "adam_core.dynamics.plots",
+        "adam_core.utils.plots.logos"
+      ],
+      "status": "first_scope_product_edge_new_plotting_approach",
+      "first_scope": true,
+      "implementation_direction": "Implement SPK/OEM/OpenSpace/product emitters over Rust batches; treat plotting as data/spec generation or optional integrations rather than a direct Python plotting port.",
+      "dependencies": [
+        "W1",
+        "W3",
+        "W5",
+        "plotting_scope_decision"
+      ],
+      "next_tasks": [
+        "RM-STANDALONE-010"
+      ],
+      "entry_count": 43,
+      "module_count": 10
+    },
+    {
+      "id": "W10",
+      "name": "query and network clients",
+      "modules": [
+        "adam_core.orbits.query.horizons",
+        "adam_core.orbits.query.scout",
+        "adam_core.orbits.query.sbdb",
+        "adam_core.orbits.query.neocc"
+      ],
+      "status": "first_scope_optional_net_edge",
+      "first_scope": true,
+      "implementation_direction": "Provide network clients in standalone scope as optional net/companion functionality; keep parsers fixture-testable without live network.",
+      "dependencies": [
+        "network_scope_decision",
+        "W1"
+      ],
+      "next_tasks": [
+        "RM-STANDALONE-010"
+      ],
+      "entry_count": 11,
+      "module_count": 4
+    },
+    {
+      "id": "W11",
+      "name": "utility/string/helper surfaces",
+      "modules": [
+        "adam_core.utils.mpc",
+        "adam_core.utils.helpers.orbits",
+        "adam_core.utils.helpers.observations"
+      ],
+      "status": "rust_native_service_api",
+      "first_scope": true,
+      "implementation_direction": "Port helpers as typed parsers/IDs where required by Rust observation/catalog/product workflows.",
+      "dependencies": [
+        "W8",
+        "W10"
+      ],
+      "next_tasks": [
+        "RM-STANDALONE-009",
+        "RM-STANDALONE-010"
+      ],
+      "entry_count": 12,
+      "module_count": 3
+    }
+  ],
+  "module_index": {
+    "adam_core.coordinates.cartesian": {
+      "workstream": "W1",
+      "entry_count": 34,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.coordinates.cometary": {
+      "workstream": "W1",
+      "entry_count": 29,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.coordinates.covariances": {
+      "workstream": "W1",
+      "entry_count": 15,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.coordinates.geodetics": {
+      "workstream": "W1",
+      "entry_count": 11,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.coordinates.keplerian": {
+      "workstream": "W1",
+      "entry_count": 29,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.coordinates.origin": {
+      "workstream": "W1",
+      "entry_count": 7,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.coordinates.residuals": {
+      "workstream": "W2",
+      "entry_count": 8,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.coordinates.spherical": {
+      "workstream": "W1",
+      "entry_count": 16,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.coordinates.transform": {
+      "workstream": "W2",
+      "entry_count": 12,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.coordinates.units": {
+      "workstream": "W2",
+      "entry_count": 8,
+      "status": "python_surface_exempt"
+    },
+    "adam_core.coordinates.variants": {
+      "workstream": "W2",
+      "entry_count": 6,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.dynamics._rust_compat": {
+      "workstream": "W4",
+      "entry_count": 6,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.dynamics.aberrations": {
+      "workstream": "W4",
+      "entry_count": 2,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.dynamics.barker": {
+      "workstream": "W4",
+      "entry_count": 1,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.dynamics.chi": {
+      "workstream": "W4",
+      "entry_count": 3,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.dynamics.ephemeris": {
+      "workstream": "W4",
+      "entry_count": 1,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.dynamics.exceptions": {
+      "workstream": "W4",
+      "entry_count": 1,
+      "status": "python_surface_exempt"
+    },
+    "adam_core.dynamics.impacts": {
+      "workstream": "W4",
+      "entry_count": 11,
+      "status": "rust_native_service_api"
+    },
+    "adam_core.dynamics.kepler": {
+      "workstream": "W4",
+      "entry_count": 8,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.dynamics.lagrange": {
+      "workstream": "W4",
+      "entry_count": 2,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.dynamics.lambert": {
+      "workstream": "W4",
+      "entry_count": 2,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.dynamics.moid": {
+      "workstream": "W4",
+      "entry_count": 3,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.dynamics.plots": {
+      "workstream": "W9",
+      "entry_count": 7,
+      "status": "first_scope_product_edge_new_plotting_approach"
+    },
+    "adam_core.dynamics.propagation": {
+      "workstream": "W4",
+      "entry_count": 2,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.dynamics.stumpff": {
+      "workstream": "W4",
+      "entry_count": 1,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.dynamics.tisserand": {
+      "workstream": "W4",
+      "entry_count": 1,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.missions.porkchop": {
+      "workstream": "W4",
+      "entry_count": 16,
+      "status": "python_orchestration_over_rust_kernels"
+    },
+    "adam_core.observations.ades": {
+      "workstream": "W8",
+      "entry_count": 9,
+      "status": "rust_native_service_api"
+    },
+    "adam_core.observations.associations": {
+      "workstream": "W8",
+      "entry_count": 3,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.observations.detections": {
+      "workstream": "W8",
+      "entry_count": 5,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.observations.exposures": {
+      "workstream": "W8",
+      "entry_count": 4,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.observations.photometry": {
+      "workstream": "W7",
+      "entry_count": 1,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.observations.source_catalog": {
+      "workstream": "W8",
+      "entry_count": 8,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.observers.observers": {
+      "workstream": "W1",
+      "entry_count": 7,
+      "status": "rust_native_service_api"
+    },
+    "adam_core.observers.state": {
+      "workstream": "W1",
+      "entry_count": 3,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.observers.utils": {
+      "workstream": "W3",
+      "entry_count": 1,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbit_determination.differential_correction": {
+      "workstream": "W6",
+      "entry_count": 2,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbit_determination.evaluate": {
+      "workstream": "W6",
+      "entry_count": 3,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbit_determination.fitted_orbits": {
+      "workstream": "W6",
+      "entry_count": 5,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.orbit_determination.gauss": {
+      "workstream": "W6",
+      "entry_count": 2,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbit_determination.gibbs": {
+      "workstream": "W6",
+      "entry_count": 1,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbit_determination.herrick_gibbs": {
+      "workstream": "W6",
+      "entry_count": 1,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbit_determination.iod": {
+      "workstream": "W6",
+      "entry_count": 5,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbit_determination.least_squares": {
+      "workstream": "W6",
+      "entry_count": 2,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbit_determination.od": {
+      "workstream": "W6",
+      "entry_count": 3,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbit_determination.orbit_fitter": {
+      "workstream": "W6",
+      "entry_count": 2,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbit_determination.outliers": {
+      "workstream": "W6",
+      "entry_count": 2,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbits.classification": {
+      "workstream": "W1",
+      "entry_count": 1,
+      "status": "kernel_governed_typed_via_batches"
+    },
+    "adam_core.orbits.ephemeris": {
+      "workstream": "W9",
+      "entry_count": 2,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.orbits.oem_io": {
+      "workstream": "W9",
+      "entry_count": 3,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbits.openspace.assets": {
+      "workstream": "W9",
+      "entry_count": 6,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbits.openspace.lua": {
+      "workstream": "W9",
+      "entry_count": 3,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbits.openspace.renderable": {
+      "workstream": "W9",
+      "entry_count": 10,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbits.openspace.translation": {
+      "workstream": "W9",
+      "entry_count": 4,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbits.orbits": {
+      "workstream": "W1",
+      "entry_count": 4,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.orbits.physical_parameters": {
+      "workstream": "W1",
+      "entry_count": 1,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.orbits.plots": {
+      "workstream": "W9",
+      "entry_count": 3,
+      "status": "first_scope_product_edge_new_plotting_approach"
+    },
+    "adam_core.orbits.query.horizons": {
+      "workstream": "W10",
+      "entry_count": 2,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbits.query.neocc": {
+      "workstream": "W10",
+      "entry_count": 1,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbits.query.sbdb": {
+      "workstream": "W10",
+      "entry_count": 3,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbits.query.scout": {
+      "workstream": "W10",
+      "entry_count": 5,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbits.spice_kernel": {
+      "workstream": "W9",
+      "entry_count": 4,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.orbits.variants": {
+      "workstream": "W1",
+      "entry_count": 10,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.parallel": {
+      "workstream": "W5",
+      "entry_count": 20,
+      "status": "distribution_orchestration_python_terminal"
+    },
+    "adam_core.photometry.absolute_magnitude": {
+      "workstream": "W7",
+      "entry_count": 3,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.photometry.bandpasses.api": {
+      "workstream": "W7",
+      "entry_count": 11,
+      "status": "rust_native_service_api"
+    },
+    "adam_core.photometry.bandpasses.constants": {
+      "workstream": "W7",
+      "entry_count": 1,
+      "status": "python_surface_exempt"
+    },
+    "adam_core.photometry.bandpasses.tables": {
+      "workstream": "W7",
+      "entry_count": 4,
+      "status": "rust_data_model_landed_adapters_active"
+    },
+    "adam_core.photometry.bandpasses.vendor": {
+      "workstream": "W7",
+      "entry_count": 5,
+      "status": "python_surface_exempt"
+    },
+    "adam_core.photometry.magnitude": {
+      "workstream": "W7",
+      "entry_count": 5,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.photometry.magnitude_common": {
+      "workstream": "W7",
+      "entry_count": 5,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.propagator.propagator": {
+      "workstream": "W5",
+      "entry_count": 6,
+      "status": "distribution_orchestration_python_terminal"
+    },
+    "adam_core.propagator.utils": {
+      "workstream": "W5",
+      "entry_count": 2,
+      "status": "distribution_orchestration_python_terminal"
+    },
+    "adam_core.ray_cluster": {
+      "workstream": "W5",
+      "entry_count": 1,
+      "status": "distribution_orchestration_python_terminal"
+    },
+    "adam_core.time.time": {
+      "workstream": "W1",
+      "entry_count": 37,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.utils.bounded_lru": {
+      "workstream": "W5",
+      "entry_count": 2,
+      "status": "distribution_orchestration_python_terminal"
+    },
+    "adam_core.utils.chunking": {
+      "workstream": "W5",
+      "entry_count": 2,
+      "status": "distribution_orchestration_python_terminal"
+    },
+    "adam_core.utils.helpers.observations": {
+      "workstream": "W11",
+      "entry_count": 1,
+      "status": "python_surface_exempt"
+    },
+    "adam_core.utils.helpers.orbits": {
+      "workstream": "W11",
+      "entry_count": 2,
+      "status": "python_surface_exempt"
+    },
+    "adam_core.utils.mpc": {
+      "workstream": "W11",
+      "entry_count": 9,
+      "status": "rust_native_service_api"
+    },
+    "adam_core.utils.plots.logos": {
+      "workstream": "W9",
+      "entry_count": 1,
+      "status": "first_scope_product_edge_new_plotting_approach"
+    },
+    "adam_core.utils.spice": {
+      "workstream": "W3",
+      "entry_count": 7,
+      "status": "rust_backed_thin_python_orchestration"
+    },
+    "adam_core.utils.spice_backend": {
+      "workstream": "W3",
+      "entry_count": 10,
+      "status": "rust_backed_thin_python_orchestration"
+    }
+  },
+  "adapter_surface": {
+    "status": "python_adapter_layer_to_rebuild_on_rust_schemas",
+    "entry_count_in_inventory": null,
+    "sizing_sources": [
+      "src/adam_core/_rust/status.py API_MIGRATIONS",
+      "src/adam_core/_rust/api.py",
+      "rust/adam_core_py/src/*.rs"
+    ],
+    "api_migration_count": 42,
+    "note": "Adapter work is intentionally tracked outside the 507 public-ish Python entry inventory."
+  },
+  "next_tasks": [
+    "RM-STANDALONE-002: Rust-native data model RFC (complete)",
+    "RM-STANDALONE-003: CoordinateBatch/OrbitBatch plus Arrow adapter prototype (complete)",
+    "RM-STANDALONE-004: ERFA/SOFA time-strategy fixture spike with Rust-native replacement outline (complete)",
+    "RM-STANDALONE-004A: ERFA/liberfa UTC-TAI FFI service (complete)",
+    "RM-STANDALONE-005: Rust SPICE service API for origin/frame/observer states (complete)"
+  ]
+}

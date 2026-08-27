@@ -1,6 +1,6 @@
 # adam_core: ADAM Core Utilities
 #### A Python package by the Asteroid Institute, a program of the B612 Foundation
-[![Python 3.9+](https://img.shields.io/badge/Python-3.9%2B-blue)](https://img.shields.io/badge/Python-3.9%2B-blue)
+[![Python 3.11-3.13](https://img.shields.io/badge/Python-3.11--3.13-blue)](https://img.shields.io/badge/Python-3.9%2B-blue)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)  
 [![pip - Build, Lint, Test, and Coverage](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/pip-build-lint-test-coverage.yml/badge.svg)](https://github.com/B612-Asteroid-Institute/adam_core/actions/workflows/pip-build-lint-test-coverage.yml)
 
@@ -13,6 +13,30 @@ ADAM Core is available on PyPI
 ```bash
 pip install adam_core
 ```
+
+Astropy, Astroquery, Healpy, and plotting libraries are explicit optional
+providers rather than default runtime dependencies. Install only the bridge
+you need:
+
+```bash
+pip install "adam_core[astropy]"      # Astropy Time and UT1/IERS bridges
+pip install "adam_core[legacy-sbdb]"  # Astroquery compatibility workflows
+pip install "adam_core[healpix]"      # Healpy-backed public helpers
+pip install "adam_core[jax]"          # Historical explicit JAX bridge
+pip install "adam_core[plots]"        # Plotting and date-axis formatting
+```
+
+Native wheels support CPython 3.11-3.13 on manylinux 2.17+ x86-64/AArch64 and
+macOS Apple silicon/Intel. Windows is deferred because the required
+``libassist-sys 1.2.1`` acceptance stack depends on upstream ASSIST's POSIX
+memory mapping; musllinux is also unsupported. Python installs reuse kernel
+data from the active environment; pure-Rust consumers use override ->
+installed-Python -> cache -> checksummed wheel resolution, with
+``ADAM_CORE_KERNEL_OFFLINE=1`` disabling downloads.
+
+ASSIST propagation is provided by the separate ``adam-assist`` distribution as
+``adam_assist.ASSISTPropagator``. ``adam-assist`` owns the orchestration layer
+and consumes ``libassist-sys`` and ``librebound-sys`` directly.
 
 ## Usage
 
@@ -193,22 +217,15 @@ propagated_orbits = propagator.propagate_orbits(
 ```
 
 #### Ephemeris Generation
-Ephemeris generation requires a propagator that implements the EphemerisMixin interface. This is currently only implemented by the PYOORB propagator. The ephemeris generator will automatically map the propagated covariance matrices to the sky-plane.
-
-You will need to install adam-pyoorb in order to use the ephemeris generator, which is currently only available on GitHub.
-
-```sh
-pip install git+https://github.com/B612-Asteroid-Institute/adam-pyoorb.git
-```
-
+Ephemeris generation requires a compatible propagator. `adam-assist` supplies the supported high-precision N-body implementation and maps propagated covariance matrices to the sky plane.
 
 ```python
 import numpy as np
 from astropy import units as u
 
-from adam_core.orbits.query import query_horizons
-from adam_core.propagator.adam_pyoorb import PYOORBPropagator
+from adam_assist import ASSISTPropagator
 from adam_core.observers import Observers
+from adam_core.orbits.query import query_horizons
 from adam_core.time import Timestamp
 
 # Get orbits to propagate
@@ -216,8 +233,7 @@ initial_time = Timestamp.from_mjd([60000.0], scale="tdb")
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_horizons(object_ids, initial_time)
 
-# Make sure PYOORB is ready
-propagator = PYOORBPropagator()
+propagator = ASSISTPropagator()
 
 # Define a set of observers and observation times
 times = Timestamp.from_mjd(initial_time.mjd() + np.arange(0, 100))
@@ -280,10 +296,10 @@ propagated_orbits = propagate_2body(
 #### 2-body Ephemeris Generation
 This package also has functionality to generate ephemerides for a set of orbits. We do not recommend you use this with
 2-body propagated orbits as it will not be accurate for more than a few days. However, if you used a N-body propagator
-such as PYOORB, you can feed in the propagated orbits to this function to generate ephemerides. We call the ephemeris generator
+such as ASSIST, you can feed in the propagated orbits to this function to generate ephemerides. We call the ephemeris generator
 2-body because the light-time correction is applied using a 2-body propagator.
 
-Because the ephemeris generator was written in Jax, we can also map covariances directly to the sky-plane. To do this, we propagate
+The ephemeris generator can map covariances directly to the sky plane. To do this, propagate
 the covariance matrices with the orbits. This is done by passing `covariance=True` to the propagator. The ephemeris generator will
 then automatically map the propagated covariance matrices to the sky-plane.
 
@@ -291,9 +307,9 @@ then automatically map the propagated covariance matrices to the sky-plane.
 import numpy as np
 from astropy import units as u
 
-from adam_core.orbits.query import query_sbdb
-from adam_core.propagator.adam_pyoorb import PYOORBPropagator
+from adam_assist import ASSISTPropagator
 from adam_core.observers import Observers
+from adam_core.orbits.query import query_sbdb
 from adam_core.dynamics import generate_ephemeris_2body
 from adam_core.time import Timestamp
 
@@ -301,14 +317,13 @@ from adam_core.time import Timestamp
 object_ids = ["Duende", "Eros", "Ceres"]
 orbits = query_sbdb(object_ids)
 
-# Make sure PYOORB is ready
-propagator = PYOORBPropagator()
+propagator = ASSISTPropagator()
 
 # Define a set of observers and observation times
 times = Timestamp.from_mjd(np.arange(59000, 60000), scale="tdb")
 observers = Observers.from_code("I11", times)
 
-# Propagate orbits with PYOORB (note that we are propagating with covariances)
+# Propagate orbits with ASSIST (including covariances)
 propagated_orbits = propagator.propagate_orbits(
     orbits,
     times,

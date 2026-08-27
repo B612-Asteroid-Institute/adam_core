@@ -2,35 +2,18 @@ from pathlib import Path
 
 import numpy as np
 
+from adam_core import _rust_native
+from adam_core._rust.arrow import table_from_record_batch
+from adam_core.orbits import Orbits
+
 from ..neocc import (
     _full_covariance_from_upper_triangular,
     _non_gravitational_parameters_from_neocc,
     _parse_oef,
     _physical_parameters_from_neocc,
-    query_neocc,
 )
 
 TESTDATA_DIR = Path(__file__).parent / "testdata" / "neocc"
-
-
-def test__full_covariance_drops_trailing_magnitude_for_6d_solution():
-    # A 28-element (7x7) upper-triangular COV on a 6D orbital solution carries
-    # an appended magnitude row/column; it must be dropped to a 6x6 solved
-    # state (see "2018 CW2").
-    upper = list(range(1, 29))  # 28 distinct values
-    solved = _full_covariance_from_upper_triangular(upper, solved_dimension=6)
-    assert solved.shape == (6, 6)
-
-
-def test__full_covariance_keeps_nongrav_parameter_for_7d_solution():
-    # The same 28-element (7x7) COV on a 7D non-grav solution (6 orbital + A2)
-    # must keep the full 7x7 — the 7th row/column is A2, not magnitude.
-    upper = list(range(1, 29))
-    solved = _full_covariance_from_upper_triangular(upper, solved_dimension=7)
-    assert solved.shape == (7, 7)
-    # The leading 6x6 block is identical whether or not the 7th param is kept.
-    dropped = _full_covariance_from_upper_triangular(upper, solved_dimension=6)
-    np.testing.assert_array_equal(solved[:6, :6], dropped)
 
 
 def test__parse_oef_2024YR4_ke0():
@@ -131,103 +114,28 @@ def test__parse_oef_2022OB5_ke1():
     )  # Diagonal elements should be 1
 
 
-def test_query_neocc(mocker):
-    """Test query_neocc with both present-day and middle epochs (using saved test data)"""
-    import requests
-
-    # Setup mock responses for each test file
-    mock_responses = {}
-    for orbit_type in ["ke0", "ke1"]:
-        for obj in ["2024YR4", "2022OB5"]:
-            with open(TESTDATA_DIR / f"{obj}.{orbit_type}", "r") as f:
-                mock_responses[f"{obj}.{orbit_type}"] = f.read()
-
-    # Create mock response
-    def mock_get(url, params):
-        mock = mocker.MagicMock()
-        mock.status_code = 200
-        mock.text = mock_responses[params["file"]]
-        return mock
-
-    # Patch requests.get
-    mocker.patch("requests.get", side_effect=mock_get)
-
-    # Test querying multiple objects
+def test_query_neocc_recorded_products():
     object_ids = ["2024YR4", "2022OB5"]
-    orbits = query_neocc(object_ids, orbit_type="ke", orbit_epoch="present-day")
-
-    # Verify the results
-    assert orbits is not None
-    assert len(orbits) == 2
-
-    assert orbits.orbit_id[0].as_py() == "2024YR4"
-    assert orbits.object_id[0].as_py() == "2024YR4"
-    assert orbits.orbit_id[1].as_py() == "2022OB5"
-    assert orbits.object_id[1].as_py() == "2022OB5"
-    # present-day uses ke1 files; epochs from current fixtures
-    assert orbits.coordinates.time.days[0].as_py() == 61000
-    assert orbits.coordinates.time.days[1].as_py() == 61000
-    assert orbits.coordinates.time.scale == "tt"
-    assert np.all(~np.isnan(orbits.coordinates.values))
-    assert np.all(~np.isnan(orbits.coordinates.covariance.to_matrix()))
-    # 6-D orbital solutions carry no non-gravitational covariance block.
-    assert not orbits.coordinates.covariance.has_nongrav_block()
-    # Physical parameters from OEF MAG (H, G); no uncertainties in NEOCC OEF
-    assert orbits.physical_parameters is not None
-    assert orbits.physical_parameters.H_v[0].as_py() == 24.047
-    assert orbits.physical_parameters.G[0].as_py() == 0.150
-    assert orbits.physical_parameters.H_v[1].as_py() == 28.912
-    assert orbits.physical_parameters.G[1].as_py() == 0.150
-    assert orbits.non_gravitational_parameters.A2[0].as_py() is None
-    assert orbits.non_gravitational_parameters.A2[1].as_py() is None
-
-    # Verify the mock was called with correct parameters
-    requests.get.assert_has_calls(
-        [
-            mocker.call(
-                "https://neo.ssa.esa.int/PSDB-portlet/download",
-                params={"file": "2024YR4.ke1"},
-            ),
-            mocker.call(
-                "https://neo.ssa.esa.int/PSDB-portlet/download",
-                params={"file": "2022OB5.ke1"},
-            ),
+    for orbit_epoch, suffix, expected_days in [
+        ("present-day", "ke1", [61000, 61000]),
+        ("middle", "ke0", [60704, 60129]),
+    ]:
+        payloads = [
+            (TESTDATA_DIR / f"{obj}.{suffix}").read_text() for obj in object_ids
         ]
-    )
-
-    # Test querying multiple objects
-    object_ids = ["2024YR4", "2022OB5"]
-    orbits = query_neocc(object_ids, orbit_type="ke", orbit_epoch="middle")
-
-    # Verify the results
-    assert orbits is not None
-    assert len(orbits) == 2
-
-    assert orbits.orbit_id[0].as_py() == "2024YR4"
-    assert orbits.object_id[0].as_py() == "2024YR4"
-    assert orbits.orbit_id[1].as_py() == "2022OB5"
-    assert orbits.object_id[1].as_py() == "2022OB5"
-    # middle uses ke0 files; epochs from current fixtures
-    assert orbits.coordinates.time.days[0].as_py() == 60704
-    assert orbits.coordinates.time.days[1].as_py() == 60129
-    assert orbits.coordinates.time.scale == "tt"
-    assert np.all(~np.isnan(orbits.coordinates.values))
-    assert np.all(~np.isnan(orbits.coordinates.covariance.to_matrix()))
-    assert not orbits.coordinates.covariance.has_nongrav_block()
-
-    # Verify the mock was called with correct parameters
-    requests.get.assert_has_calls(
-        [
-            mocker.call(
-                "https://neo.ssa.esa.int/PSDB-portlet/download",
-                params={"file": "2024YR4.ke0"},
-            ),
-            mocker.call(
-                "https://neo.ssa.esa.int/PSDB-portlet/download",
-                params={"file": "2022OB5.ke0"},
-            ),
-        ]
-    )
+        batch, warnings = _rust_native.query_neocc_arrow(
+            object_ids, "ke", orbit_epoch, payloads
+        )
+        assert warnings == []
+        orbits = table_from_record_batch(Orbits, batch)
+        assert orbits.orbit_id.to_pylist() == object_ids
+        assert orbits.object_id.to_pylist() == object_ids
+        assert orbits.coordinates.time.days.to_pylist() == expected_days
+        assert orbits.coordinates.time.scale == "tt"
+        assert np.all(np.isfinite(orbits.coordinates.values))
+        assert np.all(np.isfinite(orbits.coordinates.covariance.to_matrix()))
+        assert orbits.physical_parameters.H_v.to_pylist() == [24.047, 28.912]
+        assert orbits.physical_parameters.G.to_pylist() == [0.15, 0.15]
 
 
 def test__physical_parameters_from_neocc_with_magnitude() -> None:
@@ -264,104 +172,6 @@ def test__physical_parameters_from_neocc_magnitude_empty() -> None:
     assert np.isnan(phys.G[0].as_py())
 
 
-def test__parse_oef_99942_ke1_nongrav() -> None:
-    result = _parse_oef((TESTDATA_DIR / "99942.ke1").read_text())
-
-    assert result["nongrav"]["model_used"] == 1
-    assert result["nongrav"]["parameter_count"] == 2
-    assert result["nongrav"]["dimension"] == 7
-    assert result["nongrav"]["solve_for_parameter_codes"] == [2]
-    assert result["nongrav"]["vector"] == [0.0, -2.90010329254113e-04]
-    assert result["covariance"].shape == (6, 6)
-    assert result["covariance_full"].shape == (7, 7)
-    assert result["correlation_full"].shape == (7, 7)
-
-
-def test__non_gravitational_parameters_from_neocc_yarkovsky() -> None:
-    data = _parse_oef((TESTDATA_DIR / "101955.ke1").read_text())
-    nongrav = _non_gravitational_parameters_from_neocc(data)
-
-    assert len(nongrav) == 1
-    assert nongrav.source[0].as_py() == "NEOCC"
-    assert np.isclose(nongrav.A2[0].as_py(), -4.60477568857430e-14)
-    assert nongrav.A1[0].as_py() is None
-    assert nongrav.A3[0].as_py() is None
-
-
-def test__non_gravitational_parameters_from_neocc_unsupported_model(caplog) -> None:
-    import logging
-
-    data = _parse_oef((TESTDATA_DIR / "99942.ke1").read_text())
-    # Rewrite the parsed solution as an unsupported cometary-style model
-    # solving for A1 (code 3): the (AMRAT, A2) vector decoding does not apply.
-    data["nongrav"]["model_used"] = 2
-    data["nongrav"]["solve_for_parameter_codes"] = [3]
-
-    with caplog.at_level(logging.WARNING, logger="adam_core.orbits.query.neocc"):
-        nongrav = _non_gravitational_parameters_from_neocc(data)
-
-    assert any("unsupported" in record.message for record in caplog.records)
-    # Values must not be mislabeled from the (AMRAT, A2) positional layout.
-    assert nongrav.A2[0].as_py() is None
-    assert nongrav.A1[0].as_py() is None
-    assert nongrav.A3[0].as_py() is None
-
-
-def test_query_neocc_builds_extended_covariance(mocker):
-    response_text = (TESTDATA_DIR / "99942.ke1").read_text()
-
-    def mock_get(url, params):
-        mock = mocker.MagicMock()
-        mock.status_code = 200
-        mock.text = response_text
-        return mock
-
-    mocker.patch("requests.get", side_effect=mock_get)
-    orbits = query_neocc(["99942"], orbit_type="ke", orbit_epoch="present-day")
-
-    assert orbits.coordinates.covariance.nongrav_block_mask().tolist() == [True]
-    covariance = orbits.coordinates.covariance.to_full_matrix()[0]
-    assert covariance.shape == (9, 9)
-
-    # The leading 6x6 block is the coordinate covariance by construction:
-    # the full 9x9 is transformed Keplerian -> Cartesian in one pass.
-    np.testing.assert_allclose(
-        covariance[:6, :6],
-        orbits.coordinates.covariance.to_matrix()[0],
-        rtol=0,
-        atol=0,
-    )
-    # sigma(A2) in canonical au/d^2: the OEF RMS line gives 2.32321E-06 in
-    # 1e-10 au/d^2 units. The A2 diagonal is invariant under the orbital-block
-    # Jacobian, so this also verifies the unit scaling of the covariance.
-    # A2 occupies index 7 of the fixed (..., A1, A2, A3) layout; A1 and A3
-    # were not estimated, so their rows are zero.
-    np.testing.assert_allclose(np.sqrt(covariance[7, 7]), 2.32321e-16, rtol=1e-4)
-    assert np.all(covariance[6, :] == 0.0)
-    assert np.all(covariance[8, :] == 0.0)
-    assert np.isclose(
-        orbits.non_gravitational_parameters.A2[0].as_py(), -2.90010329254113e-14
-    )
-
-
-def test_query_neocc_include_nongrav_false_strips_nongrav(mocker):
-    response_text = (TESTDATA_DIR / "99942.ke1").read_text()
-
-    def mock_get(url, params):
-        mock = mocker.MagicMock()
-        mock.status_code = 200
-        mock.text = response_text
-        return mock
-
-    mocker.patch("requests.get", side_effect=mock_get)
-    orbits = query_neocc(
-        ["99942"], orbit_type="ke", orbit_epoch="present-day", include_nongrav=False
-    )
-
-    assert orbits.non_gravitational_parameters.A2[0].as_py() is None
-    assert not orbits.coordinates.covariance.has_nongrav_block()
-
-
 def test_real_neocc_oef_files_parse_without_error() -> None:
     # Parse every .ke0/.ke1 in testdata; ensures real NEOCC OEF shapes don't break us.
     # Some real files may use COV/format variants we don't support yet; skip those.
@@ -386,62 +196,128 @@ def test_real_neocc_oef_files_parse_without_error() -> None:
     ), "at least two real OEF files should parse (e.g. 2024YR4, 2022OB5)"
 
 
-def test_empty_response(mocker) -> None:
-    # Sometimes, e.g. "1416T-2", the response text is empty even though the
-    # HTTP code is 200. We should just skip those objects.
+def test_empty_response() -> None:
+    batch, warnings = _rust_native.query_neocc_arrow(
+        ["1416T-2"], "ke", "present-day", [""]
+    )
+    assert warnings == []
+    assert len(table_from_record_batch(Orbits, batch)) == 0
 
-    import requests
 
-    # Create mock response
-    def mock_get(url, params):
-        mock = mocker.MagicMock()
-        mock.status_code = 200
-        mock.text = ""
-        return mock
+def test_28element_matrix() -> None:
+    batch, warnings = _rust_native.query_neocc_arrow(
+        ["2018 CW2"],
+        "ke",
+        "present-day",
+        [(TESTDATA_DIR / "2018CW2.ke1").read_text()],
+    )
+    assert warnings == []
+    assert len(table_from_record_batch(Orbits, batch)) == 1
 
-    mocker.patch("requests.get", side_effect=mock_get)
 
-    object_ids = ["1416T-2"]
-    orbits = query_neocc(object_ids, orbit_type="ke", orbit_epoch="present-day")
+def test_full_covariance_respects_solved_dimension() -> None:
+    upper = list(range(1, 29))
+    orbital = _full_covariance_from_upper_triangular(upper, solved_dimension=6)
+    extended = _full_covariance_from_upper_triangular(upper, solved_dimension=7)
+    assert orbital.shape == (6, 6)
+    assert extended.shape == (7, 7)
+    np.testing.assert_array_equal(extended[:6, :6], orbital)
 
-    # Verify the results
-    assert orbits is not None
-    assert len(orbits) == 0
-    requests.get.assert_has_calls(
-        [
-            mocker.call(
-                "https://neo.ssa.esa.int/PSDB-portlet/download",
-                params={"file": "1416T-2.ke1"},
-            ),
-        ]
+
+def test_parse_oef_nongrav_solution() -> None:
+    result = _parse_oef((TESTDATA_DIR / "99942.ke1").read_text())
+    assert result["nongrav"] == {
+        "model_used": 1,
+        "parameter_count": 2,
+        "dimension": 7,
+        "solve_for_parameter_codes": [2],
+        "vector": [0.0, -2.90010329254113e-04],
+    }
+    assert result["covariance"].shape == (6, 6)
+    assert result["covariance_full"].shape == (7, 7)
+    assert result["correlation_full"].shape == (7, 7)
+
+
+def test_non_gravitational_parameters_from_neocc_yarkovsky() -> None:
+    data = _parse_oef((TESTDATA_DIR / "101955.ke1").read_text())
+    nongrav = _non_gravitational_parameters_from_neocc(data)
+    assert nongrav.source[0].as_py() == "NEOCC"
+    assert np.isclose(nongrav.A2[0].as_py(), -4.60477568857430e-14)
+    assert nongrav.A1[0].as_py() is None
+    assert nongrav.A3[0].as_py() is None
+
+
+def test_non_gravitational_parameters_from_neocc_unsupported_model(caplog) -> None:
+    import logging
+
+    data = _parse_oef((TESTDATA_DIR / "99942.ke1").read_text())
+    data["nongrav"]["model_used"] = 2
+    data["nongrav"]["solve_for_parameter_codes"] = [3]
+    with caplog.at_level(logging.WARNING, logger="adam_core.orbits.query.neocc"):
+        nongrav = _non_gravitational_parameters_from_neocc(data)
+    assert any("unsupported" in record.message for record in caplog.records)
+    assert nongrav.A1[0].as_py() is None
+    assert nongrav.A2[0].as_py() is None
+    assert nongrav.A3[0].as_py() is None
+
+
+def test_query_neocc_recorded_builds_extended_covariance() -> None:
+    payload = (TESTDATA_DIR / "99942.ke1").read_text()
+    batch, warnings = _rust_native.query_neocc_arrow(
+        ["99942"], "ke", "present-day", [payload], True
+    )
+    assert warnings == []
+    orbits = table_from_record_batch(Orbits, batch)
+    assert orbits.coordinates.covariance.nongrav_block_mask().tolist() == [True]
+    covariance = orbits.coordinates.covariance.to_full_matrix()[0]
+    assert covariance.shape == (9, 9)
+    assert np.isclose(np.sqrt(covariance[7, 7]), 2.32321e-16, rtol=1e-4)
+    assert np.all(covariance[6, :] == 0.0)
+    assert np.all(covariance[8, :] == 0.0)
+    assert np.isclose(
+        orbits.non_gravitational_parameters.A2[0].as_py(),
+        -2.90010329254113e-14,
     )
 
 
-def test_28element_matrix(mocker) -> None:
-    # Some objects have 28 elements upper triangular for covariance and correlation
-    import requests
-
-    # Create mock response
-    def mock_get(url, params):
-        mock = mocker.MagicMock()
-        mock.status_code = 200
-        with open(TESTDATA_DIR / "2018CW2.ke1", "r") as f:
-            mock.text = f.read()
-        return mock
-
-    mocker.patch("requests.get", side_effect=mock_get)
-
-    object_ids = ["2018 CW2"]
-    orbits = query_neocc(object_ids, orbit_type="ke", orbit_epoch="present-day")
-
-    # Verify the results
-    assert orbits is not None
-    assert len(orbits) == 1
-    requests.get.assert_has_calls(
-        [
-            mocker.call(
-                "https://neo.ssa.esa.int/PSDB-portlet/download",
-                params={"file": "2018CW2.ke1"},
-            ),
-        ]
+def test_query_neocc_recorded_include_nongrav_false_strips_solution() -> None:
+    payload = (TESTDATA_DIR / "99942.ke1").read_text()
+    batch, warnings = _rust_native.query_neocc_arrow(
+        ["99942"], "ke", "present-day", [payload], False
     )
+    assert warnings == []
+    orbits = table_from_record_batch(Orbits, batch)
+    assert orbits.non_gravitational_parameters.A2[0].as_py() is None
+    assert not orbits.coordinates.covariance.has_nongrav_block()
+
+
+def test_query_neocc_recorded_warns_and_drops_unsupported_dt() -> None:
+    payload = (TESTDATA_DIR / "99942.ke1").read_text()
+    payload_with_dt = payload.replace("LSP   1  2    7    2", "LSP   1  2    7    5")
+    assert payload_with_dt != payload
+
+    batch, warnings = _rust_native.query_neocc_arrow(
+        ["99942"], "ke", "present-day", [payload_with_dt], True
+    )
+    assert len(warnings) == 1
+    assert "unsupported" in warnings[0]
+    orbits = table_from_record_batch(Orbits, batch)
+    assert orbits.non_gravitational_parameters.A1[0].as_py() is None
+    assert orbits.non_gravitational_parameters.A2[0].as_py() is None
+    assert orbits.non_gravitational_parameters.A3[0].as_py() is None
+    assert not orbits.coordinates.covariance.has_nongrav_block()
+
+
+def test_query_neocc_recorded_warns_and_marginalizes_amrat() -> None:
+    payload = (TESTDATA_DIR / "99942.ke1").read_text()
+    payload_with_amrat = payload.replace("LSP   1  2    7    2", "LSP   1  2    7    1")
+    assert payload_with_amrat != payload
+
+    batch, warnings = _rust_native.query_neocc_arrow(
+        ["99942"], "ke", "present-day", [payload_with_amrat], True
+    )
+    assert len(warnings) == 1
+    assert "AMRAT" in warnings[0]
+    orbits = table_from_record_batch(Orbits, batch)
+    assert orbits.non_gravitational_parameters.A2[0].as_py() is None
+    assert not orbits.coordinates.covariance.has_nongrav_block()

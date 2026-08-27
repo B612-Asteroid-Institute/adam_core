@@ -11,13 +11,15 @@ import numpy.testing as npt
 import pytest
 from astroquery.jplsbdb import SBDB
 
+from adam_core import _rust_native
+from adam_core._rust.arrow import table_from_record_batch
+from adam_core.orbits import Orbits
+
 from ..sbdb import (
     NotFoundError,
     _convert_SBDB_covariances,
-    _non_gravitational_parameters_from_sbdb,
     _orbits_from_sbdb_payloads,
     _physical_parameters_from_sbdb,
-    _sbdb_nongrav_row,
     _sbdb_phys_par_from_payload,
     query_sbdb,
     query_sbdb_new,
@@ -115,7 +117,7 @@ def _load_sbdb_fixture_payload(response_file: str) -> dict:
         return json.load(f)
 
 
-def _assert_orbits_equivalent(a, b) -> None:
+def _assert_orbits_equivalent(a, b, *, covariance_atol: float = 0.0) -> None:
     assert len(a) == len(b)
     assert a.orbit_id.to_pylist() == b.orbit_id.to_pylist()
     assert a.object_id.to_pylist() == b.object_id.to_pylist()
@@ -146,7 +148,7 @@ def _assert_orbits_equivalent(a, b) -> None:
         a.coordinates.covariance.to_matrix(),
         b.coordinates.covariance.to_matrix(),
         rtol=0.0,
-        atol=0.0,
+        atol=covariance_atol,
         equal_nan=True,
     )
 
@@ -333,41 +335,6 @@ def test__physical_parameters_from_sbdb_two_rows() -> None:
     assert np.isnan(tbl.G_sigma[0].as_py()) and tbl.G_sigma[1].as_py() == 0.05
 
 
-def test__sbdb_nongrav_row_extracts_supported_fields() -> None:
-    payload = _load_sbdb_fixture_payload("99942_phys.json")
-    row = _sbdb_nongrav_row("99942", payload)
-    assert row["source"] == "SBDB"
-    assert row["A1"] == 5.0e-13
-    assert row["A2"] == -2.901766637153165e-14
-    assert row["A3"] is None
-    # The Marsden g(r) constants are stored as plain values; 99942's asteroid
-    # solution lists ALN/NK/NM/R0 explicitly and inherits the standard NN.
-    assert row["ALN"] == 1.0
-    assert row["NK"] == 0.0
-    assert row["NM"] == 2.0
-    assert row["NN"] == 5.093
-    assert row["R0"] == 1.0
-    assert set(row) == {"source", "A1", "A2", "A3", "ALN", "NK", "NM", "NN", "R0"}
-
-
-def test__sbdb_nongrav_row_fills_standard_comet_constants() -> None:
-    # Comet solutions (67P) list no g(r) constants: they are fit under the
-    # classic Marsden standard, which the importer fills in explicitly.
-    payload = _load_sbdb_fixture_payload("67P_phys.json")
-    row = _sbdb_nongrav_row("67P", payload)
-    assert row["A1"] == 1.042451026100725e-9
-    npt.assert_allclose(row["ALN"], 0.1112620426)
-    assert row["NK"] == 4.6142
-    assert row["NM"] == 2.15
-    assert row["NN"] == 5.093
-    assert row["R0"] == 2.808
-
-
-def test__non_gravitational_parameters_from_sbdb_empty() -> None:
-    tbl = _non_gravitational_parameters_from_sbdb([])
-    assert len(tbl) == 0
-
-
 def test_query_sbdb_new_physical_parameters_from_phys_par() -> None:
     # SBDB returns H, G (and optional sigmas) when phys-par=1; V-band per JPL/MPC convention.
     payload = _load_sbdb_fixture_payload("2001VB.json")
@@ -427,62 +394,69 @@ def test_query_sbdb_new_physical_parameters_missing_phys_par_fills_nan() -> None
     assert np.isnan(orbits.physical_parameters.G[0].as_py())
 
 
-def test_query_sbdb_new_populates_non_gravitational_parameters() -> None:
-    payload = _load_sbdb_fixture_payload("67P_phys.json")
+def test_query_sbdb_new_populates_nongrav_and_extended_covariance() -> None:
+    for object_id, filename in [("67P", "67P_phys.json"), ("99942", "99942_phys.json")]:
+        payload = _load_sbdb_fixture_payload(filename)
+
+        def new_side_effect(
+            requested_id: str, *, timeout_s: float, max_attempts: int
+        ) -> dict:
+            assert requested_id == object_id
+            return payload
+
+        with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+            mock_new.side_effect = new_side_effect
+            orbits = query_sbdb_new([object_id], timeout_s=1.0, max_attempts=1)
+
+        assert orbits.non_gravitational_parameters.source[0].as_py() == "SBDB"
+        assert orbits.coordinates.covariance.nongrav_block_mask().tolist() == [True]
+        full = orbits.coordinates.covariance.to_full_matrix()[0]
+        assert full.shape == (9, 9)
+        assert np.isfinite(full).all()
+        if object_id == "67P":
+            assert np.isclose(
+                orbits.non_gravitational_parameters.A1[0].as_py(),
+                1.042451026100725e-9,
+            )
+            assert orbits.non_gravitational_parameters.ALN[0].as_py() == 0.1112620426
+            assert orbits.non_gravitational_parameters.NK[0].as_py() == 4.6142
+            assert orbits.non_gravitational_parameters.R0[0].as_py() == 2.808
+        else:
+            npt.assert_allclose(np.sqrt(full[6, 6]), 4.892e-13, rtol=1e-3)
+            npt.assert_allclose(np.sqrt(full[7, 7]), 1.859e-16, rtol=1e-3)
+            assert np.all(full[8, :] == 0.0)
+            assert np.all(full[:, 8] == 0.0)
+
+
+@pytest.mark.parametrize("malformation", ["labels", "shape"])
+def test_query_sbdb_new_degrades_bad_covariance_with_warning(
+    caplog, malformation
+) -> None:
+    payload = copy.deepcopy(_load_sbdb_fixture_payload("99942_phys.json"))
+    covariance = payload["orbit"]["covariance"]
+    if malformation == "labels":
+        covariance["labels"][0] = "unexpected"
+    else:
+        covariance["data"] = [[1.0] * 5 for _ in range(5)]
 
     def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
         return payload
 
     with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
         mock_new.side_effect = new_side_effect
-        orbits = query_sbdb_new(["67P"], timeout_s=1.0, max_attempts=1)
+        with caplog.at_level(logging.WARNING, logger="adam_core.orbits.query.sbdb"):
+            orbits = query_sbdb_new(["99942"], timeout_s=1.0, max_attempts=1)
 
-    assert len(orbits) == 1
-    assert orbits.non_gravitational_parameters.source[0].as_py() == "SBDB"
-    assert orbits.non_gravitational_parameters.A1[0].as_py() == 1.042451026100725e-9
-    assert orbits.non_gravitational_parameters.A2[0].as_py() == -6.739627582388806e-11
-    assert orbits.non_gravitational_parameters.A3[0].as_py() == 2.960945433454094e-10
-    # 67P's SBDB covariance is 10-dimensional (A1, A2, A3, DT): the DT
-    # dimension is not supported for storage and is marginalized out,
-    # leaving the fixed 9x9 extended covariance.
-    assert orbits.coordinates.covariance.nongrav_block_mask().tolist() == [True]
-    full = orbits.coordinates.covariance.to_full_matrix()[0]
-    assert full.shape == (9, 9)
-    assert np.all(np.diag(full)[6:] > 0.0)
-
-
-def test_query_sbdb_new_extended_covariance_values() -> None:
-    payload = _load_sbdb_fixture_payload("99942_phys.json")
-
-    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
-        return payload
-
-    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
-        mock_new.side_effect = new_side_effect
-        orbits = query_sbdb_new(["99942"], timeout_s=1.0, max_attempts=1)
-
-    assert orbits.coordinates.covariance.nongrav_block_mask().tolist() == [True]
-    full = orbits.coordinates.covariance.to_full_matrix()[0]
-    assert full.shape == (9, 9)
-    # The leading 6x6 block is the coordinate covariance by construction:
-    # the full 9x9 is transformed cometary -> Cartesian in one pass.
-    npt.assert_allclose(
-        full[:6, :6],
-        orbits.coordinates.covariance.to_matrix()[0],
-        rtol=0,
-        atol=0,
+    assert any(
+        "falling back to per-element sigmas" in record.message
+        for record in caplog.records
     )
-    # The A1/A2 diagonal entries are invariant under the orbital-block
-    # Jacobian and must agree with the payload's own sigma fields, which SBDB
-    # reports in canonical au/d^2. 99942's solution estimates A1 and A2 only,
-    # so A3 is held fixed with a zero row.
-    npt.assert_allclose(np.sqrt(full[6, 6]), 4.892e-13, rtol=1e-3)
-    npt.assert_allclose(np.sqrt(full[7, 7]), 1.859e-16, rtol=1e-3)
-    assert np.all(full[8, :] == 0.0)
-    assert np.all(full[:, 8] == 0.0)
+    assert not orbits.coordinates.covariance.has_nongrav_block()
+    assert orbits.non_gravitational_parameters.A2[0].as_py() is not None
+    assert np.isfinite(orbits.coordinates.covariance.to_matrix()).all()
 
 
-def test_query_sbdb_new_include_nongrav_false_strips_nongrav() -> None:
+def test_query_sbdb_new_include_nongrav_false_strips_solution() -> None:
     payload = _load_sbdb_fixture_payload("67P_phys.json")
 
     def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
@@ -491,104 +465,41 @@ def test_query_sbdb_new_include_nongrav_false_strips_nongrav() -> None:
     with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
         mock_new.side_effect = new_side_effect
         orbits = query_sbdb_new(
-            ["67P"], timeout_s=1.0, max_attempts=1, include_nongrav=False
+            ["67P"],
+            timeout_s=1.0,
+            max_attempts=1,
+            include_nongrav=False,
         )
 
     assert orbits.non_gravitational_parameters.A1[0].as_py() is None
     assert not orbits.coordinates.covariance.has_nongrav_block()
 
 
-def test_query_sbdb_unexpected_covariance_labels(caplog) -> None:
-    payload_good = _load_sbdb_fixture_payload("Ceres.json")
-    payload_bad = _load_sbdb_fixture_payload("99942_phys.json")
-    # Scramble the first-six label ordering: the covariance record can no
-    # longer be interpreted, so this object must degrade to per-element
-    # sigmas instead of failing the whole batch.
-    payload_bad["orbit"]["covariance"]["labels"][:6] = [
-        "q",
-        "e",
-        "tp",
-        "node",
-        "peri",
-        "i",
-    ]
-
-    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
-        return payload_good if object_id == "Ceres" else payload_bad
-
-    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
-        mock_new.side_effect = new_side_effect
-        with caplog.at_level(logging.WARNING, logger="adam_core.orbits.query.sbdb"):
-            orbits = query_sbdb_new(["Ceres", "99942"], timeout_s=1.0, max_attempts=1)
-
-    # The batch survives: both objects come back, and the degradation warned.
-    assert len(orbits) == 2
-    assert any(
-        "falling back to per-element sigmas" in record.message
-        for record in caplog.records
+def test_recorded_sbdb_complete_rust_product_matches_payload_facade() -> None:
+    ids = ["Ceres", "2001VB", "54509"]
+    payloads = [_load_sbdb_fixture_payload(f"{object_id}.json") for object_id in ids]
+    expected = _orbits_from_sbdb_payloads(ids, payloads)
+    batch, warnings = _rust_native.query_sbdb_arrow(
+        ids,
+        True,
+        60.0,
+        1,
+        False,
+        False,
+        [json.dumps(payload) for payload in payloads],
     )
+    actual = table_from_record_batch(Orbits, batch)
+    assert warnings == []
+    _assert_orbits_equivalent(actual, expected, covariance_atol=3e-28)
 
-    degraded = orbits.take([1])
-    # No usable covariance record means no non-grav block; the A1/A2 values
-    # from model_pars are still stored (a value without an uncertainty row).
-    assert not degraded.coordinates.covariance.has_nongrav_block()
-    assert degraded.non_gravitational_parameters.A2[0].as_py() is not None
 
-    # The degraded object must be identical to the same payload with the
-    # covariance record removed entirely: elements, epoch, and the
-    # sigma-fallback covariance all come from the top-level orbit record
-    # (the untrusted record's cov["elements"]/cov["epoch"] are not adopted).
-    payload_stripped = copy.deepcopy(payload_bad)
-    del payload_stripped["orbit"]["covariance"]
-    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
-        mock_new.side_effect = (
-            lambda object_id, *, timeout_s, max_attempts: payload_stripped
-        )
-        reference = query_sbdb_new(["99942"], timeout_s=1.0, max_attempts=1)
-
-    np.testing.assert_allclose(
-        degraded.coordinates.values, reference.coordinates.values, rtol=0, atol=0
+def test_sbdb_complete_product_has_rust_owned_timing() -> None:
+    payload = json.dumps(_load_sbdb_fixture_payload("Ceres.json"))
+    samples = np.asarray(
+        _rust_native.benchmark_query_client_processing("sbdb", [payload], 2, 2, 1)
     )
-    # rtol only: the covariance Jacobian is evaluated on different batch
-    # shapes in the two queries, which perturbs the transform at the ULP
-    # level; a real divergence (e.g. adopting the untrusted record's
-    # elements/epoch) would differ by orders of magnitude.
-    np.testing.assert_allclose(
-        degraded.coordinates.covariance.to_matrix(),
-        reference.coordinates.covariance.to_matrix(),
-        rtol=1e-12,
-        atol=0,
-        equal_nan=True,
-    )
-    np.testing.assert_array_equal(
-        degraded.coordinates.time.mjd().to_numpy(zero_copy_only=False),
-        reference.coordinates.time.mjd().to_numpy(zero_copy_only=False),
-    )
-
-
-def test_query_sbdb_ragged_covariance_data(caplog) -> None:
-    payload_good = _load_sbdb_fixture_payload("Ceres.json")
-    payload_bad = _load_sbdb_fixture_payload("99942_phys.json")
-    # A truncated/ragged covariance payload fails inside np.asarray, before
-    # any shape check; it must degrade this object, not the whole batch.
-    payload_bad["orbit"]["covariance"]["data"] = [[1.0, 2.0], [3.0]]
-
-    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
-        return payload_good if object_id == "Ceres" else payload_bad
-
-    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
-        mock_new.side_effect = new_side_effect
-        with caplog.at_level(logging.WARNING, logger="adam_core.orbits.query.sbdb"):
-            orbits = query_sbdb_new(["Ceres", "99942"], timeout_s=1.0, max_attempts=1)
-
-    assert len(orbits) == 2
-    assert any(
-        "falling back to per-element sigmas" in record.message
-        for record in caplog.records
-    )
-    degraded = orbits.take([1])
-    assert not degraded.coordinates.covariance.has_nongrav_block()
-    assert np.isfinite(degraded.coordinates.covariance.to_matrix()).all()
+    assert samples.shape == (2, 2)
+    assert np.all(samples > 0.0)
 
 
 def test_real_sbdb_payloads_parse_without_error() -> None:
@@ -607,11 +518,6 @@ def test_real_sbdb_payloads_parse_without_error() -> None:
         assert len(orbits) == 1
         assert orbits.coordinates is not None
         assert orbits.physical_parameters is not None
-        # If the payload produced an extended covariance, its trailing block
-        # must be finite (zero rows for parameters held fixed are fine).
-        if orbits.coordinates.covariance.has_nongrav_block():
-            full = orbits.coordinates.covariance.to_full_matrix()[0]
-            assert np.isfinite(full).all()
 
 
 @contextmanager

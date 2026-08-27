@@ -104,6 +104,15 @@ Current limits:
 - NEOCC non-grav solutions are decoded only for the Yarkovsky model
   (``AMRAT``/``A2``); the ``AMRAT`` dimension is marginalized out with a
   warning and other models are degraded to value-free rows with a warning.
+- Near-parabolic orbits (e close to 1, e.g. C/2022 E3) currently convert to
+  wildly wrong Cartesian states through the pre-existing
+  cometary-to-Cartesian defect tracked in `issue #210
+  <https://github.com/B612-Asteroid-Institute/adam_core/issues/210>`_. Until
+  that is fixed, element-based SBDB/NEOCC imports of such objects cannot be
+  propagated meaningfully: the non-gravitational force model itself is
+  validated against JPL Horizons from Cartesian starting states (see the
+  adam-assist regression suite), so parity claims for hyperbolic comets are
+  bounded to that force-integration path, not the element-conversion path.
 
 Two-Body Note
 -------------

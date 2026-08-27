@@ -1,0 +1,167 @@
+{
+ "schema": "adam_core.openspace_asset_product_fixture",
+ "version": 1,
+ "orbits": {
+  "orbit_id": [
+   "orbit alpha",
+   "orbit,beta",
+   "orbit gamma"
+  ],
+  "object_id": [
+   "Object Alpha",
+   null,
+   "Object Gamma"
+  ],
+  "x": [
+   0.9847667295949533,
+   -1.6481223863033387,
+   -1.4851266287121314
+  ],
+  "y": [
+   0.573280313668827,
+   -1.6409361292666806,
+   0.08397789479865614
+  ],
+  "z": [
+   0.03443273391094321,
+   0.24800924400697213,
+   0.7141859820681961
+  ],
+  "vx": [
+   -0.008309978733319746,
+   0.007316341127903522,
+   0.0012378221136192485
+  ],
+  "vy": [
+   0.014201151088932126,
+   -0.008860844781139514,
+   -0.016870215835054176
+  ],
+  "vz": [
+   0.001349811527445307,
+   -0.0016205784789072178,
+   0.004327666409338492
+  ],
+  "days": [
+   60000,
+   60123,
+   60250
+  ],
+  "nanos": [
+   0,
+   123456789,
+   60000000000000
+  ],
+  "scale": "tdb",
+  "frame": "ecliptic",
+  "origin": [
+   "SUN",
+   "SUN",
+   "SUN"
+  ]
+ },
+ "cases": [
+  {
+   "name": "orbital_kepler_all_options",
+   "kind": "orbital_kepler",
+   "identifier": "Fixture Orbital",
+   "kwargs": {
+    "gui_name": "Orbital GUI",
+    "gui_path": "/ADAM/Fixture Orbital",
+    "color": [
+     0.1,
+     0.2,
+     0.3
+    ],
+    "segment_quality": 42,
+    "contiguous_mode": true,
+    "enable_max_size": false,
+    "enable_outline": true,
+    "max_size": 12.5,
+    "outline_color": [
+     0.4,
+     0.5,
+     0.6
+    ],
+    "outline_width": 2.5,
+    "point_size_exponent": 1.25,
+    "rendering": "PointsTrails",
+    "render_size": 8,
+    "start_render_idx": 1,
+    "trail_fade": 0.75,
+    "trail_width": 0.33,
+    "dim_in_atmosphere": false,
+    "enabled": true,
+    "opacity": 0.8,
+    "render_bin_mode": "Opaque",
+    "tag": [
+     "science",
+     "fixture"
+    ]
+   },
+   "files": {
+    "Fixture_Orbital.asset": "local Object = {\n    Identifier = \"Fixture_Orbital\",\n    Parent = \"SunEclipJ2000\",\n    GUI = {\n        Name = \"Orbital GUI\",\n        Path = \"/ADAM/Fixture Orbital\",\n    },\n    Renderable = {\n        Type = \"RenderableOrbitalKepler\",\n        DimInAtmosphere = false,\n        Enabled = true,\n        Opacity = 0.8,\n        RenderBinMode = \"Opaque\",\n        Tag = {\"science, fixture\"},\n        Color = {0.1, 0.2, 0.3},\n        Format = \"SBDB\",\n        Path = asset.resource(\"Fixture_Orbital.csv\"),\n        SegmentQuality = 42,\n        ContiguousMode = true,\n        EnableMaxSize = false,\n        EnableOutline = true,\n        MaxSize = 12.5,\n        OutlineColor = {0.4, 0.5, 0.6},\n        OutlineWidth = 2.5,\n        PointSizeExponent = 1.25,\n        Rendering = \"PointsTrails\",\n        RenderSize = 8,\n        StartRenderIdx = 1,\n        TrailFade = 0.75,\n        TrailWidth = 0.33,\n    },\n}\n\nasset.onInitialize(function ()\n  openspace.addSceneGraphNode(Object);\nend)\nasset.onDeinitialize(function ()\n  openspace.removeSceneGraphNode(Object);\nend)",
+    "Fixture_Orbital.csv": "full_name,epoch_cal,e,a,i,om,w,ma,per\norbit alpha,2023-02-25.0,0.049999999999999704,1.2,4.999999999999992,10.000000000000014,20.000000000000217,0.25000000000147227,480.14266199567595\n\"orbit,beta\",2023-06-28.000001428896,0.10000000000000026,2.5000000000000013,10.499999999999991,80.0,90.00000000000026,45.499999999999766,1443.804662253267\norbit gamma,2023-11-02.694444444445,0.7000000000000001,5.500000000000002,29.999999999999993,120.50000000000001,60.75,359.9,4711.318458820309\n"
+   }
+  },
+  {
+   "name": "trail_kepler_all_options",
+   "kind": "trail_orbit",
+   "identifier": "Fixture Trail Kepler",
+   "kwargs": {
+    "trail_head": true,
+    "gui_name": "ignored legacy argument",
+    "gui_path": "/ADAM/Fixture Trail",
+    "color": [
+     0.2,
+     0.4,
+     0.6
+    ],
+    "resolution": 12345,
+    "translation_type": "Kepler",
+    "enable_fade": true,
+    "line_fade_amount": 0.4,
+    "line_length": 25.0,
+    "line_width": 1.5,
+    "point_size": 3,
+    "rendering": "Lines+Points",
+    "dim_in_atmosphere": false,
+    "enabled": true,
+    "opacity": 0.55,
+    "period": 77.25,
+    "render_bin_mode": "Overlay",
+    "tag": "single-tag"
+   },
+   "files": {
+    "Fixture_Trail_Kepler.asset": "local Object00000000 = {\n    Identifier = \"Object_Alpha\",\n    Parent = \"SunEclipJ2000\",\n    GUI = {\n        Name = \"Object Alpha Trail\",\n        Path = \"/ADAM/Fixture Trail/Object Alpha\",\n    },\n    Renderable = {\n        Type = \"RenderableTrailOrbit\",\n        Color = {0.2, 0.4, 0.6},\n        Period = 77.25,\n        Resolution = 12345,\n        Translation = {\n            Type = \"KeplerTranslation\",\n            ArgumentOfPeriapsis = 20.000000000000217,\n            AscendingNode = 10.000000000000014,\n            Eccentricity = 0.049999999999999704,\n            Epoch = \"2023-02-25 00:00:00.000\",\n            Inclination = 4.999999999999992,\n            MeanAnomaly = 0.25000000000147227,\n            Period = 41484325.9964264,\n            SemiMajorAxis = 179517444.83999997,\n        },\n        EnableFade = true,\n        LineFadeAmount = 0.4,\n        LineLength = 25.0,\n        LineWidth = 1.5,\n        PointSize = 3,\n        Rendering = \"Lines+Points\",\n    },\n}\n\nlocal Object00000001 = {\n    Identifier = \"Object_Alpha_Head\",\n    Parent = \"SunEclipJ2000\",\n    GUI = {\n        Name = \"Object Alpha Head\",\n        Path = \"/ADAM/Fixture Trail/Object Alpha\",\n    },\n    Transform = {\n        Translation = {\n            Type = \"KeplerTranslation\",\n            ArgumentOfPeriapsis = 20.000000000000217,\n            AscendingNode = 10.000000000000014,\n            Eccentricity = 0.049999999999999704,\n            Epoch = \"2023-02-25 00:00:00.000\",\n            Inclination = 4.999999999999992,\n            MeanAnomaly = 0.25000000000147227,\n            Period = 41484325.9964264,\n            SemiMajorAxis = 179517444.83999997,\n        },\n    },\n}\n\nlocal Object00000002 = {\n    Identifier = \"orbit,beta\",\n    Parent = \"SunEclipJ2000\",\n    GUI = {\n        Name = \"orbit,beta Trail\",\n        Path = \"/ADAM/Fixture Trail/orbit,beta\",\n    },\n    Renderable = {\n        Type = \"RenderableTrailOrbit\",\n        Color = {0.2, 0.4, 0.6},\n        Period = 77.25,\n        Resolution = 12345,\n        Translation = {\n            Type = \"KeplerTranslation\",\n            ArgumentOfPeriapsis = 90.00000000000026,\n            AscendingNode = 80.0,\n            Eccentricity = 0.10000000000000026,\n            Epoch = \"2023-06-28 00:00:00.123\",\n            Inclination = 10.499999999999991,\n            MeanAnomaly = 45.499999999999766,\n            Period = 124744722.81868227,\n            SemiMajorAxis = 373994676.7500002,\n        },\n        EnableFade = true,\n        LineFadeAmount = 0.4,\n        LineLength = 25.0,\n        LineWidth = 1.5,\n        PointSize = 3,\n        Rendering = \"Lines+Points\",\n    },\n}\n\nlocal Object00000003 = {\n    Identifier = \"orbit,beta_Head\",\n    Parent = \"SunEclipJ2000\",\n    GUI = {\n        Name = \"orbit,beta Head\",\n        Path = \"/ADAM/Fixture Trail/orbit,beta\",\n    },\n    Transform = {\n        Translation = {\n            Type = \"KeplerTranslation\",\n            ArgumentOfPeriapsis = 90.00000000000026,\n            AscendingNode = 80.0,\n            Eccentricity = 0.10000000000000026,\n            Epoch = \"2023-06-28 00:00:00.123\",\n            Inclination = 10.499999999999991,\n            MeanAnomaly = 45.499999999999766,\n            Period = 124744722.81868227,\n            SemiMajorAxis = 373994676.7500002,\n        },\n    },\n}\n\nlocal Object00000004 = {\n    Identifier = \"Object_Gamma\",\n    Parent = \"SunEclipJ2000\",\n    GUI = {\n        Name = \"Object Gamma Trail\",\n        Path = \"/ADAM/Fixture Trail/Object Gamma\",\n    },\n    Renderable = {\n        Type = \"RenderableTrailOrbit\",\n        Color = {0.2, 0.4, 0.6},\n        Period = 77.25,\n        Resolution = 12345,\n        Translation = {\n            Type = \"KeplerTranslation\",\n            ArgumentOfPeriapsis = 60.75,\n            AscendingNode = 120.50000000000001,\n            Eccentricity = 0.7000000000000001,\n            Epoch = \"2023-11-02 16:40:00.000\",\n            Inclination = 29.999999999999993,\n            MeanAnomaly = 359.9,\n            Period = 407057914.84207475,\n            SemiMajorAxis = 822788288.8500001,\n        },\n        EnableFade = true,\n        LineFadeAmount = 0.4,\n        LineLength = 25.0,\n        LineWidth = 1.5,\n        PointSize = 3,\n        Rendering = \"Lines+Points\",\n    },\n}\n\nlocal Object00000005 = {\n    Identifier = \"Object_Gamma_Head\",\n    Parent = \"SunEclipJ2000\",\n    GUI = {\n        Name = \"Object Gamma Head\",\n        Path = \"/ADAM/Fixture Trail/Object Gamma\",\n    },\n    Transform = {\n        Translation = {\n            Type = \"KeplerTranslation\",\n            ArgumentOfPeriapsis = 60.75,\n            AscendingNode = 120.50000000000001,\n            Eccentricity = 0.7000000000000001,\n            Epoch = \"2023-11-02 16:40:00.000\",\n            Inclination = 29.999999999999993,\n            MeanAnomaly = 359.9,\n            Period = 407057914.84207475,\n            SemiMajorAxis = 822788288.8500001,\n        },\n    },\n}\n\nasset.onInitialize(function ()\n  openspace.addSceneGraphNode(Object00000000);\n  openspace.addSceneGraphNode(Object00000001);\n  openspace.addSceneGraphNode(Object00000002);\n  openspace.addSceneGraphNode(Object00000003);\n  openspace.addSceneGraphNode(Object00000004);\n  openspace.addSceneGraphNode(Object00000005);\nend)\nasset.onDeinitialize(function ()\n  openspace.removeSceneGraphNode(Object00000000);\n  openspace.removeSceneGraphNode(Object00000001);\n  openspace.removeSceneGraphNode(Object00000002);\n  openspace.removeSceneGraphNode(Object00000003);\n  openspace.removeSceneGraphNode(Object00000004);\n  openspace.removeSceneGraphNode(Object00000005);\nend)"
+   }
+  },
+  {
+   "name": "trail_spice_resource",
+   "kind": "trail_orbit",
+   "identifier": "Fixture Trail Spice",
+   "kwargs": {
+    "trail_head": false,
+    "gui_path": "/ADAM/Fixture Spice",
+    "color": [
+     0.9,
+     0.8,
+     0.7
+    ],
+    "resolution": 86400,
+    "translation_type": "Spice",
+    "rendering": "Lines",
+    "spice_kernel_path": "__FIXTURE_KERNEL_PATH__",
+    "spice_id_mappings": {
+     "Object Alpha": -1001,
+     "orbit,beta": -1002,
+     "Object Gamma": -1003
+    }
+   },
+   "kernel_relative_to_out_dir": "../kernels/fixture kernel.bsp",
+   "files": {
+    "Fixture_Trail_Spice.asset": "local Object00000000 = {\n    Identifier = \"Object_Alpha\",\n    Parent = \"SunEclipJ2000\",\n    GUI = {\n        Name = \"Object Alpha\",\n        Path = \"/ADAM/Fixture Spice\",\n    },\n    Renderable = {\n        Type = \"RenderableTrailOrbit\",\n        Color = {0.9, 0.8, 0.7},\n        Period = 480.14266199567595,\n        Resolution = 86400,\n        Translation = {\n            Type = \"SpiceTranslation\",\n            Observer = \"SOLAR SYSTEM BARYCENTER\",\n            Target = -1001,\n        },\n        Rendering = \"Lines\",\n    },\n}\n\nlocal Object00000001 = {\n    Identifier = \"orbit,beta\",\n    Parent = \"SunEclipJ2000\",\n    GUI = {\n        Name = \"orbit,beta\",\n        Path = \"/ADAM/Fixture Spice\",\n    },\n    Renderable = {\n        Type = \"RenderableTrailOrbit\",\n        Color = {0.9, 0.8, 0.7},\n        Period = 1443.804662253267,\n        Resolution = 86400,\n        Translation = {\n            Type = \"SpiceTranslation\",\n            Observer = \"SOLAR SYSTEM BARYCENTER\",\n            Target = -1002,\n        },\n        Rendering = \"Lines\",\n    },\n}\n\nlocal Object00000002 = {\n    Identifier = \"Object_Gamma\",\n    Parent = \"SunEclipJ2000\",\n    GUI = {\n        Name = \"Object Gamma\",\n        Path = \"/ADAM/Fixture Spice\",\n    },\n    Renderable = {\n        Type = \"RenderableTrailOrbit\",\n        Color = {0.9, 0.8, 0.7},\n        Period = 4711.318458820309,\n        Resolution = 86400,\n        Translation = {\n            Type = \"SpiceTranslation\",\n            Observer = \"SOLAR SYSTEM BARYCENTER\",\n            Target = -1003,\n        },\n        Rendering = \"Lines\",\n    },\n}\n\nasset.onInitialize(function ()\n  openspace.addSceneGraphNode(Object00000000);\n  openspace.addSceneGraphNode(Object00000001);\n  openspace.addSceneGraphNode(Object00000002);\nend)\nasset.onDeinitialize(function ()\n  openspace.removeSceneGraphNode(Object00000000);\n  openspace.removeSceneGraphNode(Object00000001);\n  openspace.removeSceneGraphNode(Object00000002);\nend)asset.onInitialize(function()\n  local kernelResource = openspace.resource('../kernels/fixture kernel.bsp')\n  openspace.spice.loadKernel(kernelResource)\nend)\nasset.onDeinitialize(function()\n  openspace.spice.unloadKernel(kernelResource)\nend)\n"
+   }
+  }
+ ]
+}

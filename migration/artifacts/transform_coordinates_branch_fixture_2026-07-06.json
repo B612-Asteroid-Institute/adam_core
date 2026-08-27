@@ -1,0 +1,3282 @@
+{
+ "schema": "adam_core.transform_coordinates_branch_fixture",
+ "version": 1,
+ "generated_by": "migration/scripts/generate_transform_coordinates_branch_fixture.py",
+ "source_contract": "Legacy adam-core public transform_coordinates dispatcher, executed in the untouched legacy checkout. Values/errors are compared by the migration checkout without rerunning legacy.",
+ "cases": [
+  {
+   "name": "identity_cartesian_noop",
+   "kind": "value",
+   "note": "Early return when representation, frame, and origin are unchanged.",
+   "expect_rust_support": null,
+   "input": {
+    "name": "identity_cartesian_noop",
+    "kind": "value",
+    "representation_in": "cartesian",
+    "values": [
+     [
+      1.2,
+      0.15,
+      0.05,
+      -0.001,
+      0.017,
+      0.0002
+     ],
+     [
+      1.55,
+      -0.35,
+      0.2,
+      0.004,
+      0.012,
+      -0.0003
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60000.25
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "SUN",
+    "representation_out": null,
+    "frame_out": null,
+    "origin_out": null,
+    "covariance": "nan",
+    "expect_rust_support": null,
+    "note": "Early return when representation, frame, and origin are unchanged."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "CartesianCoordinates",
+     "frame": "ecliptic",
+     "origin": [
+      "SUN",
+      "SUN"
+     ],
+     "days": [
+      60000,
+      60000
+     ],
+     "nanos": [
+      0,
+      21600000000000
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       1.2,
+       0.15,
+       0.05,
+       -0.001,
+       0.017,
+       0.0002
+      ],
+      [
+       1.55,
+       -0.35,
+       0.2,
+       0.004,
+       0.012,
+       -0.0003
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "rust_cart_ec_to_sph_eq",
+   "kind": "value",
+   "note": "Cartesian input, non-Cartesian output, constant ecliptic->equatorial frame rotation.",
+   "expect_rust_support": true,
+   "input": {
+    "name": "rust_cart_ec_to_sph_eq",
+    "kind": "value",
+    "representation_in": "cartesian",
+    "values": [
+     [
+      1.2,
+      0.15,
+      0.05,
+      -0.001,
+      0.017,
+      0.0002
+     ],
+     [
+      1.55,
+      -0.35,
+      0.2,
+      0.004,
+      0.012,
+      -0.0003
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60000.25
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "SUN",
+    "representation_out": "spherical",
+    "frame_out": "equatorial",
+    "origin_out": null,
+    "covariance": "nan",
+    "expect_rust_support": true,
+    "note": "Cartesian input, non-Cartesian output, constant ecliptic->equatorial frame rotation."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "SphericalCoordinates",
+     "frame": "equatorial",
+     "origin": [
+      "SUN",
+      "SUN"
+     ],
+     "days": [
+      60000,
+      60000
+     ],
+     "nanos": [
+      0,
+      21600000000000
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       1.2103718436910205,
+       5.603424984810468,
+       5.002367333020017,
+       0.0011236216432899578,
+       0.7384886297473295,
+       0.3253927726706605
+      ],
+      [
+       1.6015617378046967,
+       345.50634426966315,
+       1.5841162190563551,
+       0.001211317649645658,
+       0.4214478304410003,
+       0.15978169485420488
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "rust_sph_itrf93_to_geodetic",
+   "kind": "value",
+   "note": "Geodetic output branch with Earth-centered ITRF93 input.",
+   "expect_rust_support": true,
+   "input": {
+    "name": "rust_sph_itrf93_to_geodetic",
+    "kind": "value",
+    "representation_in": "spherical",
+    "values": [
+     [
+      4.15e-05,
+      15.0,
+      -25.0,
+      1e-07,
+      2e-05,
+      -3e-05
+     ],
+     [
+      4.3e-05,
+      250.0,
+      35.0,
+      -2e-07,
+      -1e-05,
+      2e-05
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60100.0
+    ],
+    "frame_in": "itrf93",
+    "origin_in": "EARTH",
+    "representation_out": "geodetic",
+    "frame_out": "itrf93",
+    "origin_out": "EARTH",
+    "covariance": "nan",
+    "expect_rust_support": true,
+    "note": "Geodetic output branch with Earth-centered ITRF93 input."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "GeodeticCoordinates",
+     "frame": "itrf93",
+     "origin": [
+      "EARTH",
+      "EARTH"
+     ],
+     "days": [
+      60000,
+      60100
+     ],
+     "nanos": [
+      0,
+      0
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       -1.1095697990674774e-06,
+       14.999999999999998,
+       -25.15169592645777,
+       7.522354632407542e-10,
+       1.3924579286839565e-08,
+       9.999970704308363e-08
+      ],
+      [
+       4.119709934725913e-07,
+       250.00000000000003,
+       35.17928456825834,
+       -3.5223537904399486e-10,
+       3.671685092711137e-08,
+       -1.9999897390307654e-07
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "rust_kep_ec_to_com_ec",
+   "kind": "value",
+   "note": "Keplerian input path with t0/mu supplied to the Rust dispatcher.",
+   "expect_rust_support": true,
+   "input": {
+    "name": "rust_kep_ec_to_com_ec",
+    "kind": "value",
+    "representation_in": "keplerian",
+    "values": [
+     [
+      1.3,
+      0.1,
+      5.0,
+      80.0,
+      30.0,
+      40.0
+     ],
+     [
+      2.1,
+      0.2,
+      10.0,
+      120.0,
+      45.0,
+      90.0
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60000.25
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "SUN",
+    "representation_out": "cometary",
+    "frame_out": "ecliptic",
+    "origin_out": null,
+    "covariance": "nan",
+    "expect_rust_support": true,
+    "note": "Keplerian input path with t0/mu supplied to the Rust dispatcher."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "CometaryCoordinates",
+     "frame": "ecliptic",
+     "origin": [
+      "SUN",
+      "SUN"
+     ],
+     "days": [
+      60000,
+      60000
+     ],
+     "nanos": [
+      0,
+      21600000000000
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       1.17,
+       0.0999999999999999,
+       5.000000000000064,
+       80.0,
+       29.999999999999844,
+       59939.84510876479
+      ],
+      [
+       1.6800000000000002,
+       0.19999999999999993,
+       9.999999999999975,
+       120.00000000000001,
+       45.00000000000003,
+       59722.36354555276
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "rust_com_ec_to_cart_ec",
+   "kind": "value",
+   "note": "Cometary input to Cartesian output; not the pure Cartesian frame-only fallback.",
+   "expect_rust_support": true,
+   "input": {
+    "name": "rust_com_ec_to_cart_ec",
+    "kind": "value",
+    "representation_in": "cometary",
+    "values": [
+     [
+      0.9,
+      0.2,
+      7.0,
+      80.0,
+      40.0,
+      59900.0
+     ],
+     [
+      1.1,
+      0.4,
+      11.0,
+      90.0,
+      60.0,
+      59850.0
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60000.25
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "SUN",
+    "representation_out": "cartesian",
+    "frame_out": "ecliptic",
+    "origin_out": null,
+    "covariance": "nan",
+    "expect_rust_support": true,
+    "note": "Cometary input to Cartesian output; not the pure Cartesian frame-only fallback."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "CartesianCoordinates",
+     "frame": "ecliptic",
+     "origin": [
+      "SUN",
+      "SUN"
+     ],
+     "days": [
+      60000,
+      60000
+     ],
+     "nanos": [
+      0,
+      21600000000000
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       -0.7954545986738188,
+       -0.8139352033809824,
+       0.07883155472510853,
+       0.00884923582789704,
+       -0.013251528169302154,
+       -0.001352582416142047
+      ],
+      [
+       -0.4008752265927971,
+       -1.687270041696618,
+       0.07792225047076082,
+       0.010503869911021754,
+       -0.008062781572585642,
+       -0.002041745480446788
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "rust_noncart_origin_change",
+   "kind": "value",
+   "note": "Non-Cartesian origin change uses synthetic Cartesian metadata for translation vectors.",
+   "expect_rust_support": true,
+   "input": {
+    "name": "rust_noncart_origin_change",
+    "kind": "value",
+    "representation_in": "keplerian",
+    "values": [
+     [
+      1.3,
+      0.1,
+      5.0,
+      80.0,
+      30.0,
+      40.0
+     ],
+     [
+      2.1,
+      0.2,
+      10.0,
+      120.0,
+      45.0,
+      90.0
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60100.0
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "SUN",
+    "representation_out": "spherical",
+    "frame_out": "ecliptic",
+    "origin_out": "EARTH",
+    "covariance": "nan",
+    "expect_rust_support": true,
+    "note": "Non-Cartesian origin change uses synthetic Cartesian metadata for translation vectors."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "SphericalCoordinates",
+     "frame": "ecliptic",
+     "origin": [
+      "EARTH",
+      "EARTH"
+     ],
+     "days": [
+      60000,
+      60100
+     ],
+     "nanos": [
+      0,
+      0
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       0.23992208011145685,
+       168.5348231088205,
+       25.400076243212403,
+       0.00013665126621823255,
+       -0.3175158827885107,
+       0.08665853666081388
+      ],
+      [
+       1.3229468257900896,
+       295.83346140282487,
+       6.33237677520069,
+       -0.005914432000527554,
+       -0.11887739149703996,
+       -0.04323125314851299
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "rust_cart_origin_change",
+   "kind": "value",
+   "note": "Cartesian origin change fused with representation conversion.",
+   "expect_rust_support": true,
+   "input": {
+    "name": "rust_cart_origin_change",
+    "kind": "value",
+    "representation_in": "cartesian",
+    "values": [
+     [
+      1.2,
+      0.15,
+      0.05,
+      -0.001,
+      0.017,
+      0.0002
+     ],
+     [
+      1.55,
+      -0.35,
+      0.2,
+      0.004,
+      0.012,
+      -0.0003
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60100.0
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "SUN",
+    "representation_out": "spherical",
+    "frame_out": "ecliptic",
+    "origin_out": "EARTH",
+    "covariance": "nan",
+    "expect_rust_support": true,
+    "note": "Cartesian origin change fused with representation conversion."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "SphericalCoordinates",
+     "frame": "ecliptic",
+     "origin": [
+      "EARTH",
+      "EARTH"
+     ],
+     "days": [
+      60000,
+      60100
+     ],
+     "nanos": [
+      0,
+      0
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       2.118773411735903,
+       353.0625213216618,
+       1.3526650917710499,
+       0.002331124439150318,
+       0.9004090698989327,
+       0.003915427530971344
+      ],
+      [
+       1.94680940581042,
+       18.80172869405754,
+       5.894906089332889,
+       -0.006142653144618478,
+       0.5890909938752845,
+       0.009772791606127084
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "rust_itrf93_no_origin_change",
+   "kind": "value",
+   "note": "ITRF93 time-varying rotation followed by identity-frame representation conversion.",
+   "expect_rust_support": true,
+   "input": {
+    "name": "rust_itrf93_no_origin_change",
+    "kind": "value",
+    "representation_in": "cartesian",
+    "values": [
+     [
+      4.1e-05,
+      1e-06,
+      -2e-06,
+      1e-07,
+      2e-07,
+      -1e-07
+     ],
+     [
+      -3.9e-05,
+      2.5e-06,
+      1.5e-06,
+      -2e-07,
+      1e-07,
+      1.5e-07
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60100.0
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "EARTH",
+    "representation_out": "spherical",
+    "frame_out": "itrf93",
+    "origin_out": null,
+    "covariance": "nan",
+    "expect_rust_support": true,
+    "note": "ITRF93 time-varying rotation followed by identity-frame representation conversion."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "SphericalCoordinates",
+     "frame": "itrf93",
+     "origin": [
+      "EARTH",
+      "EARTH"
+     ],
+     "days": [
+      60000,
+      60100
+     ],
+     "nanos": [
+      0,
+      0
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       4.106093033529562e-05,
+       208.3761857824959,
+       -1.878069011880742,
+       1.0959323043224165e-07,
+       -360.68000072602825,
+       -0.011252902393086855
+      ],
+      [
+       3.910882253405234e-05,
+       284.9315442204742,
+       3.345951723484644,
+       2.1158908562883948e-07,
+       -361.0198081952509,
+       0.24146374645581567
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "rust_itrf93_with_origin_change",
+   "kind": "value",
+   "note": "Origin translation plus ITRF93 time-varying rotation branch.",
+   "expect_rust_support": true,
+   "input": {
+    "name": "rust_itrf93_with_origin_change",
+    "kind": "value",
+    "representation_in": "cartesian",
+    "values": [
+     [
+      1.2,
+      0.15,
+      0.05,
+      -0.001,
+      0.017,
+      0.0002
+     ],
+     [
+      1.55,
+      -0.35,
+      0.2,
+      0.004,
+      0.012,
+      -0.0003
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60100.0
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "SUN",
+    "representation_out": "spherical",
+    "frame_out": "itrf93",
+    "origin_out": "EARTH",
+    "covariance": "nan",
+    "expect_rust_support": true,
+    "note": "Origin translation plus ITRF93 time-varying rotation branch."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "SphericalCoordinates",
+     "frame": "itrf93",
+     "origin": [
+      "EARTH",
+      "EARTH"
+     ],
+     "days": [
+      60000,
+      60100
+     ],
+     "nanos": [
+      0,
+      0
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       2.118773411735903,
+       199.07942681606758,
+       -1.3846399164081495,
+       0.002331124439150937,
+       -360.160071532503,
+       0.3598897836423976
+      ],
+      [
+       1.94680940581042,
+       122.48520520812511,
+       12.9374471771316,
+       -0.0061426531446186925,
+       -360.43493896361,
+       0.2353487881034097
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "rust_covariance_constant_frame",
+   "kind": "value",
+   "note": "Finite covariance path through Rust forward-mode AD.",
+   "expect_rust_support": true,
+   "input": {
+    "name": "rust_covariance_constant_frame",
+    "kind": "value",
+    "representation_in": "cartesian",
+    "values": [
+     [
+      1.2,
+      0.15,
+      0.05,
+      -0.001,
+      0.017,
+      0.0002
+     ],
+     [
+      1.55,
+      -0.35,
+      0.2,
+      0.004,
+      0.012,
+      -0.0003
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60000.25
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "SUN",
+    "representation_out": "spherical",
+    "frame_out": "equatorial",
+    "origin_out": null,
+    "covariance": "finite",
+    "expect_rust_support": true,
+    "note": "Finite covariance path through Rust forward-mode AD."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "SphericalCoordinates",
+     "frame": "equatorial",
+     "origin": [
+      "SUN",
+      "SUN"
+     ],
+     "days": [
+      60000,
+      60000
+     ],
+     "nanos": [
+      0,
+      21600000000000
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       1.2103718436910205,
+       5.603424984810468,
+       5.002367333020017,
+       0.0011236216432899578,
+       0.7384886297473295,
+       0.3253927726706605
+      ],
+      [
+       1.6015617378046967,
+       345.50634426966315,
+       1.5841162190563551,
+       0.001211317649645658,
+       0.4214478304410003,
+       0.15978169485420488
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        1.0212286689419795e-08,
+        4.247373823029415e-08,
+        6.04387291460097e-08,
+        1.8727843073303122e-11,
+        -6.18098998299965e-09,
+        -2.8491015919412894e-09
+       ],
+       [
+        4.247373823029416e-08,
+        4.844297396022366e-05,
+        -8.38599798732448e-06,
+        1.2083725262669881e-08,
+        -5.626555385832017e-08,
+        -5.787056430107627e-08
+       ],
+       [
+        6.043872914600971e-08,
+        -8.38599798732448e-06,
+        6.349082786439362e-05,
+        5.351161745825763e-09,
+        3.836984904223126e-08,
+        -6.579945245205686e-08
+       ],
+       [
+        1.8727843073303116e-11,
+        1.208372526266988e-08,
+        5.351161745825763e-09,
+        1.0603001159965088e-10,
+        4.1413714704748096e-10,
+        5.808559210022824e-10
+       ],
+       [
+        -6.18098998299965e-09,
+        -5.626555385832017e-08,
+        3.836984904223126e-08,
+        4.1413714704748065e-10,
+        4.882685212626181e-07,
+        -8.217092546483002e-08
+       ],
+       [
+        -2.8491015919412894e-09,
+        -5.7870564301076256e-08,
+        -6.579945245205686e-08,
+        5.808559210022825e-10,
+        -8.217092546482998e-08,
+        6.358000982905496e-07
+       ]
+      ],
+      [
+       [
+        1.1783820662768035e-08,
+        -1.0852510770349278e-07,
+        5.796765997559283e-08,
+        -1.7778016407707602e-11,
+        -3.0153857735019376e-09,
+        -1.1974103070046918e-09
+       ],
+       [
+        -1.0852510770349278e-07,
+        2.9499199981068224e-05,
+        -4.8453473109797705e-06,
+        5.682964551552112e-09,
+        7.536280555085172e-09,
+        8.495664763599965e-09
+       ],
+       [
+        5.796765997559283e-08,
+        -4.84534731097977e-06,
+        3.991173289125597e-05,
+        2.1157004302271786e-09,
+        -3.844158978129666e-09,
+        -3.498497044837543e-08
+       ],
+       [
+        -1.7778016407707605e-11,
+        5.6829645515521116e-09,
+        2.1157004302271786e-09,
+        1.1917070503553938e-10,
+        -1.0840023922975863e-09,
+        5.786949134583211e-10
+       ],
+       [
+        -3.015385773501937e-09,
+        7.53628055508518e-09,
+        -3.844158978129668e-09,
+        -1.084002392297586e-09,
+        2.957795919396254e-07,
+        -4.815126398808633e-08
+       ],
+       [
+        -1.1974103070046916e-09,
+        8.49566476359997e-09,
+        -3.498497044837544e-08,
+        5.786949134583211e-10,
+        -4.815126398808632e-08,
+        3.992615234531165e-07
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "rust_covariance_itrf93",
+   "kind": "value",
+   "note": "Finite covariance with public ITRF93 dispatcher branch.",
+   "expect_rust_support": true,
+   "input": {
+    "name": "rust_covariance_itrf93",
+    "kind": "value",
+    "representation_in": "cartesian",
+    "values": [
+     [
+      4.1e-05,
+      1e-06,
+      -2e-06,
+      1e-07,
+      2e-07,
+      -1e-07
+     ],
+     [
+      -3.9e-05,
+      2.5e-06,
+      1.5e-06,
+      -2e-07,
+      1e-07,
+      1.5e-07
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60100.0
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "EARTH",
+    "representation_out": "spherical",
+    "frame_out": "itrf93",
+    "origin_out": null,
+    "covariance": "finite",
+    "expect_rust_support": true,
+    "note": "Finite covariance with public ITRF93 dispatcher branch."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "SphericalCoordinates",
+     "frame": "itrf93",
+     "origin": [
+      "EARTH",
+      "EARTH"
+     ],
+     "days": [
+      60000,
+      60100
+     ],
+     "nanos": [
+      0,
+      0
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       4.106093033529562e-05,
+       208.3761857824959,
+       -1.878069011880742,
+       1.0959323043224165e-07,
+       -360.68000072602825,
+       -0.011252902393086855
+      ],
+      [
+       3.910882253405234e-05,
+       284.9315442204742,
+       3.345951723484644,
+       2.1158908562883948e-07,
+       -361.0198081952509,
+       0.24146374645581567
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        1.00582443653618e-08,
+        0.000979798815582346,
+        -0.0010544235602677717,
+        3.895551812486613e-12,
+        -7.729482651075978e-05,
+        5.84277935530553e-06
+       ],
+       [
+        0.0009797988155823435,
+        42012.81459281877,
+        -7062.492053899906,
+        0.00016146052208735793,
+        -117.96131318937009,
+        26.228246913952148
+       ],
+       [
+        -0.0010544235602677721,
+        -7062.492053899907,
+        55273.77554590127,
+        -3.504861111299968e-05,
+        17.30258544864246,
+        -149.02141006633374
+       ],
+       [
+        3.895551812486445e-12,
+        0.00016146052208735514,
+        -3.504861111301271e-05,
+        1.0120411252563417e-10,
+        9.345017436880811e-06,
+        -1.042229719860462e-05
+       ],
+       [
+        -7.729482651079617e-05,
+        -117.96131318936656,
+        17.302585448649303,
+        9.345017436926658e-06,
+        421.0146147725279,
+        -70.71303555211053
+       ],
+       [
+        5.842779355305463e-06,
+        26.22824691395414,
+        -149.02141006633414,
+        -1.0422297198607348e-05,
+        -70.71303555211371,
+        553.1415945186925
+       ]
+      ],
+      [
+       [
+        1.105181431840471e-08,
+        -0.0001861202703376144,
+        0.0014257790909437676,
+        4.178644338149087e-12,
+        1.0611386155991859e-05,
+        -7.597883470357627e-05
+       ],
+       [
+        -0.00018612027033761656,
+        51113.68933725961,
+        8650.009061900066,
+        4.109706276394488e-06,
+        -264.2739023589416,
+        -44.670789870611394
+       ],
+       [
+        0.0014257790909437676,
+        8650.009061900066,
+        66997.17212661772,
+        0.00018928095264192442,
+        -44.7059978808451,
+        -371.11316413550804
+       ],
+       [
+        4.178644338148644e-12,
+        4.109706276350085e-06,
+        0.00018928095264193013,
+        1.1106116662928922e-10,
+        -1.8824014595098957e-06,
+        1.3208000150135781e-05
+       ],
+       [
+        1.0611386155995896e-05,
+        -264.27390235891534,
+        -44.705997880860075,
+        -1.8824014594286684e-06,
+        512.5117218585578,
+        86.67136172884132
+       ],
+       [
+        -7.597883470357612e-05,
+        -44.670789870608,
+        -371.1131641355094,
+        1.3208000150132859e-05,
+        86.67136172885003,
+        672.4479691830983
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "fallback_cartesian_frame_only",
+   "kind": "value",
+   "note": "Intentional fallback: pure Cartesian 6x6 frame rotation is faster in Python/NumPy.",
+   "expect_rust_support": false,
+   "input": {
+    "name": "fallback_cartesian_frame_only",
+    "kind": "value",
+    "representation_in": "cartesian",
+    "values": [
+     [
+      1.2,
+      0.15,
+      0.05,
+      -0.001,
+      0.017,
+      0.0002
+     ],
+     [
+      1.55,
+      -0.35,
+      0.2,
+      0.004,
+      0.012,
+      -0.0003
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60000.25
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "SUN",
+    "representation_out": "cartesian",
+    "frame_out": "equatorial",
+    "origin_out": null,
+    "covariance": "nan",
+    "expect_rust_support": false,
+    "note": "Intentional fallback: pure Cartesian 6x6 frame rotation is faster in Python/NumPy."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "CartesianCoordinates",
+     "frame": "equatorial",
+     "origin": [
+      "SUN",
+      "SUN"
+     ],
+     "days": [
+      60000,
+      60000
+     ],
+     "nanos": [
+      0,
+      21600000000000
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       1.2,
+       0.11773345151378159,
+       0.10554067649324614,
+       -0.001,
+       0.01551763962398971,
+       0.006945708063256369
+      ],
+      [
+       1.55,
+       -0.4006741529105964,
+       0.04427440783766662,
+       0.004,
+       0.011129117891609756,
+       0.004498081252562209
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "fallback_cartesian_origin_only",
+   "kind": "value",
+   "note": "Intentional fallback: Cartesian output with origin change adds no fusion win.",
+   "expect_rust_support": false,
+   "input": {
+    "name": "fallback_cartesian_origin_only",
+    "kind": "value",
+    "representation_in": "cartesian",
+    "values": [
+     [
+      1.2,
+      0.15,
+      0.05,
+      -0.001,
+      0.017,
+      0.0002
+     ],
+     [
+      1.55,
+      -0.35,
+      0.2,
+      0.004,
+      0.012,
+      -0.0003
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60100.0
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "SUN",
+    "representation_out": "cartesian",
+    "frame_out": "ecliptic",
+    "origin_out": "EARTH",
+    "covariance": "nan",
+    "expect_rust_support": false,
+    "note": "Intentional fallback: Cartesian output with origin change adds no fusion win."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "CartesianCoordinates",
+     "frame": "ecliptic",
+     "origin": [
+      "EARTH",
+      "EARTH"
+     ],
+     "days": [
+      60000,
+      60100
+     ],
+     "nanos": [
+      0,
+      0
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       2.1026747984246166,
+       -0.255847276898417,
+       0.05001632985997078,
+       0.006330685698077663,
+       0.032762674430339395,
+       0.00019977963125474636
+      ],
+      [
+       1.8331812684085917,
+       0.6241275287502859,
+       0.19994531143252056,
+       -0.012233428824089818,
+       0.016867730735110813,
+       -0.00030056943442380204
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "fallback_noncart_itrf93_input",
+   "kind": "value",
+   "note": "Non-Cartesian input into ITRF93 frame change must route through Cartesian fallback.",
+   "expect_rust_support": false,
+   "input": {
+    "name": "fallback_noncart_itrf93_input",
+    "kind": "value",
+    "representation_in": "cometary",
+    "values": [
+     [
+      0.9,
+      0.2,
+      7.0,
+      80.0,
+      40.0,
+      59900.0
+     ],
+     [
+      1.1,
+      0.4,
+      11.0,
+      90.0,
+      60.0,
+      59850.0
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60100.0
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "SUN",
+    "representation_out": "spherical",
+    "frame_out": "itrf93",
+    "origin_out": null,
+    "covariance": "nan",
+    "expect_rust_support": false,
+    "note": "Non-Cartesian input into ITRF93 frame change must route through Cartesian fallback."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "SphericalCoordinates",
+     "frame": "itrf93",
+     "origin": [
+      "SUN",
+      "SUN"
+     ],
+     "days": [
+      60000,
+      60100
+     ],
+     "nanos": [
+      0,
+      0
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       1.1408124069602965,
+       70.37295165208793,
+       -12.825265537663803,
+       0.0031907908299143397,
+       -360.2384048871606,
+       -0.2980518689317208
+      ],
+      [
+       2.191729241332123,
+       37.16389584635615,
+       -25.579270881796106,
+       0.0037086059436749236,
+       -360.70342113336636,
+       -0.012453671602079356
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "mixed_origin_preserve",
+   "kind": "value",
+   "note": "Mixed input origins with no requested origin_out preserve per-row origins.",
+   "expect_rust_support": true,
+   "input": {
+    "name": "mixed_origin_preserve",
+    "kind": "value",
+    "representation_in": "cartesian",
+    "values": [
+     [
+      1.2,
+      0.15,
+      0.05,
+      -0.001,
+      0.017,
+      0.0002
+     ],
+     [
+      1.55,
+      -0.35,
+      0.2,
+      0.004,
+      0.012,
+      -0.0003
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60100.0
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": [
+     "SUN",
+     "EARTH"
+    ],
+    "representation_out": "spherical",
+    "frame_out": "ecliptic",
+    "origin_out": null,
+    "covariance": "nan",
+    "expect_rust_support": true,
+    "note": "Mixed input origins with no requested origin_out preserve per-row origins."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "SphericalCoordinates",
+     "frame": "ecliptic",
+     "origin": [
+      "SUN",
+      "EARTH"
+     ],
+     "days": [
+      60000,
+      60100
+     ],
+     "nanos": [
+      0,
+      0
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       1.2103718436910205,
+       7.125016348901798,
+       2.367540523446962,
+       0.0011236216432899578,
+       0.8050791582863877,
+       0.007276450653570281
+      ],
+      [
+       1.601561737804697,
+       347.2756443145776,
+       7.173716741406464,
+       0.0012113176496456577,
+       0.45382795653926594,
+       -0.01627142435118752
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "mixed_origin_to_single_origin",
+   "kind": "value",
+   "note": "Mixed input origins translated to a single target origin.",
+   "expect_rust_support": true,
+   "input": {
+    "name": "mixed_origin_to_single_origin",
+    "kind": "value",
+    "representation_in": "cartesian",
+    "values": [
+     [
+      1.2,
+      0.15,
+      0.05,
+      -0.001,
+      0.017,
+      0.0002
+     ],
+     [
+      1.55,
+      -0.35,
+      0.2,
+      0.004,
+      0.012,
+      -0.0003
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60100.0
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": [
+     "SUN",
+     "EARTH"
+    ],
+    "representation_out": "spherical",
+    "frame_out": "ecliptic",
+    "origin_out": "SOLAR_SYSTEM_BARYCENTER",
+    "covariance": "nan",
+    "expect_rust_support": true,
+    "note": "Mixed input origins translated to a single target origin."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "SphericalCoordinates",
+     "frame": "ecliptic",
+     "origin": [
+      "SOLAR_SYSTEM_BARYCENTER",
+      "SOLAR_SYSTEM_BARYCENTER"
+     ],
+     "days": [
+      60000,
+      60100
+     ],
+     "nanos": [
+      0,
+      0
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       1.2014248413950628,
+       7.1594776899384955,
+       2.3953251154673003,
+       0.0011344259472964458,
+       0.810631459829147,
+       0.007284834925069105
+      ],
+      [
+       1.8383241992687436,
+       313.5070555049757,
+       6.254283785800903,
+       0.008679740235462693,
+       0.6139555078583968,
+       -0.03903581092010541
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "observatory_origin_to_sun",
+   "kind": "value",
+   "note": "MPC observatory-origin translation branch in _resolve_origin_translation_vectors.",
+   "expect_rust_support": true,
+   "input": {
+    "name": "observatory_origin_to_sun",
+    "kind": "value",
+    "representation_in": "cartesian",
+    "values": [
+     [
+      1e-06,
+      2e-06,
+      -1e-06,
+      0.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "time_mjd": [
+     60000.0
+    ],
+    "frame_in": "ecliptic",
+    "origin_in": "X05",
+    "representation_out": "spherical",
+    "frame_out": "ecliptic",
+    "origin_out": "SUN",
+    "covariance": "nan",
+    "expect_rust_support": true,
+    "note": "MPC observatory-origin translation branch in _resolve_origin_translation_vectors."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "SphericalCoordinates",
+     "frame": "ecliptic",
+     "origin": [
+      "SUN"
+     ],
+     "days": [
+      60000
+     ],
+     "nanos": [
+      0
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       0.9897203038551814,
+       155.78951272182448,
+       -0.002981595954641698,
+       0.00044258648312749897,
+       1.010436385439445,
+       -0.0005859398630873691
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "geodetic_identity_noop",
+   "kind": "value",
+   "note": "Geodetic input is allowed for identity/no-op returns.",
+   "expect_rust_support": null,
+   "input": {
+    "name": "geodetic_identity_noop",
+    "kind": "value",
+    "representation_in": "geodetic",
+    "values": [
+     [
+      0.0,
+      250.0,
+      -30.0,
+      0.0,
+      0.0,
+      0.0
+     ],
+     [
+      1e-06,
+      120.0,
+      35.0,
+      0.0,
+      0.0,
+      0.0
+     ]
+    ],
+    "time_mjd": [
+     60000.0,
+     60000.25
+    ],
+    "frame_in": "itrf93",
+    "origin_in": "EARTH",
+    "representation_out": null,
+    "frame_out": null,
+    "origin_out": null,
+    "covariance": "nan",
+    "expect_rust_support": null,
+    "note": "Geodetic input is allowed for identity/no-op returns."
+   },
+   "legacy": {
+    "ok": true,
+    "output": {
+     "type": "GeodeticCoordinates",
+     "frame": "itrf93",
+     "origin": [
+      "EARTH",
+      "EARTH"
+     ],
+     "days": [
+      60000,
+      60000
+     ],
+     "nanos": [
+      0,
+      21600000000000
+     ],
+     "scale": "tdb",
+     "values": [
+      [
+       0.0,
+       250.0,
+       -30.0,
+       0.0,
+       0.0,
+       0.0
+      ],
+      [
+       1e-06,
+       120.0,
+       35.0,
+       0.0,
+       0.0,
+       0.0
+      ]
+     ],
+     "covariance": [
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ],
+      [
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ],
+       [
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN,
+        NaN
+       ]
+      ]
+     ]
+    }
+   }
+  },
+  {
+   "name": "error_unsupported_coordinate_type",
+   "kind": "unsupported_coordinate_type",
+   "note": "Initial TypeError branch for non-coordinate input.",
+   "expect_rust_support": null,
+   "input": {
+    "name": "error_unsupported_coordinate_type",
+    "kind": "unsupported_coordinate_type",
+    "note": "Initial TypeError branch for non-coordinate input."
+   },
+   "legacy": {
+    "ok": false,
+    "error_type": "TypeError",
+    "error_message": "Unsupported coordinate type: <class 'object'>"
+   }
+  },
+  {
+   "name": "error_invalid_frame_out",
+   "kind": "invalid_frame_out",
+   "note": "frame_out validation branch.",
+   "expect_rust_support": null,
+   "input": {
+    "name": "error_invalid_frame_out",
+    "kind": "invalid_frame_out",
+    "note": "frame_out validation branch."
+   },
+   "legacy": {
+    "ok": false,
+    "error_type": "ValueError",
+    "error_message": "Unsupported frame_out: galactic"
+   }
+  },
+  {
+   "name": "error_invalid_origin_out_type",
+   "kind": "invalid_origin_out_type",
+   "note": "origin_out type validation branch.",
+   "expect_rust_support": null,
+   "input": {
+    "name": "error_invalid_origin_out_type",
+    "kind": "invalid_origin_out_type",
+    "note": "origin_out type validation branch."
+   },
+   "legacy": {
+    "ok": false,
+    "error_type": "TypeError",
+    "error_message": "Unsupported origin_out type: <class 'str'>"
+   }
+  },
+  {
+   "name": "error_invalid_representation_out",
+   "kind": "invalid_representation_out",
+   "note": "representation_out validation branch.",
+   "expect_rust_support": null,
+   "input": {
+    "name": "error_invalid_representation_out",
+    "kind": "invalid_representation_out",
+    "note": "representation_out validation branch."
+   },
+   "legacy": {
+    "ok": false,
+    "error_type": "ValueError",
+    "error_message": "Unsupported representation_out: <class 'object'>"
+   }
+  },
+  {
+   "name": "error_geodetic_non_identity_transform",
+   "kind": "geodetic_non_identity_transform",
+   "note": "Geodetic input is not implemented for non-identity transforms and must fail loudly.",
+   "expect_rust_support": null,
+   "input": {
+    "name": "error_geodetic_non_identity_transform",
+    "kind": "geodetic_non_identity_transform",
+    "note": "Geodetic input is not implemented for non-identity transforms and must fail loudly."
+   },
+   "legacy": {
+    "ok": false,
+    "error_type": "AttributeError",
+    "error_message": "'GeodeticCoordinates' object has no attribute 'to_cartesian'"
+   }
+  }
+ ]
+}

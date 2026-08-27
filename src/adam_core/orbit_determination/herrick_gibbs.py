@@ -1,5 +1,6 @@
 import numpy as np
 
+from adam_core._rust import calc_herrick_gibbs_numpy
 from adam_core.constants import Constants as c
 
 __all__ = ["calcHerrickGibbs"]
@@ -8,7 +9,7 @@ MU = c.MU
 
 
 def calcHerrickGibbs(r1, r2, r3, t1, t2, t3):
-    """
+    r"""
     Calculates the velocity vector at the location of the second position vector (r2) using the
     Herrick-Gibbs formula.
 
@@ -50,13 +51,11 @@ def calcHerrickGibbs(r1, r2, r3, t1, t2, t3):
     v2 : `~numpy.ndarray` (3)
         Velocity of object at position r2 at time t2 in units of AU per day.
     """
-    t31 = t3 - t1
-    t32 = t3 - t2
-    t21 = t2 - t1
+    r1_np = np.ascontiguousarray(np.asarray(r1, dtype=np.float64))
+    r2_np = np.ascontiguousarray(np.asarray(r2, dtype=np.float64))
+    r3_np = np.ascontiguousarray(np.asarray(r3, dtype=np.float64))
+    if r1_np.shape != (3,) or r2_np.shape != (3,) or r3_np.shape != (3,):
+        raise ValueError("r1, r2, and r3 must each have shape (3,)")
 
-    v2 = (
-        -t32 * (1 / (t21 * t31) + MU / (12 * np.linalg.norm(r1) ** 3)) * r1
-        + (t32 - t21) * (1 / (t21 * t32) + MU / (12 * np.linalg.norm(r2) ** 3)) * r2
-        + t21 * (1 / (t32 * t31) + MU / (12 * np.linalg.norm(r3) ** 3)) * r3
-    )
-    return v2
+    rust_out = calc_herrick_gibbs_numpy(r1_np, r2_np, r3_np, t1, t2, t3, MU)
+    return rust_out

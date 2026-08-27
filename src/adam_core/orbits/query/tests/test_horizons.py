@@ -1,9 +1,19 @@
-import numpy as np
+import os
 
+import numpy as np
+import pytest
+
+from adam_core.coordinates import CartesianCoordinates, Origin
+from adam_core.observers import Observers
 from adam_core.orbits.query import query_horizons
+from adam_core.orbits.query.horizons import query_horizons_ephemeris
 from adam_core.time import Timestamp
 
 
+@pytest.mark.skipif(
+    os.environ.get("ADAM_CORE_LIVE_HORIZONS") != "1",
+    reason="set ADAM_CORE_LIVE_HORIZONS=1 for the external Horizons integration gate",
+)
 def test_query_horizons_chunking():
     """Test that query_horizons correctly handles batches of times larger than the time limit (50)."""
 
@@ -87,3 +97,29 @@ def test_query_horizons_chunking():
             orbits_second_half.coordinates.v,
             rtol=1e-15,
         )
+
+
+@pytest.mark.skipif(
+    os.environ.get("ADAM_CORE_LIVE_HORIZONS") != "1",
+    reason="set ADAM_CORE_LIVE_HORIZONS=1 for the external Horizons integration gate",
+)
+def test_query_horizons_ephemeris_live():
+    time = Timestamp.from_mjd([60310.0], scale="utc")
+    observers = Observers.from_kwargs(
+        code=["500"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[0.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.0],
+            vz=[0.0],
+            time=time,
+            frame="ecliptic",
+            origin=Origin.from_kwargs(code=["SUN"]),
+        ),
+    )
+    ephemeris = query_horizons_ephemeris(["101955"], observers)
+    assert len(ephemeris) == 1
+    assert ephemeris.coordinates.origin.code.to_pylist() == ["500"]
+    assert ephemeris.coordinates.lon[0].as_py() == pytest.approx(210.058339162)

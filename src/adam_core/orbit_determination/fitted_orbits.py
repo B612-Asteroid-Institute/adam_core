@@ -29,50 +29,29 @@ def assign_duplicate_observations(
     filtered_orbit_members : `~thor.orbit_determination.FittedOrbitMembers`
         Fitted orbit members with duplicate assignments removed.
     """
-    # Sorting by priority criteria
-    orbits = orbits.sort_by(
-        [
-            ("num_obs", "descending"),
-            ("arc_length", "descending"),
-            ("reduced_chi2", "ascending"),
-        ]
+    import numpy as np
+
+    from adam_core import _rust_native
+
+    # One Rust crossing owns the priority ordering, per-observation best-orbit
+    # selection, member filtering, and surviving-orbit selection.
+    orbit_take, member_keep = _rust_native.assign_duplicate_observations_numpy(
+        orbits.orbit_id.to_pylist(),
+        np.ascontiguousarray(
+            orbits.num_obs.to_numpy(zero_copy_only=False), dtype=np.int64
+        ),
+        np.ascontiguousarray(
+            orbits.arc_length.to_numpy(zero_copy_only=False), dtype=np.float64
+        ),
+        np.ascontiguousarray(
+            orbits.reduced_chi2.to_numpy(zero_copy_only=False), dtype=np.float64
+        ),
+        orbit_members.orbit_id.to_pylist(),
+        orbit_members.obs_id.to_pylist(),
     )
 
-    # Extracting unique observation IDs
-    unique_obs_ids = pc.unique(orbit_members.column("obs_id"))
-
-    # Dictionary to store the best orbit for each observation
-    best_orbit_for_obs = {}
-
-    # Iterate over each unique observation ID
-    for obs_id in unique_obs_ids:
-        # Filter orbit_members for the current observation ID
-        mask = pc.equal(orbit_members.column("obs_id"), obs_id)
-        current_obs_members = orbit_members.where(mask)
-
-        # Extract orbit IDs that this observation belongs to
-        obs_orbit_ids = current_obs_members.column("orbit_id")
-
-        # Find the best orbit for this observation based on the criteria
-        for sorted_orbit_id in orbits.column("orbit_id"):
-            if pc.any(pc.is_in(sorted_orbit_id, value_set=obs_orbit_ids)).as_py():
-                best_orbit_for_obs[obs_id.as_py()] = sorted_orbit_id.as_py()
-                break
-
-    # Iteratively update orbit_members to drop rows where obs_id is the same,
-    # but orbit_id is not the best orbit_id for that observation
-    for obs_id, best_orbit_id in best_orbit_for_obs.items():
-        mask_to_remove = pc.and_(
-            pc.equal(orbit_members.column("obs_id"), pa.scalar(obs_id)),
-            pc.not_equal(orbit_members.column("orbit_id"), pa.scalar(best_orbit_id)),
-        )
-        orbit_members = orbit_members.apply_mask(pc.invert(mask_to_remove))
-
-    # Filtering self based on the filtered orbit_members
-    orbits_mask = pc.is_in(
-        orbits.column("orbit_id"), value_set=orbit_members.column("orbit_id")
-    )
-    filtered_orbits = orbits.apply_mask(orbits_mask)
+    filtered_orbits = orbits.take(pa.array(orbit_take, type=pa.int64()))
+    orbit_members = orbit_members.apply_mask(pa.array(member_keep))
 
     return filtered_orbits, orbit_members
 

@@ -5,10 +5,8 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import pyarrow as pa
-import pyarrow.compute as pc
 import quivr as qv
 from mpc_obscodes import mpc_obscodes
-from timezonefinder import TimezoneFinder
 from typing_extensions import Self
 
 from ..constants import Constants as c
@@ -43,24 +41,19 @@ class ObservatoryParallaxCoefficients(qv.Table):
             The latitude of the observatories in degrees. In the range -90 to 90 degrees,
             with positive values north of the equator.
         """
-        # Filter out Space-based observatories
-        mask = pc.is_nan(self.longitude).to_numpy(zero_copy_only=False)
+        from adam_core import _rust_native
 
-        longitude = np.where(
-            mask, np.nan, self.longitude.to_numpy(zero_copy_only=False)
+        # One Rust crossing owns the space-site NaN masking, geodetic
+        # latitude conversion, and longitude wrap.
+        longitude, latitude = _rust_native.observatory_lon_lat_numpy(
+            self.longitude.to_numpy(zero_copy_only=False),
+            self.cos_phi.to_numpy(zero_copy_only=False),
+            self.sin_phi.to_numpy(zero_copy_only=False),
+            float(E_EARTH**2),
         )
-        tan_phi_geo = np.where(
-            mask,
-            np.nan,
-            self.sin_phi.to_numpy(zero_copy_only=False)
-            / self.cos_phi.to_numpy(zero_copy_only=False),
+        return np.asarray(longitude, dtype=np.float64), np.asarray(
+            latitude, dtype=np.float64
         )
-        latitude_geodetic = np.arctan(tan_phi_geo / (1 - E_EARTH**2))
-
-        # Scale longitude to -180 to 180
-        longitude = np.where(longitude > 180, longitude - 360, longitude)
-
-        return longitude, np.degrees(latitude_geodetic)
 
     def timezone(self) -> npt.NDArray[np.str_]:
         """
@@ -71,16 +64,17 @@ class ObservatoryParallaxCoefficients(qv.Table):
         timezone : np.ndarray
             The timezone of the observatories in hours.
         """
-        tf = TimezoneFinder()
-        lon, lat = self.lon_lat()
-        time_zones = np.array(
-            [
-                tz if not np.isnan(lon_i) else "None"
-                for lon_i, lat_i in zip(lon, lat)
-                for tz in [tf.timezone_at(lng=lon_i, lat=lat_i)]
-            ]
+        from adam_core import _rust_native
+
+        return np.asarray(
+            _rust_native.observatory_timezones_numpy(
+                self.longitude.to_numpy(zero_copy_only=False),
+                self.cos_phi.to_numpy(zero_copy_only=False),
+                self.sin_phi.to_numpy(zero_copy_only=False),
+                float(E_EARTH**2),
+            ),
+            dtype=np.str_,
         )
-        return time_zones
 
 
 # Read MPC extended observatory codes file
@@ -110,6 +104,23 @@ OBSERVATORY_PARALLAX_COEFFICIENTS = ObservatoryParallaxCoefficients.from_kwargs(
 OBSERVATORY_CODES = {
     x for x in OBSERVATORY_PARALLAX_COEFFICIENTS.code.to_numpy(zero_copy_only=False)
 }
+
+
+def _ensure_obscodes_loaded(backend) -> None:
+    """Load the MPC observatory parallax table into the process-global Rust
+    SPICE backend.
+
+    Delegates to the canonical loader in ``utils.spice`` (a single obscodes
+    loading path shared with the Rust-native origin translation), which is
+    idempotent against the backend's actual loaded-site count -- robust to a
+    backend ``clear`` unlike the previous per-``id(backend)`` cache. The
+    ``backend`` argument is accepted for backward compatibility; the loader
+    always targets the process-global backend.
+    """
+    del backend
+    from ..utils.spice import setup_mpc_obscodes
+
+    setup_mpc_obscodes()
 
 
 class Observers(qv.Table):
@@ -142,37 +153,36 @@ class Observers(qv.Table):
             raise ValueError("codes and times must have the same length.")
 
         if not isinstance(codes, pa.Array):
-            codes = pa.array(codes, type=pa.large_string())
+            codes = pa.array([str(code) for code in codes], type=pa.large_string())
 
-        class IndexedObservers(qv.Table):
-            index = qv.UInt64Column()
-            observers = Observers.as_column()
+        # Single Rust crossing: obscodes lookup, DE440 Earth state, ITRF93
+        # ground-offset rotation, and loaded custom/space-body SPICE states all
+        # run in the spicekit backend (beads personal-cmy.6 and .33.7).
+        from .._rust.arrow import ensure_spice_backend, table_from_record_batch
 
-        indexed_observers = IndexedObservers.empty()
+        # Single Arrow C Data Interface crossing (bead personal-cmy.36): the
+        # codes + epochs go over as one pyarrow RecordBatch, Rust groups by
+        # code / dedups epochs / runs the DE440 + ITRF93 lookups and returns the
+        # finished nested Observers RecordBatch. No dictionary_encode, no numpy
+        # split, no from_kwargs. SPICE + MPC obscodes setup is centralized in
+        # the shared crossing helper (Rust-side lazy init tracked under
+        # personal-cmy.36.1; kernel data-crate packaging in personal-3uy).
+        backend = ensure_spice_backend()
 
-        # Loop through each unique code and calculate the observer's
-        # state for each time (these can be non-unique as cls.from_code
-        # will handle this)
-        for code in pc.unique(codes):
-
-            indices = pc.indices_nonzero(pc.equal(codes, code))
-            times_code = times.take(indices)
-
-            observers_i = cls.from_code(
-                code.as_py(),
-                times_code,
-            )
-
-            indexed_observers_i = IndexedObservers.from_kwargs(
-                index=indices,
-                observers=observers_i,
-            )
-
-            indexed_observers = qv.concatenate([indexed_observers, indexed_observers_i])
-            if indexed_observers.fragmented():
-                indexed_observers = qv.defragment(indexed_observers)
-
-        return indexed_observers.sort_by("index").observers
+        code_column = (
+            codes if codes.type == pa.large_string() else codes.cast(pa.large_string())
+        )
+        time_table = times.table.combine_chunks()
+        batch = pa.RecordBatch.from_arrays(
+            [
+                code_column,
+                time_table.column("days").chunk(0),
+                time_table.column("nanos").chunk(0),
+            ],
+            names=["code", "days", "nanos"],
+        )
+        result = backend.observer_states_from_codes_arrow(batch, times.scale)
+        return table_from_record_batch(cls, result)
 
     @classmethod
     def from_code(cls, code: Union[str, OriginCodes], times: Timestamp) -> Self:
@@ -217,6 +227,12 @@ class Observers(qv.Table):
             err = "Code should be a str or an `~adam_core.coordinates.origin.OriginCodes`."
             raise ValueError(err)
 
+        if isinstance(code, str):
+            # Route MPC observatory codes through the single-crossing Rust
+            # path used by from_codes; NAIF OriginCodes keep the perturber
+            # state path below.
+            return cls.from_codes([code_str] * len(times), times)
+
         return cls.from_kwargs(
             code=[code_str] * len(times),
             coordinates=get_observer_state(code, times),
@@ -233,5 +249,15 @@ class Observers(qv.Table):
         observers : `~adam_core.observers.observers.Observers`
             The Observers table for this observer.
         """
-        for code in self.code.unique().sort():
-            yield code.as_py(), self.select("code", code)
+        from adam_core import _rust_native
+
+        from .._rust.arrow import table_from_record_batch
+        from ..orbits.arrow_bridge import observers_to_record_batch
+
+        # One Rust crossing owns the sorted grouping; each group batch is
+        # wrapped directly.
+        grouped = _rust_native.group_observers_by_code_arrow(
+            observers_to_record_batch(self)
+        )
+        for code, batch in grouped:
+            yield str(code), table_from_record_batch(Observers, batch)

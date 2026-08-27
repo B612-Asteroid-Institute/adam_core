@@ -1,4 +1,6 @@
+import json
 import warnings
+from pathlib import Path
 
 import astropy.time
 import astropy.units
@@ -254,6 +256,47 @@ class TestAstropyTime:
         # Test empty case
         have = self.empty.to_iso8601()
         assert len(have) == 0
+
+    @pytest.mark.parametrize("scale", ["tai", "tt", "utc", "tdb"])
+    def test_iso8601_rust_parity(self, scale):
+        values = [
+            "1858-11-17T00:00:00.000000000",
+            "1995-10-10T12:34:56.123456789",
+            (
+                "2016-12-31T23:59:60.000000000"
+                if scale == "utc"
+                else "2017-01-01T00:00:00.000000000"
+            ),
+            "2023-02-25T23:59:59.999999999",
+        ]
+        have = Timestamp.from_iso8601(values, scale=scale)
+        want = Timestamp.from_astropy(
+            astropy.time.Time(values, format="isot", scale=scale)
+        )
+        assert have == want
+        assert have.to_iso8601().to_pylist() == want.to_astropy().isot.tolist()
+
+    def test_iso8601_scalar_and_z_suffix(self):
+        have = Timestamp.from_iso8601("2022-01-01T00:00:00Z", scale="utc")
+        assert len(have) == 1
+        assert have.to_iso8601().to_pylist() == ["2022-01-01T00:00:00.000"]
+
+    def test_iso8601_native_timing(self):
+        from adam_core import _rust_native as _rn
+
+        values = ["2022-01-01T00:00:00.000", "2022-06-01T12:34:56.789"]
+        times = Timestamp.from_iso8601(values, scale="utc")
+        samples = _rn.benchmark_timestamp_iso_numpy(
+            times.days.to_numpy(zero_copy_only=False),
+            times.nanos.to_numpy(zero_copy_only=False),
+            "utc",
+            values,
+            1,
+            2,
+            1,
+        )
+        assert len(samples) == 2
+        assert all(sample[0] >= 0.0 for sample in samples)
 
 
 class TestTimeMath:
@@ -760,6 +803,118 @@ def test_Timestamp_rescale_roundtrip():
     assert t2.nanos.to_pylist() != [86400 * 1e9, 86400 * 1e9, 86400 * 1e9]
 
 
+def test_time_scale_fixture_matches_current_timestamp_contract():
+    fixture_path = (
+        Path(__file__).resolve().parents[4]
+        / "migration"
+        / "artifacts"
+        / "time_scale_rescale_fixture_2026-05-15.json"
+    )
+    fixture = json.loads(fixture_path.read_text())
+
+    for case_group in ["cases", "rescale_correctness_cases"]:
+        for case in fixture[case_group]:
+            if "ut1" in (case["from_scale"], case["to_scale"]):
+                # UT1 values depend on the installed astropy-iers-data
+                # version (measured/extrapolated UT1-UTC, updated weekly), so
+                # frozen fixture rows are not stable across environments.
+                # UT1 correctness is covered (with tolerance) by
+                # test_Timestamp_rescale_correctness; the Rust path stays
+                # fail-loud for UT1 (no Rust consumer yet).
+                continue
+            original = Timestamp.from_kwargs(
+                days=case["input"]["days"],
+                nanos=case["input"]["nanos"],
+                scale=case["from_scale"],
+            )
+            rescaled = original.rescale(case["to_scale"])
+            assert rescaled.days.to_pylist() == case["output"]["days"]
+            assert rescaled.nanos.to_pylist() == case["output"]["nanos"]
+            assert rescaled.scale == case["to_scale"]
+
+    tdb_case = fixture["tdb_et_cases"]
+    tdb = Timestamp.from_kwargs(
+        days=tdb_case["tdb"]["days"],
+        nanos=tdb_case["tdb"]["nanos"],
+        scale="tdb",
+    )
+    npt.assert_allclose(
+        np.array(tdb.et().to_pylist()),
+        np.array(tdb_case["et_seconds"]),
+        rtol=0,
+        atol=1e-9,
+    )
+
+
+def test_timestamp_arithmetic_fixture_matches_legacy_contract():
+    """Bit-exact reproduction of the legacy-baseline Timestamp arithmetic
+    contract (bead personal-cmy.19): add_days/add_nanos/add_fractional_days,
+    difference/difference_scalar, mjd/jd projection, and the from_mjd/from_jd
+    quantization round-trip, over an epoch matrix including leap-second
+    adjacent days and day-boundary nanos. The fixture is generated with the
+    legacy interpreter via
+    migration/scripts/generate_timestamp_arithmetic_fixture.py."""
+    fixture_path = (
+        Path(__file__).resolve().parents[4]
+        / "migration"
+        / "artifacts"
+        / "timestamp_arithmetic_fixture_2026-07-05.json"
+    )
+    fixture = json.loads(fixture_path.read_text())
+
+    add_days_arg = pa.array(fixture["add_days_arg"], pa.int64())
+    add_nanos_arg = pa.array(fixture["add_nanos_arg"], pa.int64())
+    add_fractional_days_arg = pa.array(fixture["add_fractional_days_arg"], pa.float64())
+    scalar_arg = fixture["difference_scalar_arg"]
+
+    def assert_payload(timestamp, expected, label):
+        assert timestamp.days.to_pylist() == expected["days"], label
+        assert timestamp.nanos.to_pylist() == expected["nanos"], label
+
+    for case in fixture["cases"]:
+        scale = case["scale"]
+        ops = case["ops"]
+        epochs = Timestamp.from_kwargs(
+            days=case["input"]["days"],
+            nanos=case["input"]["nanos"],
+            scale=scale,
+        )
+
+        assert_payload(epochs.add_days(add_days_arg), ops["add_days"], scale)
+        assert_payload(epochs.add_nanos(add_nanos_arg), ops["add_nanos"], scale)
+        assert_payload(
+            epochs.add_fractional_days(add_fractional_days_arg),
+            ops["add_fractional_days"],
+            scale,
+        )
+
+        other = Timestamp.from_kwargs(
+            days=ops["difference_other"]["days"],
+            nanos=ops["difference_other"]["nanos"],
+            scale=scale,
+        )
+        diff_days, diff_nanos = epochs.difference(other)
+        assert diff_days.to_pylist() == ops["difference"]["days"], scale
+        assert diff_nanos.to_pylist() == ops["difference"]["nanos"], scale
+
+        scalar_days, scalar_nanos = epochs.difference_scalar(
+            scalar_arg["days"], scalar_arg["nanos"]
+        )
+        assert scalar_days.to_pylist() == ops["difference_scalar"]["days"], scale
+        assert scalar_nanos.to_pylist() == ops["difference_scalar"]["nanos"], scale
+
+        mjd = epochs.mjd()
+        jd = epochs.jd()
+        assert mjd.to_pylist() == ops["mjd"], scale
+        assert jd.to_pylist() == ops["jd"], scale
+        assert_payload(
+            Timestamp.from_mjd(mjd, scale=scale), ops["from_mjd_roundtrip"], scale
+        )
+        assert_payload(
+            Timestamp.from_jd(jd, scale=scale), ops["from_jd_roundtrip"], scale
+        )
+
+
 # Data for testing and benchmarking rescale functions
 RESCALE_DAYS = [
     -57032,
@@ -844,10 +999,14 @@ def test_Timestamp_rescale_correctness(scale1, scale2):
     if "tdb" in [scale1, scale2]:
         astropy_tolerance = 32_000
 
-    # UT1 is delegated through Astropy/ERFA. Its floating-point TDB conversion
-    # can quantize a round trip by one nanosecond for remote epochs as IERS data
-    # and dependency versions change; preserve exactness for every other pair.
-    round_trip_tolerance = 1 if {scale1, scale2} == {"tdb", "ut1"} else 0
+    # UT1 conversions go through astropy's float UT1-UTC offset from the
+    # installed astropy-iers-data tables (measured data, updated weekly, and
+    # extrapolated for far-future epochs -- ERFA's "dubious year" regime).
+    # Round-trip rounding at the nanosecond level is not bit-stable across
+    # IERS data versions, so allow 1 ns instead of exact equality.
+    round_trip_tolerance = 0
+    if "ut1" in [scale1, scale2]:
+        round_trip_tolerance = 1
 
     original = Timestamp.from_kwargs(
         days=RESCALE_DAYS,
@@ -870,22 +1029,16 @@ def test_Timestamp_rescale_correctness(scale1, scale2):
     )
 
 
-@pytest.mark.benchmark(group="timestamp_rescale")
+@pytest.mark.benchmark(group="timestamp_rescale_rust")
 @pytest.mark.parametrize("scale1", ["tai", "utc", "tdb", "tt"])
 @pytest.mark.parametrize("scale2", ["tai", "utc", "tdb", "tt"])
-@pytest.mark.parametrize("version", ["astropy", "new"])
-def test_Timestamp_rescale_benchmark(benchmark, scale1, scale2, version):
-    # Compare speed of the new rescale implementation with astropy.
-    # Don't bother checking ut1, since we still use astropy for that.
-    # Don't check correctness here. It is checked in the function above.
+def test_timestamp_rescale_benchmark(benchmark, scale1, scale2):
+    # UT1 remains an explicit Astropy/IERS provider boundary and is not mixed
+    # into the default-runtime Rust benchmark identity.
     original = Timestamp.from_kwargs(
         days=RESCALE_DAYS,
         nanos=RESCALE_NANOS,
         scale=scale1,
     )
-
-    if version == "astropy":
-        benchmark(original.rescale_astropy, scale2)
-    else:
-        rescaled = benchmark(original.rescale, scale2)
-        assert rescaled.scale == scale2
+    rescaled = benchmark(original.rescale, scale2)
+    assert rescaled.scale == scale2

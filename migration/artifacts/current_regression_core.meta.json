@@ -1,0 +1,17 @@
+{
+  "schema_version": 2,
+  "fixture": "current_regression_core.json.gz",
+  "fixture_sha256": "2a418a692810d5d612896264c21412d41ed5c1b824f1e61ae2b17669ae58d6da",
+  "accepted_candidate": "468fb1a270dd193bc2e7cb24bd232cfdc6a8ccbe",
+  "baseline_authority": "757c09fca86adf9e3d5899952db3d379e09413f6",
+  "coverage": {
+    "registered_apis": 44,
+    "fuzz_seeds_per_api": 8,
+    "fuzz_cases": 352,
+    "fixed_fixtures": 5,
+    "total_cases": 357,
+    "outputs": 855,
+    "contractually_exact_outputs": 128
+  },
+  "normal_test_runtime": "current adam-core only; no frozen-runtime imports, subprocesses, runners, or conditional skips"
+}

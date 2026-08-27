@@ -1,3 +1,6 @@
+import re
+from pathlib import Path
+
 import numpy as np
 import pyarrow.compute as pc
 import pytest
@@ -260,6 +263,65 @@ def test_on_unknown_invalid_value_raises_immediately():
         map_to_canonical_filter_bands(["W84"], ["g"], on_unknown="warn")  # type: ignore[arg-type]
 
 
+def test_documented_bandpass_inventory_matches_vendored_data():
+    docs_path = (
+        Path(__file__).parents[4]
+        / "docs"
+        / "source"
+        / "cookbook"
+        / "photometry_and_magnitude.rst"
+    )
+    docs = docs_path.read_text()
+
+    canonical_section = docs.split("Supported Canonical Filters", maxsplit=1)[1].split(
+        "Reported-Band Resolution", maxsplit=1
+    )[0]
+    canonical_table = canonical_section.split(".. list-table::", maxsplit=1)[1]
+    documented_filter_ids = set(re.findall(r"``([A-Za-z0-9_]+)``", canonical_table))
+    curves = load_bandpass_curves()
+    assert documented_filter_ids == set(curves.filter_id.to_pylist())
+
+    mapping_section = docs.split("Reported-Band Resolution", maxsplit=1)[1].split(
+        "Bandpass Conversion and Color Terms", maxsplit=1
+    )[0]
+    explicit_table = mapping_section.split(
+        ".. list-table:: Explicit observatory mappings", maxsplit=1
+    )[1].split("For ``X05``", maxsplit=1)[0]
+    documented_mappings = set()
+    for row in explicit_table.split("\n   * - ")[2:]:
+        cells = row.split("\n     - ")
+        observatory_codes = re.findall(r"``([A-Z0-9]+)``", cells[0])
+        band_mappings = re.findall(r"``([^`]+)``\s+→\s+``([A-Za-z0-9_]+)``", cells[1])
+        documented_mappings.update(
+            (observatory_code, reported_band, filter_id)
+            for observatory_code in observatory_codes
+            for reported_band, filter_id in band_mappings
+        )
+
+    mapping = load_observatory_band_map()
+    vendored_mappings = set(
+        zip(
+            mapping.observatory_code.to_pylist(),
+            mapping.reported_band.to_pylist(),
+            mapping.filter_id.to_pylist(),
+        )
+    )
+    assert documented_mappings == vendored_mappings
+
+    fallback_table = mapping_section.split(
+        ".. list-table:: Generic reported-band fallbacks", maxsplit=1
+    )[1].split("Generic fallback matching", maxsplit=1)[0]
+    documented_fallbacks = dict(
+        re.findall(r"\* - ``([^`]+)``\s+- ``([A-Za-z0-9_]+)``", fallback_table)
+    )
+    unknown_codes = [f"Z{i:02d}" for i in range(len(documented_fallbacks))]
+    resolved_fallbacks = map_to_canonical_filter_bands(
+        unknown_codes,
+        documented_fallbacks.keys(),
+    )
+    assert dict(zip(documented_fallbacks, resolved_fallbacks)) == documented_fallbacks
+
+
 def test_bandpass_curves_are_sane():
     curves = load_bandpass_curves()
     assert len(curves) > 0
@@ -308,6 +370,22 @@ def test_mix_integrals_match_linear_combination():
 
     assert np.allclose(ints_neo, ints_neo_mix, rtol=0, atol=1e-9)
     assert np.allclose(ints_mba, ints_mba_mix, rtol=0, atol=1e-9)
+
+
+def test_bandpass_loaders_have_rust_owned_timing():
+    from adam_core import _rust_native
+    from adam_core.photometry.bandpasses.api import _data_dir_str
+
+    for filename in (
+        "bandpass_curves.parquet",
+        "observatory_band_map.parquet",
+        "asteroid_templates.parquet",
+        "template_bandpass_integrals.parquet",
+    ):
+        samples = _rust_native.benchmark_bandpasses_load_table(
+            _data_dir_str(), filename, 1, 1, 0
+        )
+        assert samples[0][0] > 0.0
 
 
 def test_bandpass_delta_mag_matches_integral_ratio():

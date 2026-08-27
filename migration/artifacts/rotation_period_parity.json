@@ -1,0 +1,91 @@
+{
+  "current": {
+    "native_samples_seconds": [
+      [
+        0.015735584,
+        0.011158,
+        0.011841166
+      ],
+      [
+        0.010323084,
+        0.00823775,
+        0.009709
+      ]
+    ],
+    "public_samples_seconds": [
+      0.008892083540558815,
+      0.013289958238601685,
+      0.023369583301246166,
+      0.013999415561556816,
+      0.026092500425875187
+    ],
+    "result": {
+      "amplitude_snr": 78.36702180599514,
+      "confidence_flags": [
+        "good_phase_coverage",
+        "two_max_two_min"
+      ],
+      "fourier_order": 2,
+      "insufficiency_reasons": [
+        "subharmonic_unresolved"
+      ],
+      "is_period_doubled": false,
+      "n_clipped": 0,
+      "n_fit_observations": 60,
+      "n_observations": 60,
+      "n_significant_aliases": 1,
+      "period_days": 0.020032840722657447,
+      "period_verdict": "period_family",
+      "phase_coverage_fraction": 1.0,
+      "reliability_code": "2"
+    }
+  },
+  "current_commit": "41c906506c9941f49ffbbaf71f114417172f61c7",
+  "identity": "rotation-period-latest-main-exact-grid-v1",
+  "legacy": {
+    "native_samples_seconds": null,
+    "public_samples_seconds": [
+      0.25789500027894974,
+      0.2546251667663455,
+      0.251262791454792,
+      0.25630641635507345,
+      0.2598576247692108
+    ],
+    "result": {
+      "amplitude_snr": 78.36702179231632,
+      "confidence_flags": [
+        "good_phase_coverage",
+        "two_max_two_min"
+      ],
+      "fourier_order": 2,
+      "insufficiency_reasons": [
+        "subharmonic_unresolved"
+      ],
+      "is_period_doubled": false,
+      "n_clipped": 0,
+      "n_fit_observations": 60,
+      "n_observations": 60,
+      "n_significant_aliases": 1,
+      "period_days": 0.020032840722657447,
+      "period_verdict": "period_family",
+      "phase_coverage_fraction": 1.0,
+      "reliability_code": "2"
+    }
+  },
+  "legacy_commit": "936cc636096fcfefcee3e1310c21528444f39546",
+  "parity": {
+    "exact_fields_match": true,
+    "passed": true,
+    "period_relative_error": 0.0
+  },
+  "runner_sha256": "9aff26a3bab53cdaa133064d5e7963970cd5affc1d3e6528ebaf769e90e8590b",
+  "schema_version": 1,
+  "timing": {
+    "current_public_median_seconds": 0.013999415561556816,
+    "legacy_over_current": 18.308365461977235,
+    "legacy_public_median_seconds": 0.25630641635507345,
+    "native_clock": "std::time::Instant",
+    "native_rust_median_seconds": 0.010740541999999999,
+    "python_conversion_outside_native_samples": true
+  }
+}

@@ -100,6 +100,14 @@ def test_get_observer_state_cache_key_is_order_sensitive(monkeypatch):
 
     state_mod.clear_observer_state_cache()
 
+    # The observer-state cache under test wraps both the Rust one-crossing
+    # path and the legacy fallback; force the fallback so the monkeypatched
+    # perturber-state stub below is what populates the cache.
+    def _no_rust(*args, **kwargs):
+        raise RuntimeError("forced legacy path for cache test")
+
+    monkeypatch.setattr(state_mod, "_rust_backend_observer_states", _no_rust)
+
     calls = {"n": 0}
 
     def _fake_get_perturber_state(

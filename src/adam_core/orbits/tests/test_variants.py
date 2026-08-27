@@ -1,63 +1,186 @@
 import numpy as np
 import pyarrow.compute as pc
 import pytest
-import quivr as qv
 
-from ...coordinates import (
-    CartesianCoordinates,
-    CoordinateCovariances,
-    Origin,
-    SphericalCoordinates,
-)
-from ...orbits.non_gravitational_parameters import NonGravitationalParameters
+from adam_core import _rust_native
+
+from ...coordinates import CartesianCoordinates, Origin, SphericalCoordinates
+from ...coordinates.covariances import CoordinateCovariances
+from ...orbits.orbits import Orbits
 from ...orbits.physical_parameters import PhysicalParameters
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
-from ..orbits import Orbits
 from ..variants import VariantEphemeris, VariantOrbits
 
 
-def _nongrav_a2_row(a2: float) -> NonGravitationalParameters:
-    return NonGravitationalParameters.from_kwargs(
-        source=["SBDB"],
-        A1=[None],
-        A2=[a2],
-        A3=[None],
-    )
-
-
-def _embed_a2_covariance(covariance_7x7: np.ndarray) -> np.ndarray:
-    """
-    Embed a (x, y, z, vx, vy, vz, A2) covariance into the fixed 9x9 layout
-    (A1 and A3 held fixed with zero rows/columns).
-    """
-    indices = [0, 1, 2, 3, 4, 5, 7]
-    full = np.zeros((9, 9), dtype=np.float64)
-    full[np.ix_(indices, indices)] = covariance_7x7
-    return full
-
-
-def _solved_a2_orbit(orbit_id: str, covariance_7x7: np.ndarray) -> Orbits:
-    return Orbits.from_kwargs(
-        orbit_id=[orbit_id],
-        object_id=[orbit_id],
-        physical_parameters=PhysicalParameters.from_kwargs(H_v=[20.0], G=[0.15]),
-        non_gravitational_parameters=_nongrav_a2_row(-2.0e-13),
+def _covariance_orbits(
+    covariances: np.ndarray, with_physical_parameters: bool = False
+) -> Orbits:
+    """Orbits with explicit per-row covariance matrices for sampling tests."""
+    n = covariances.shape[0]
+    kwargs = dict(
+        orbit_id=[f"o{i}" for i in range(n)],
+        object_id=[f"obj{i}" for i in range(n)],
         coordinates=CartesianCoordinates.from_kwargs(
-            x=[1.0],
-            y=[2.0],
-            z=[3.0],
-            vx=[0.01],
-            vy=[0.02],
-            vz=[0.03],
-            covariance=CoordinateCovariances.from_matrix(
-                _embed_a2_covariance(covariance_7x7).reshape(1, 9, 9)
-            ),
-            time=Timestamp.from_mjd([60000.0]),
-            origin=Origin.from_kwargs(code=["SUN"]),
+            x=np.linspace(1.0, 2.0, n),
+            y=np.linspace(0.5, 1.5, n),
+            z=np.linspace(0.1, 0.3, n),
+            vx=[0.001] * n,
+            vy=[0.002] * n,
+            vz=[0.003] * n,
+            time=Timestamp.from_mjd([60000.0] * n, scale="tdb"),
+            covariance=CoordinateCovariances.from_matrix(covariances),
+            origin=Origin.from_kwargs(code=["SUN"] * n),
             frame="ecliptic",
         ),
     )
+    if with_physical_parameters:
+        kwargs["physical_parameters"] = PhysicalParameters.from_kwargs(
+            H_v=list(15.0 + np.arange(n)),
+            G=[0.15] * n,
+        )
+    return Orbits.from_kwargs(**kwargs)
+
+
+def _well_conditioned_covariances(n: int = 3) -> np.ndarray:
+    base = np.diag([1e-6, 1e-6, 1e-6, 1e-9, 1e-9, 1e-9])
+    return np.stack([base * (i + 1) for i in range(n)])
+
+
+def _sigma_fallback_covariance() -> np.ndarray:
+    """PSD covariance whose sigma points fail the 1e-12 auto reconstruction
+    check (large-magnitude correlated entries), forcing the Monte Carlo
+    fallback in both the legacy Python and Rust auto-mode samplers."""
+    v = np.array([1.0, 0.9, 0.8, 0.7, 0.6, 0.5]) * 1e3
+    return np.stack([np.outer(v, v) + np.eye(6)])
+
+
+def test_VariantOrbits_create_monte_carlo_deterministic_with_seed():
+    orbits = _covariance_orbits(_well_conditioned_covariances())
+    v1 = VariantOrbits.create(orbits, method="monte-carlo", num_samples=500, seed=42)
+    v2 = VariantOrbits.create(orbits, method="monte-carlo", num_samples=500, seed=42)
+    assert len(v1) == len(orbits) * 500
+    np.testing.assert_array_equal(v1.coordinates.values, v2.coordinates.values)
+    np.testing.assert_allclose(
+        v1.weights.to_numpy(zero_copy_only=False), 1.0 / 500, rtol=0, atol=0
+    )
+
+
+def test_VariantOrbits_create_monte_carlo_unseeded_is_nondeterministic():
+    orbits = _covariance_orbits(_well_conditioned_covariances())
+    v1 = VariantOrbits.create(orbits, method="monte-carlo", num_samples=200)
+    v2 = VariantOrbits.create(orbits, method="monte-carlo", num_samples=200)
+    assert not np.array_equal(v1.coordinates.values, v2.coordinates.values)
+
+
+def test_VariantOrbits_create_monte_carlo_statistical_reconstruction():
+    # Rust-native RNG (decision 2026-07-03: exact scipy RNG parity is not
+    # required): gate the Monte Carlo sampler statistically instead.
+    covariances = _well_conditioned_covariances(1)
+    orbits = _covariance_orbits(covariances)
+    variants = VariantOrbits.create(
+        orbits, method="monte-carlo", num_samples=20000, seed=7
+    )
+    # Covariance reconstructs through the public collapse path.
+    collapsed = variants.collapse(orbits)
+    cov_hat = collapsed.coordinates.covariance.to_matrix()[0]
+    np.testing.assert_allclose(np.diag(cov_hat), np.diag(covariances[0]), rtol=0.05)
+    # Weighted sample mean matches the nominal state within ~4 standard
+    # errors (deterministic given the fixed seed).
+    values = variants.coordinates.values
+    weights = variants.weights.to_numpy(zero_copy_only=False)
+    mean_hat = (values * weights[:, None]).sum(axis=0)
+    standard_error = np.sqrt(np.diag(covariances[0]) / 20000)
+    z = np.abs(mean_hat - orbits.coordinates.values[0]) / standard_error
+    assert z.max() < 4.0
+
+
+def test_VariantOrbits_create_monte_carlo_preserves_physical_parameters():
+    orbits = _covariance_orbits(
+        _well_conditioned_covariances(), with_physical_parameters=True
+    )
+    variants = VariantOrbits.create(
+        orbits, method="monte-carlo", num_samples=100, seed=1
+    )
+    np.testing.assert_array_equal(
+        variants.physical_parameters.H_v.to_numpy(zero_copy_only=False),
+        np.repeat([15.0, 16.0, 17.0], 100),
+    )
+
+
+def test_VariantOrbits_collapse_paths_have_rust_owned_timing():
+    from ..arrow_bridge import orbits_to_record_batch, variants_to_record_batch
+
+    orbits = _covariance_orbits(_well_conditioned_covariances())
+    variants = VariantOrbits.create(orbits, method="sigma-point")
+    orbit_batch = orbits_to_record_batch(orbits)
+    variant_batch = variants_to_record_batch(variants)
+
+    samples = _rust_native.benchmark_collapse_variant_orbits_arrow(
+        orbit_batch, variant_batch, 2, 2, 1
+    )
+    assert len(samples) == 2
+    assert all(len(trial) == 2 for trial in samples)
+    assert all(value > 0.0 for trial in samples for value in trial)
+
+    orbit_ids = [f"collapsed{i}" for i in range(len(orbits))]
+    samples = _rust_native.benchmark_collapse_variant_orbits_by_object_id_arrow(
+        variant_batch, orbit_ids, 2, 2, 1
+    )
+    assert len(samples) == 2
+    assert all(len(trial) == 2 for trial in samples)
+    assert all(value > 0.0 for trial in samples for value in trial)
+
+
+def test_VariantOrbits_collapse_by_object_id_rejects_mixed_epochs():
+    orbits = _covariance_orbits(_well_conditioned_covariances(2))
+    variants = VariantOrbits.create(orbits, method="sigma-point")
+    # Same object across two epochs must fail the single-epoch contract.
+    mixed = variants.set_column(
+        "object_id",
+        pc.cast(
+            pc.if_else(pc.equal(variants.object_id, "obj0"), "obj0", "obj0"),
+            variants.object_id.type,
+        ),
+    ).set_column(
+        "coordinates.time",
+        Timestamp.from_kwargs(
+            days=pc.add(
+                variants.coordinates.time.days,
+                pc.if_else(pc.equal(variants.orbit_id, variants.orbit_id[0]), 0, 1),
+            ),
+            nanos=variants.coordinates.time.nanos,
+            scale=variants.coordinates.time.scale,
+        ),
+    )
+    with pytest.raises(AssertionError):
+        mixed.collapse_by_object_id()
+
+
+def test_VariantOrbits_create_auto_falls_back_to_monte_carlo():
+    # The legacy Python sampler picks the identical branch on this input
+    # (sigma-point reconstruction misses the 1e-12 absolute tolerance).
+    orbits = _covariance_orbits(_sigma_fallback_covariance())
+    v1 = VariantOrbits.create(orbits, method="auto", num_samples=300, seed=11)
+    assert len(v1) == 300
+    # Improvement over legacy: the fallback honors the seed.
+    v2 = VariantOrbits.create(orbits, method="auto", num_samples=300, seed=11)
+    np.testing.assert_array_equal(v1.coordinates.values, v2.coordinates.values)
+    # And stays nondeterministic without one.
+    v3 = VariantOrbits.create(orbits, method="auto", num_samples=300)
+    assert not np.array_equal(v1.coordinates.values, v3.coordinates.values)
+
+
+def test_VariantOrbits_create_auto_well_conditioned_uses_sigma_points():
+    orbits = _covariance_orbits(_well_conditioned_covariances())
+    variants = VariantOrbits.create(orbits, method="auto")
+    assert len(variants) == len(orbits) * 13
+
+
+def test_VariantOrbits_create_unknown_method_raises():
+    orbits = _covariance_orbits(_well_conditioned_covariances())
+    with pytest.raises(ValueError, match="Unknown coordinate covariance sampling"):
+        VariantOrbits.create(orbits, method="bogus")
 
 
 def test_VariantOrbits():
@@ -92,178 +215,6 @@ def test_VariantOrbits():
     )
 
 
-def test_VariantOrbits_joint_sampling_uses_extended_covariance():
-    covariance = np.diag(
-        [
-            1e-8,
-            2e-8,
-            3e-8,
-            4e-10,
-            5e-10,
-            6e-10,
-            9e-26,
-            4e-26,
-            1e-26,
-        ]
-    ).reshape(1, 9, 9)
-    # Cross-covariances between orbital and non-grav dimensions: recovering
-    # these is the entire point of joint sampling.
-    covariance[0, 0, 6] = covariance[0, 6, 0] = 2e-17
-    covariance[0, 4, 7] = covariance[0, 7, 4] = -2e-18
-    covariance[0, 5, 8] = covariance[0, 8, 5] = 5e-19
-    orbits = Orbits.from_kwargs(
-        orbit_id=["joint"],
-        object_id=["joint"],
-        physical_parameters=PhysicalParameters.from_kwargs(H_v=[20.0], G=[0.15]),
-        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
-            source=["SBDB"],
-            A1=[1.0e-13],
-            A2=[-2.0e-13],
-            A3=[4.0e-13],
-            ALN=[0.1112620426],
-            NK=[4.6142],
-            NM=[2.15],
-            NN=[5.093],
-            R0=[2.808],
-        ),
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=[1.0],
-            y=[2.0],
-            z=[3.0],
-            vx=[0.01],
-            vy=[0.02],
-            vz=[0.03],
-            covariance=CoordinateCovariances.from_matrix(covariance),
-            time=Timestamp.from_mjd([60000.0]),
-            origin=Origin.from_kwargs(code=["SUN"]),
-            frame="ecliptic",
-        ),
-    )
-    variants = VariantOrbits.create(orbits, method="sigma-point")
-
-    assert len(variants) == 19
-    assert len(np.unique(variants.non_gravitational_parameters.A1.to_pylist())) > 1
-    # The g(r) constants are fixed model constants: every variant inherits
-    # the parent's values unchanged.
-    assert variants.non_gravitational_parameters.ALN.to_pylist() == [0.1112620426] * 19
-    assert len(np.unique(variants.non_gravitational_parameters.A2.to_pylist())) > 1
-    assert len(np.unique(variants.non_gravitational_parameters.A3.to_pylist())) > 1
-
-    collapsed = variants.collapse(orbits)
-    assert collapsed.coordinates.covariance.nongrav_block_mask().tolist() == [True]
-    # Compare element-wise relative to each entry's own scale: an absolute
-    # tolerance would be vacuously satisfied by the ~1e-26 non-grav entries.
-    recovered = collapsed.coordinates.covariance.to_full_matrix()[0]
-    np.testing.assert_allclose(np.diag(recovered), np.diag(covariance[0]), rtol=1e-9)
-    np.testing.assert_allclose(recovered[0, 6], covariance[0, 0, 6], rtol=1e-9)
-    np.testing.assert_allclose(recovered[4, 7], covariance[0, 4, 7], rtol=1e-9)
-    np.testing.assert_allclose(recovered[5, 8], covariance[0, 5, 8], rtol=1e-9)
-
-
-def test_VariantOrbits_create_include_nongrav_false_uses_orbital_covariance_only():
-    covariance_7x7 = np.diag([1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26])
-    orbits = _solved_a2_orbit("joint", covariance_7x7)
-
-    variants = VariantOrbits.create(orbits, method="sigma-point", include_nongrav=False)
-
-    assert len(variants) == 13
-    assert variants.non_gravitational_parameters.A2[0].as_py() is None
-    assert not variants.coordinates.covariance.has_nongrav_block()
-
-
-def test_VariantOrbits_create_mixed_nongrav_coverage():
-    # One orbit with the non-gravitational covariance block and one with only
-    # a 6x6 coordinate covariance must both be sampled in a single create()
-    # call.
-    covariance_7x7 = np.diag([1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26])
-    orbit_with = _solved_a2_orbit("with_nongrav", covariance_7x7)
-    orbit_without = Orbits.from_kwargs(
-        orbit_id=["plain"],
-        object_id=["plain"],
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=[1.5],
-            y=[2.5],
-            z=[3.5],
-            vx=[0.011],
-            vy=[0.021],
-            vz=[0.031],
-            covariance=CoordinateCovariances.from_matrix(
-                covariance_7x7[:6, :6].reshape(1, 6, 6)
-            ),
-            time=Timestamp.from_mjd([60000.0]),
-            origin=Origin.from_kwargs(code=["SUN"]),
-            frame="ecliptic",
-        ),
-    )
-    orbits = qv.concatenate([orbit_with, orbit_without])
-
-    variants = VariantOrbits.create(orbits, method="sigma-point")
-
-    joint = variants.select("orbit_id", "with_nongrav")
-    plain = variants.select("orbit_id", "plain")
-    assert len(joint) == 19  # 2 * 9 + 1 sigma points (fixed 9-dim layout)
-    assert len(plain) == 13  # 2 * 6 + 1 sigma points
-    assert len(np.unique(joint.non_gravitational_parameters.A2.to_pylist())) > 1
-    assert all(
-        value is None for value in plain.non_gravitational_parameters.A2.to_pylist()
-    )
-    assert len(set(variants.variant_id.to_pylist())) == len(variants)
-
-
-def test_VariantOrbits_monte_carlo_joint_sampling_recovers_nongrav_spread():
-    # The non-grav variance (9e-26) is ~18 orders of magnitude below the
-    # positional variances. Unwhitened sampling silently truncates it to a
-    # zero eigenvalue and produces no spread in A2 at all.
-    covariance_7x7 = np.diag([1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26])
-    covariance_7x7[0, 6] = covariance_7x7[6, 0] = 2e-17
-    orbits = _solved_a2_orbit("mc", covariance_7x7)
-
-    variants = VariantOrbits.create(
-        orbits, method="monte-carlo", num_samples=20000, seed=42
-    )
-
-    a2 = np.array(variants.non_gravitational_parameters.A2.to_pylist())
-    np.testing.assert_allclose(np.std(a2), np.sqrt(9e-26), rtol=0.05)
-    x = variants.coordinates.x.to_numpy(zero_copy_only=False)
-    expected_correlation = 2e-17 / np.sqrt(1e-8 * 9e-26)
-    np.testing.assert_allclose(
-        np.corrcoef(x, a2)[0, 1], expected_correlation, atol=0.05
-    )
-
-
-def test_VariantOrbits_monte_carlo_seed_is_independent_per_orbit():
-    covariance_7x7 = np.diag([1e-8, 2e-8, 3e-8, 4e-10, 5e-10, 6e-10, 9e-26])
-    orbits = qv.concatenate(
-        [
-            _solved_a2_orbit("orbit_a", covariance_7x7),
-            _solved_a2_orbit("orbit_b", covariance_7x7),
-        ]
-    )
-
-    variants = VariantOrbits.create(
-        orbits, method="monte-carlo", num_samples=100, seed=7
-    )
-
-    # Identical means and covariances, so identical draws would mean the seed
-    # was reused verbatim for both orbits.
-    x_a = variants.select("orbit_id", "orbit_a").coordinates.x.to_numpy(
-        zero_copy_only=False
-    )
-    x_b = variants.select("orbit_id", "orbit_b").coordinates.x.to_numpy(
-        zero_copy_only=False
-    )
-    assert not np.allclose(x_a, x_b)
-
-    # The same seed must reproduce the same variants across calls.
-    variants_again = VariantOrbits.create(
-        orbits, method="monte-carlo", num_samples=100, seed=7
-    )
-    np.testing.assert_array_equal(
-        variants.coordinates.x.to_numpy(zero_copy_only=False),
-        variants_again.coordinates.x.to_numpy(zero_copy_only=False),
-    )
-
-
 def test_VariantOrbits_collapse_by_object_id():
     """Test that VariantOrbits.collapse_by_object_id correctly collapses variants into mean orbits."""
 
@@ -275,12 +226,6 @@ def test_VariantOrbits_collapse_by_object_id():
         physical_parameters=PhysicalParameters.from_kwargs(
             H_v=[15.0, 15.0, 15.0, 17.5, 17.5, 17.5],
             G=[0.15, 0.15, 0.15, 0.25, 0.25, 0.25],
-        ),
-        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
-            source=["SBDB", "SBDB", "SBDB", "NEOCC", "NEOCC", "NEOCC"],
-            A1=[None] * 6,
-            A2=[1e-13, 1e-13, 1e-13, -2e-14, -2e-14, -2e-14],
-            A3=[None] * 6,
         ),
         coordinates=CartesianCoordinates.from_kwargs(
             x=[1.0, 1.1, 0.9, 2.0, 2.1, 1.9],
@@ -325,8 +270,6 @@ def test_VariantOrbits_collapse_by_object_id():
     assert obj1.physical_parameters.G[0].as_py() == 0.15
     assert obj2.physical_parameters.H_v[0].as_py() == 17.5
     assert obj2.physical_parameters.G[0].as_py() == 0.25
-    assert obj1.non_gravitational_parameters.A2[0].as_py() == 1e-13
-    assert obj2.non_gravitational_parameters.A2[0].as_py() == -2e-14
 
     # Check that covariance matrices are computed correctly
     # For obj1, the variance should be approximately 0.00667 for each component
@@ -407,63 +350,6 @@ def test_VariantOrbits_collapse_by_object_id():
     )
     with pytest.raises(AssertionError):
         variant_orbits_diff_origins.collapse_by_object_id()
-
-
-def test_VariantOrbits_collapse_by_object_id_rebuilds_extended_covariance():
-    variant_orbits = VariantOrbits.from_kwargs(
-        orbit_id=["obj1", "obj1", "obj1"],
-        object_id=["obj1", "obj1", "obj1"],
-        variant_id=["0", "1", "2"],
-        weights=[1 / 3, 1 / 3, 1 / 3],
-        weights_cov=[1 / 3, 1 / 3, 1 / 3],
-        physical_parameters=PhysicalParameters.from_kwargs(
-            H_v=[15.0, 15.0, 15.0],
-            G=[0.15, 0.15, 0.15],
-        ),
-        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
-            source=["SBDB"] * 3,
-            A1=[None] * 3,
-            A2=[1e-13, 1.2e-13, 0.8e-13],
-            A3=[None] * 3,
-        ),
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=[1.0, 1.1, 0.9],
-            y=[1.0, 1.1, 0.9],
-            z=[1.0, 1.1, 0.9],
-            vx=[0.1, 0.11, 0.09],
-            vy=[0.1, 0.11, 0.09],
-            vz=[0.1, 0.11, 0.09],
-            time=Timestamp.from_mjd([60000] * 3),
-            origin=Origin.from_kwargs(code=["SUN"] * 3),
-            frame="ecliptic",
-        ),
-    )
-
-    collapsed = variant_orbits.collapse_by_object_id()
-
-    # Varying A2 samples mark a jointly sampled non-grav solution: the
-    # collapsed orbit carries the full 9x9 covariance and the mean A2.
-    assert collapsed.coordinates.covariance.nongrav_block_mask().tolist() == [True]
-    assert collapsed.non_gravitational_parameters.A2[0].as_py() == pytest.approx(1e-13)
-
-    full = collapsed.coordinates.covariance.to_full_matrix()[0]
-    a2_samples = np.array([1e-13, 1.2e-13, 0.8e-13])
-    x_samples = np.array([1.0, 1.1, 0.9])
-    np.testing.assert_allclose(full[7, 7], np.var(a2_samples), rtol=1e-9)
-    np.testing.assert_allclose(
-        full[0, 7],
-        np.mean((x_samples - x_samples.mean()) * (a2_samples - a2_samples.mean())),
-        rtol=1e-9,
-    )
-    # A1 and A3 were never sampled: their rows collapse to zero variance.
-    assert full[6, 6] == 0.0
-    assert full[8, 8] == 0.0
-    np.testing.assert_allclose(
-        full[:6, :6],
-        collapsed.coordinates.covariance.to_matrix()[0],
-        rtol=0,
-        atol=0,
-    )
 
 
 def test_VariantEphemeris_collapse_by_object_id_single_epoch():

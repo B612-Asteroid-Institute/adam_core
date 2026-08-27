@@ -1,9 +1,9 @@
 import logging
 import uuid
-from typing import TYPE_CHECKING, Iterable, Literal, Optional, Tuple
+from typing import TYPE_CHECKING, Iterable, Literal, Optional, Tuple, TypeVar, cast
 
+import numpy as np
 import numpy.typing as npt
-import pyarrow.compute as pc
 import quivr as qv
 
 from ..coordinates.cartesian import CartesianCoordinates
@@ -13,7 +13,6 @@ from ..coordinates.keplerian import KeplerianCoordinates
 from ..coordinates.origin import OriginCodes
 from ..coordinates.spherical import SphericalCoordinates
 from ..coordinates.transform import transform_coordinates
-from .classification import calc_orbit_class
 from .non_gravitational_parameters import NonGravitationalParameters
 from .physical_parameters import PhysicalParameters
 
@@ -21,6 +20,14 @@ if TYPE_CHECKING:
     from ..propagator import Propagator
 
 logger = logging.getLogger(__name__)
+
+CoordinateType = TypeVar(
+    "CoordinateType",
+    CartesianCoordinates,
+    KeplerianCoordinates,
+    CometaryCoordinates,
+    SphericalCoordinates,
+)
 
 
 class Orbits(qv.Table):
@@ -42,10 +49,13 @@ class Orbits(qv.Table):
         orbits : `~adam_core.orbits.orbits.Orbits`
             Orbits belonging to this orbit ID.
         """
-        unique_orbit_ids = self.orbit_id.unique()
-        for orbit_id in unique_orbit_ids:
-            mask = pc.equal(self.orbit_id, orbit_id)
-            yield orbit_id, self.apply_mask(mask)
+        from adam_core import _rust_native
+
+        from .arrow_bridge import orbits_from_record_batch, orbits_to_record_batch
+
+        grouped = _rust_native.group_by_orbit_id_arrow(orbits_to_record_batch(self))
+        for orbit_id, batch in grouped:
+            yield str(orbit_id), orbits_from_record_batch(batch)
 
     def dynamical_class(self) -> npt.NDArray[str]:
         """
@@ -57,34 +67,26 @@ class Orbits(qv.Table):
         dynamical_classes : `~numpy.ndarray`
             Dynamical classes of orbits.
         """
-        keplerian = self.coordinates.to_keplerian()
-        return calc_orbit_class(keplerian)
+        from adam_core import _rust_native
+
+        from .arrow_bridge import orbits_to_record_batch
+
+        classes = _rust_native.dynamical_class_arrow(orbits_to_record_batch(self))
+        return np.asarray(classes, dtype=str)
 
     def has_non_gravitational_parameters(self) -> bool:
-        """
-        Return True if any orbit carries a non-zero non-gravitational parameter value.
-
-        Parameters that are explicitly solved to zero are treated as absent: they
-        exert no force, so a gravity-only propagation of such an orbit is still exact.
-        """
+        """Return whether any orbit carries a non-zero A1/A2/A3 value."""
         return self.non_gravitational_parameters.has_values()
 
     def has_non_gravitational_solution(self) -> bool:
-        """
-        Return True if any orbit carries a non-gravitational solution: either a
-        non-zero parameter value or a non-gravitational block in the coordinate
-        covariance (a zero-mean parameter can still carry uncertainty).
-        """
+        """Return whether values or an extended covariance encode a solution."""
         return (
-            self.non_gravitational_parameters.has_values()
+            self.has_non_gravitational_parameters()
             or self.coordinates.covariance.has_nongrav_block()
         )
 
     def without_non_gravitational_parameters(self) -> "Orbits":
-        """
-        Return a copy with the non-gravitational parameters nulled and the
-        coordinate covariance reduced to its 6x6 coordinate block.
-        """
+        """Strip non-grav values and reduce extended covariance to its 6D block."""
         orbits = self.set_column(
             "non_gravitational_parameters",
             NonGravitationalParameters.nulls(len(self)),
@@ -100,27 +102,20 @@ class Orbits(qv.Table):
 
     def coordinates_to(
         self,
-        representation_out: type[
-            CartesianCoordinates
-            | KeplerianCoordinates
-            | CometaryCoordinates
-            | SphericalCoordinates
-        ],
+        representation_out: type[CoordinateType],
         *,
         frame_out: Optional[Literal["ecliptic", "equatorial", "itrf93"]] = None,
         origin_out: Optional[OriginCodes] = None,
-    ):
-        """
-        Transform this orbit's coordinates to another representation, frame,
-        and/or origin. Covariances -- including the non-gravitational block
-        for orbits with a non-gravitational solution -- are transformed
-        alongside the coordinates.
-        """
-        return transform_coordinates(
-            self.coordinates,
-            representation_out=representation_out,
-            frame_out=frame_out,
-            origin_out=origin_out,
+    ) -> CoordinateType:
+        """Transform coordinates while preserving the complete covariance."""
+        return cast(
+            CoordinateType,
+            transform_coordinates(
+                self.coordinates,
+                representation_out=representation_out,
+                frame_out=frame_out,
+                origin_out=origin_out,
+            ),
         )
 
     def to_keplerian(self) -> KeplerianCoordinates:

@@ -1,0 +1,2283 @@
+{
+ "schema": "adam_core.mpc_designation_fixture",
+ "version": 1,
+ "generated_by": "migration/scripts/generate_mpc_designation_fixture.py",
+ "source_contract": "Legacy adam-core MPC packed-designation helpers, executed in the untouched legacy checkout.",
+ "panel": [
+  "3202",
+  "50000",
+  "100345",
+  "360017",
+  "203289",
+  "620000",
+  "620061",
+  "3140113",
+  "15396335",
+  "03202",
+  "A0345",
+  "a0017",
+  "K3289",
+  "~0000",
+  "~000z",
+  "~AZaz",
+  "~zzzz",
+  "1995 XA",
+  "1995 XL1",
+  "1995 FB13",
+  "1998 SQ108",
+  "1998 SV127",
+  "1998 SS162",
+  "2099 AZ193",
+  "2008 AA360",
+  "2007 TA418",
+  "J95X00A",
+  "J95X01L",
+  "J95F13B",
+  "J98SA8Q",
+  "J98SC7V",
+  "J98SG2S",
+  "K99AJ3Z",
+  "K08Aa0A",
+  "K07Tf8A",
+  "2040 P-L",
+  "3138 T-1",
+  "1010 T-2",
+  "4101 T-3",
+  "PLS2040",
+  "T1S3138",
+  "T2S1010",
+  "T3S4101",
+  "0",
+  "1",
+  "99999",
+  "100000",
+  "619999",
+  "15396336",
+  "  5  ",
+  "+7",
+  "-5",
+  "1995 IA",
+  "1995 ZA",
+  "1995 X-1",
+  "1995 X",
+  "2008 AA619",
+  "2008 AA6200",
+  "199 5XA",
+  "1995_XA",
+  "abcd P-L",
+  "12 T-4",
+  "PLS0500",
+  "T4S1234",
+  "PLSabcd",
+  "J95X001",
+  "K08!a0A",
+  "!0345",
+  "~zzzzz",
+  "0032",
+  "",
+  " ",
+  "~"
+ ],
+ "cases": {
+  "pack_numbered_designation": [
+   {
+    "output": "03202"
+   },
+   {
+    "output": "50000"
+   },
+   {
+    "output": "A0345"
+   },
+   {
+    "output": "a0017"
+   },
+   {
+    "output": "K3289"
+   },
+   {
+    "output": "~0000"
+   },
+   {
+    "output": "~000z"
+   },
+   {
+    "output": "~AZaz"
+   },
+   {
+    "output": "~zzzz"
+   },
+   {
+    "output": "03202"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'A0345'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'a0017'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'K3289'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '~0000'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '~000z'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '~AZaz'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '~zzzz'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1995 XA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1995 XL1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1995 FB13'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1998 SQ108'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1998 SV127'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1998 SS162'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '2099 AZ193'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '2008 AA360'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '2007 TA418'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'J95X00A'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'J95X01L'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'J95F13B'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'J98SA8Q'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'J98SC7V'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'J98SG2S'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'K99AJ3Z'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'K08Aa0A'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'K07Tf8A'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '2040 P-L'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '3138 T-1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1010 T-2'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '4101 T-3'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'PLS2040'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'T1S3138'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'T2S1010'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'T3S4101'"
+   },
+   {
+    "output": "00000"
+   },
+   {
+    "output": "00001"
+   },
+   {
+    "output": "99999"
+   },
+   {
+    "output": "A0000"
+   },
+   {
+    "output": "z9999"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Numbered designation is too large. Maximum supported is 15396335."
+   },
+   {
+    "output": "00005"
+   },
+   {
+    "output": "00007"
+   },
+   {
+    "output": "-0005"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1995 IA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1995 ZA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1995 X-1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1995 X'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '2008 AA619'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '2008 AA6200'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '199 5XA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1995_XA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'abcd P-L'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '12 T-4'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'PLS0500'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'T4S1234'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'PLSabcd'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'J95X001'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'K08!a0A'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '!0345'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '~zzzzz'"
+   },
+   {
+    "output": "00032"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: ''"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: ' '"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '~'"
+   }
+  ],
+  "pack_provisional_designation": [
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the 5th character of the provisional designation to be a space."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the 5th character of the provisional designation to be a space."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the 5th character of the provisional designation to be a space."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the 5th character of the provisional designation to be a space."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the 5th character of the provisional designation to be a space."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the 5th character of the provisional designation to be a space."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the 5th character of the provisional designation to be a space."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "output": "J95X00A"
+   },
+   {
+    "output": "J95X01L"
+   },
+   {
+    "output": "J95F13B"
+   },
+   {
+    "output": "J98SA8Q"
+   },
+   {
+    "output": "J98SC7V"
+   },
+   {
+    "output": "J98SG2S"
+   },
+   {
+    "output": "K99AJ3Z"
+   },
+   {
+    "output": "K08Aa0A"
+   },
+   {
+    "output": "K07Tf8A"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations cannot contain a hyphen."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations cannot contain a hyphen."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations cannot contain a hyphen."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations cannot contain a hyphen."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the 5th character of the provisional designation to be a space."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the 5th character of the provisional designation to be a space."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the 5th character of the provisional designation to be a space."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Half-month letters cannot be I or Z."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Half-month letters cannot be I or Z."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations cannot contain a hyphen."
+   },
+   {
+    "error_type": "IndexError",
+    "error_message": "string index out of range"
+   },
+   {
+    "output": "K08Az9A"
+   },
+   {
+    "error_type": "IndexError",
+    "error_message": "string index out of range"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the 5th character of the provisional designation to be a space."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the 5th character of the provisional designation to be a space."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Expected the first 4 characters of the provisional designation to be a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designations should be at least 6 characters long."
+   }
+  ],
+  "pack_survey_designation": [
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "output": "PLS2040"
+   },
+   {
+    "output": "T1S3138"
+   },
+   {
+    "output": "T2S1010"
+   },
+   {
+    "output": "T3S4101"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "output": "PLSabcd"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Survey designations must start with P-L, T-1, T-2, T-3."
+   }
+  ],
+  "pack_mpc_designation": [
+   {
+    "output": "03202"
+   },
+   {
+    "output": "50000"
+   },
+   {
+    "output": "A0345"
+   },
+   {
+    "output": "a0017"
+   },
+   {
+    "output": "K3289"
+   },
+   {
+    "output": "~0000"
+   },
+   {
+    "output": "~000z"
+   },
+   {
+    "output": "~AZaz"
+   },
+   {
+    "output": "~zzzz"
+   },
+   {
+    "output": "03202"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'A0345' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'a0017' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'K3289' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '~0000' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '~000z' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '~AZaz' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '~zzzz' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "output": "J95X00A"
+   },
+   {
+    "output": "J95X01L"
+   },
+   {
+    "output": "J95F13B"
+   },
+   {
+    "output": "J98SA8Q"
+   },
+   {
+    "output": "J98SC7V"
+   },
+   {
+    "output": "J98SG2S"
+   },
+   {
+    "output": "K99AJ3Z"
+   },
+   {
+    "output": "K08Aa0A"
+   },
+   {
+    "output": "K07Tf8A"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'J95X00A' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'J95X01L' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'J95F13B' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'J98SA8Q' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'J98SC7V' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'J98SG2S' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'K99AJ3Z' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'K08Aa0A' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'K07Tf8A' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "output": "PLS2040"
+   },
+   {
+    "output": "T1S3138"
+   },
+   {
+    "output": "T2S1010"
+   },
+   {
+    "output": "T3S4101"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'PLS2040' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'T1S3138' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'T2S1010' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'T3S4101' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "output": "00000"
+   },
+   {
+    "output": "00001"
+   },
+   {
+    "output": "99999"
+   },
+   {
+    "output": "A0000"
+   },
+   {
+    "output": "z9999"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '15396336' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "output": "00005"
+   },
+   {
+    "output": "00007"
+   },
+   {
+    "output": "-0005"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '1995 IA' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '1995 ZA' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '1995 X-1' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "IndexError",
+    "error_message": "string index out of range"
+   },
+   {
+    "output": "K08Az9A"
+   },
+   {
+    "error_type": "IndexError",
+    "error_message": "string index out of range"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '199 5XA' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '1995_XA' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "output": "PLSabcd"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '12 T-4' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'PLS0500' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'T4S1234' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'PLSabcd' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'J95X001' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation 'K08!a0A' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '!0345' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '~zzzzz' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "output": "00032"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation ' ' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Unpacked designation '~' could not be packed.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '3202', '203289', '3140113')\n - a provisional designation (e.g. '1998 SV127', '2008 AA360')\n - a survey designation (e.g. '2040 P-L', '3138 T-1')"
+   }
+  ],
+  "unpack_numbered_designation": [
+   {
+    "output": "3202"
+   },
+   {
+    "output": "50000"
+   },
+   {
+    "output": "100345"
+   },
+   {
+    "output": "360017"
+   },
+   {
+    "output": "203289"
+   },
+   {
+    "output": "620000"
+   },
+   {
+    "output": "620061"
+   },
+   {
+    "output": "3140113"
+   },
+   {
+    "output": "15396335"
+   },
+   {
+    "output": "3202"
+   },
+   {
+    "output": "100345"
+   },
+   {
+    "output": "360017"
+   },
+   {
+    "output": "203289"
+   },
+   {
+    "output": "620000"
+   },
+   {
+    "output": "620061"
+   },
+   {
+    "output": "3140113"
+   },
+   {
+    "output": "15396335"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '995 XA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '995 XL1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '995 FB13'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '998 SQ108'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '998 SV127'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '998 SS162'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '099 AZ193'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '008 AA360'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '007 TA418'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '95X00A'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '95X01L'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '95F13B'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '98SA8Q'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '98SC7V'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '98SG2S'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '99AJ3Z'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '08Aa0A'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '07Tf8A'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '040 P-L'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '138 T-1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '010 T-2'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '101 T-3'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'LS2040'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1S3138'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '2S1010'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '3S4101'"
+   },
+   {
+    "output": "0"
+   },
+   {
+    "output": "1"
+   },
+   {
+    "output": "99999"
+   },
+   {
+    "output": "100000"
+   },
+   {
+    "output": "619999"
+   },
+   {
+    "output": "15396336"
+   },
+   {
+    "error_type": "KeyError",
+    "error_message": "' '"
+   },
+   {
+    "error_type": "KeyError",
+    "error_message": "'+'"
+   },
+   {
+    "error_type": "KeyError",
+    "error_message": "'-'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '995 IA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '995 ZA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '995 X-1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '995 X'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '008 AA619'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '008 AA6200'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '99 5XA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '995_XA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'bcd P-L'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '2 T-4'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'LS0500'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '4S1234'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'LSabcd'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '95X001'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '08!a0A'"
+   },
+   {
+    "error_type": "KeyError",
+    "error_message": "'!'"
+   },
+   {
+    "output": "916752831"
+   },
+   {
+    "output": "32"
+   },
+   {
+    "error_type": "IndexError",
+    "error_message": "string index out of range"
+   },
+   {
+    "error_type": "KeyError",
+    "error_message": "' '"
+   },
+   {
+    "output": "620000"
+   }
+  ],
+  "unpack_provisional_designation": [
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": ""
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": ""
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "output": "1995 XA"
+   },
+   {
+    "output": "1995 XL1"
+   },
+   {
+    "output": "1995 FB13"
+   },
+   {
+    "output": "1998 SQ108"
+   },
+   {
+    "output": "1998 SV127"
+   },
+   {
+    "output": "1998 SS162"
+   },
+   {
+    "output": "2099 AZ193"
+   },
+   {
+    "output": "2008 AA360"
+   },
+   {
+    "output": "2007 TA418"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must have a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must have a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must have a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must have a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": ""
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": ""
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "output": "199  A83"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": ""
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must have a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must have a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must have a year."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": ""
+   },
+   {
+    "output": "2008 !A360"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Provisional designation must be 7 characters long."
+   }
+  ],
+  "unpack_survey_designation": [
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '0z'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'az'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'zz'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '5 XA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '5 XL1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '5 FB1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '8 SQ1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '8 SV1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '8 SS1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '9 AZ1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '8 AA3'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '7 TA4'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'X00A'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'X01L'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'F13B'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'SA8Q'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'SC7V'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'SG2S'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'AJ3Z'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'Aa0A'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'Tf8A'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '0 P-L'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '8 T-1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '0 T-2'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '1 T-3'"
+   },
+   {
+    "output": "2040 P-L"
+   },
+   {
+    "output": "3138 T-1"
+   },
+   {
+    "output": "1010 T-2"
+   },
+   {
+    "output": "4101 T-3"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: ''"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: ''"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '  '"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: ''"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: ''"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '5 IA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '5 ZA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '5 X-1'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '5 X'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '8 AA6'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '8 AA6'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: ' 5XA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '5_XA'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'd P-L'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'T-4'"
+   },
+   {
+    "output": "500 P-L"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'abcd'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'X001'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: '!a0A'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: 'zzz'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed survey designation must start with PLS, T1S, T2S, or T3S."
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: ''"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: ''"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "invalid literal for int() with base 10: ''"
+   }
+  ],
+  "unpack_mpc_designation": [
+   {
+    "output": "3202"
+   },
+   {
+    "output": "50000"
+   },
+   {
+    "output": "100345"
+   },
+   {
+    "output": "360017"
+   },
+   {
+    "output": "203289"
+   },
+   {
+    "output": "620000"
+   },
+   {
+    "output": "620061"
+   },
+   {
+    "output": "3140113"
+   },
+   {
+    "output": "15396335"
+   },
+   {
+    "output": "3202"
+   },
+   {
+    "output": "100345"
+   },
+   {
+    "output": "360017"
+   },
+   {
+    "output": "203289"
+   },
+   {
+    "output": "620000"
+   },
+   {
+    "output": "620061"
+   },
+   {
+    "output": "3140113"
+   },
+   {
+    "output": "15396335"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '1995 XA' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '1995 XL1' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '1995 FB13' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '1998 SQ108' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '1998 SV127' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '1998 SS162' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '2099 AZ193' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '2008 AA360' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '2007 TA418' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "output": "1995 XA"
+   },
+   {
+    "output": "1995 XL1"
+   },
+   {
+    "output": "1995 FB13"
+   },
+   {
+    "output": "1998 SQ108"
+   },
+   {
+    "output": "1998 SV127"
+   },
+   {
+    "output": "1998 SS162"
+   },
+   {
+    "output": "2099 AZ193"
+   },
+   {
+    "output": "2008 AA360"
+   },
+   {
+    "output": "2007 TA418"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '2040 P-L' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '3138 T-1' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '1010 T-2' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '4101 T-3' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "output": "2040 P-L"
+   },
+   {
+    "output": "3138 T-1"
+   },
+   {
+    "output": "1010 T-2"
+   },
+   {
+    "output": "4101 T-3"
+   },
+   {
+    "output": "0"
+   },
+   {
+    "output": "1"
+   },
+   {
+    "output": "99999"
+   },
+   {
+    "output": "100000"
+   },
+   {
+    "output": "619999"
+   },
+   {
+    "output": "15396336"
+   },
+   {
+    "error_type": "KeyError",
+    "error_message": "' '"
+   },
+   {
+    "error_type": "KeyError",
+    "error_message": "'+'"
+   },
+   {
+    "error_type": "KeyError",
+    "error_message": "'-'"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '1995 IA' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '1995 ZA' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '1995 X-1' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '1995 X' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '2008 AA619' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '2008 AA6200' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "output": "199  A83"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '1995_XA' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation 'abcd P-L' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation '12 T-4' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "output": "500 P-L"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation 'T4S1234' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation 'PLSabcd' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "error_type": "ValueError",
+    "error_message": "Packed form designation 'J95X001' could not be unpacked.\nIt could not be recognized as any of the following:\n - a numbered object (e.g. '03202', 'K3289', '~AZaz')\n - a provisional designation (e.g. 'J98SC7V', 'K08Aa0A')\n - a survey designation (e.g. 'PLS2040', 'T1S3138')"
+   },
+   {
+    "output": "2008 !A360"
+   },
+   {
+    "error_type": "KeyError",
+    "error_message": "'!'"
+   },
+   {
+    "output": "916752831"
+   },
+   {
+    "output": "32"
+   },
+   {
+    "error_type": "IndexError",
+    "error_message": "string index out of range"
+   },
+   {
+    "error_type": "KeyError",
+    "error_message": "' '"
+   },
+   {
+    "output": "620000"
+   }
+  ]
+ }
+}

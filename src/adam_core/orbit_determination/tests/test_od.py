@@ -84,3 +84,62 @@ def test_od(real_data):
     assert len(od_orbit) == 1
     assert len(od_orbit_members) == 10
     assert od_orbit.success[0]
+
+
+def test_od_dispatches_to_native_work_unit(real_data):
+    """The public `od` runs the whole differential-correction loop behind one
+    Rust crossing when the propagator exposes the fused `od_fit` work unit:
+    outputs are bit-identical to the direct native call."""
+    starting_orbit, observations = real_data
+
+    od_orbit, od_orbit_members = od(
+        orbit=starting_orbit,
+        observations=observations[:10],
+        propagator=ASSISTPropagator,
+        rchi2_threshold=10,
+        min_obs=3,
+        min_arc_length=1.0,
+        contamination_percentage=0.0,
+        delta=1e-6,
+        max_iter=20,
+        method="central",
+        propagator_kwargs={},
+    )
+    direct = ASSISTPropagator().od_fit(
+        starting_orbit,
+        observations[:10],
+        rchi2_threshold=10,
+        min_obs=3,
+        min_arc_length=1.0,
+        contamination_percentage=0.0,
+        delta=1e-6,
+        max_iter=20,
+        method="central",
+    )
+    assert direct["found"]
+    np.testing.assert_array_equal(
+        od_orbit.coordinates.values[0], np.asarray(direct["state"])
+    )
+    np.testing.assert_array_equal(
+        od_orbit.coordinates.covariance.to_matrix()[0],
+        np.asarray(direct["covariance"]).reshape(6, 6),
+    )
+    assert od_orbit.chi2[0].as_py() == direct["chi2"]
+    assert od_orbit.reduced_chi2[0].as_py() == direct["reduced_chi2"]
+    assert od_orbit.num_obs[0].as_py() == direct["num_obs"]
+    assert od_orbit.iterations[0].as_py() == direct["iterations"]
+    assert od_orbit_members.outlier.to_pylist() == list(direct["outlier"])
+    np.testing.assert_array_equal(
+        od_orbit_members.residuals.to_array(),
+        np.asarray(direct["residual_values"]),
+    )
+
+
+def test_od_method_validation_matches_legacy():
+    with pytest.raises(ValueError, match="method should be one of"):
+        od(
+            orbit=None,
+            observations=None,
+            propagator=ASSISTPropagator,
+            method="nope",
+        )

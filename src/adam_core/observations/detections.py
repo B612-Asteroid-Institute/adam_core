@@ -2,11 +2,8 @@ from __future__ import annotations
 
 from typing import Iterator
 
-import healpy
 import numpy as np
 import numpy.typing as npt
-import pyarrow
-import pyarrow.compute
 import quivr as qv
 from quivr.validators import and_, ge, le
 
@@ -37,19 +34,30 @@ class PointSourceDetections(qv.Table):
         """
         Returns an iterator of PointSourceDetections, each grouped by exposure_id.
         """
-        # Gather unique exposure IDs
-        exposure_ids = self.exposure_id.unique()
-        sorted = self.table.sort_by("exposure_id")
-        for exposure_id in exposure_ids:
-            mask = pyarrow.compute.equal(sorted.column("exposure_id"), exposure_id)
-            table = sorted.filter(mask)
-            yield PointSourceDetections(table)
+        from adam_core import _rust_native
+
+        from .arrow_bridge import observations_from_ipc, observations_to_ipc
+
+        # One Rust crossing owns the grouping: unique exposure IDs in
+        # first-appearance order; a null unique ID yields an empty group
+        # exactly like the legacy null-equality mask.
+        for raw in _rust_native.detection_exposure_groups_ipc(
+            observations_to_ipc(self)
+        ):
+            yield observations_from_ipc(raw, PointSourceDetections)
 
     def healpixels(self, nside: int, nest: bool = True) -> npt.NDArray[np.int64]:
         """
         Returns an array of healpixels for each observation.
         """
-        return healpy.ang2pix(nside, self.ra, self.dec, nest=nest, lonlat=True)
+        from adam_core import _rust_native
+
+        return _rust_native.detections_healpixels_numpy(
+            self.ra.to_numpy(zero_copy_only=False),
+            self.dec.to_numpy(zero_copy_only=False),
+            nside,
+            nest,
+        )
 
     def group_by_healpixel(
         self, nside: int, nest: bool = True
@@ -57,12 +65,17 @@ class PointSourceDetections(qv.Table):
         """
         Returns an iterator of PointSourceDetections, each grouped by healpixel.
         """
-        # Gather unique healpixels
-        healpixels = self.healpixels(nside, nest)
-        unique_healpixels = np.unique(healpixels)
-        for healpixel in unique_healpixels:
-            mask = pyarrow.compute.equal(healpixels, healpixel)
-            yield (healpixel, self.apply_mask(mask))
+        from adam_core import _rust_native
+
+        from .arrow_bridge import observations_from_ipc, observations_to_ipc
+
+        # One Rust crossing owns pixel assignment and ascending-pixel
+        # grouping; the yielded key stays a numpy int64 scalar like the
+        # legacy ``np.unique`` iteration.
+        for pixel, raw in _rust_native.detection_healpixel_groups_ipc(
+            observations_to_ipc(self), nside, nest
+        ):
+            yield (np.int64(pixel), observations_from_ipc(raw, PointSourceDetections))
 
     def link_to_exposures(
         self, exposures: Exposures

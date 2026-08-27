@@ -1,0 +1,254 @@
+{
+  "created_at": "2026-08-12T16:49:41.321170+00:00",
+  "comparison_mode": "gpl_rust_assist_backend_vs_legacy_python_adam_assist",
+  "performance_columns": {
+    "legacy_adam_core": "frozen updated-upstream adam_assist over frozen adam_core",
+    "current_python": "current adam_assist public Python method",
+    "native_rust": "direct Rust call timed inside Rust with std::time::Instant",
+    "gate": "legacy/current_python; native_rust is diagnostic"
+  },
+  "repeats": 5,
+  "warmups": 1,
+  "workloads": [
+    {
+      "lane": "tiny",
+      "name": "nongrav_5x2",
+      "description": "A1/A2 non-gravitational propagation: 5 same-epoch orbits by 2 target epochs.",
+      "workload_shape": {
+        "n_orbits": 5,
+        "n_target_times": 2,
+        "output_rows": 10,
+        "unique_input_epochs": 1,
+        "marsden_models": 1
+      },
+      "options": {
+        "covariance": false,
+        "chunk_size": 5,
+        "max_processes": 1,
+        "include_nongrav": true
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.007387332618236542,
+            0.007281791418790817,
+            0.00782112404704094,
+            0.006813541054725647,
+            0.006976500153541565
+          ],
+          "p50": 0.007281791418790817,
+          "p95": 0.00773436576128006
+        },
+        "legacy_adam_core": {
+          "p50": 0.007281791418790817,
+          "p95": 0.00773436576128006,
+          "samples_alias": "python.values"
+        },
+        "rust": {
+          "values": [
+            0.0022888313978910446,
+            0.002574041485786438,
+            0.002213291823863983,
+            0.00214574858546257,
+            0.0022594574838876724
+          ],
+          "p50": 0.0022594574838876724,
+          "p95": 0.0025169994682073594
+        },
+        "current_python": {
+          "p50": 0.0022594574838876724,
+          "p95": 0.0025169994682073594,
+          "samples_alias": "rust.values"
+        },
+        "native_rust": {
+          "status": "measured",
+          "operation": "propagation",
+          "timer": "std::time::Instant",
+          "values": [
+            0.000810709,
+            0.000750833,
+            0.0007485,
+            0.000775334,
+            0.000739709
+          ],
+          "p50": 0.000750833,
+          "p95": 0.000803634
+        },
+        "speedup": {
+          "p50_python_over_rust": 3.2228052400709952,
+          "p95_python_over_rust": 3.0728515675009573,
+          "p50_legacy_over_current_python": 3.2228052400709952,
+          "p95_legacy_over_current_python": 3.0728515675009573
+        }
+      },
+      "residuals": {
+        "rows": 10,
+        "position_abs_au": 2.220446049250313e-16,
+        "position_abs_m": 3.321740009720742e-05,
+        "velocity_abs_au_per_day": 1.0408340855860843e-17,
+        "velocity_abs_m_per_s": 1.8021592934682844e-11,
+        "time_abs_ns": 0
+      }
+    },
+    {
+      "lane": "small",
+      "name": "nongrav_40x50",
+      "description": "A1/A2 non-gravitational propagation: 40 same-epoch orbits by 50 target epochs over 30 days.",
+      "workload_shape": {
+        "n_orbits": 40,
+        "n_target_times": 50,
+        "output_rows": 2000,
+        "unique_input_epochs": 1,
+        "marsden_models": 1
+      },
+      "options": {
+        "covariance": false,
+        "chunk_size": 40,
+        "max_processes": 1,
+        "include_nongrav": true
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.05778533034026623,
+            0.056212417781353,
+            0.05684120953083038,
+            0.055089209228754044,
+            0.055628830567002296
+          ],
+          "p50": 0.056212417781353,
+          "p95": 0.05759650617837906
+        },
+        "legacy_adam_core": {
+          "p50": 0.056212417781353,
+          "p95": 0.05759650617837906,
+          "samples_alias": "python.values"
+        },
+        "rust": {
+          "values": [
+            0.044445162639021873,
+            0.04477508179843426,
+            0.04445779137313366,
+            0.04540558531880379,
+            0.04437516629695892
+          ],
+          "p50": 0.04445779137313366,
+          "p95": 0.04527948461472988
+        },
+        "current_python": {
+          "p50": 0.04445779137313366,
+          "p95": 0.04527948461472988,
+          "samples_alias": "rust.values"
+        },
+        "native_rust": {
+          "status": "measured",
+          "operation": "propagation",
+          "timer": "std::time::Instant",
+          "values": [
+            0.041460292,
+            0.041816375,
+            0.041321584,
+            0.042306209,
+            0.043088417
+          ],
+          "p50": 0.041816375,
+          "p95": 0.042931975399999996
+        },
+        "speedup": {
+          "p50_python_over_rust": 1.2643996933982373,
+          "p95_python_over_rust": 1.2720221236714855,
+          "p50_legacy_over_current_python": 1.2643996933982373,
+          "p95_legacy_over_current_python": 1.2720221236714855
+        }
+      },
+      "residuals": {
+        "rows": 2000,
+        "position_abs_au": 6.661338147750939e-16,
+        "position_abs_m": 9.965220029162225e-05,
+        "velocity_abs_au_per_day": 1.0408340855860843e-17,
+        "velocity_abs_m_per_s": 1.8021592934682844e-11,
+        "time_abs_ns": 0
+      }
+    },
+    {
+      "lane": "large",
+      "name": "nongrav_200x50_1yr",
+      "description": "A1/A2 non-gravitational propagation: 200 same-epoch orbits by 50 target epochs over one year.",
+      "workload_shape": {
+        "n_orbits": 200,
+        "n_target_times": 50,
+        "output_rows": 10000,
+        "unique_input_epochs": 1,
+        "marsden_models": 1
+      },
+      "options": {
+        "covariance": false,
+        "chunk_size": 200,
+        "max_processes": 1,
+        "include_nongrav": true
+      },
+      "timing_seconds": {
+        "python": {
+          "values": [
+            0.3239863310009241,
+            0.3356861677020788,
+            0.32915741950273514,
+            0.337652875110507,
+            0.33951995708048344
+          ],
+          "p50": 0.3356861677020788,
+          "p95": 0.33914654068648814
+        },
+        "legacy_adam_core": {
+          "p50": 0.3356861677020788,
+          "p95": 0.33914654068648814,
+          "samples_alias": "python.values"
+        },
+        "rust": {
+          "values": [
+            0.26763083413243294,
+            0.27769078873097897,
+            0.2694599162787199,
+            0.27029912546277046,
+            0.27505320869386196
+          ],
+          "p50": 0.27029912546277046,
+          "p95": 0.27716327272355556
+        },
+        "current_python": {
+          "p50": 0.27029912546277046,
+          "p95": 0.27716327272355556,
+          "samples_alias": "rust.values"
+        },
+        "native_rust": {
+          "status": "measured",
+          "operation": "propagation",
+          "timer": "std::time::Instant",
+          "values": [
+            0.265435542,
+            0.261939416,
+            0.271857917,
+            0.268437042,
+            0.263408334
+          ],
+          "p50": 0.265435542,
+          "p95": 0.271173742
+        },
+        "speedup": {
+          "p50_python_over_rust": 1.241906229357425,
+          "p95_python_over_rust": 1.2236344929609597,
+          "p50_legacy_over_current_python": 1.241906229357425,
+          "p95_legacy_over_current_python": 1.2236344929609597
+        }
+      },
+      "residuals": {
+        "rows": 10000,
+        "position_abs_au": 7.716050021144838e-15,
+        "position_abs_m": 0.0011543046533779577,
+        "velocity_abs_au_per_day": 1.1384122811097797e-16,
+        "velocity_abs_m_per_s": 1.971111727230936e-10,
+        "time_abs_ns": 0
+      }
+    }
+  ]
+}

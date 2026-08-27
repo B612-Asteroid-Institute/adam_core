@@ -1,0 +1,632 @@
+{
+  "performance_columns_schema_version": 1,
+  "semantic_cache_policy_schema_version": 1,
+  "semantic_cache_policy": "semantic-result-caches-cleared-before-each-sample",
+  "semantic_caches_cleared": [
+    "observer-state",
+    "origin-translation",
+    "spkez-state"
+  ],
+  "performance_columns": {
+    "legacy_adam_core": "frozen updated-upstream checkout in isolated Python runtime",
+    "current_python": "current implementation called through compatible Python interface",
+    "native_rust": "underlying function called directly in Rust and timed by Rust std::time::Instant; no Python/PyO3 boundary inside samples; null when a Rust-internal adapter is not implemented",
+    "gate": "legacy_adam_core / current_python; native_rust is diagnostic"
+  },
+  "default_small_speedup": 1.3,
+  "default_large_speedup": 1.3,
+  "default_tiny_speedup": 1.3,
+  "canonical_speed_trials": 3,
+  "timing_aggregation": "median-of-trial-percentiles",
+  "thread_mode": "multi-thread",
+  "thread_env": {
+    "RAYON_NUM_THREADS": null,
+    "OMP_NUM_THREADS": null,
+    "OPENBLAS_NUM_THREADS": null,
+    "MKL_NUM_THREADS": null,
+    "VECLIB_MAXIMUM_THREADS": null,
+    "NUMEXPR_NUM_THREADS": null,
+    "JAX_NUM_THREADS": null,
+    "XLA_FLAGS": null
+  },
+  "cold_thread_mode": "multi-thread",
+  "cold_thread_env": {
+    "RAYON_NUM_THREADS": null,
+    "OMP_NUM_THREADS": null,
+    "OPENBLAS_NUM_THREADS": null,
+    "MKL_NUM_THREADS": null,
+    "VECLIB_MAXIMUM_THREADS": null,
+    "NUMEXPR_NUM_THREADS": null,
+    "JAX_NUM_THREADS": null,
+    "XLA_FLAGS": null
+  },
+  "timing_policy": "Canonical parity speed timings run 3 serial trials per API/lane and gate on the median of per-trial p50/p95 estimates. The current side is called through its compatible Python interface for gate enforcement. Native-Rust samples, when available, are measured independently inside Rust with Instant around direct Rust calls; Python/PyO3 is outside every sample and native timing is diagnostic. Missing native adapters remain null with a reason/TODO. Semantic result caches are cleared outside every warmup and timed current/legacy sample; imports, kernels, JIT state, and thread pools stay warm. Raw sample trials and per-trial percentiles are preserved in each row. Trial count is source-governed rather than a CLI flag so standard commands cannot silently downgrade to single-trial evidence.",
+  "thread_policy": "Warm p50/p95 timings default to multi-thread on both sides so Rust Rayon and the legacy NumPy/JAX/XLA/BLAS pools both run uncapped, giving a production-realistic best-effort comparison. single-thread mode caps Rust Rayon to 1 thread and forwards OMP/OPENBLAS/MKL/VECLIB/NUMEXPR/JAX_NUM_THREADS=1 plus --xla_cpu_multi_thread_eigen=false to the legacy subprocess; on macOS Apple Silicon JAX/XLA's CPU thread pool cannot be reliably constrained from those env vars, so single-thread there is an asymmetric Rust-1-core vs legacy-uncapped diagnostic rather than a clean apples-to-apples gate.",
+  "lane_policy": "The tiny-n lane records quick one-off/small-call behavior; p50 is enforced at 1.3x, p95 is reported but not enforced because microsecond-scale per-call work is dominated by system scheduler jitter under multi-thread mode. The small-n lane preserves the historical n=2000 promotion gate. The large-n lane is API-shaped, records structured workload axes, and is enforced by default with explicit per-lane waivers required for known large-workload regressions. Raw-kernel-only APIs and backend/transport implementation candidates are timed and reported as diagnostic comparisons because they are not public-dispatch Rust-default promotion gates.",
+  "lanes": [
+    {
+      "name": "tiny-n",
+      "description": "One-off/small-call lane at default n=10 with API-specific overrides where a scalar API's true one-off shape is smaller; p50 enforced at 1.3x, p95 reported but not enforced (microsecond-scale work makes p95 noise-dominated).",
+      "enforced": true,
+      "enforcement": "enforced",
+      "enforced_api_count": 1,
+      "diagnostic_api_count": 0,
+      "reps": [
+        3
+      ],
+      "warmup": [
+        1
+      ],
+      "timing_trials": [
+        3
+      ],
+      "timing_aggregation": "median-of-trial-percentiles",
+      "measure_cold": false,
+      "min_speedup_p50": 1.3,
+      "min_speedup_p95": 0.0,
+      "n": 10,
+      "n_values": [
+        10
+      ],
+      "api_count": 1
+    },
+    {
+      "name": "small-n",
+      "description": "Historical promotion gate at default n=100 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.3x pass/fail.",
+      "enforced": true,
+      "enforcement": "enforced",
+      "enforced_api_count": 1,
+      "diagnostic_api_count": 0,
+      "reps": [
+        3
+      ],
+      "warmup": [
+        1
+      ],
+      "timing_trials": [
+        3
+      ],
+      "timing_aggregation": "median-of-trial-percentiles",
+      "measure_cold": false,
+      "min_speedup_p50": 1.3,
+      "min_speedup_p95": 1.3,
+      "n": 100,
+      "n_values": [
+        100
+      ],
+      "api_count": 1
+    },
+    {
+      "name": "large-n",
+      "description": "Ad-hoc large workload override at rows=1000; enforced for p50/p95 >= 1.3x. Canonical scripts use API-shaped workloads instead of this scalar override.",
+      "enforced": true,
+      "enforcement": "enforced",
+      "enforced_api_count": 1,
+      "diagnostic_api_count": 0,
+      "reps": [
+        3
+      ],
+      "warmup": [
+        1
+      ],
+      "timing_trials": [
+        3
+      ],
+      "timing_aggregation": "median-of-trial-percentiles",
+      "measure_cold": false,
+      "min_speedup_p50": 1.3,
+      "min_speedup_p95": 1.3,
+      "n": 1000,
+      "n_values": [
+        1000
+      ],
+      "api_count": 1
+    }
+  ],
+  "lane_status": {
+    "tiny-n": {
+      "passed": true,
+      "raw_passed": true,
+      "enforced": true,
+      "enforcement": "enforced",
+      "enforced_api_count": 1,
+      "diagnostic_api_count": 0,
+      "waived": [],
+      "failed": []
+    },
+    "small-n": {
+      "passed": true,
+      "raw_passed": true,
+      "enforced": true,
+      "enforcement": "enforced",
+      "enforced_api_count": 1,
+      "diagnostic_api_count": 0,
+      "waived": [],
+      "failed": []
+    },
+    "large-n": {
+      "passed": true,
+      "raw_passed": true,
+      "enforced": true,
+      "enforcement": "enforced",
+      "enforced_api_count": 1,
+      "diagnostic_api_count": 0,
+      "waived": [],
+      "failed": []
+    }
+  },
+  "apis": [
+    {
+      "api_id": "orbits.VariantOrbits.create",
+      "current_boundary": "arrow",
+      "legacy_entrypoint_kind": "legacy_public_python_or_oracle",
+      "legacy_entrypoint": "orbits.VariantOrbits.create",
+      "registry_status": "public-rust-default",
+      "parity_coverage": "random-fuzz",
+      "coverage_note": "Public covariance-variant sampler crosses once as an Orbits RecordBatch; Rust owns sigma-point/Monte-Carlo/auto sampling and finished VariantOrbits RecordBatch assembly. Sigma-point output is deterministic and gated elementwise against pinned legacy; Monte Carlo and the auto fallback use the Rust-native RNG (statistically equivalent, not bit-identical; decision 2026-07-03) and are covered by statistical unit tests. Replaces the retired temporary variant-sampler candidate lane (bead personal-cmy.36.10); historical IDs remain documented only in migration/parity/README.md.",
+      "covered_subcases": [],
+      "excluded_subcases": [],
+      "rust_module": "adam_core._rust_native.sample_orbit_variants_arrow",
+      "rust_native_top_level": false,
+      "comparison_mode": "public_python_facade_vs_legacy_public_python",
+      "comparison_mode_short": "public facade",
+      "comparison_mode_label": "current public Python facade vs frozen upstream Python",
+      "current_entrypoint_kind": "public_python_facade_arrow_rust_backed",
+      "speed_gate_scope": "public_facade_enforced",
+      "lane": "tiny-n",
+      "lane_description": "One-off/small-call lane at default n=10 with API-specific overrides where a scalar API's true one-off shape is smaller; p50 enforced at 1.3x, p95 reported but not enforced (microsecond-scale work makes p95 noise-dominated).",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 10,
+        "axes": {},
+        "label": "rows=10"
+      },
+      "workload_label": "rows=10",
+      "n": 10,
+      "reps": 3,
+      "warmup": 1,
+      "timing_trials": 3,
+      "timing_aggregation": "median-of-trial-percentiles",
+      "semantic_cache_policy": "semantic-result-caches-cleared-before-each-sample",
+      "rust_sample_trials_s": [
+        [
+          0.0012085828930139542,
+          0.0010374560952186584,
+          0.0009758733212947845
+        ],
+        [
+          0.0009477920830249786,
+          0.0009444169700145721,
+          0.0009422078728675842
+        ],
+        [
+          0.000913623720407486,
+          0.013170791789889336,
+          0.0013034585863351822
+        ]
+      ],
+      "rust_p50_trials_s": [
+        0.0010374560952186584,
+        0.0009444169700145721,
+        0.0013034585863351822
+      ],
+      "rust_p95_trials_s": [
+        0.0011914702132344245,
+        0.000947454571723938,
+        0.01198405846953392
+      ],
+      "native_rust_sample_trials_s": [
+        [
+          0.000115166,
+          0.000110041,
+          0.000109
+        ],
+        [
+          0.000469416,
+          0.000109709,
+          0.000107167
+        ],
+        [
+          0.000106583,
+          0.000106875,
+          0.000106792
+        ]
+      ],
+      "native_rust_p50_trials_s": [
+        0.000110041,
+        0.000109709,
+        0.000106792
+      ],
+      "native_rust_p95_trials_s": [
+        0.0001146535,
+        0.00043344529999999996,
+        0.0001068667
+      ],
+      "legacy_sample_trials_s": [
+        [
+          0.00303070992231369,
+          0.0031885839998722076,
+          0.0030495841056108475
+        ],
+        [
+          0.0030495431274175644,
+          0.0028495006263256073,
+          0.003036247566342354
+        ],
+        [
+          0.005103582516312599,
+          0.0029848776757717133,
+          0.0028307903558015823
+        ]
+      ],
+      "legacy_p50_trials_s": [
+        0.0030495841056108475,
+        0.003036247566342354,
+        0.0029848776757717133
+      ],
+      "legacy_p95_trials_s": [
+        0.0031746840104460716,
+        0.0030482135713100432,
+        0.00489171203225851
+      ],
+      "speedup_p50_trials": [
+        2.9394825666989837,
+        3.21494388892176,
+        2.289967404460487
+      ],
+      "speedup_p95_trials": [
+        2.664509758769307,
+        3.217266201759601,
+        0.4081849270590848
+      ],
+      "rust_p50_s": 0.0010374560952186584,
+      "rust_p95_s": 0.0011914702132344245,
+      "current_python_p50_s": 0.0010374560952186584,
+      "current_python_p95_s": 0.0011914702132344245,
+      "native_rust_status": "measured",
+      "native_rust_p50_s": 0.000109709,
+      "native_rust_p95_s": 0.0001146535,
+      "current_python_over_native_rust_p50": 9.45643561803187,
+      "current_python_over_native_rust_p95": 10.391921862258235,
+      "native_rust_entrypoint": "adam_core_py::coordinates::sample_orbit_variants_record_batch",
+      "native_rust_timing_boundary": "Rust std::time::Instant around direct Orbits RecordBatch decode, sigma-point unscented sampling, and VariantOrbits RecordBatch assembly; outer Python/PyO3 launch and PyArrow conversion excluded",
+      "native_rust_unavailable_reason": "",
+      "native_rust_todo": "",
+      "legacy_p50_s": 0.003036247566342354,
+      "legacy_p95_s": 0.0031746840104460716,
+      "legacy_source": "measured",
+      "legacy_cache_key": "",
+      "speedup_p50": 2.926627527020719,
+      "speedup_p95": 2.664509758769307,
+      "min_speedup_p50": 1.3,
+      "min_speedup_p95": 0.0,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": null,
+      "legacy_cold_s": null,
+      "legacy_cold_source": "not-measured",
+      "legacy_cold_cache_key": "",
+      "rust_cold_trials_s": [],
+      "legacy_cold_trials_s": [],
+      "speedup_cold": null
+    },
+    {
+      "api_id": "orbits.VariantOrbits.create",
+      "current_boundary": "arrow",
+      "legacy_entrypoint_kind": "legacy_public_python_or_oracle",
+      "legacy_entrypoint": "orbits.VariantOrbits.create",
+      "registry_status": "public-rust-default",
+      "parity_coverage": "random-fuzz",
+      "coverage_note": "Public covariance-variant sampler crosses once as an Orbits RecordBatch; Rust owns sigma-point/Monte-Carlo/auto sampling and finished VariantOrbits RecordBatch assembly. Sigma-point output is deterministic and gated elementwise against pinned legacy; Monte Carlo and the auto fallback use the Rust-native RNG (statistically equivalent, not bit-identical; decision 2026-07-03) and are covered by statistical unit tests. Replaces the retired temporary variant-sampler candidate lane (bead personal-cmy.36.10); historical IDs remain documented only in migration/parity/README.md.",
+      "covered_subcases": [],
+      "excluded_subcases": [],
+      "rust_module": "adam_core._rust_native.sample_orbit_variants_arrow",
+      "rust_native_top_level": false,
+      "comparison_mode": "public_python_facade_vs_legacy_public_python",
+      "comparison_mode_short": "public facade",
+      "comparison_mode_label": "current public Python facade vs frozen upstream Python",
+      "current_entrypoint_kind": "public_python_facade_arrow_rust_backed",
+      "speed_gate_scope": "public_facade_enforced",
+      "lane": "small-n",
+      "lane_description": "Historical promotion gate at default n=100 with API-specific overrides for expensive scalar optimizers; enforced for p50/p95 >= 1.3x pass/fail.",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 100,
+        "axes": {},
+        "label": "rows=100"
+      },
+      "workload_label": "rows=100",
+      "n": 100,
+      "reps": 3,
+      "warmup": 1,
+      "timing_trials": 3,
+      "timing_aggregation": "median-of-trial-percentiles",
+      "semantic_cache_policy": "semantic-result-caches-cleared-before-each-sample",
+      "rust_sample_trials_s": [
+        [
+          0.0018983744084835052,
+          0.008925791829824448,
+          0.003874000161886215
+        ],
+        [
+          0.005027541890740395,
+          0.002070581540465355,
+          0.0019258763641119003
+        ],
+        [
+          0.015240583568811417,
+          0.004260959103703499,
+          0.004536334425210953
+        ]
+      ],
+      "rust_p50_trials_s": [
+        0.003874000161886215,
+        0.002070581540465355,
+        0.004536334425210953
+      ],
+      "rust_p95_trials_s": [
+        0.008420612663030624,
+        0.0047318458557128905,
+        0.01417015865445137
+      ],
+      "native_rust_sample_trials_s": [
+        [
+          0.000924667,
+          0.000914542,
+          0.001313708
+        ],
+        [
+          0.000911875,
+          0.000914708,
+          0.000911667
+        ],
+        [
+          0.000918416,
+          0.000912125,
+          0.000997458
+        ]
+      ],
+      "native_rust_p50_trials_s": [
+        0.000924667,
+        0.000911875,
+        0.000918416
+      ],
+      "native_rust_p95_trials_s": [
+        0.0012748039,
+        0.0009144247,
+        0.0009895537999999998
+      ],
+      "legacy_sample_trials_s": [
+        [
+          0.03101208060979843,
+          0.012602709233760834,
+          0.04461175017058849
+        ],
+        [
+          0.023757290095090866,
+          0.02191491797566414,
+          0.012475790455937386
+        ],
+        [
+          0.012979293242096901,
+          0.018448082730174065,
+          0.015582000836730003
+        ]
+      ],
+      "legacy_p50_trials_s": [
+        0.03101208060979843,
+        0.02191491797566414,
+        0.015582000836730003
+      ],
+      "legacy_p95_trials_s": [
+        0.04325178321450949,
+        0.023573052883148194,
+        0.01816147454082966
+      ],
+      "speedup_p50_trials": [
+        8.00518309599113,
+        10.583943470653587,
+        3.43493212275799
+      ],
+      "speedup_p95_trials": [
+        5.136417615359467,
+        4.981787996049741,
+        1.281670515038621
+      ],
+      "rust_p50_s": 0.003874000161886215,
+      "rust_p95_s": 0.008420612663030624,
+      "current_python_p50_s": 0.003874000161886215,
+      "current_python_p95_s": 0.008420612663030624,
+      "native_rust_status": "measured",
+      "native_rust_p50_s": 0.000918416,
+      "native_rust_p95_s": 0.0009895537999999998,
+      "current_python_over_native_rust_p50": 4.218132264557908,
+      "current_python_over_native_rust_p95": 8.509504650510792,
+      "native_rust_entrypoint": "adam_core_py::coordinates::sample_orbit_variants_record_batch",
+      "native_rust_timing_boundary": "Rust std::time::Instant around direct Orbits RecordBatch decode, sigma-point unscented sampling, and VariantOrbits RecordBatch assembly; outer Python/PyO3 launch and PyArrow conversion excluded",
+      "native_rust_unavailable_reason": "",
+      "native_rust_todo": "",
+      "legacy_p50_s": 0.02191491797566414,
+      "legacy_p95_s": 0.023573052883148194,
+      "legacy_source": "measured",
+      "legacy_cache_key": "",
+      "speedup_p50": 5.6569223179882275,
+      "speedup_p95": 2.7994462904869115,
+      "min_speedup_p50": 1.3,
+      "min_speedup_p95": 1.3,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": null,
+      "legacy_cold_s": null,
+      "legacy_cold_source": "not-measured",
+      "legacy_cold_cache_key": "",
+      "rust_cold_trials_s": [],
+      "legacy_cold_trials_s": [],
+      "speedup_cold": null
+    },
+    {
+      "api_id": "orbits.VariantOrbits.create",
+      "current_boundary": "arrow",
+      "legacy_entrypoint_kind": "legacy_public_python_or_oracle",
+      "legacy_entrypoint": "orbits.VariantOrbits.create",
+      "registry_status": "public-rust-default",
+      "parity_coverage": "random-fuzz",
+      "coverage_note": "Public covariance-variant sampler crosses once as an Orbits RecordBatch; Rust owns sigma-point/Monte-Carlo/auto sampling and finished VariantOrbits RecordBatch assembly. Sigma-point output is deterministic and gated elementwise against pinned legacy; Monte Carlo and the auto fallback use the Rust-native RNG (statistically equivalent, not bit-identical; decision 2026-07-03) and are covered by statistical unit tests. Replaces the retired temporary variant-sampler candidate lane (bead personal-cmy.36.10); historical IDs remain documented only in migration/parity/README.md.",
+      "covered_subcases": [],
+      "excluded_subcases": [],
+      "rust_module": "adam_core._rust_native.sample_orbit_variants_arrow",
+      "rust_native_top_level": false,
+      "comparison_mode": "public_python_facade_vs_legacy_public_python",
+      "comparison_mode_short": "public facade",
+      "comparison_mode_label": "current public Python facade vs frozen upstream Python",
+      "current_entrypoint_kind": "public_python_facade_arrow_rust_backed",
+      "speed_gate_scope": "public_facade_enforced",
+      "lane": "large-n",
+      "lane_description": "Ad-hoc large workload override at rows=1000; enforced for p50/p95 >= 1.3x. Canonical scripts use API-shaped workloads instead of this scalar override.",
+      "lane_enforced": true,
+      "workload_shape": {
+        "rows": 1000,
+        "axes": {},
+        "label": "rows=1000"
+      },
+      "workload_label": "rows=1000",
+      "n": 1000,
+      "reps": 3,
+      "warmup": 1,
+      "timing_trials": 3,
+      "timing_aggregation": "median-of-trial-percentiles",
+      "semantic_cache_policy": "semantic-result-caches-cleared-before-each-sample",
+      "rust_sample_trials_s": [
+        [
+          0.012372791767120361,
+          0.01457500085234642,
+          0.01224854402244091
+        ],
+        [
+          0.011904584243893623,
+          0.012100832536816597,
+          0.011672710999846458
+        ],
+        [
+          0.012417208403348923,
+          0.01637345738708973,
+          0.015277126803994179
+        ]
+      ],
+      "rust_p50_trials_s": [
+        0.012372791767120361,
+        0.011904584243893623,
+        0.015277126803994179
+      ],
+      "rust_p95_trials_s": [
+        0.014354779943823814,
+        0.0120812077075243,
+        0.016263824328780173
+      ],
+      "native_rust_sample_trials_s": [
+        [
+          0.010944625,
+          0.0108635,
+          0.010937083
+        ],
+        [
+          0.010620125,
+          0.012346125,
+          0.012323917
+        ],
+        [
+          0.01841425,
+          0.014208834,
+          0.010781542
+        ]
+      ],
+      "native_rust_p50_trials_s": [
+        0.010937083,
+        0.012323917,
+        0.014208834
+      ],
+      "native_rust_p95_trials_s": [
+        0.0109438708,
+        0.0123439042,
+        0.0179937084
+      ],
+      "legacy_sample_trials_s": [
+        [
+          0.21225279197096825,
+          0.17246133461594582,
+          0.18321545980870724
+        ],
+        [
+          0.27435524947941303,
+          0.2833329997956753,
+          0.23574787564575672
+        ],
+        [
+          0.2194302510470152,
+          0.2154890839010477,
+          0.3157531674951315
+        ]
+      ],
+      "legacy_p50_trials_s": [
+        0.18321545980870724,
+        0.27435524947941303,
+        0.2194302510470152
+      ],
+      "legacy_p95_trials_s": [
+        0.20934905875474213,
+        0.28243522476404903,
+        0.30612087585031983
+      ],
+      "speedup_p50_trials": [
+        14.80793205423425,
+        23.046184886308964,
+        14.363319350707066
+      ],
+      "speedup_p95_trials": [
+        14.583926718069627,
+        23.37806216080082,
+        18.822195177588938
+      ],
+      "rust_p50_s": 0.012372791767120361,
+      "rust_p95_s": 0.014354779943823814,
+      "current_python_p50_s": 0.012372791767120361,
+      "current_python_p95_s": 0.014354779943823814,
+      "native_rust_status": "measured",
+      "native_rust_p50_s": 0.012323917,
+      "native_rust_p95_s": 0.0123439042,
+      "current_python_over_native_rust_p50": 1.0039658468261643,
+      "current_python_over_native_rust_p95": 1.162904354347129,
+      "native_rust_entrypoint": "adam_core_py::coordinates::sample_orbit_variants_record_batch",
+      "native_rust_timing_boundary": "Rust std::time::Instant around direct Orbits RecordBatch decode, sigma-point unscented sampling, and VariantOrbits RecordBatch assembly; outer Python/PyO3 launch and PyArrow conversion excluded",
+      "native_rust_unavailable_reason": "",
+      "native_rust_todo": "",
+      "legacy_p50_s": 0.2194302510470152,
+      "legacy_p95_s": 0.28243522476404903,
+      "legacy_source": "measured",
+      "legacy_cache_key": "",
+      "speedup_p50": 17.73490212856668,
+      "speedup_p95": 19.675343395672716,
+      "min_speedup_p50": 1.3,
+      "min_speedup_p95": 1.3,
+      "raw_passed": true,
+      "passed": true,
+      "waived": false,
+      "waiver": "",
+      "error": null,
+      "rust_cold_s": null,
+      "legacy_cold_s": null,
+      "legacy_cold_source": "not-measured",
+      "legacy_cold_cache_key": "",
+      "rust_cold_trials_s": [],
+      "legacy_cold_trials_s": [],
+      "speedup_cold": null
+    }
+  ],
+  "all_passed": true
+}

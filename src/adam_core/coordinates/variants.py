@@ -9,12 +9,6 @@ import quivr as qv
 from . import types
 from .cartesian import CartesianCoordinates
 from .cometary import CometaryCoordinates
-from .covariances import (
-    sample_covariance_random,
-    sample_covariance_sigma_points,
-    weighted_covariance,
-    weighted_mean,
-)
 from .keplerian import KeplerianCoordinates
 from .spherical import SphericalCoordinates
 
@@ -37,6 +31,18 @@ class VariantCoordinatesTable(Generic[T], Protocol):
 
     @property
     def weight_cov(self) -> pa.lib.DoubleArray: ...
+
+
+def _coordinate_dimensions(coordinates: types.CoordinateType) -> list[str]:
+    if isinstance(coordinates, CartesianCoordinates):
+        return ["x", "y", "z", "vx", "vy", "vz"]
+    if isinstance(coordinates, SphericalCoordinates):
+        return ["rho", "lon", "lat", "vrho", "vlon", "vlat"]
+    if isinstance(coordinates, KeplerianCoordinates):
+        return ["a", "e", "i", "raan", "ap", "M"]
+    if isinstance(coordinates, CometaryCoordinates):
+        return ["q", "e", "i", "raan", "ap", "tp"]
+    raise ValueError(f"Unsupported coordinate type: {type(coordinates)}")
 
 
 def create_coordinate_variants(
@@ -95,7 +101,8 @@ def create_coordinate_variants(
         If the input coordinates are not supported.
     """
 
-    if coordinates.covariance.is_all_nan():
+    covariances = coordinates.covariance.to_matrix()
+    if np.all(np.isnan(covariances)):
         raise ValueError(
             "Cannot sample coordinate covariances when covariances are all undefined."
         )
@@ -106,81 +113,38 @@ def create_coordinate_variants(
         weight = qv.Float64Column()
         weight_cov = qv.Float64Column()
 
-    if isinstance(coordinates, CartesianCoordinates):
-        dimensions = ["x", "y", "z", "vx", "vy", "vz"]
-    elif isinstance(coordinates, SphericalCoordinates):
-        dimensions = ["rho", "lon", "lat", "vrho", "vlon", "vlat"]
-    elif isinstance(coordinates, KeplerianCoordinates):
-        dimensions = ["a", "e", "i", "raan", "ap", "M"]
-    elif isinstance(coordinates, CometaryCoordinates):
-        dimensions = ["q", "e", "i", "raan", "ap", "tp"]
-    else:
-        raise ValueError(f"Unsupported coordinate type: {type(coordinates)}")
+    dimensions = _coordinate_dimensions(coordinates)
+    means = coordinates.values
 
-    variants_list = []
-    for i, coordinate_i in enumerate(coordinates):
+    # One Rust crossing owns per-row NaN validation, sigma-point/Monte-Carlo/
+    # auto sampling policy, and index assembly. Monte Carlo draws use the
+    # Rust-native RNG (decision 2026-07-03: statistically equivalent to, but
+    # not bit-identical with, the legacy scipy sampler); the seed is threaded
+    # per-row and into the auto-mode fallback, matching VariantOrbits.create.
+    from adam_core import _rust_native
 
-        mean = coordinate_i.values[0]
-        cov = coordinate_i.covariance.to_matrix()[0]
-
-        if np.any(np.isnan(cov)):
-            raise ValueError(
-                "Cannot sample coordinate covariances when some covariance elements are undefined."
-            )
-        if np.any(np.isnan(mean)):
-            raise ValueError(
-                "Cannot sample coordinate covariances when some coordinate dimensions are undefined."
-            )
-
-        if method == "sigma-point":
-            samples, W, W_cov = sample_covariance_sigma_points(
-                mean, cov, alpha=alpha, beta=beta, kappa=kappa
-            )
-
-        elif method == "monte-carlo":
-            samples, W, W_cov = sample_covariance_random(
-                mean, cov, num_samples=num_samples, seed=seed
-            )
-
-        elif method == "auto":
-            # Sample with sigma points
-            samples, W, W_cov = sample_covariance_sigma_points(
-                mean, cov, alpha=alpha, beta=beta, kappa=kappa
-            )
-
-            # Check if the sigma point sampling is good enough by seeing if we can
-            # recover the mean and covariance from the sigma points
-            mean_sg = weighted_mean(samples, W)
-            cov_sg = weighted_covariance(mean_sg, samples, W_cov)
-
-            # If the sigma point sampling is not good enough, then sample with monte carlo
-            # Though it is not guaranteed that monte carlo will actually be better
-            diff_mean = np.abs(mean_sg - mean)
-            diff_cov = np.abs(cov_sg - cov)
-            if np.any(diff_mean >= 1e-12) or np.any(diff_cov >= 1e-12):
-                samples, W, W_cov = sample_covariance_random(
-                    mean, cov, num_samples=num_samples
-                )
-
-        else:
-            raise ValueError(f"Unknown coordinate covariance sampling method: {method}")
-
-        variants_list.append(
-            VariantCoordinates.from_kwargs(
-                index=np.full(len(samples), i),
-                sample=coordinates.from_kwargs(
-                    origin=qv.concatenate(
-                        [coordinate_i.origin for i in range(len(samples))]
-                    ),
-                    time=qv.concatenate(
-                        [coordinate_i.time for i in range(len(samples))]
-                    ),
-                    frame=coordinate_i.frame,
-                    **{dim: samples[:, i] for i, dim in enumerate(dimensions)},
-                ),
-                weight=W,
-                weight_cov=W_cov,
-            )
+    samples, weights, weights_cov, index = (
+        _rust_native.sample_coordinate_variants_numpy(
+            np.ascontiguousarray(means, dtype=np.float64),
+            np.ascontiguousarray(covariances, dtype=np.float64),
+            method,
+            int(num_samples),
+            seed,
+            float(alpha),
+            float(beta),
+            float(kappa),
         )
+    )
+    take_index = pa.array(index, type=pa.int64())
 
-    return qv.concatenate(variants_list)
+    return VariantCoordinates.from_kwargs(
+        index=index,
+        sample=coordinates.from_kwargs(
+            origin=coordinates.origin.take(take_index),
+            time=coordinates.time.take(take_index),
+            frame=coordinates.frame,
+            **{dim: samples[:, dim_index] for dim_index, dim in enumerate(dimensions)},
+        ),
+        weight=weights,
+        weight_cov=weights_cov,
+    )

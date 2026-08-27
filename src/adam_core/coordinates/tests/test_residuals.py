@@ -82,6 +82,24 @@ def test_calculate_chi2_missing_off_diagonal_covariance_values():
         np.testing.assert_allclose(calculate_chi2(residuals, covariances), [14, 6])
 
 
+def test_calculate_chi2_rejects_invertible_non_spd_covariance():
+    residuals = np.array(
+        [
+            [1.0, 0.0],
+            [0.0, 1.0],
+        ]
+    )
+    covariances = np.array(
+        [
+            [[1.0, 0.0], [0.0, 1.0]],
+            [[1.0, 2.0], [2.0, 1.0]],
+        ]
+    )
+
+    with pytest.raises(ValueError, match=r"row 1 is not positive definite"):
+        calculate_chi2(residuals, covariances)
+
+
 def test_calculate_chi2_mahalanobis():
     # Test that the calculate_chi2 is equivalent to the Mahalanobis distance squared
     observed = np.array([[1, 1, 1], [2, 2, 2]])

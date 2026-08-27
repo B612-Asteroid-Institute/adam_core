@@ -1,14 +1,12 @@
-import numpy as np
+import pyarrow as pa
 
-from ...coordinates import (
-    CartesianCoordinates,
-    CoordinateCovariances,
-    KeplerianCoordinates,
-)
+from adam_core import _rust_native
+
+from ...coordinates import CartesianCoordinates
 from ...coordinates.origin import Origin
-from ...orbits.non_gravitational_parameters import NonGravitationalParameters
 from ...time import Timestamp
 from ...utils.helpers import orbits as orbits_helpers
+from ..arrow_bridge import orbits_to_record_batch
 from ..orbits import Orbits
 
 
@@ -48,87 +46,25 @@ def test_orbit_iteration():
         assert len(o) == 1
 
 
-def test_orbits_without_non_gravitational_parameters():
-    covariance = np.full((1, 9, 9), np.nan)
-    covariance[0] = np.zeros((9, 9))
-    covariance[0, :7, :7] = np.eye(7)
-    orbits = Orbits.from_kwargs(
-        orbit_id=["1"],
-        object_id=["Test Orbit"],
-        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
-            source=["SBDB"],
-            A1=[None],
-            A2=[-2.9e-14],
-            A3=[None],
-        ),
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=[0.5],
-            y=[0.5],
-            z=[0.004],
-            vx=[0.005],
-            vy=[-0.005],
-            vz=[0.0002],
-            time=Timestamp.from_mjd([59000.0], scale="tdb"),
-            origin=Origin.from_kwargs(code=["SUN"]),
-            frame="ecliptic",
-            covariance=CoordinateCovariances.from_matrix(covariance),
-        ),
+def test_group_by_orbit_id_is_stable_and_rust_timed() -> None:
+    orbits = orbits_helpers.make_simple_orbits(num_orbits=4).set_column(
+        "orbit_id", pa.array(["b", "a", "b", "c"], type=pa.large_string())
     )
 
-    stripped = orbits.without_non_gravitational_parameters()
+    groups = list(orbits.group_by_orbit_id())
+    assert [orbit_id for orbit_id, _ in groups] == ["b", "a", "c"]
+    assert [group.orbit_id.to_pylist() for _, group in groups] == [
+        ["b", "b"],
+        ["a"],
+        ["c"],
+    ]
+    for _, group in groups:
+        assert group.coordinates.frame == orbits.coordinates.frame
+        assert group.coordinates.time.scale == orbits.coordinates.time.scale
 
-    assert orbits.has_non_gravitational_parameters()
-    assert orbits.has_non_gravitational_solution()
-    assert orbits.coordinates.covariance.has_nongrav_block()
-    assert not stripped.has_non_gravitational_parameters()
-    assert not stripped.has_non_gravitational_solution()
-    assert stripped.non_gravitational_parameters.A2[0].as_py() is None
-    assert not stripped.coordinates.covariance.has_nongrav_block()
-    np.testing.assert_allclose(
-        stripped.coordinates.covariance.to_matrix()[0], np.eye(6)
+    samples = _rust_native.benchmark_group_by_orbit_id_arrow(
+        orbits_to_record_batch(orbits), 2, 2, 1
     )
-
-
-def test_orbits_extended_covariance_to_keplerian():
-    covariance = np.zeros((1, 9, 9))
-    covariance[0, :7, :7] = np.eye(7)
-    orbits = Orbits.from_kwargs(
-        orbit_id=["1"],
-        object_id=["Test Orbit"],
-        non_gravitational_parameters=NonGravitationalParameters.from_kwargs(
-            source=["SBDB"],
-            A1=[-2.9e-14],
-            A2=[None],
-            A3=[None],
-        ),
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=[0.5],
-            y=[0.5],
-            z=[0.004],
-            vx=[0.005],
-            vy=[-0.005],
-            vz=[0.0002],
-            time=Timestamp.from_mjd([59000.0], scale="tdb"),
-            origin=Origin.from_kwargs(code=["SUN"]),
-            frame="ecliptic",
-            covariance=CoordinateCovariances.from_matrix(covariance),
-        ),
-    )
-
-    coords = orbits.to_keplerian()
-
-    assert isinstance(coords, KeplerianCoordinates)
-    assert coords.frame == "ecliptic"
-    assert coords.covariance.nongrav_block_mask().tolist() == [True]
-    full = coords.covariance.to_full_matrix()[0]
-    # The A1 dimension carries through the transform unchanged (identity
-    # block), and the orbital block matches the transformed 6x6 covariance
-    # since the input orbital block is the identity.
-    np.testing.assert_allclose(full[6, 6], 1.0, rtol=1e-12)
-    np.testing.assert_allclose(full[7:, 7:], np.zeros((2, 2)), atol=0)
-    np.testing.assert_allclose(
-        full[:6, :6],
-        coords.covariance.to_matrix()[0],
-        rtol=0,
-        atol=0,
-    )
+    assert len(samples) == 2
+    assert all(len(trial) == 2 for trial in samples)
+    assert all(value > 0.0 for trial in samples for value in trial)

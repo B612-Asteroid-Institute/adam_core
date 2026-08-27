@@ -1,0 +1,510 @@
+{
+  "environment": {
+    "asteroids_override": null,
+    "kernel_cache": "/private/tmp/adam-clean-room-a94badc2-883177d/matrix-kernel-cache",
+    "kernel_offline": "1",
+    "kernel_python_override": null,
+    "planets_override": null,
+    "pythonpath": null
+  },
+  "failed_stage": null,
+  "inputs": {
+    "epochs_mjd_utc": [
+      60000.0,
+      60001.0,
+      60007.0
+    ],
+    "object_ids": [
+      "2020 AV2",
+      "1993 SB",
+      "433 Eros",
+      "99942 Apophis",
+      "202930 Ivezic",
+      "3200 Phaethon",
+      "101955 Bennu",
+      "25143 Itokawa",
+      "4179 Toutatis",
+      "1862 Apollo",
+      "1620 Geographos",
+      "3552 Don Quixote"
+    ],
+    "observatory_codes": [
+      "X05",
+      "W84",
+      "I41",
+      "F51",
+      "F52",
+      "568",
+      "500",
+      "G96",
+      "703",
+      "807",
+      "691",
+      "675"
+    ]
+  },
+  "issues": {
+    "dependency_layering_issues": [
+      {
+        "causes": [
+          "adam_core/time/time.py imports astropy.time at module import for explicit Astropy conversion and UT1/IERS provider boundaries.",
+          "adam_core/orbits/query/sbdb.py imports astroquery.jplsbdb.SBDB at module import for legacy/monkeypatch compatibility even though default query execution is Rust HTTP."
+        ],
+        "effect_on_this_run": "No Astropy computation participated in ASSIST integration or ephemeris assembly; the issue is dependency/import layering and startup footprint.",
+        "follow_up_epic": "Astropy-removal epic created from personal-ppk0 (see Beads graph).",
+        "issue": "Astropy and Astroquery are still eager default-runtime dependencies despite the exercised fetch/ephemeris compute paths being Rust-backed.",
+        "observed_import_counts": {
+          "adam_assist": {
+            "astropy_modules": 97,
+            "astroquery_modules": 0
+          },
+          "adam_core": {
+            "astropy_modules": 0,
+            "astroquery_modules": 0
+          },
+          "adam_core.orbits.query.sbdb": {
+            "astropy_modules": 275,
+            "astroquery_modules": 16
+          },
+          "adam_core.time": {
+            "astropy_modules": 97,
+            "astroquery_modules": 0
+          }
+        }
+      }
+    ],
+    "harness_observations": [
+      "The first exact benchmark attempt warned that the temporary XDG cache directory did not exist. The directory was created and the final recorded benchmark reran warning-free; this did not involve package behavior."
+    ],
+    "package_or_computation_issues": []
+  },
+  "performance": {
+    "canonical_44_api_context": {
+      "api_id": "dynamics.generate_ephemeris_2body",
+      "artifact": "migration/artifacts/parity_speed.json",
+      "current_python_p50_seconds": 0.00236408319324255,
+      "legacy_p50_seconds": 0.02296770829707384,
+      "n": 2000,
+      "native_rust_p50_seconds": 0.001727458,
+      "note": "This canonical row is the adam-core two-body ephemeris kernel, not downstream ASSIST N-body ephemeris, so its absolute latency is not a valid direct comparator. The exact downstream workload above is the applicable performance check.",
+      "speedup_p50": 9.715270749660714
+    },
+    "exact_downstream_assist_benchmark": {
+      "clean_vs_prior_lean_percent": 0.2948439574870232,
+      "clean_vs_prior_old_percent": 0.19246865919178013,
+      "clean_wheel_stats_seconds": {
+        "hd15iqr": 0.017897958867251873,
+        "iqr": 0.00037551065906882286,
+        "iqr_outliers": 6,
+        "iterations": 1,
+        "ld15iqr": 0.016550250351428986,
+        "max": 0.020108167082071304,
+        "mean": 0.01722408104687929,
+        "median": 0.017079208977520466,
+        "min": 0.016550250351428986,
+        "ops": 58.058249800280805,
+        "outliers": "7;6",
+        "q1": 0.016904895193874836,
+        "q3": 0.01728040585294366,
+        "rounds": 55,
+        "stddev": 0.000635019588329092,
+        "stddev_outliers": 7,
+        "total": 0.947324457578361
+      },
+      "comparison": "Apples-to-apples downstream ASSIST public Python benchmark in the clean wheel runtime.",
+      "matches_prior_within_5_percent": true,
+      "prior_lean_stack_median_seconds": 0.017029,
+      "prior_old_pinned_stack_median_seconds": 0.0170464,
+      "workload": "test_benchmark_ephemeris_generation: one SBDB Apophis orbit, X05 observer, 366 daily epochs from MJD 60000, covariance disabled"
+    },
+    "matrix_stage": {
+      "note": "Stage wall time includes the public generate_ephemeris call plus complete coverage/finiteness/key validation; it is not a kernel-only benchmark.",
+      "rows": 432,
+      "seconds_including_generation_and_validation": 0.0801047096028924,
+      "validated_rows_per_second": 5392.9413406724525
+    }
+  },
+  "python": {
+    "executable": "/private/tmp/adam-clean-room-a94badc2-883177d/runtime-venv/bin/python",
+    "platform": "macOS-14.8.4-arm64-arm-64bit-Mach-O",
+    "prefix": "/private/tmp/adam-clean-room-a94badc2-883177d/runtime-venv",
+    "version": "3.13.3"
+  },
+  "schema_version": 1,
+  "stages": {
+    "assist_ephemeris_matrix": {
+      "first_keys": [
+        [
+          "101955 Bennu",
+          "X05",
+          60000,
+          0
+        ],
+        [
+          "101955 Bennu",
+          "X05",
+          60001,
+          0
+        ],
+        [
+          "101955 Bennu",
+          "X05",
+          60007,
+          0
+        ],
+        [
+          "101955 Bennu",
+          "W84",
+          60000,
+          0
+        ],
+        [
+          "101955 Bennu",
+          "W84",
+          60001,
+          0
+        ],
+        [
+          "101955 Bennu",
+          "W84",
+          60007,
+          0
+        ],
+        [
+          "101955 Bennu",
+          "I41",
+          60000,
+          0
+        ],
+        [
+          "101955 Bennu",
+          "I41",
+          60001,
+          0
+        ],
+        [
+          "101955 Bennu",
+          "I41",
+          60007,
+          0
+        ],
+        [
+          "101955 Bennu",
+          "F51",
+          60000,
+          0
+        ],
+        [
+          "101955 Bennu",
+          "F51",
+          60001,
+          0
+        ],
+        [
+          "101955 Bennu",
+          "F51",
+          60007,
+          0
+        ]
+      ],
+      "kernel_paths": {
+        "asteroids": "/private/tmp/adam-clean-room-a94badc2-883177d/runtime-venv/lib/python3.13/site-packages/jpl_small_bodies_de441_n16/sb441-n16.bsp",
+        "planets": "/private/tmp/adam-clean-room-a94badc2-883177d/runtime-venv/lib/python3.13/site-packages/naif_de440/de440.bsp"
+      },
+      "last_keys": [
+        [
+          "99942 Apophis",
+          "703",
+          60000,
+          0
+        ],
+        [
+          "99942 Apophis",
+          "703",
+          60001,
+          0
+        ],
+        [
+          "99942 Apophis",
+          "703",
+          60007,
+          0
+        ],
+        [
+          "99942 Apophis",
+          "807",
+          60000,
+          0
+        ],
+        [
+          "99942 Apophis",
+          "807",
+          60001,
+          0
+        ],
+        [
+          "99942 Apophis",
+          "807",
+          60007,
+          0
+        ],
+        [
+          "99942 Apophis",
+          "691",
+          60000,
+          0
+        ],
+        [
+          "99942 Apophis",
+          "691",
+          60001,
+          0
+        ],
+        [
+          "99942 Apophis",
+          "691",
+          60007,
+          0
+        ],
+        [
+          "99942 Apophis",
+          "675",
+          60000,
+          0
+        ],
+        [
+          "99942 Apophis",
+          "675",
+          60001,
+          0
+        ],
+        [
+          "99942 Apophis",
+          "675",
+          60007,
+          0
+        ]
+      ],
+      "latitude_deg_max": 38.21447056644685,
+      "latitude_deg_min": -29.112026979615095,
+      "light_time_days_max": 0.1544012190350237,
+      "light_time_days_min": 0.0050358492080112,
+      "longitude_deg_max": 358.62755516512965,
+      "longitude_deg_min": 2.30746804822242,
+      "range_au_max": 26.7337423542741,
+      "range_au_min": 0.871930261323964,
+      "rows": 432,
+      "seconds": 0.0801047096028924,
+      "status": "passed",
+      "unique_epochs": 3,
+      "unique_observatories": 12,
+      "unique_orbit_site_epoch_keys": 432,
+      "unique_orbits": 12
+    },
+    "kernel_cache_policy": {
+      "cache_files": [],
+      "installed_package_paths_used": true,
+      "seconds": 9.50424000620842e-05,
+      "status": "passed"
+    },
+    "live_sbdb_fetch": {
+      "epoch_mjd_tdb": [
+        59447.0,
+        57554.0,
+        53311.0,
+        59215.0,
+        59001.0,
+        57597.0,
+        55562.0,
+        53005.0,
+        56751.0,
+        58329.0,
+        57508.0,
+        58484.0
+      ],
+      "frame": "ecliptic",
+      "object_ids": [
+        "594913 'Aylo'chaxnim (2020 AV2)",
+        "15788 (1993 SB)",
+        "433 Eros (A898 PA)",
+        "99942 Apophis (2004 MN4)",
+        "202930 Ivezic (1998 SG172)",
+        "3200 Phaethon (1983 TB)",
+        "101955 Bennu (1999 RQ36)",
+        "25143 Itokawa (1998 SF36)",
+        "4179 Toutatis (1989 AC)",
+        "1862 Apollo (1932 HA)",
+        "1620 Geographos (1951 RA)",
+        "3552 Don Quixote (1983 SA)"
+      ],
+      "orbit_ids": [
+        "2020 AV2",
+        "1993 SB",
+        "433 Eros",
+        "99942 Apophis",
+        "202930 Ivezic",
+        "3200 Phaethon",
+        "101955 Bennu",
+        "25143 Itokawa",
+        "4179 Toutatis",
+        "1862 Apollo",
+        "1620 Geographos",
+        "3552 Don Quixote"
+      ],
+      "origins": [
+        "SUN",
+        "SUN",
+        "SUN",
+        "SUN",
+        "SUN",
+        "SUN",
+        "SUN",
+        "SUN",
+        "SUN",
+        "SUN",
+        "SUN",
+        "SUN"
+      ],
+      "rows": 12,
+      "seconds": 3.882956332527101,
+      "status": "passed"
+    },
+    "observer_states": {
+      "codes": [
+        "X05",
+        "X05",
+        "X05",
+        "W84",
+        "W84",
+        "W84",
+        "I41",
+        "I41",
+        "I41",
+        "F51",
+        "F51",
+        "F51",
+        "F52",
+        "F52",
+        "F52",
+        "568",
+        "568",
+        "568",
+        "500",
+        "500",
+        "500",
+        "G96",
+        "G96",
+        "G96",
+        "703",
+        "703",
+        "703",
+        "807",
+        "807",
+        "807",
+        "691",
+        "691",
+        "691",
+        "675",
+        "675",
+        "675"
+      ],
+      "epoch_mjd_utc": [
+        60000.0,
+        60001.0,
+        60007.0,
+        60000.0,
+        60001.0,
+        60007.0,
+        60000.0,
+        60001.0,
+        60007.0,
+        60000.0,
+        60001.0,
+        60007.0,
+        60000.0,
+        60001.0,
+        60007.0,
+        60000.0,
+        60001.0,
+        60007.0,
+        60000.0,
+        60001.0,
+        60007.0,
+        60000.0,
+        60001.0,
+        60007.0,
+        60000.0,
+        60001.0,
+        60007.0,
+        60000.0,
+        60001.0,
+        60007.0,
+        60000.0,
+        60001.0,
+        60007.0,
+        60000.0,
+        60001.0,
+        60007.0
+      ],
+      "rows": 36,
+      "seconds": 0.006716083735227585,
+      "state_max": [
+        -0.9026404947767641,
+        0.4058664663970217,
+        -6.913849797620286e-07,
+        -0.005355133886369386,
+        -0.015530741792069442,
+        2.0878707669145584e-06
+      ],
+      "state_min": [
+        -0.9471212544505441,
+        0.2927763482516239,
+        -5.051166227627377e-05,
+        -0.007561484523544299,
+        -0.01650012443679081,
+        -0.00010039831262570649
+      ],
+      "status": "passed"
+    },
+    "provenance": {
+      "module_paths": {
+        "adam_assist": "/private/tmp/adam-clean-room-a94badc2-883177d/runtime-venv/lib/python3.13/site-packages/adam_assist/__init__.py",
+        "adam_assist._native": "/private/tmp/adam-clean-room-a94badc2-883177d/runtime-venv/lib/python3.13/site-packages/adam_assist/_native.cpython-313-darwin.so",
+        "adam_core": "/private/tmp/adam-clean-room-a94badc2-883177d/runtime-venv/lib/python3.13/site-packages/adam_core/__init__.py",
+        "adam_core._rust_native": "/private/tmp/adam-clean-room-a94badc2-883177d/runtime-venv/lib/python3.13/site-packages/adam_core/_rust_native.cpython-313-darwin.so"
+      },
+      "seconds": 0.1484674997627735,
+      "status": "passed",
+      "versions": {
+        "adam-assist": "0.4.0",
+        "adam-core": "0.5.6"
+      }
+    }
+  },
+  "status": "passed",
+  "total_seconds": 4.118339668028057,
+  "wheel_provenance": {
+    "adam_assist": {
+      "bytes": 1043879,
+      "filename": "adam_assist-0.4.0-cp313-cp313-macosx_11_0_arm64.whl",
+      "name": "adam-assist",
+      "native_members": [
+        "adam_assist/_native.cpython-313-darwin.so"
+      ],
+      "path": "/private/tmp/adam-clean-room-a94badc2-883177d/wheelhouse/adam_assist-0.4.0-cp313-cp313-macosx_11_0_arm64.whl",
+      "sha256": "e1a883ab7698c01fbba1aa983bdbab024172a87fb770f340202881a9b57e4cf7",
+      "version": "0.4.0"
+    },
+    "adam_core": {
+      "bytes": 9224139,
+      "filename": "adam_core-0.5.6-cp313-cp313-macosx_11_0_arm64.whl",
+      "name": "adam_core",
+      "native_members": [
+        "adam_core/_rust_native.cpython-313-darwin.so"
+      ],
+      "path": "/private/tmp/adam-clean-room-a94badc2-883177d/wheelhouse/adam_core-0.5.6-cp313-cp313-macosx_11_0_arm64.whl",
+      "sha256": "5ac7f2dcab848c65da15f41627317af158dcb0f0b93c3961708d84ca0f155e95",
+      "version": "0.5.6"
+    }
+  }
+}
