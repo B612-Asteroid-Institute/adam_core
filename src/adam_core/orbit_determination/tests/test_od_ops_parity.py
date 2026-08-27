@@ -196,6 +196,80 @@ def test_assign_duplicate_observations_matches_legacy():
     assert actual_members.obs_id.to_pylist() == expected_members.obs_id.to_pylist()
 
 
+@pytest.mark.parametrize(
+    ("arc_length", "reduced_chi2", "expected_order"),
+    [
+        (
+            [np.nan, 20.0, 10.0, 5.0],
+            [1.0, 1.0, 1.0, 1.0],
+            ["orbit01", "orbit02", "orbit03", "orbit00"],
+        ),
+        (
+            [10.0, 10.0, 10.0, 10.0],
+            [np.nan, 2.0, 1.0, 3.0],
+            ["orbit02", "orbit01", "orbit03", "orbit00"],
+        ),
+        (
+            [np.nan, 10.0, np.nan, 10.0],
+            [np.nan, np.nan, 1.0, 2.0],
+            ["orbit03", "orbit01", "orbit02", "orbit00"],
+        ),
+        (
+            [np.nan, np.nan, np.nan, np.nan],
+            [np.nan, np.nan, np.nan, np.nan],
+            ["orbit00", "orbit01", "orbit02", "orbit03"],
+        ),
+    ],
+)
+def test_assign_duplicate_observations_preserves_arrow_nan_ordering(
+    arc_length: list[float],
+    reduced_chi2: list[float],
+    expected_order: list[str],
+) -> None:
+    from ...coordinates.cartesian import CartesianCoordinates
+    from ..fitted_orbits import (
+        FittedOrbitMembers,
+        FittedOrbits,
+        assign_duplicate_observations,
+    )
+
+    num_orbits = 4
+    orbit_ids = [f"orbit{i:02d}" for i in range(num_orbits)]
+    time = Timestamp.from_mjd(np.full(num_orbits, 59000.0), scale="tdb")
+    orbits = FittedOrbits.from_kwargs(
+        orbit_id=orbit_ids,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=np.arange(num_orbits, dtype=np.float64),
+            y=np.zeros(num_orbits),
+            z=np.zeros(num_orbits),
+            vx=np.zeros(num_orbits),
+            vy=np.zeros(num_orbits),
+            vz=np.zeros(num_orbits),
+            time=time,
+            origin=Origin.from_kwargs(code=np.full(num_orbits, "SUN", dtype="object")),
+            frame="ecliptic",
+        ),
+        arc_length=arc_length,
+        num_obs=np.full(num_orbits, 3),
+        chi2=np.ones(num_orbits),
+        reduced_chi2=reduced_chi2,
+    )
+    orbit_members = FittedOrbitMembers.from_kwargs(
+        orbit_id=orbit_ids,
+        obs_id=[f"obs{i:02d}" for i in range(num_orbits)],
+    )
+
+    expected_orbits, expected_members = _legacy_assign_duplicate_observations(
+        orbits, orbit_members
+    )
+    actual_orbits, actual_members = assign_duplicate_observations(orbits, orbit_members)
+
+    assert expected_orbits.orbit_id.to_pylist() == expected_order
+    assert actual_orbits.orbit_id.to_pylist() == expected_order
+    assert actual_members.orbit_id.to_pylist() == expected_members.orbit_id.to_pylist()
+    assert actual_members.obs_id.to_pylist() == expected_members.obs_id.to_pylist()
+
+
 class _Linkages(qv.Table):
     cluster_id = qv.LargeStringColumn()
 

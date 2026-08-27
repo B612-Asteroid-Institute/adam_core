@@ -7,6 +7,7 @@ use numpy::{IntoPyArray, PyArray1, PyArray2, PyReadonlyArray1, PyReadonlyArray2}
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::hint::black_box;
 use std::time::Instant;
@@ -278,6 +279,28 @@ fn select_observation_triplets_numpy<'py>(
 
 type DuplicateAssignment<'py> = (Bound<'py, PyArray1<i64>>, Bound<'py, PyArray1<bool>>);
 
+fn compare_ascending_nan_last(left: f64, right: f64) -> Ordering {
+    match (left.is_nan(), right.is_nan()) {
+        (true, true) => Ordering::Equal,
+        (true, false) => Ordering::Greater,
+        (false, true) => Ordering::Less,
+        (false, false) => left
+            .partial_cmp(&right)
+            .expect("non-NaN floating-point values must be comparable"),
+    }
+}
+
+fn compare_descending_nan_last(left: f64, right: f64) -> Ordering {
+    match (left.is_nan(), right.is_nan()) {
+        (true, true) => Ordering::Equal,
+        (true, false) => Ordering::Greater,
+        (false, true) => Ordering::Less,
+        (false, false) => right
+            .partial_cmp(&left)
+            .expect("non-NaN floating-point values must be comparable"),
+    }
+}
+
 /// `assign_duplicate_observations` core: stable priority ordering of orbits
 /// by (num_obs desc, arc_length desc, reduced_chi2 asc); each observation is
 /// kept only on its highest-priority orbit; orbits with no surviving members
@@ -313,8 +336,8 @@ fn assign_duplicate_observations_numpy<'py>(
     order.sort_by(|&a, &b| {
         num_obs[b]
             .cmp(&num_obs[a])
-            .then(arc_length[b].partial_cmp(&arc_length[a]).unwrap())
-            .then(reduced_chi2[a].partial_cmp(&reduced_chi2[b]).unwrap())
+            .then_with(|| compare_descending_nan_last(arc_length[a], arc_length[b]))
+            .then_with(|| compare_ascending_nan_last(reduced_chi2[a], reduced_chi2[b]))
     });
     let mut rank_by_orbit: HashMap<&str, usize> = HashMap::with_capacity(order.len());
     for (rank, &row) in order.iter().enumerate() {
