@@ -21,15 +21,14 @@ memory-mapping implementation; musllinux is also deliberately unsupported.
 Preview versions and opt-in installation
 ----------------------------------------
 
-The currently published migration preview is ``adam-core==0.5.6rc2`` on
-PyPI. The corrected promotion candidate is ``adam-core==0.5.6rc5`` with the already
-published public Rust crates ``0.1.0-rc.4`` and exact internal requirements
-such as ``=0.1.0-rc.4``; it is not published until its exact artifacts complete
-the separately authorized hosted matrix and post-download inspection. Pip and
-Cargo exclude prereleases from ordinary resolution;
-preview consumers must opt in with an exact pin. The Python wheel contains the
-Python veneer and compiled ``adam_core._rust_native`` extension, so Python
-consumers do not need to install the component crates from crates.io.
+The currently published Python preview is ``adam-core==0.5.6rc5``. The
+corrective Python successor is ``adam-core==0.5.6rc6``. All six public Rust
+crates ``0.1.0-rc.5`` are published with exact internal requirements such as
+``=0.1.0-rc.5`` and keep clean consumers compatible with the declared Rust
+1.87 MSRV. Pip and Cargo exclude prereleases from ordinary resolution; preview
+consumers must opt in with an exact pin. The Python wheel contains the Python
+veneer and compiled ``adam_core._rust_native`` extension, so Python consumers
+do not need to install the component crates from crates.io.
 
 The current stable PyPI release remains the default for ``pip install
 adam-core``. A public preview is still visible and intentionally installable by
@@ -39,32 +38,39 @@ instead if public visibility is unacceptable.
 Trusted publishing
 ------------------
 
-``publish.yml`` uses GitHub/PyPI OIDC with protected ``testpypi-preview`` and
-``pypi-preview`` environments. Its manual inputs include the successful
+``publish.yml`` uses GitHub/PyPI OIDC with the protected ``pypi-preview``
+environment. TestPyPI is not available for this release sequence. Its manual
+inputs include the successful
 release-candidate run ID, exact version, and a confirmation containing the
 version, commit SHA, and destination. The collector verifies the run name,
 successful conclusion, exact head SHA, RC-only version, wheel metadata, and the
 complete 12-wheel matrix before assembling only ``adam_core`` wheels.
 
-The six public Rust crates ``0.1.0-rc.4`` were published through crates.io OIDC
+The six public Rust crates ``0.1.0-rc.5`` were published through crates.io OIDC
 trusted publishing from the exact hosted candidate archives. Crate publication
 verified explicit confirmation, candidate provenance, checksums, archive
 metadata, prerelease versions, and exact internal dependency pins, then
 uploaded the accepted ``.crate`` archives in dependency order without
-repackaging or compiling.
+repackaging or compiling. Rust 1.87 remains authoritative for formatting,
+strict Clippy, tests, documentation, packaging, wheels, and clean consumer
+resolution. A separate non-authoritative latest-stable lane checks and tests
+default, all-feature, no-default, and fresh no-lock consumer configurations;
+it does not run moving-stable Clippy or change the declared MSRV.
 
 Release order
 -------------
 
-The six Rust crates are already published. After review and approval:
+The six Core Rust ``0.1.0-rc.5`` crates are already published. Successor
+promotion remains separately approval-gated and proceeds in dependency order:
 
-#. publish the exact accepted ``adam-core==0.5.6rc5`` wheel set and verify it
-   from the public index;
-#. resolve adam-assist against exact public RC dependencies and test the
-   prepared ``adam-assist==0.4.0rc6`` candidate against
-   ``adam-core==0.5.6rc5``;
-#. publish the exact accepted ``adam-assist`` RC wheel set; and
-#. run the precovery-v2 clean package-manager smoke test with exact pins.
+#. build and accept the paired ``adam-core==0.5.6rc6`` and
+   ``adam-assist==0.4.0rc7`` wheel matrices at exact source SHAs;
+#. publish and verify the exact accepted Core Python RC6 wheel set;
+#. rerun ordinary ASSIST CI against public Core RC6, then publish and verify
+   ``adam_assist 0.4.0-rc.7``;
+#. publish and verify the exact accepted ASSIST Python RC7 wheel set; and
+#. run clean no-lock Cargo 1.87/latest-stable and clean Python package-manager
+   smoke tests with exact pins.
 
 ``adam-assist`` owns ASSIST orchestration and consumes released
 ``libassist-sys`` and ``librebound-sys`` directly. Do not publish an

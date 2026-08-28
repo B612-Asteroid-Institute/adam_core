@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 env:
-  PYTHON_PREVIEW_VERSION: "0.5.6rc5"
+  PYTHON_PREVIEW_VERSION: "0.5.6rc6"
   RUST_PREVIEW_VERSION: "0.1.0-rc.5"
 
 jobs:
@@ -130,3 +130,54 @@ jobs:
           name: rust-crate-publication-set
           path: crate-dist/
           if-no-files-found: error
+
+  latest-stable-compatibility:
+    name: Latest-stable Rust compatibility (non-authoritative)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Check and test supported feature configurations
+        run: |
+          set -euo pipefail
+          cargo check --workspace --locked
+          cargo test --workspace --locked
+          cargo check --workspace --locked --all-features
+          cargo test --workspace --locked --all-features
+          cargo check --manifest-path rust/adam_core_rs_kernel_data/Cargo.toml \
+            --locked --no-default-features
+          cargo test --manifest-path rust/adam_core_rs_kernel_data/Cargo.toml \
+            --locked --no-default-features
+      - name: Check and test clean no-lock consumers
+        run: |
+          set -euo pipefail
+          consumer="$(mktemp -d)"
+          trap 'rm -rf "$consumer"' EXIT
+          for mode in default no-default; do
+            mkdir -p "$consumer/$mode/src"
+            printf 'fn main() {}\n' > "$consumer/$mode/src/main.rs"
+          done
+          cat > "$consumer/default/Cargo.toml" <<EOF
+          [package]
+          name = "adam-core-latest-stable-consumer"
+          version = "0.0.0"
+          edition = "2021"
+
+          [dependencies]
+          adam_core = "=$RUST_PREVIEW_VERSION"
+          EOF
+          cat > "$consumer/no-default/Cargo.toml" <<EOF
+          [package]
+          name = "adam-core-kernel-data-latest-stable-consumer"
+          version = "0.0.0"
+          edition = "2021"
+
+          [dependencies]
+          adam_core_rs_kernel_data = { version = "=$RUST_PREVIEW_VERSION", default-features = false }
+          EOF
+          test ! -e "$consumer/default/Cargo.lock"
+          test ! -e "$consumer/no-default/Cargo.lock"
+          cargo check --manifest-path "$consumer/default/Cargo.toml"
+          cargo test --manifest-path "$consumer/default/Cargo.toml"
+          cargo check --manifest-path "$consumer/no-default/Cargo.toml"
+          cargo test --manifest-path "$consumer/no-default/Cargo.toml"

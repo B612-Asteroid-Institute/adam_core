@@ -120,7 +120,8 @@ if _missing_native_symbols:  # pragma: no cover - depends on broken install stat
     missing = ", ".join(_missing_native_symbols)
     raise ImportError(
         "adam_core._rust_native is present but incomplete; missing required "
-        f"native symbol(s): {missing}"
+        f"native symbol(s): {missing}. Reinstall the wheel or, for a source "
+        "checkout, run `pdm install -G test && pdm run rust-develop`."
     )
 
 RUST_BACKEND_AVAILABLE = True

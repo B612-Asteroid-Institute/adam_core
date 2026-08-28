@@ -10,18 +10,10 @@ on:
       expected_version:
         description: Exact PEP 440 release-candidate version
         required: true
-        default: 0.5.6rc5
+        default: 0.5.6rc6
         type: string
-      repository:
-        description: Destination index
-        required: true
-        default: testpypi
-        type: choice
-        options:
-          - testpypi
-          - pypi
       confirmation:
-        description: Type "publish adam-core <version> from <sha> to <repository>"
+        description: Type "publish adam-core <version> from <sha> to pypi"
         required: true
         type: string
 
@@ -31,7 +23,7 @@ permissions:
   id-token: write
 
 env:
-  RUST_PREVIEW_VERSION: "0.1.0-rc.4"
+  RUST_PREVIEW_VERSION: "0.1.0-rc.5"
 
 jobs:
   collect-tested-artifacts:
@@ -55,11 +47,10 @@ jobs:
           CONFIRMATION: ${{ inputs.confirmation }}
           EXPECTED_VERSION: ${{ inputs.expected_version }}
           EXPECTED_SHA: ${{ github.sha }}
-          DESTINATION: ${{ inputs.repository }}
         run: |
           set -euo pipefail
           test "$GITHUB_REF" = "refs/tags/v$EXPECTED_VERSION"
-          test "$CONFIRMATION" = "publish adam-core $EXPECTED_VERSION from $EXPECTED_SHA to $DESTINATION"
+          test "$CONFIRMATION" = "publish adam-core $EXPECTED_VERSION from $EXPECTED_SHA to pypi"
 
       - name: Verify source prerelease versions and exact Rust pins
         run: |
@@ -176,28 +167,8 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-  publish-testpypi:
-    name: Publish exact preview wheels to TestPyPI
-    if: inputs.repository == 'testpypi'
-    needs: collect-tested-artifacts
-    runs-on: ubuntu-latest
-    environment:
-      name: testpypi-preview
-      url: https://test.pypi.org/p/adam-core
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: adam-core-${{ inputs.expected_version }}-tested-publication-set
-          path: dist
-      - name: Remove checksum manifest from upload directory
-        run: rm dist/SHA256SUMS
-      - uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          repository-url: https://test.pypi.org/legacy/
-
   publish-pypi:
     name: Publish exact preview wheels to PyPI
-    if: inputs.repository == 'pypi'
     needs: collect-tested-artifacts
     runs-on: ubuntu-latest
     environment:

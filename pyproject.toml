@@ -214,6 +214,7 @@ docs = { cmd = "sphinx-build -b html docs/source docs/build", env = { LC_ALL = "
 docs-check = { cmd = "sphinx-build -E -b html -W --keep-going docs/source docs/build_ci", env = { LC_ALL = "C", LANG = "C" } }
 rust-build = "pdm run wheel-build"
 rust-develop = { composite = [
+  "pdm run wheel-version",
   "python -m ensurepip --upgrade",
   "maturin develop --manifest-path rust/adam_core_py/Cargo.toml --release",
 ] }
