@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "adam_core"
-version = "0.1.0-rc.4"
+version = "0.1.0-rc.5"
 dependencies = [
  "adam_core_rs_autodiff",
  "adam_core_rs_coords",
@@ -15,7 +15,7 @@ dependencies = [
 
 [[package]]
 name = "adam_core_py"
-version = "0.5.6-rc.5"
+version = "0.5.6-rc.6"
 dependencies = [
  "adam_core_rs_coords",
  "adam_core_rs_orbit_determination",
@@ -39,11 +39,11 @@ dependencies = [
 
 [[package]]
 name = "adam_core_rs_autodiff"
-version = "0.1.0-rc.4"
+version = "0.1.0-rc.5"
 
 [[package]]
 name = "adam_core_rs_coords"
-version = "0.1.0-rc.4"
+version = "0.1.0-rc.5"
 dependencies = [
  "adam_core_rs_autodiff",
  "adam_core_rs_orbit_determination",
@@ -61,9 +61,13 @@ dependencies = [
 
 [[package]]
 name = "adam_core_rs_kernel_data"
-version = "0.1.0-rc.4"
+version = "0.1.0-rc.5"
 dependencies = [
  "adam_core_rs_spice",
+ "icu_locale_core",
+ "icu_normalizer",
+ "icu_properties",
+ "icu_provider",
  "sha2",
  "tempfile",
  "ureq",
@@ -72,11 +76,11 @@ dependencies = [
 
 [[package]]
 name = "adam_core_rs_orbit_determination"
-version = "0.1.0-rc.4"
+version = "0.1.0-rc.5"
 
 [[package]]
 name = "adam_core_rs_spice"
-version = "0.1.0-rc.4"
+version = "0.1.0-rc.5"
 dependencies = [
  "adam_core_rs_coords",
  "faer",

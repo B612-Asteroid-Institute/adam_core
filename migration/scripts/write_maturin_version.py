@@ -26,6 +26,9 @@ CARGO_SEMVER = re.compile(
     r"(?:-(?P<phase>alpha|beta|rc)\.(?P<number>0|[1-9][0-9]*))?$"
 )
 VERSION_TAG = re.compile(r"^v(?P<version>.+)$")
+VERSION_RELEASE_PREFIX = re.compile(
+    r"^(?P<major>0|[1-9][0-9]*)\.(?P<minor>0|[1-9][0-9]*)\."
+)
 
 
 def cargo_version_to_pep440(version: str) -> str:
@@ -55,10 +58,26 @@ def _cargo_versions() -> tuple[str, str]:
     return version, python_version
 
 
-def _exact_version_tag() -> str | None:
+def _python_version_tag_glob(python_version: str) -> str:
+    match = VERSION_RELEASE_PREFIX.match(python_version)
+    if match is None:
+        raise SystemExit(
+            f"Python version {python_version!r} has no major/minor release"
+        )
+    return f"v{match.group('major')}.{match.group('minor')}.*"
+
+
+def _exact_version_tag(python_version: str) -> str | None:
     try:
         result = subprocess.run(
-            ["git", "describe", "--tags", "--exact-match", "--match", "v[0-9]*"],
+            [
+                "git",
+                "describe",
+                "--tags",
+                "--exact-match",
+                "--match",
+                _python_version_tag_glob(python_version),
+            ],
             cwd=REPO_ROOT,
             check=False,
             text=True,
@@ -87,7 +106,7 @@ def _exact_version_tag() -> str | None:
 
 
 def _validate_exact_tag(python_version: str) -> None:
-    tag_version = _exact_version_tag()
+    tag_version = _exact_version_tag(python_version)
     if tag_version is None:
         return
     if tag_version != python_version:

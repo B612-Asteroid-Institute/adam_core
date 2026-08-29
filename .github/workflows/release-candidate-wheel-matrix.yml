@@ -10,7 +10,7 @@ on:
       adam_assist_ref:
         description: adam-assist revision to test with this adam-core revision
         required: true
-        default: release-candidate/adam-assist-0.4.0rc6
+        default: release-candidate/adam-assist-0.4.0rc7
 
 permissions:
   contents: read
@@ -20,9 +20,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref || 'release-candidate/adam-assist-0.4.0rc6' }}
+  ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref || 'release-candidate/adam-assist-0.4.0rc7' }}
   PIP_ONLY_BINARY: ":all:"
-  PYTHON_PREVIEW_VERSION: "0.5.6rc5"
+  PYTHON_PREVIEW_VERSION: "0.5.6rc6"
 
 jobs:
   artifact-acceptance:
