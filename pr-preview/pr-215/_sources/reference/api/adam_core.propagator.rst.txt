@@ -1,0 +1,17 @@
+adam\_core.propagator package
+=============================
+
+.. automodule:: adam_core.propagator
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.propagator.propagator
+   adam_core.propagator.types
+   adam_core.propagator.utils

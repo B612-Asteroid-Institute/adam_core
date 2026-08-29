@@ -1,0 +1,7 @@
+adam\_core.constants module
+===========================
+
+.. automodule:: adam_core.constants
+   :members:
+   :show-inheritance:
+   :undoc-members:
