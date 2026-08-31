@@ -1,16 +1,12 @@
 name: Release candidate wheel matrix
 
 on:
-  push:
-    branches: ["rust-migration-*"]
-  pull_request:
-    branches: [main, "v*"]
   workflow_dispatch:
     inputs:
       adam_assist_ref:
-        description: adam-assist revision to test with this adam-core revision
+        description: Exact compatible adam-assist revision to test
         required: true
-        default: release-candidate/adam-assist-0.4.0rc7
+        type: string
 
 permissions:
   contents: read
@@ -20,9 +16,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref || 'release-candidate/adam-assist-0.4.0rc7' }}
+  ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}
   PIP_ONLY_BINARY: ":all:"
-  PYTHON_PREVIEW_VERSION: "0.5.6rc6"
+  PYTHON_PREVIEW_VERSION: "0.5.7"
 
 jobs:
   artifact-acceptance:
@@ -176,7 +172,7 @@ jobs:
               metadata = email.message_from_bytes(archive.read(metadata_paths[0]))
           if metadata["Name"] != "adam_core" or metadata["Version"] != expected_version:
               raise SystemExit(
-                  f"adam-core preview metadata mismatch: {metadata['Name']} {metadata['Version']}"
+                  f"adam-core release metadata mismatch: {metadata['Name']} {metadata['Version']}"
               )
           pattern = "*${{ matrix.platform.wheel_tag }}.whl"
           invalid = [

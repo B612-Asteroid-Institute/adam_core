@@ -92,6 +92,7 @@ test = [
     # Immutable SPICE authority for regression fixtures. Keep the runtime
     # requirements broad so wheel consumers can receive current EOP data.
     "naif-de440==2020.12.21.1",
+    "jpl-small-bodies-de441-n16==2021.3.31.1",
     "naif-leapseconds==2025.4.22",
     "naif-eop-high-prec==2026.5.9",
     "naif-eop-predict==2024.8.28.1",

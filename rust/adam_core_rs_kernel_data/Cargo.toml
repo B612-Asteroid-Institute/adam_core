@@ -1,6 +1,6 @@
 [package]
 name = "adam_core_rs_kernel_data"
-version = "0.1.0-rc.5"
+version = "0.5.7"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -22,7 +22,7 @@ icu_normalizer = { version = "=2.2.0", default-features = false }
 icu_properties = { version = "=2.2.0", default-features = false }
 icu_provider = { version = "=2.2.0", default-features = false }
 zip = { version = "2", default-features = false, features = ["deflate"] }
-adam_core_rs_spice = { version = "=0.1.0-rc.5", path = "../adam_core_rs_spice", optional = true }
+adam_core_rs_spice = { version = "=0.5.7", path = "../adam_core_rs_spice", optional = true }
 
 [dev-dependencies]
 tempfile = "3"

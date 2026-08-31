@@ -5,7 +5,7 @@ on:
   # equals the final release commit, even when that commit only adjusts release
   # documentation or publication guards.
   push:
-    branches: ["rust-migration-*"]
+    branches: ["rust-migration-*", "release/adam-core-*"]
   pull_request:
     paths:
       - "Cargo.toml"
@@ -18,8 +18,8 @@ permissions:
   contents: read
 
 env:
-  PYTHON_PREVIEW_VERSION: "0.5.6rc6"
-  RUST_PREVIEW_VERSION: "0.1.0-rc.5"
+  PYTHON_PREVIEW_VERSION: "0.5.7"
+  RUST_PREVIEW_VERSION: "0.5.7"
 
 jobs:
   package-and-test:
@@ -29,17 +29,19 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.87.0
         with:
           components: rustfmt, clippy
-      - name: Verify prerelease versions and exact internal pins
+      - name: Verify stable versions and exact internal pins
         run: |
           python migration/scripts/verify_preview_versions.py \
             --python-version "$PYTHON_PREVIEW_VERSION" \
-            --rust-version "$RUST_PREVIEW_VERSION"
+            --rust-version "$RUST_PREVIEW_VERSION" \
+            --channel stable
       - name: Test publishable workspace
         run: |
           set -euo pipefail
           cargo fmt --all -- --check
           cargo clippy --workspace --all-targets -- -D warnings
           cargo test --workspace
+          RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
       - name: Package and verify crates once in publication order
         run: |
           set -euo pipefail
@@ -62,7 +64,7 @@ jobs:
             adam_core_rs_kernel_data \
             adam_core
           do
-            cargo package -p "$crate"
+            cargo package -p "$crate" --locked
           done
           rm .cargo/config.toml
           rmdir .cargo
@@ -72,7 +74,8 @@ jobs:
           (cd crate-dist && sha256sum *.crate | sort | tee SHA256SUMS)
           python migration/scripts/publish_crate_archives.py \
             --archives crate-dist \
-            --expected-version "$RUST_PREVIEW_VERSION"
+            --expected-version "$RUST_PREVIEW_VERSION" \
+            --channel stable
       - name: Verify clean no-lock Rust 1.87 consumer resolution
         run: |
           set -euo pipefail
@@ -164,7 +167,7 @@ jobs:
           edition = "2021"
 
           [dependencies]
-          adam_core = "=$RUST_PREVIEW_VERSION"
+          adam_core = { path = "$GITHUB_WORKSPACE/rust/adam_core" }
           EOF
           cat > "$consumer/no-default/Cargo.toml" <<EOF
           [package]
@@ -173,7 +176,7 @@ jobs:
           edition = "2021"
 
           [dependencies]
-          adam_core_rs_kernel_data = { version = "=$RUST_PREVIEW_VERSION", default-features = false }
+          adam_core_rs_kernel_data = { path = "$GITHUB_WORKSPACE/rust/adam_core_rs_kernel_data", default-features = false }
           EOF
           test ! -e "$consumer/default/Cargo.lock"
           test ! -e "$consumer/no-default/Cargo.lock"

@@ -2,7 +2,7 @@
 
 This file contains notable changes in adam-core
 
-## [Unreleased]
+## [0.5.7] - 2026-08-31
 
 ### Added
 
@@ -48,6 +48,12 @@ This file contains notable changes in adam-core
   arguments remain accepted where needed for call compatibility.
 - Optional Astropy/UT1, Astroquery monkeypatch, Healpy, plotting, external
   propagator, and provider integrations remain explicit boundaries.
+
+### Known limitations
+
+- Near-parabolic and hyperbolic cometary conversion retains the inherited
+  legacy defect tracked by issue #210; its post-stable correction is not part
+  of this migration release.
 
 ## [0.2.4] - 2024-09-20
 

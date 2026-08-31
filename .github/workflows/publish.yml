@@ -1,4 +1,4 @@
-name: Publish tested adam-core preview wheels
+name: Publish tested adam-core wheels
 
 on:
   workflow_dispatch:
@@ -8,9 +8,9 @@ on:
         required: true
         type: string
       expected_version:
-        description: Exact PEP 440 release-candidate version
+        description: Exact stable PEP 440 version
         required: true
-        default: 0.5.6rc6
+        default: 0.5.7
         type: string
       confirmation:
         description: Type "publish adam-core <version> from <sha> to pypi"
@@ -20,14 +20,13 @@ on:
 permissions:
   contents: read
   actions: read
-  id-token: write
 
 env:
-  RUST_PREVIEW_VERSION: "0.1.0-rc.5"
+  RUST_PREVIEW_VERSION: "0.5.7"
 
 jobs:
   collect-tested-artifacts:
-    name: Collect and verify already-tested preview wheels
+    name: Collect and verify already-tested wheels
     runs-on: ubuntu-latest
     steps:
       - name: Checkout release commit
@@ -42,7 +41,7 @@ jobs:
         run: |
           python -m pip install --only-binary=:all: packaging
 
-      - name: Verify exact RC tag and irreversible-action confirmation
+      - name: Verify exact stable tag and irreversible-action confirmation
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
           EXPECTED_VERSION: ${{ inputs.expected_version }}
@@ -52,11 +51,12 @@ jobs:
           test "$GITHUB_REF" = "refs/tags/v$EXPECTED_VERSION"
           test "$CONFIRMATION" = "publish adam-core $EXPECTED_VERSION from $EXPECTED_SHA to pypi"
 
-      - name: Verify source prerelease versions and exact Rust pins
+      - name: Verify source stable versions and exact Rust pins
         run: |
           python migration/scripts/verify_preview_versions.py \
             --python-version "${{ inputs.expected_version }}" \
-            --rust-version "$RUST_PREVIEW_VERSION"
+            --rust-version "$RUST_PREVIEW_VERSION" \
+            --channel stable
 
       - name: Verify acceptance run provenance and success
         env:
@@ -101,8 +101,8 @@ jobs:
 
           wheels = sorted(Path("dist").glob("*.whl"))
           expected_version = Version(os.environ["EXPECTED_VERSION"])
-          if expected_version.pre is None or expected_version.pre[0] != "rc":
-              raise SystemExit(f"only release candidates may be published: {expected_version}")
+          if expected_version.is_prerelease or expected_version.is_devrelease:
+              raise SystemExit(f"only stable versions may be published: {expected_version}")
           expected_python = {"cp311", "cp312", "cp313"}
           expected_platforms = {
               "manylinux_2_17_x86_64",
@@ -168,17 +168,61 @@ jobs:
           if-no-files-found: error
 
   publish-pypi:
-    name: Publish exact preview wheels to PyPI
+    name: Publish exact stable wheels to PyPI
     needs: collect-tested-artifacts
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
     environment:
-      name: pypi-preview
+      name: pypi
       url: https://pypi.org/p/adam-core
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
       - uses: actions/download-artifact@v4
         with:
           name: adam-core-${{ inputs.expected_version }}-tested-publication-set
-          path: dist
-      - name: Remove checksum manifest from upload directory
-        run: rm dist/SHA256SUMS
-      - uses: pypa/gh-action-pypi-publish@release/v1
+          path: accepted-dist
+      - name: Prepare only missing checksum-verified files
+        id: publication-state
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: |
+          set -euo pipefail
+          rm -rf upload-dist
+          python migration/scripts/prepare_pypi_upload.py \
+            --dist accepted-dist \
+            --project adam-core \
+            --version "$EXPECTED_VERSION" \
+            --expected-count 12 \
+            --upload-dir upload-dist \
+            --output pypi-before.json
+          echo "missing_count=$(find upload-dist -maxdepth 1 -name '*.whl' | wc -l | tr -d ' ')" \
+            >> "$GITHUB_OUTPUT"
+      - name: Upload only missing accepted wheels
+        if: steps.publication-state.outputs.missing_count != '0'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload-dist/
+      - name: Verify the complete public release matches accepted bytes
+        env:
+          EXPECTED_VERSION: ${{ inputs.expected_version }}
+        run: |
+          python migration/scripts/prepare_pypi_upload.py \
+            --dist accepted-dist \
+            --project adam-core \
+            --version "$EXPECTED_VERSION" \
+            --expected-count 12 \
+            --require-complete \
+            --output pypi-after.json
+      - name: Upload public-registry comparison evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: adam-core-${{ inputs.expected_version }}-pypi-state
+          path: pypi-*.json
+          if-no-files-found: error

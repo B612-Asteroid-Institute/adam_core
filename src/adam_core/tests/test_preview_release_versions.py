@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from migration.scripts import verify_preview_versions
 from migration.scripts.clean_room_artifact_smoke import _validate_runtime_versions
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -28,6 +29,7 @@ SPEC.loader.exec_module(MODULE)
         ("0.5.6-rc.4", "0.5.6rc4"),
         ("0.5.6-rc.5", "0.5.6rc5"),
         ("0.5.6-rc.6", "0.5.6rc6"),
+        ("0.5.7", "0.5.7"),
     ],
 )
 def test_cargo_version_to_pep440(cargo: str, python: str) -> None:
@@ -43,12 +45,18 @@ def test_cargo_version_to_pep440_rejects_unsupported_forms(version: str) -> None
         MODULE.cargo_version_to_pep440(version)
 
 
-def test_python_tag_validation_ignores_independent_rust_release_line() -> None:
-    assert MODULE._python_version_tag_glob("0.5.6rc6") == "v0.5.*"
+def test_python_tag_validation_uses_the_python_release_line() -> None:
+    assert MODULE._python_version_tag_glob("0.5.7") == "v0.5.*"
+
+
+def test_stable_release_versions_align_python_and_public_rust_crates() -> None:
+    verify_preview_versions.verify(ROOT, "0.5.7", "0.5.7", "stable")
+    with pytest.raises(ValueError, match="not a prerelease"):
+        verify_preview_versions.verify(ROOT, "0.5.7", "0.5.7", "preview")
 
 
 def test_runtime_versions_must_match_distribution_metadata() -> None:
-    versions = {"adam-core": "0.5.6rc6", "adam-assist": "0.4.0rc7"}
+    versions = {"adam-core": "0.5.7", "adam-assist": "0.4.0rc7"}
     assert _validate_runtime_versions(versions, versions.copy()) == versions
 
     with pytest.raises(AssertionError, match="runtime package version mismatch"):
@@ -67,7 +75,9 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
     inspector = "python migration/scripts/check_wheel_artifacts.py"
 
     assert workflow.index(writer) < workflow.index(builder) < workflow.index(inspector)
-    assert 'PYTHON_PREVIEW_VERSION: "0.5.6rc6"' in workflow
+    assert "adam_assist_ref:" in workflow
+    assert "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}" in workflow
+    assert 'PYTHON_PREVIEW_VERSION: "0.5.7"' in workflow
 
 
 def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
@@ -89,20 +99,30 @@ def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
     assert 'test ! -e "$consumer/Cargo.lock"' in workflow
     assert 'rustc --version | grep -F "rustc 1.87.0"' in workflow
     assert "clean Rust 1.87 consumer resolved ICU4X 2.2.0 exactly" in workflow
+    assert 'cargo package -p "$crate" --locked' in workflow
+    assert 'RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps' in workflow
     assert "Latest-stable Rust compatibility (non-authoritative)" in workflow
     assert "dtolnay/rust-toolchain@stable" in workflow
     assert "cargo test --workspace --locked --all-features" in workflow
     assert "--locked --no-default-features" in workflow
     assert 'test ! -e "$consumer/default/Cargo.lock"' in workflow
     assert 'test ! -e "$consumer/no-default/Cargo.lock"' in workflow
+    assert 'adam_core = { path = "$GITHUB_WORKSPACE/rust/adam_core" }' in workflow
+    assert "adam_core_rs_kernel_data = { path =" in workflow
 
     python_publisher = (ROOT / ".github/workflows/publish.yml").read_text()
     assert "testpypi" not in python_publisher.lower()
     assert "to pypi" in python_publisher
+    assert "name: pypi" in python_publisher
+    assert "prepare_pypi_upload.py" in python_publisher
+    assert "packages-dir: upload-dist/" in python_publisher
+    assert "skip-existing" not in python_publisher
 
     publisher = (ROOT / ".github/workflows/publish-crates.yml").read_text()
-    assert "default: 0.1.0-rc.5" in publisher
-    assert 'PYTHON_SOURCE_VERSION: "0.5.6rc5"' in publisher
+    assert "default: 0.5.7" in publisher
+    assert 'PYTHON_SOURCE_VERSION: "0.5.7"' in publisher
+    assert "environment: crates-io" in publisher
+    assert "--channel stable" in publisher
     assert 'test "$GITHUB_REF" = "refs/tags/v$EXPECTED_VERSION"' in publisher
 
 
@@ -121,7 +141,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     normal_ci = (workflows / "pip-build-lint-test-coverage.yml").read_text()
     crate_ci = (workflows / "rust-crate-release-candidate.yml").read_text()
     tier1 = (workflows / "tier1-dependent-smoke.yml").read_text()
-    assist_sha = "4009c154da52b06b9f24724027c6a78e17ec8c7c"
+    assist_sha = "ee7ca85f4cc2f15ff01513b3065fc2725cec7b44"
 
     assert "dtolnay/rust-toolchain@1.87.0" in normal_ci
     assert "components: rustfmt, clippy" in normal_ci
@@ -131,8 +151,9 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert assist_sha in normal_ci
     assert assist_sha in tier1
     assert "python -m pip install --no-deps -e dependent" in tier1
-    assert 'version("adam-core") == adam_core.__version__ == "0.5.6rc6"' in tier1
-    assert 'version("adam-assist") == assist_version == "0.4.0rc6"' in tier1
+    assert "jpl-small-bodies-de441-n16==2021.3.31.1" in tier1
+    assert 'version("adam-core") == adam_core.__version__ == "0.5.7"' in tier1
+    assert 'version("adam-assist") == assist_version == "0.4.0rc7"' in tier1
 
     for workflow in workflows.glob("*.yml"):
         source = workflow.read_text()

@@ -328,7 +328,7 @@ pub fn unpack_mpc_designation(designation_pf: &str) -> MpcResult<String> {
 }
 
 /// Legacy `_unpack_mpc_date` (packed MPC epoch -> ISOT string, TT scale).
-/// See https://minorplanetcenter.net/iau/info/PackedDates.html.
+/// See <https://minorplanetcenter.net/iau/info/PackedDates.html>.
 pub fn unpack_mpc_date_isot(epoch_pf: &str) -> MpcResult<String> {
     let chars: Vec<char> = epoch_pf.chars().collect();
     if chars.len() < 5 {

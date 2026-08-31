@@ -1,4 +1,4 @@
-name: Publish tested Rust crate previews
+name: Publish tested adam-core Rust crates
 
 on:
   workflow_dispatch:
@@ -8,9 +8,9 @@ on:
         required: true
         type: string
       expected_version:
-        description: Exact prerelease shared by all six crates
+        description: Exact stable version shared by all six crates
         required: true
-        default: 0.1.0-rc.5
+        default: 0.5.7
         type: string
       authentication:
         description: crates.io OIDC trusted publishing (bootstrap token was revoked after rc.1)
@@ -30,18 +30,18 @@ permissions:
   id-token: write
 
 env:
-  PYTHON_SOURCE_VERSION: "0.5.6rc5"
+  PYTHON_SOURCE_VERSION: "0.5.7"
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    environment: crates-io-preview
+    environment: crates-io
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.87.0
         with:
           components: rustfmt, clippy
-      - name: Verify exact RC tag and irreversible-action confirmation
+      - name: Verify exact stable tag and irreversible-action confirmation
         env:
           CONFIRMATION: ${{ inputs.confirmation }}
           EXPECTED_VERSION: ${{ inputs.expected_version }}
@@ -50,11 +50,12 @@ jobs:
           set -euo pipefail
           test "$GITHUB_REF" = "refs/tags/v$EXPECTED_VERSION"
           test "$CONFIRMATION" = "publish $EXPECTED_VERSION from $EXPECTED_SHA to crates.io"
-      - name: Verify source prerelease versions and exact internal pins
+      - name: Verify source stable versions and exact internal pins
         run: |
           python migration/scripts/verify_preview_versions.py \
             --python-version "$PYTHON_SOURCE_VERSION" \
-            --rust-version "${{ inputs.expected_version }}"
+            --rust-version "${{ inputs.expected_version }}" \
+            --channel stable
       - name: Verify candidate run provenance and success
         env:
           GH_TOKEN: ${{ github.token }}
@@ -83,7 +84,8 @@ jobs:
           test "$(find accepted-crates -maxdepth 1 -name '*.crate' | wc -l | tr -d ' ')" = 6
           python migration/scripts/publish_crate_archives.py \
             --archives accepted-crates \
-            --expected-version "${{ inputs.expected_version }}"
+            --expected-version "${{ inputs.expected_version }}" \
+            --channel stable
       - name: Acquire crates.io trusted-publishing token
         id: auth
         uses: rust-lang/crates-io-auth-action@v1
@@ -94,4 +96,5 @@ jobs:
           python migration/scripts/publish_crate_archives.py \
             --archives accepted-crates \
             --expected-version "${{ inputs.expected_version }}" \
+            --channel stable \
             --execute

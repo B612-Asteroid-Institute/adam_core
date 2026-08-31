@@ -34,11 +34,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: B612-Asteroid-Institute/adam-assist
-          ref: 4009c154da52b06b9f24724027c6a78e17ec8c7c
+          ref: ee7ca85f4cc2f15ff01513b3065fc2725cec7b44
           path: dependent
       - name: Install dependent and adam_core wheel
         run: |
           python -m pip install --upgrade pip
+          python -m pip install \
+            naif-de440==2020.12.21.1 \
+            jpl-small-bodies-de441-n16==2021.3.31.1
           python -m pip install dist/*.whl
           python -m pip install --no-deps -e dependent
       - name: Verify exact candidate installations
@@ -49,8 +52,8 @@ jobs:
           import adam_core
           from adam_assist.version import __version__ as assist_version
 
-          assert version("adam-core") == adam_core.__version__ == "0.5.6rc6"
-          assert version("adam-assist") == assist_version == "0.4.0rc6"
+          assert version("adam-core") == adam_core.__version__ == "0.5.7"
+          assert version("adam-assist") == assist_version == "0.4.0rc7"
           PY
       - name: Run dependent import smoke
         run: python -c "import adam_assist.propagator"

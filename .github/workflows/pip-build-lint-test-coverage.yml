@@ -133,7 +133,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: B612-Asteroid-Institute/adam-assist
-          ref: 4009c154da52b06b9f24724027c6a78e17ec8c7c
+          ref: ee7ca85f4cc2f15ff01513b3065fc2725cec7b44
           path: .ci/adam-assist
       - name: Build compatible downstream adam-assist
         env:
@@ -191,7 +191,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: B612-Asteroid-Institute/adam-assist
-          ref: 4009c154da52b06b9f24724027c6a78e17ec8c7c
+          ref: ee7ca85f4cc2f15ff01513b3065fc2725cec7b44
           path: .ci/adam-assist
       - name: Build compatible downstream adam-assist
         env:
