@@ -36,6 +36,83 @@ _JACOBIAN_PAD_MULTIPLE = 32
 # should be ~1 for a trustworthy covariance at a converged minimum.
 _DELTA_CHI2_WINDOW = (0.1, 10.0)
 
+# Robust loss functions supported by fit_least_squares. "linear" is ordinary
+# weighted least squares (the cost is chi2); "huber" is Huber's M-estimator.
+LossType = Literal["linear", "huber"]
+
+# Huber transition point in units of whitened (1-sigma) residual components:
+# residuals within +/- f_scale are treated quadratically, larger residuals
+# linearly. 1.345 is the classical constant giving 95% asymptotic efficiency
+# for Gaussian errors (Huber 1981; Huber & Ronchetti 2009, sec. 4.5).
+HUBER_F_SCALE_DEFAULT = 1.345
+
+_ROBUST_SCALE_EPS = np.finfo(np.float64).eps
+
+
+def _validate_loss(loss: str, f_scale: float) -> None:
+    if loss not in ("linear", "huber"):
+        raise ValueError(f"loss must be one of 'linear', 'huber'; got {loss!r}")
+    if not np.isfinite(f_scale) or f_scale <= 0.0:
+        raise ValueError(f"f_scale must be a positive finite number; got {f_scale!r}")
+
+
+def _robust_cost(
+    residuals: npt.NDArray[np.float64], loss: str, f_scale: float
+) -> float:
+    """
+    Objective minimized by `fit_least_squares` for the given loss, as a
+    function of the whitened residual components ``r``.
+
+    - ``"linear"``: ``sum(r**2)``, i.e. chi2.
+    - ``"huber"``: ``f_scale**2 * sum(rho(r**2 / f_scale**2))`` with
+      ``rho(z) = z`` for ``z <= 1`` and ``rho(z) = 2 sqrt(z) - 1`` otherwise,
+      which is twice the ``cost`` reported by `scipy.optimize.least_squares`
+      and reduces to chi2 when every component lies inside the quadratic core.
+    """
+    if loss == "linear":
+        return float(residuals @ residuals)
+    z = (residuals / f_scale) ** 2
+    rho = np.where(z <= 1.0, z, 2.0 * np.sqrt(z) - 1.0)
+    return float(f_scale**2 * np.sum(rho))
+
+
+def _robust_weights(
+    residuals: npt.NDArray[np.float64], loss: str, f_scale: float
+) -> npt.NDArray[np.float64]:
+    """
+    Iteratively-reweighted-least-squares weight ``rho'(z)`` of each whitened
+    residual component at the solution: 1 inside the quadratic core and
+    ``f_scale / |r|`` in the linear tail (Huber's psi(r) / r). All ones for
+    ``"linear"``.
+    """
+    if loss == "linear":
+        return np.ones_like(residuals)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        weights = np.minimum(1.0, f_scale / np.abs(residuals))
+    return np.asarray(np.where(np.isfinite(weights), weights, 1.0), dtype=np.float64)
+
+
+def _robust_jacobian_scale(
+    residuals: npt.NDArray[np.float64], loss: str, f_scale: float
+) -> npt.NDArray[np.float64]:
+    """
+    Row scaling that turns the Jacobian of the whitened residual vector into
+    the Gauss-Newton Jacobian of the robust cost, following the convention of
+    `scipy.optimize.least_squares` (``sqrt(rho' + 2 rho'' r**2)``, floored at
+    machine epsilon). For ``"linear"`` this is all ones. For ``"huber"`` the
+    second derivative of the loss vanishes in the linear tail, so components
+    beyond ``f_scale`` contribute (numerically) no curvature: the resulting
+    ``inv(J^T J)`` is the covariance of the M-estimate in which downweighted
+    observations carry no information, consistent with the local shape of
+    the robust cost surface probed by `_weak_direction_delta_chi2`.
+    """
+    if loss == "linear":
+        return np.ones_like(residuals)
+    inside = np.abs(residuals) <= f_scale
+    return np.asarray(
+        np.where(inside, 1.0, np.sqrt(_ROBUST_SCALE_EPS)), dtype=np.float64
+    )
+
 
 def _observation_whitening_matrices(
     observations: OrbitDeterminationObservations,
@@ -341,20 +418,24 @@ def _weak_direction_delta_chi2(
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     covariance_matrix: npt.NDArray[np.float64],
-    chi2_solution: float,
+    cost_solution: float,
+    loss: str = "linear",
+    f_scale: float = 1.0,
 ) -> float:
     """
-    Measure the actual change in chi2 at a 1-sigma displacement along the
-    covariance's weakest-constrained direction.
+    Measure the actual change in the fit cost at a 1-sigma displacement along
+    the covariance's weakest-constrained direction.
 
-    If the covariance is trustworthy and the solution sits at the minimum of
-    a locally quadratic chi2 surface, this is ~1 by construction
-    (delta = sigma^2 * v^T C^-1 v = 1 for the eigenpair (sigma^2, v)). Values
-    far below 1 reproduce the fabricated-confidence failure mode where the
-    chi2 valley is flat over many claimed sigma; values far above 1 indicate
-    the covariance overstates the uncertainty. The displacement is applied
-    symmetrically so that a residual gradient (incomplete convergence) mostly
-    cancels.
+    The cost is chi2 for ``loss="linear"`` and the robust cost of
+    `_robust_cost` otherwise (``cost_solution`` must be that cost at
+    ``state_vector``). If the covariance is trustworthy and the solution sits
+    at the minimum of a locally quadratic cost surface, this is ~1 by
+    construction (delta = sigma^2 * v^T C^-1 v = 1 for the eigenpair
+    (sigma^2, v)). Values far below 1 reproduce the fabricated-confidence
+    failure mode where the cost valley is flat over many claimed sigma;
+    values far above 1 indicate the covariance overstates the uncertainty.
+    The displacement is applied symmetrically so that a residual gradient
+    (incomplete convergence) mostly cancels.
     """
     eigenvalues, eigenvectors = np.linalg.eigh(covariance_matrix)
     sigma = float(np.sqrt(eigenvalues[-1]))
@@ -366,9 +447,9 @@ def _weak_direction_delta_chi2(
     residuals_minus = residual_function(
         state_vector - sigma * direction, mjd_tdb, observations, propagator
     )
-    chi2_plus = float(residuals_plus @ residuals_plus)
-    chi2_minus = float(residuals_minus @ residuals_minus)
-    return 0.5 * (chi2_plus + chi2_minus) - chi2_solution
+    cost_plus = _robust_cost(residuals_plus, loss, f_scale)
+    cost_minus = _robust_cost(residuals_minus, loss, f_scale)
+    return 0.5 * (cost_plus + cost_minus) - cost_solution
 
 
 def _validated_covariance(
@@ -378,7 +459,10 @@ def _validated_covariance(
     mjd_tdb: float,
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
-    chi2_solution: float,
+    cost_solution: float,
+    loss: str = "linear",
+    f_scale: float = 1.0,
+    residuals_solution: npt.NDArray[np.float64] | None = None,
 ) -> npt.NDArray[np.float64]:
     """
     Run the weak-direction consistency check on a fit covariance and, for the
@@ -386,6 +470,11 @@ def _validated_covariance(
     when the check fails (the signature of a dynamics regime — such as a
     planetary encounter inside the arc — that the 2-body state transition
     matrix does not capture).
+
+    ``cost_solution`` is the fit cost (chi2, or the robust cost for a robust
+    ``loss``) at ``state_vector``. For a robust loss the central-difference
+    fallback Jacobian is row-scaled with `_robust_jacobian_scale` using
+    ``residuals_solution`` (recomputed if not given).
     """
     lower, upper = _DELTA_CHI2_WINDOW
     try:
@@ -395,7 +484,9 @@ def _validated_covariance(
             observations,
             propagator,
             covariance_matrix,
-            chi2_solution,
+            cost_solution,
+            loss=loss,
+            f_scale=f_scale,
         )
     except Exception as e:
         warnings.warn(
@@ -423,6 +514,15 @@ def _validated_covariance(
         jacobian = _central_difference_jacobian(
             state_vector, mjd_tdb, observations, propagator
         )
+        if loss != "linear":
+            if residuals_solution is None:
+                residuals_solution = residual_function(
+                    state_vector, mjd_tdb, observations, propagator
+                )
+            jacobian = (
+                jacobian
+                * _robust_jacobian_scale(residuals_solution, loss, f_scale)[:, None]
+            )
         try:
             covariance_matrix = np.asarray(
                 np.linalg.inv(jacobian.T @ jacobian), dtype=np.float64
@@ -441,7 +541,10 @@ def _validated_covariance(
             mjd_tdb,
             observations,
             propagator,
-            chi2_solution,
+            cost_solution,
+            loss=loss,
+            f_scale=f_scale,
+            residuals_solution=residuals_solution,
         )
 
     if jacobian_method in ("2-point", "solver"):
@@ -477,10 +580,12 @@ def fit_least_squares(
     observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
     jacobian: Literal["analytic", "central", "2-point"] = "analytic",
     validate_covariance: bool = True,
+    loss: LossType = "linear",
+    f_scale: float = HUBER_F_SCALE_DEFAULT,
     **kwargs,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
-    Differentially correct an orbit using least squares.
+    Differentially correct an orbit using (optionally robust) least squares.
 
     Parameters
     ----------
@@ -531,8 +636,28 @@ def fit_least_squares(
         emit a `RuntimeWarning`. This also serves as the guard against
         planetary encounters inside the arc invalidating the 2-body state
         transition matrix.
+    loss : {"linear", "huber"}, optional
+        Loss applied to the whitened residual components.
+
+        - ``"linear"`` (default): ordinary weighted least squares; the
+          objective is chi2. Outliers are handled only by hard rejection
+          (``ignore`` here, the rejection loop in `iterative_fit`).
+        - ``"huber"``: Huber's M-estimator. Components within ``f_scale``
+          (1-sigma units) contribute quadratically, larger ones linearly, so
+          a gross outlier's pull on the solution is bounded instead of
+          growing with its residual. No observation is removed: every
+          observation stays in the solution with an iteratively-reweighted
+          least-squares weight of ``min(1, f_scale / |r|)`` per component,
+          reported on the members (see Notes). Requires
+          ``method='trf'`` (default) or ``'dogbox'``.
+    f_scale : float, optional
+        Huber transition point in units of whitened (1-sigma) residual
+        components. Default `HUBER_F_SCALE_DEFAULT` (1.345), the classical
+        constant giving 95% asymptotic efficiency for Gaussian errors.
+        Ignored for ``loss="linear"``.
     **kwargs
-        Additional keyword arguments to pass to `~scipy.optimize.least_squares`.
+        Additional keyword arguments to pass to `~scipy.optimize.least_squares`
+        (``loss`` and ``f_scale`` are the named parameters above).
         Some of these parameters if not specified will be set to sensible defaults.
             xtol = 1e-12
             ftol = 1e-12
@@ -545,9 +670,24 @@ def fit_least_squares(
     fitted_orbit : `~adam_core.orbit_determination.FittedOrbits` (1)
         Fitted orbit.
     fitted_orbit_members : `~adam_core.orbit_determination.FittedOrbitMembers` (N)
-        Fitted orbit members.
+        Fitted orbit members. ``weight`` holds each observation's effective
+        weight in the solution: 0 for ignored observations, 1 for fully
+        weighted ones and, for ``loss="huber"``, the smaller of the two
+        per-component Huber weights for downweighted observations.
+
+    Notes
+    -----
+    With ``loss="huber"`` the reported ``chi2`` / ``reduced_chi2`` remain the
+    plain (unweighted) chi2 of the included observations, so they stay
+    comparable across losses; the minimized robust cost is not stored. The
+    covariance is ``inv(J^T J)`` of the Gauss-Newton Jacobian of the robust
+    cost (the convention of `scipy.optimize.least_squares`): components in
+    the linear tail of the loss contribute no curvature, i.e. downweighted
+    observations carry no information in the covariance, and the
+    weak-direction consistency check probes the robust cost instead of chi2.
     """
     assert len(orbit) == 1, "Only one orbit can be differentially corrected"
+    _validate_loss(loss, f_scale)
 
     if observatory_bias_model is not None:
         observations = observatory_bias_model.apply(observations)
@@ -593,6 +733,14 @@ def fit_least_squares(
             "The args parameter is not supported and will be ignored.",
             category=RuntimeWarning,
         )
+    if loss != "linear":
+        if kwargs.get("method") == "lm":
+            raise ValueError(
+                f"loss={loss!r} is not supported by method='lm'; use method='trf' "
+                "(default) or 'dogbox'."
+            )
+        kwargs["loss"] = loss
+        kwargs["f_scale"] = f_scale
 
     jacobian_method: str = jacobian
     if "jac" in kwargs:
@@ -626,11 +774,26 @@ def fit_least_squares(
     mjd_tdb = epoch[0]
     x, y, z, vx, vy, vz = solution.x
 
+    # Whitened residual components at the solution (unscaled by the loss) and
+    # the value of the minimized objective (chi2 for the linear loss).
+    residuals_solution = np.asarray(solution.fun, dtype=np.float64)
+    cost_solution = _robust_cost(residuals_solution, loss, f_scale)
+
     if jacobian_method == "central":
         solution_jacobian = _central_difference_jacobian(
             solution.x, mjd_tdb, observations_to_include, propagator
         )
+        if loss != "linear":
+            # Match the solver's convention: the covariance is that of the
+            # robust cost, whose Gauss-Newton Jacobian is the residual
+            # Jacobian row-scaled by the loss curvature.
+            solution_jacobian = (
+                solution_jacobian
+                * _robust_jacobian_scale(residuals_solution, loss, f_scale)[:, None]
+            )
     else:
+        # For a robust loss, scipy reports the Jacobian already scaled for
+        # the loss (J^T J approximates the Hessian of the robust cost).
         solution_jacobian = solution.jac
 
     try:
@@ -647,7 +810,6 @@ def fit_least_squares(
         covariance_matrix = np.full((6, 6), np.nan)
 
     if validate_covariance and np.all(np.isfinite(covariance_matrix)):
-        chi2_solution = float(solution.fun @ solution.fun)
         covariance_matrix = _validated_covariance(
             covariance_matrix,
             jacobian_method,
@@ -655,7 +817,10 @@ def fit_least_squares(
             mjd_tdb,
             observations_to_include,
             propagator,
-            chi2_solution,
+            cost_solution,
+            loss=loss,
+            f_scale=f_scale,
+            residuals_solution=residuals_solution,
         )
 
     # Create orbit with solution state vector and use it to generate ephemeris
@@ -698,6 +863,18 @@ def fit_least_squares(
         "solution", pc.invert(fitted_orbit_members.outlier)
     )
 
+    # Effective weight of each observation in the solution: the smaller of its
+    # two per-component IRLS weights (all ones for the linear loss), and 0 for
+    # ignored observations. Members are in the order of `observations`.
+    component_weights = _robust_weights(residuals_solution, loss, f_scale)
+    included_weights = component_weights.reshape(-1, 2).min(axis=1)
+    weights = np.zeros(len(observations), dtype=np.float64)
+    if ignore is not None:
+        weights[mask.to_numpy(zero_copy_only=False)] = included_weights
+    else:
+        weights[:] = included_weights
+    fitted_orbit_members = fitted_orbit_members.set_column("weight", weights)
+
     return fitted_orbit, fitted_orbit_members
 
 
@@ -710,6 +887,8 @@ def iterative_fit(
     min_arc_length: float = 1.0,
     contamination_percentage: float = 20.0,
     observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
+    loss: LossType = "linear",
+    f_scale: float = HUBER_F_SCALE_DEFAULT,
     **kwargs,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
@@ -746,6 +925,18 @@ def iterative_fit(
         (e.g. inflating per-station sigmas from an observatory bias table). Default
         None leaves the observations unchanged. The model is applied once at this
         entry point and is not forwarded to nested calls.
+    loss : {"linear", "huber"}, optional
+        Loss used by every `fit_least_squares` call. ``"huber"`` bounds the
+        influence of large residuals by downweighting them instead of (or in
+        addition to) removing observations; see `fit_least_squares`. To use
+        Huber M-estimation as the sole outlier treatment, pass
+        ``contamination_percentage=0.0`` so that the hard-rejection loop is
+        disabled; with a non-zero contamination the two compose (a robust fit
+        at every pass, with observations still removed while the reduced chi2
+        exceeds ``rchi2_threshold``).
+    f_scale : float, optional
+        Huber transition point in units of whitened (1-sigma) residual
+        components; see `fit_least_squares`. Ignored for ``loss="linear"``.
     **kwargs
         Additional keyword arguments passed to `fit_least_squares` (including
         `jacobian` and `validate_covariance`) and ultimately to
@@ -756,7 +947,7 @@ def iterative_fit(
     fitted_orbit : `~adam_core.orbit_determination.FittedOrbits` (1)
         Best fitted orbit found.
     fitted_orbit_members : `~adam_core.orbit_determination.FittedOrbitMembers` (N)
-        Fitted orbit members with residuals and outlier flags.
+        Fitted orbit members with residuals, outlier flags and weights.
     """
     assert len(orbit) == 1, "Only one orbit can be iteratively fitted"
 
@@ -778,6 +969,8 @@ def iterative_fit(
             observations,
             propagator,
             ignore=ignore if ignore else None,
+            loss=loss,
+            f_scale=f_scale,
             **kwargs,
         )
 

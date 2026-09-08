@@ -241,6 +241,13 @@ class FittedOrbitMembers(qv.Table):
         Observed-minus-computed residuals of the fitted orbit.
     solution, outlier : bool, nullable
         Whether the observation constrained the solution / was rejected.
+    weight : float, nullable
+        Effective weight of the observation in the solution, as reported by
+        the fitter: 0 for observations excluded from the fit, 1 for fully
+        weighted observations and, for a robust loss (e.g.
+        ``fit_least_squares(loss="huber")``), the smaller of the observation's
+        per-component iteratively-reweighted-least-squares weights when it
+        was downweighted. Null when the fitter does not report weights.
     original_astrometry : `ObservationAstrometry`, nullable
         Position and uncertainty of the observation as ORIGINALLY supplied.
     used_astrometry : `ObservationAstrometry`, nullable
@@ -264,6 +271,7 @@ class FittedOrbitMembers(qv.Table):
     residuals = Residuals.as_column(nullable=True)
     solution = qv.BooleanColumn(nullable=True)
     outlier = qv.BooleanColumn(nullable=True)
+    weight = qv.Float64Column(nullable=True)
     original_astrometry = ObservationAstrometry.as_column(nullable=True)
     used_astrometry = ObservationAstrometry.as_column(nullable=True)
     astcat = qv.LargeStringColumn(nullable=True)

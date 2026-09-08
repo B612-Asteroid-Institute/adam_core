@@ -4,7 +4,7 @@ from typing import Literal, Tuple, Type
 import pyarrow as pa
 
 from ..propagator.propagator import Propagator
-from .differential_correction import iterative_fit
+from .differential_correction import HUBER_F_SCALE_DEFAULT, LossType, iterative_fit
 from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .iod import iod
@@ -45,6 +45,15 @@ class NativeOrbitFitter(OrbitFitter):
         Strategy for selecting observation triplets in IOD.  One of
         ``"combinations"``, ``"first+middle+last"``, ``"thirds"``.
         Default ``"combinations"``.
+    loss : {"linear", "huber"}, optional
+        Loss used during differential correction (`iterative_fit`).
+        ``"huber"`` downweights large residuals instead of letting them pull
+        the solution; combine with ``contamination_percentage=0.0`` to use
+        Huber M-estimation as the sole outlier treatment. Default
+        ``"linear"``.
+    f_scale : float, optional
+        Huber transition point in units of whitened (1-sigma) residual
+        components. Default 1.345. Ignored for ``loss="linear"``.
     """
 
     def __init__(
@@ -59,6 +68,8 @@ class NativeOrbitFitter(OrbitFitter):
         observation_selection_method: Literal[
             "combinations", "first+middle+last", "thirds"
         ] = "combinations",
+        loss: LossType = "linear",
+        f_scale: float = HUBER_F_SCALE_DEFAULT,
     ) -> None:
         self.propagator_class = propagator_class
         self.propagator_kwargs = propagator_kwargs
@@ -68,6 +79,8 @@ class NativeOrbitFitter(OrbitFitter):
         self.rchi2_threshold = rchi2_threshold
         self.iod_rchi2_threshold = iod_rchi2_threshold
         self.observation_selection_method = observation_selection_method
+        self.loss = loss
+        self.f_scale = f_scale
 
     def __getstate__(self) -> dict:
         return self.__dict__.copy()
@@ -142,4 +155,6 @@ class NativeOrbitFitter(OrbitFitter):
             min_obs=self.min_obs,
             min_arc_length=self.min_arc_length,
             contamination_percentage=self.contamination_percentage,
+            loss=self.loss,
+            f_scale=self.f_scale,
         )
