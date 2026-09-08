@@ -66,6 +66,12 @@ plots = [
 oem = [
     "oem>=0.4.5",
 ]
+# EFCC18 star-catalog debiasing (adam_core.observations.efcc18) needs healpy for
+# the HEALPix tile lookup. healpy is currently also a core dependency; this extra
+# documents the requirement and keeps the module installable should that change.
+debias = [
+    "healpy",
+]
 
 [build-system]
 requires = ["pdm-backend"]

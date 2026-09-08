@@ -15,6 +15,7 @@ from .native_orbit_fitter import NativeOrbitFitter
 from .observation_uncertainty import (
     BIAS_TABLE_SCHEMA,
     CompositeModel,
+    EFCC18DebiasModel,
     EmpiricalCovarianceModel,
     IdentityModel,
     NightBatchDeweightingModel,

@@ -23,25 +23,40 @@ the lon axis therefore requires dividing by cos(dec) once per RA factor:
 variances by cos²(dec), the RA×Dec cross-covariance by cos(dec) once, and
 1-sigma values by cos(dec) once (in addition to the arcsec → degree scaling).
 
-The shipped models modify ONLY the RA/Dec covariance block of the input
-observations; observed positions (lon/lat) and every other column pass
-through unchanged. This is a property of these implementations, not a
+The bias-table models and `NightBatchDeweightingModel` modify ONLY the
+RA/Dec covariance block of the input observations; observed positions
+(lon/lat) and every other column pass through unchanged. Use
+`assert_positions_unchanged` in tests to prove that a given model is
+position-preserving. This is a property of those implementations, not a
 constraint of the interface: `apply` returns a full
-`OrbitDeterminationObservations` so that subclasses defined elsewhere are
-free to implement other transformations. Use `assert_positions_unchanged`
-in tests to prove that a given model is position-preserving.
+`OrbitDeterminationObservations` so that models are free to implement other
+transformations. `EFCC18DebiasModel` is the shipped exception: it SUBTRACTS
+the EFCC18 star-catalog bias from the observed positions and leaves the
+covariance untouched. That is standard astrometric debiasing (applied by
+JPL, the MPC and OrbFit alike) and is distinct from the observatory
+bias-table numbers, which were measured on top of catalog-debiased residuals
+and are therefore only ever interpreted as covariance.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections import Counter
-from typing import Literal, Optional
+from pathlib import Path
+from typing import Iterable, Literal, Optional, Union
 
 import numpy as np
+import numpy.typing as npt
 import pyarrow as pa
 
 from ..coordinates.covariances import CoordinateCovariances
+from ..observations.efcc18 import (
+    EFCC18_N_CATALOGS,
+    EFCC18_N_TILES,
+    compute_efcc18_corrections,
+    is_efcc18_covered,
+    load_efcc18_biases,
+)
 from .evaluate import OrbitDeterminationObservations
 
 __all__ = [
@@ -52,6 +67,7 @@ __all__ = [
     "PerformanceWeightedModel",
     "SigmaFloorModel",
     "NightBatchDeweightingModel",
+    "EFCC18DebiasModel",
     "CompositeModel",
     "validate_bias_table",
     "assert_positions_unchanged",
@@ -547,6 +563,119 @@ class NightBatchDeweightingModel(ObservationUncertaintyModel):
             "coordinates.covariance",
             CoordinateCovariances.from_matrix(covariances),
         )
+
+
+class EFCC18DebiasModel(ObservationUncertaintyModel):
+    """
+    Subtract the EFCC18 star-catalog bias from observed positions.
+
+    For each observation whose ``astcat`` is covered by EFCC18 (see
+    `~adam_core.observations.efcc18.MPC_ASTCAT_TO_EFCC18`), the tabulated
+    position + proper-motion correction for its HEALPix tile, catalog and
+    epoch is looked up and subtracted from the observed RA and Dec::
+
+        lon_used = lon - bias_ra_arcsec  / (3600 cos(dec))   (wrapped to [0, 360))
+        lat_used = lat - bias_dec_arcsec / 3600
+
+    THIS MODEL MODIFIES POSITIONS. That is intended: EFCC18 debiasing is the
+    standard correction of catalog-induced systematic errors applied by JPL,
+    the MPC and OrbFit before fitting, and the observatory bias-table numbers
+    interpreted by the covariance models in this module were measured on top
+    of it. The covariance block is left exactly as supplied. Do not test this
+    model with `assert_positions_unchanged`; test that the covariance is
+    unchanged and that positions move by the expected correction instead.
+
+    Observations pass through unchanged when their ``astcat`` is null, not in
+    the EFCC18 map, or listed in ``exclude_astcats``, and when the position is
+    non-finite or at a pole (where the RA correction is undefined). If no
+    observation is corrected the input object is returned as is.
+
+    Parameters
+    ----------
+    bias_table : `numpy.ndarray` (49152, 26, 4), optional
+        Pre-loaded EFCC18 table (see
+        `~adam_core.observations.efcc18.load_efcc18_biases`). When None the
+        table is loaded from ``bias_dat`` / the environment / the cache.
+    bias_dat : str or Path, optional
+        Location of ``bias.dat``; only used when ``bias_table`` is None.
+    exclude_astcats : iterable of str
+        MPC ``astCat`` codes to leave uncorrected even though tabulated, e.g.
+        `~adam_core.observations.efcc18.EFCC18_JPL_UNDEBIASED_ASTCATS` to
+        follow JPL's practice of not debiasing Gaia-DR1, ACT, Tycho-2 and
+        UCAC-5. Default: correct every tabulated catalog.
+    """
+
+    def __init__(
+        self,
+        bias_table: Optional[npt.NDArray[np.floating]] = None,
+        bias_dat: Optional[Union[str, Path]] = None,
+        exclude_astcats: Iterable[str] = (),
+    ) -> None:
+        if bias_table is None:
+            bias_table = load_efcc18_biases(bias_dat)
+        elif bias_dat is not None:
+            raise ValueError("Pass either bias_table or bias_dat, not both")
+        expected_shape = (EFCC18_N_TILES, EFCC18_N_CATALOGS, 4)
+        if bias_table.shape != expected_shape:
+            raise ValueError(
+                f"bias_table has shape {bias_table.shape}, expected {expected_shape}"
+            )
+        self.bias_table = bias_table
+        self.exclude_astcats = tuple(exclude_astcats)
+
+    def apply(
+        self, observations: OrbitDeterminationObservations
+    ) -> OrbitDeterminationObservations:
+        if len(observations) == 0:
+            return observations
+
+        astcats = observations.astcat.to_pylist()
+        covered = is_efcc18_covered(astcats, self.exclude_astcats)
+        if not np.any(covered):
+            return observations
+
+        lon = observations.coordinates.lon.to_numpy(zero_copy_only=False)
+        lat = observations.coordinates.lat.to_numpy(zero_copy_only=False)
+        jd_tdb = (
+            observations.coordinates.time.rescale("tdb")
+            .jd()
+            .to_numpy(zero_copy_only=False)
+        )
+        corrections = compute_efcc18_corrections(
+            lon,
+            lat,
+            astcats,
+            jd_tdb,
+            bias_table=self.bias_table,
+            exclude_astcats=self.exclude_astcats,
+        )
+
+        cos_dec = np.cos(np.deg2rad(lat))
+        valid = (
+            covered
+            & np.isfinite(lon)
+            & np.isfinite(lat)
+            & np.isfinite(cos_dec)
+            & (np.abs(cos_dec) > 1e-12)
+        )
+        if not np.any(valid):
+            return observations
+
+        new_lon = lon.copy()
+        new_lat = lat.copy()
+        new_lon[valid] = np.mod(
+            lon[valid] - corrections[valid, 0] / (ARCSEC_PER_DEG * cos_dec[valid]),
+            360.0,
+        )
+        new_lat[valid] = lat[valid] - corrections[valid, 1] / ARCSEC_PER_DEG
+
+        if np.array_equal(new_lon, lon, equal_nan=True) and np.array_equal(
+            new_lat, lat, equal_nan=True
+        ):
+            return observations
+        return observations.set_column(
+            "coordinates.lon", pa.array(new_lon, type=pa.float64())
+        ).set_column("coordinates.lat", pa.array(new_lat, type=pa.float64()))
 
 
 class CompositeModel(ObservationUncertaintyModel):
