@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import io
 import os
+import sys
 import tarfile
+import types
 from pathlib import Path
 from typing import Any
 
@@ -83,11 +85,22 @@ def synthetic_bias_dat(
 
 @pytest.fixture
 def isolated_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    """Point the cache at an empty directory and clear the bias.dat override."""
+    """
+    Point the cache at an empty directory, clear the bias.dat override and hide
+    any installed jpl_debias_2018 package (a None entry makes import fail).
+    """
     cache = tmp_path / "cache"
     monkeypatch.setenv(EFCC18_CACHE_DIR_ENV, str(cache))
     monkeypatch.delenv(EFCC18_BIAS_DAT_ENV, raising=False)
+    monkeypatch.setitem(sys.modules, "jpl_debias_2018", None)
     return cache
+
+
+def fake_data_package(monkeypatch: pytest.MonkeyPatch, bias_dat: Path) -> None:
+    """Install a stand-in for the jpl_debias_2018 data package."""
+    module = types.ModuleType("jpl_debias_2018")
+    module.bias_dat = str(bias_dat)  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "jpl_debias_2018", module)
 
 
 class TestConstants:
@@ -290,8 +303,8 @@ class TestLocateAndInstall:
         monkeypatch: pytest.MonkeyPatch,
         tmp_path: Path,
     ) -> None:
-        # Nothing anywhere: helpful error
-        with pytest.raises(FileNotFoundError, match="download_efcc18_bias_table"):
+        # Nothing anywhere: helpful error naming the data package
+        with pytest.raises(FileNotFoundError, match="jpl-debias-2018"):
             resolve_bias_dat()
         with pytest.raises(FileNotFoundError, match="not found at"):
             resolve_bias_dat(tmp_path / "missing.dat")
@@ -308,6 +321,52 @@ class TestLocateAndInstall:
             resolve_bias_dat()
         # Explicit path wins over everything
         assert resolve_bias_dat(cached) == cached
+
+    def test_resolve_uses_installed_data_package(
+        self,
+        isolated_env: Path,
+        synthetic_bias_dat: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ) -> None:
+        # Package beats the cache directory...
+        isolated_env.mkdir(parents=True)
+        cached = isolated_env / "bias.dat"
+        cached.write_text("cache copy\n")
+        fake_data_package(monkeypatch, synthetic_bias_dat)
+        assert resolve_bias_dat() == synthetic_bias_dat
+        # ...the environment variable beats the package...
+        monkeypatch.setenv(EFCC18_BIAS_DAT_ENV, str(cached))
+        assert resolve_bias_dat() == cached
+        monkeypatch.delenv(EFCC18_BIAS_DAT_ENV)
+        # ...and a package whose file is missing falls through to the cache.
+        fake_data_package(monkeypatch, tmp_path / "gone" / "bias.dat")
+        assert resolve_bias_dat() == cached
+        # A package object without the attribute is ignored too.
+        monkeypatch.setitem(
+            sys.modules, "jpl_debias_2018", types.ModuleType("jpl_debias_2018")
+        )
+        assert resolve_bias_dat() == cached
+
+    def test_cache_falls_back_to_cache_dir_when_source_dir_is_read_only(
+        self,
+        isolated_env: Path,
+        synthetic_bias_dat: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from .. import efcc18 as efcc18_module
+
+        sibling = synthetic_bias_dat.with_suffix(".npy")
+        if sibling.exists():
+            sibling.unlink()
+        monkeypatch.setattr(efcc18_module, "_is_writable", lambda directory: False)
+        table = load_efcc18_biases(synthetic_bias_dat)
+        assert table.shape == (EFCC18_N_TILES, EFCC18_N_CATALOGS, 4)
+        assert not sibling.exists()
+        fallback = isolated_env / "bias.npy"
+        assert fallback.exists()
+        # Second load comes from the fallback cache
+        np.testing.assert_array_equal(load_efcc18_biases(synthetic_bias_dat), table)
 
     def test_install_from_file_and_archive(
         self, isolated_env: Path, synthetic_bias_dat: Path, tmp_path: Path
@@ -383,23 +442,23 @@ class TestLocateAndInstall:
         assert installed.read_bytes() == synthetic_bias_dat.read_bytes()
 
 
-def _real_bias_dat() -> Path:
+def _real_bias_dat_available() -> bool:
     try:
-        return resolve_bias_dat()
+        resolve_bias_dat()
     except FileNotFoundError:
-        pytest.skip("EFCC18 bias.dat not installed (see adam_core.observations.efcc18)")
+        return False
+    return True
 
 
 @pytest.mark.skipif(
-    os.environ.get(EFCC18_BIAS_DAT_ENV) is None
-    and not (efcc18_cache_dir() / "bias.dat").exists(),
-    reason="EFCC18 bias.dat not installed",
+    not _real_bias_dat_available(),
+    reason="EFCC18 bias.dat not installed (pip install jpl-debias-2018)",
 )
 def test_real_bias_dat_integrity_and_parse(tmp_path: Path) -> None:
     """With the published table present: checksum, version tag and a parsed spot check."""
     from ..efcc18 import _sha256
 
-    path = _real_bias_dat()
+    path = resolve_bias_dat()
     assert _sha256(path) == EFCC18_BIAS_DAT_SHA256
     assert read_efcc18_bias_version(path) == EFCC18_BIAS_VERSION
     table = load_efcc18_biases(path, cache_npy=tmp_path / "bias.npy")

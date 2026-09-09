@@ -39,19 +39,24 @@ The file header reads ``BIAS_VERSION= 3.0 (September 21, 2018)``; the archive
 was last updated on 2023-03-01 to relabel the UCAC-5 column from ``W`` to
 ``Y`` (``W`` is the MPC code for Gaia-DR3). Its ``bias.dat`` has SHA-256
 `EFCC18_BIAS_DAT_SHA256`. At 37 MB (9 MB compressed) it is not bundled with
-adam_core. It is located, in order, from:
+adam_core itself. The recommended way to obtain it is the ``jpl-debias-2018``
+data package (``pip install jpl-debias-2018``), a B612 mirror of the archive in
+the style of ``naif-de440`` and ``mpc-obscodes``. ``bias.dat`` is located, in
+order, from:
 
 1. an explicit ``bias_dat`` path argument;
 2. the ``ADAM_CORE_EFCC18_BIAS_DAT`` environment variable;
-3. ``bias.dat`` inside the EFCC18 cache directory (``ADAM_CORE_EFCC18_DIR``,
+3. the installed ``jpl_debias_2018`` package;
+4. ``bias.dat`` inside the EFCC18 cache directory (``ADAM_CORE_EFCC18_DIR``,
    else ``$XDG_CACHE_HOME/adam_core/efcc18``, else
    ``~/.cache/adam_core/efcc18``).
 
-Populate the cache once with `download_efcc18_bias_table` (fetches the
-archive from JPL and verifies the checksum) or, on machines without network
-access, with `install_efcc18_bias_table` pointing at a local copy of the
-archive or of ``bias.dat``. A parsed ``.npy`` copy is written next to
-``bias.dat`` on first load so subsequent loads are fast.
+Without the package, populate the cache once with `download_efcc18_bias_table`
+(fetches the archive from JPL and verifies the checksum) or, on machines
+without network access, with `install_efcc18_bias_table` pointing at a local
+copy of the archive or of ``bias.dat``. A parsed ``.npy`` copy is written on
+first load so subsequent loads are fast: next to ``bias.dat`` when that
+directory is writable, otherwise in the cache directory.
 
 Catalog coverage
 ----------------
@@ -72,6 +77,7 @@ keeps working should that change.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import logging
 import os
 import shutil
@@ -219,8 +225,9 @@ def resolve_bias_dat(path: Optional[Union[str, Path]] = None) -> Path:
     -------
     path : Path
         The first existing candidate among: ``path``, the
-        ``ADAM_CORE_EFCC18_BIAS_DAT`` environment variable, and
-        ``bias.dat`` in `efcc18_cache_dir`.
+        ``ADAM_CORE_EFCC18_BIAS_DAT`` environment variable, the ``bias.dat``
+        shipped by the installed ``jpl_debias_2018`` package, and ``bias.dat``
+        in `efcc18_cache_dir`.
 
     Raises
     ------
@@ -243,18 +250,52 @@ def resolve_bias_dat(path: Optional[Union[str, Path]] = None) -> Path:
             )
         return candidate
 
+    packaged = _packaged_bias_dat()
+    if packaged is not None:
+        return packaged
+
     cached = efcc18_cache_dir() / "bias.dat"
     if cached.is_file():
         return cached
 
     raise FileNotFoundError(
-        "EFCC18 bias.dat not found. Populate the cache with "
+        "EFCC18 bias.dat not found. Install the data package "
+        "(`pip install jpl-debias-2018`), or populate the cache with "
         "adam_core.observations.efcc18.download_efcc18_bias_table() (fetches "
-        f"{EFCC18_ARCHIVE_URL}), or install_efcc18_bias_table(<local debias_2018.tgz "
+        f"{EFCC18_ARCHIVE_URL}) or install_efcc18_bias_table(<local debias_2018.tgz "
         "or bias.dat>), or point $"
         f"{EFCC18_BIAS_DAT_ENV} at an existing bias.dat. Cache directory: "
         f"{efcc18_cache_dir()} (override with ${EFCC18_CACHE_DIR_ENV})."
     )
+
+
+def _packaged_bias_dat() -> Optional[Path]:
+    """``bias.dat`` shipped by the ``jpl_debias_2018`` data package, if installed."""
+    try:
+        package = importlib.import_module("jpl_debias_2018")
+    except ImportError:
+        return None
+    path = getattr(package, "bias_dat", None)
+    if not path:
+        return None
+    candidate = Path(str(path))
+    return candidate if candidate.is_file() else None
+
+
+def _default_cache_path(bias_dat_path: Path) -> Path:
+    """
+    Location of the parsed ``.npy`` cache for ``bias_dat_path``: next to it when
+    its directory is writable (e.g. a user cache), otherwise inside
+    `efcc18_cache_dir` (e.g. for a read-only site-packages install).
+    """
+    sibling = bias_dat_path.with_suffix(".npy")
+    if _is_writable(bias_dat_path.parent):
+        return sibling
+    return efcc18_cache_dir() / sibling.name
+
+
+def _is_writable(directory: Path) -> bool:
+    return os.access(directory, os.W_OK)
 
 
 def _sha256(path: Path) -> str:
@@ -418,15 +459,16 @@ def load_efcc18_biases(
     RA quantities are in the cos(dec)-corrected frame. The middle axis follows
     `EFCC18_CATALOG_CODES`.
 
-    A parsed ``.npy`` copy is written next to ``bias.dat`` (or at ``cache_npy``)
-    on first load and reused while it is at least as new as ``bias.dat``.
+    A parsed ``.npy`` copy is written on first load and reused while it is at
+    least as new as ``bias.dat``: at ``cache_npy`` if given, else next to
+    ``bias.dat`` when that directory is writable, else in `efcc18_cache_dir`.
 
     Parameters
     ----------
     bias_dat : str or Path, optional
         Location of ``bias.dat``; resolved with `resolve_bias_dat` when None.
     cache_npy : str or Path, optional
-        Location of the parsed cache. Default ``bias_dat`` with a ``.npy`` suffix.
+        Location of the parsed cache. Default: see above.
 
     Returns
     -------
@@ -436,7 +478,7 @@ def load_efcc18_biases(
     cache_path = (
         Path(cache_npy).expanduser()
         if cache_npy is not None
-        else bias_dat_path.with_suffix(".npy")
+        else _default_cache_path(bias_dat_path)
     )
     expected_shape = (EFCC18_N_TILES, EFCC18_N_CATALOGS, 4)
 
@@ -475,6 +517,7 @@ def load_efcc18_biases(
     bias_table = np.ascontiguousarray(raw.reshape(expected_shape))
 
     try:
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
         np.save(cache_path, bias_table)
         logger.info("Cached parsed EFCC18 table to %s", cache_path)
     except OSError as err:

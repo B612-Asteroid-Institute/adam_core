@@ -595,7 +595,8 @@ class EFCC18DebiasModel(ObservationUncertaintyModel):
     bias_table : `numpy.ndarray` (49152, 26, 4), optional
         Pre-loaded EFCC18 table (see
         `~adam_core.observations.efcc18.load_efcc18_biases`). When None the
-        table is loaded from ``bias_dat`` / the environment / the cache.
+        table is loaded from ``bias_dat``, the environment, the installed
+        ``jpl-debias-2018`` data package, or the cache, in that order.
     bias_dat : str or Path, optional
         Location of ``bias.dat``; only used when ``bias_table`` is None.
     exclude_astcats : iterable of str
