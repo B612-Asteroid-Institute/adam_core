@@ -1,5 +1,5 @@
 import logging
-from typing import Literal, Tuple, Type
+from typing import Any, Literal, Tuple, Type
 
 import pyarrow as pa
 
@@ -9,6 +9,7 @@ from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .iod import iod
 from .orbit_fitter import OrbitFitter
+from .rejection import cmc2003_fit
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +55,24 @@ class NativeOrbitFitter(OrbitFitter):
     f_scale : float, optional
         Huber transition point in units of whitened (1-sigma) residual
         components. Default 1.345. Ignored for ``loss="linear"``.
+    outlier_rejection : {"worst_residual", "cmc2003"}, optional
+        Outlier treatment during differential correction.
+
+        - ``"worst_residual"`` (default): `iterative_fit`, which removes the
+          worst-residual observation and refits while the reduced chi2
+          exceeds ``rchi2_threshold``, bounded by ``contamination_percentage``,
+          ``min_obs`` and ``min_arc_length``.
+        - ``"cmc2003"``: `cmc2003_fit`, Carpino-Milani-Chesley (2003)
+          rejection with re-inclusion against the expected post-fit residual
+          covariance (OrbFit defaults). ``rchi2_threshold``, ``min_obs``,
+          ``min_arc_length`` and ``contamination_percentage`` then apply to
+          IOD only; tune the scheme through ``rejection_kwargs``.
+
+        Both compose with ``loss="huber"``.
+    rejection_kwargs : dict, optional
+        Extra keyword arguments for the rejection function (e.g.
+        ``chi2_reject``, ``chi2_recover`` for ``"cmc2003"``; ``jacobian``,
+        ``max_nfev`` for either).
     """
 
     def __init__(
@@ -70,7 +89,14 @@ class NativeOrbitFitter(OrbitFitter):
         ] = "combinations",
         loss: LossType = "linear",
         f_scale: float = HUBER_F_SCALE_DEFAULT,
+        outlier_rejection: Literal["worst_residual", "cmc2003"] = "worst_residual",
+        rejection_kwargs: dict[str, Any] | None = None,
     ) -> None:
+        if outlier_rejection not in ("worst_residual", "cmc2003"):
+            raise ValueError(
+                "outlier_rejection must be 'worst_residual' or 'cmc2003'; "
+                f"got {outlier_rejection!r}"
+            )
         self.propagator_class = propagator_class
         self.propagator_kwargs = propagator_kwargs
         self.min_obs = min_obs
@@ -81,6 +107,8 @@ class NativeOrbitFitter(OrbitFitter):
         self.observation_selection_method = observation_selection_method
         self.loss = loss
         self.f_scale = f_scale
+        self.outlier_rejection = outlier_rejection
+        self.rejection_kwargs = dict(rejection_kwargs or {})
 
     def __getstate__(self) -> dict:
         return self.__dict__.copy()
@@ -127,7 +155,7 @@ class NativeOrbitFitter(OrbitFitter):
         observations: OrbitDeterminationObservations,
         propagator: Propagator,
     ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
-        """Refine an IOD orbit via iterative differential correction.
+        """Refine an IOD orbit via differential correction with outlier treatment.
 
         Parameters
         ----------
@@ -147,6 +175,15 @@ class NativeOrbitFitter(OrbitFitter):
         """
         assert len(fitted_orbit) == 1, "refine_fit expects exactly one orbit"
         orbit = fitted_orbit.to_orbits()
+        if self.outlier_rejection == "cmc2003":
+            return cmc2003_fit(
+                orbit,
+                observations,
+                propagator,
+                loss=self.loss,
+                f_scale=self.f_scale,
+                **self.rejection_kwargs,
+            )
         return iterative_fit(
             orbit,
             observations,
@@ -157,4 +194,5 @@ class NativeOrbitFitter(OrbitFitter):
             contamination_percentage=self.contamination_percentage,
             loss=self.loss,
             f_scale=self.f_scale,
+            **self.rejection_kwargs,
         )
