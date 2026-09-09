@@ -8,7 +8,7 @@
 * Danby, J. M. A. (1992). Fundamentals of Celestial Mechanics. 2nd ed.,  
     William-Bell, Inc. ISBN-13: 978-0943396200
     Notes: of particular interest is Danby's fantastic chapter on universal variables (6.9)
-* Eggl, S; Farnocchia, D; Chamberlin, A. B; Chesley, S. R. (2020). An observational reference frame for astrometric asteroid surveys.  
+* Eggl, S; Farnocchia, D; Chamberlin, A. B; Chesley, S. R. (2020). Star catalog position and proper motion corrections in asteroid astrometry II: The Gaia era.  
     Icarus, 339, 113596. https://doi.org/10.1016/j.icarus.2019.113596  
     Notes: source of the EFCC18 star-catalog debiasing table (`debias_2018.tgz`, BIAS_VERSION 3.0) published by JPL SSD at https://ssd.jpl.nasa.gov/ftp/ssd/debias/debias_2018.tgz and used by `adam_core.observations.efcc18`
 * Hedo, J. M. et al. (2019). Minimum orbital intersection distance: an asymptotic approach.  

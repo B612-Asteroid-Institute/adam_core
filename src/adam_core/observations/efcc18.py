@@ -2,8 +2,9 @@
 EFCC18 star-catalog debiasing of astrometric observations.
 
 Implements the per-observation correction of Eggl, Farnocchia, Chamberlin &
-Chesley (2020), "An observational reference frame for astrometric asteroid
-surveys", Icarus 339:113596 (EFCC18). The published table ``bias.dat``
+Chesley (2020), "Star catalog position and proper motion corrections in
+asteroid astrometry II: The Gaia era", Icarus 339:113596 (EFCC18;
+arXiv:1909.04558). The published table ``bias.dat``
 covers 26 star catalogs over a HEALPix tessellation of the sky
 (``N_side = 64``, 49152 tiles, nested ordering). Each (tile, catalog) cell
 stores four numbers: the position correction in RA*cos(Dec) at J2000
