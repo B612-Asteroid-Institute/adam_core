@@ -8,7 +8,7 @@ MU = c.MU
 
 
 def calcHerrickGibbs(r1, r2, r3, t1, t2, t3):
-    """
+    r"""
     Calculates the velocity vector at the location of the second position vector (r2) using the
     Herrick-Gibbs formula.
 

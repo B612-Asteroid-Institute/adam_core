@@ -103,35 +103,27 @@ _MIN_OBS = round(0.5 * _N_PARAMETERS)
 @dataclass(frozen=True)
 class CMC2003Fit:
     """
-    Result of `cmc2003_fit_detailed`.
-
-    Attributes
-    ----------
-    fitted_orbit : `FittedOrbits` (1)
-        Final fit to the selected observations.
-    fitted_orbit_members : `FittedOrbitMembers` (N)
-        One row per input observation, in input order: residuals with respect
-        to the final orbit, ``outlier`` True for rejected observations,
-        ``solution`` True for selected ones, and the fit ``weight``.
-    n_iterations : int
-        Number of fit passes performed.
-    n_rejected : int
-        Observations excluded from the final fit.
-    n_recovered : int
-        Re-inclusion events summed over all passes.
-    flags : tuple of str
-        Diagnostic flags raised during the run (sorted, may be empty):
-        ``"too_few_observations"``, ``"max_iterations"``,
-        ``"max_rejected_fraction"``, ``"kept_last_in_apparition"``,
-        ``"psd_floor"``, ``"no_fit_covariance"``,
-        ``"singular_residual_covariance"``, ``"non_finite_chi2"``.
+    Result of `cmc2003_fit_detailed`: the final fit, members for every input
+    observation, and run diagnostics.
     """
 
+    #: Final fit to the selected observations (`FittedOrbits`, 1 row).
     fitted_orbit: FittedOrbits
+    #: One row per input observation, in input order: residuals with respect
+    #: to the final orbit, ``outlier`` True for rejected observations,
+    #: ``solution`` True for selected ones, and the fit ``weight``.
     fitted_orbit_members: FittedOrbitMembers
+    #: Number of fit passes performed.
     n_iterations: int
+    #: Observations excluded from the final fit.
     n_rejected: int
+    #: Re-inclusion events summed over all passes.
     n_recovered: int
+    #: Diagnostic flags raised during the run (sorted, may be empty):
+    #: ``"too_few_observations"``, ``"max_iterations"``,
+    #: ``"max_rejected_fraction"``, ``"kept_last_in_apparition"``,
+    #: ``"psd_floor"``, ``"no_fit_covariance"``,
+    #: ``"singular_residual_covariance"``, ``"non_finite_chi2"``.
     flags: tuple[str, ...]
 
 

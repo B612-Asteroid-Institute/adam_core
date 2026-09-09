@@ -95,7 +95,7 @@ def approxLangrangeCoeffs(r_mag, dt, mu=MU):
 
 
 def calcGauss(r1, r2, r3, t1, t2, t3):
-    """
+    r"""
     Calculates the velocity vector at the location of the second position vector (r2) with Gauss's
     original method.
 

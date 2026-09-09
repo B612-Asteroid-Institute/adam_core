@@ -171,17 +171,17 @@ class ObservationAstrometry(qv.Table):
     the fit was based on can be inspected (and the model's effect audited)
     without re-joining to the input observations or re-running the models.
 
-    Columns
-    -------
-    lon, lat : float, degrees
+    The columns are:
+
+    ``lon``, ``lat`` : float, degrees
         Observed RA / Dec, in the same convention as
         `OrbitDeterminationObservations.coordinates` (lon = RA, lat = Dec).
-    sigma_lon, sigma_lat : float, degrees
+    ``sigma_lon``, ``sigma_lat`` : float, degrees
         1-sigma uncertainties, the square roots of the lon / lat covariance
         diagonal. ``sigma_lon`` is the uncertainty of RA itself (NOT
         cos(dec)-corrected), matching the `SphericalCoordinates` covariance
         convention. NaN where the covariance is not available.
-    cov_lonlat : float, degrees^2
+    ``cov_lonlat`` : float, degrees^2
         RA/Dec covariance cross-term. NaN where not available.
 
     This table deliberately carries no attributes (e.g. a frame): members with
