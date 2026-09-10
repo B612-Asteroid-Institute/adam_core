@@ -135,12 +135,12 @@ class TestHealpix:
         assert np.all((tiles >= 0) & (tiles < EFCC18_N_TILES))
 
     def test_tile_centers_round_trip(self) -> None:
-        # pix2ang(nest) centers must map back onto their own tile index.
+        # pix2ang(ring) centers must map back onto their own tile index.
         rng = np.random.default_rng(42)
         tiles = np.concatenate(
             [[0, 1, EFCC18_N_TILES - 1], rng.integers(0, EFCC18_N_TILES, 200)]
         )
-        theta, phi = hp.pix2ang(EFCC18_NSIDE, tiles, nest=True)
+        theta, phi = hp.pix2ang(EFCC18_NSIDE, tiles, nest=False)
         dec = 90.0 - np.rad2deg(theta)
         ra = np.rad2deg(phi)
         np.testing.assert_array_equal(ra_dec_to_healpix(ra, dec), tiles)
@@ -226,7 +226,7 @@ class TestCorrections:
 
     def test_proper_motion_term(self) -> None:
         table = np.zeros((EFCC18_N_TILES, EFCC18_N_CATALOGS, 4), dtype=np.float32)
-        theta, phi = hp.pix2ang(EFCC18_NSIDE, 0, nest=True)
+        theta, phi = hp.pix2ang(EFCC18_NSIDE, 0, nest=False)
         ra, dec = float(np.rad2deg(phi)), float(90.0 - np.rad2deg(theta))
         table[0, UCAC4_COLUMN] = [0.0, 0.0, 100.0, -50.0]  # mas/yr
         ten_years = JD_J2000 + 10.0 * 365.25
@@ -475,3 +475,33 @@ def test_real_bias_dat_integrity_and_parse(tmp_path: Path) -> None:
             next(data_lines)
         row = np.array(next(data_lines).split(), dtype=np.float32)
     np.testing.assert_array_equal(table[k].reshape(-1), row)
+
+
+# Tile centres from JPL's debias_2018.tgz ``tiles.dat`` (tile number, RA [rad],
+# Dec [rad]), whose rows the archive README says are "sorted in the same way"
+# as bias.dat. They pin the row order of bias.dat to HEALPix RING ordering:
+# healpy's ring-scheme pixel centres reproduce all 49152 of them, the nested
+# scheme reproduces 1. Anchors span both polar caps and the equatorial belt.
+JPL_TILES_DAT_ANCHORS = (
+    (0, 0.785398, 1.558038),
+    (4, 0.392699, 1.545280),
+    (100, 3.702591, 1.481462),
+    (4096, 4.764749, 0.988506),
+    (24576, 3.153864, 0.000000),
+    (29999, 4.295146, -0.220533),
+    (45055, 1.518436, -0.988506),
+    (49151, 5.497787, -1.558038),
+)
+
+
+def test_tile_ordering_matches_jpl_tiles_dat() -> None:
+    """The tile index used to read bias.dat must be the RING index: the centre
+    of tile k in JPL's tiles.dat maps to row k. (Under the nested scheme tile 0,
+    at RA 45 deg near the north pole here, would sit near the equator.)"""
+    tiles = np.array([t for t, _, _ in JPL_TILES_DAT_ANCHORS])
+    ra = np.degrees([r for _, r, _ in JPL_TILES_DAT_ANCHORS])
+    dec = np.degrees([d for _, _, d in JPL_TILES_DAT_ANCHORS])
+    np.testing.assert_array_equal(ra_dec_to_healpix(ra, dec), tiles)
+    # And the nested reading is not accidentally equivalent for these anchors.
+    nested = hp.ang2pix(EFCC18_NSIDE, np.radians(90.0 - dec), np.radians(ra), nest=True)
+    assert np.sum(nested == tiles) <= 1

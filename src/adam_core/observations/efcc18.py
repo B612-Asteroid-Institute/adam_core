@@ -6,7 +6,9 @@ Chesley (2020), "Star catalog position and proper motion corrections in
 asteroid astrometry II: The Gaia era", Icarus 339:113596 (EFCC18;
 arXiv:1909.04558). The published table ``bias.dat``
 covers 26 star catalogs over a HEALPix tessellation of the sky
-(``N_side = 64``, 49152 tiles, nested ordering). Each (tile, catalog) cell
+(``N_side = 64``, 49152 tiles, RING ordering: the k-th data row of ``bias.dat``
+is HEALPix ring pixel k, as listed in the archive's ``tiles.dat``). Each
+(tile, catalog) cell
 stores four numbers: the position correction in RA*cos(Dec) at J2000
 [arcsec], the position correction in Dec at J2000 [arcsec], and the proper
 motion corrections in RA*cos(Dec) and Dec [mas/yr]. The corrections are
@@ -536,15 +538,21 @@ def ra_dec_to_healpix(
     """
     Map (RA, Dec) in degrees to EFCC18 HEALPix tile indices.
 
-    Uses ``N_side = 64`` in nested ordering on the J2000 equatorial frame,
-    matching the row order of ``bias.dat`` (and Find_Orb's convention).
+    Uses ``N_side = 64`` in RING ordering on the J2000 equatorial frame. That
+    is the row order of ``bias.dat``: the JPL archive's ``tiles.dat`` lists the
+    tile centres "sorted in the same way" as ``bias.dat`` (README), and those
+    centres are healpy's ring-scheme pixel centres for all 49152 tiles (and
+    nested-scheme centres for 1 of them). Find_Orb reads the table in ring
+    order too (``bias.cpp`` / ``healpix.cpp``). An earlier version of this
+    function used the nested scheme, which put every observation in an
+    unrelated tile; see ``test_tile_ordering_matches_jpl_tiles_dat``.
     """
     _require_healpy()
     ra = np.asarray(ra_deg, dtype=np.float64)
     dec = np.asarray(dec_deg, dtype=np.float64)
     theta = np.deg2rad(90.0 - dec)  # colatitude
     phi = np.deg2rad(np.mod(ra, 360.0))
-    tiles = hp.ang2pix(EFCC18_NSIDE, theta, phi, nest=True)
+    tiles = hp.ang2pix(EFCC18_NSIDE, theta, phi, nest=False)
     return np.asarray(tiles, dtype=np.int64)
 
 
