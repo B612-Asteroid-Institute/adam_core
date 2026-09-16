@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 import pyarrow as pa
 
 from ..orbits.orbits import Orbits
+from ..propagator.propagator import Propagator
 from .evaluate import FittedOrbitMembers, FittedOrbits, OrbitDeterminationObservations
 
 logger = logging.getLogger(__name__)
@@ -80,3 +81,77 @@ class OrbitFitter(ABC):
             observation was used by the fitter. Residuals are NOT set.
         """
         pass
+
+    @abstractmethod
+    def refine_fit(
+        self,
+        fitted_orbit: FittedOrbits,
+        observations: OrbitDeterminationObservations,
+        propagator: Propagator,
+    ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+        """Refine an existing orbit fit using differential correction.
+
+        Takes a previously fitted orbit (e.g. from IOD) and improves it
+        via iterative least-squares with outlier rejection.
+
+        Parameters
+        ----------
+        fitted_orbit : FittedOrbits (1)
+            Orbit to refine, typically output from `initial_fit`.
+        observations : OrbitDeterminationObservations
+            Observations to fit against.
+        propagator : Propagator
+            Propagator used to generate ephemeris during DC.
+
+        Returns
+        -------
+        fitted_orbit : FittedOrbits (1)
+            Refined orbit with covariance and quality statistics.
+        fitted_orbit_members : FittedOrbitMembers (N)
+            Observations with residuals and outlier/solution flags set.
+        """
+        pass
+
+    def full_od(
+        self,
+        object_id: str | pa.LargeStringScalar,
+        observations: OrbitDeterminationObservations,
+        propagator: Propagator,
+    ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+        """Run full orbit determination: IOD followed by differential correction.
+
+        This default implementation chains `initial_fit` and `refine_fit`.
+        Subclasses may override for backend-specific behaviour (e.g. FindOrb's
+        built-in DC pipeline).
+
+        Parameters
+        ----------
+        object_id : str | pa.LargeStringScalar
+            Object identifier used in output tables.
+        observations : OrbitDeterminationObservations
+            All observations for this object.
+        propagator : Propagator
+            Propagator used during differential correction.
+
+        Returns
+        -------
+        fitted_orbit : FittedOrbits (1)
+            Best orbit found across IOD + DC.
+        fitted_orbit_members : FittedOrbitMembers (N)
+            Observations with residuals and outlier/solution flags.
+
+        Notes
+        -----
+        Observation uncertainty handling (e.g. an observatory bias model)
+        deliberately happens ABOVE this interface: fitter implementations,
+        including external plugins, are passed observations whose
+        uncertainties have already been transformed. Apply a model upstream,
+        e.g. ``fitter.full_od(object_id, model.apply(observations),
+        propagator)``, use `~adam_core.orbit_determination.run_od`, or use the
+        module-level OD functions which accept ``observatory_bias_model``
+        directly.
+        """
+        iod_orbit, iod_members = self.initial_fit(object_id, observations)
+        if len(iod_orbit) == 0:
+            return iod_orbit, iod_members
+        return self.refine_fit(iod_orbit, observations, propagator)
