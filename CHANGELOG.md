@@ -6,6 +6,29 @@ This file contains notable changes in adam-core
 
 ### Added
 
+- Fit-time observation handling for orbit determination, reimplemented in Rust
+  from the Python `kk/obs-uncertainty-interface` branch (`d56114ac`) on top of
+  the Rust OD core: `run_od` orchestration recording original vs. used
+  astrometry on `FittedOrbitMembers` (`ObservationAstrometry`, `weight`,
+  `astcat`); the `ObservationUncertaintyModel` interpreters
+  (`EmpiricalCovarianceModel`, `PerformanceWeightedModel`, `SigmaFloorModel`,
+  `NightBatchDeweightingModel`, `CompositeModel`, `IdentityModel`) driven by the
+  `BIAS_TABLE_SCHEMA` observatory bias table; EFCC18 star-catalog debiasing
+  (`adam_core.observations.efcc18`, `EFCC18DebiasModel`) reading JPL's
+  `bias.dat` in HEALPix RING order through the Rust `ang2pix` port; the VFC2017
+  station/catalog sigma table (`VeresFloorModel`, `VeresReplaceModel`); the
+  `astcat` column and `from_ades` converter on `OrbitDeterminationObservations`;
+  `OrbitFitter.refine_fit` / `full_od` and `NativeOrbitFitter`; and the
+  `observatory_bias_model` parameter on every module-level OD entry point.
+- Whitened-residual differential correction: `fit_least_squares` now minimizes
+  the 2N whitened (lon, lat) residual components with an exact 2-body
+  Jacobian from the Rust forward-mode autodiff kernels, validates the
+  covariance along its weakest direction (falling back to central differences),
+  supports Huber's M-estimator (`loss="huber"`), and reports per-observation
+  weights; `iterative_fit` wraps it with outlier rejection. Carpino, Milani &
+  Chesley (2003) rejection with re-inclusion (`cmc2003_fit`,
+  `cmc2003_fit_detailed`) runs its decision kernels in Rust.
+
 - Native CPython 3.11-3.13 wheels for manylinux 2.17 x86-64/AArch64 and
   macOS Apple silicon/Intel, with clean-room artifact acceptance and build-once
   trusted-publishing automation. Windows is deferred while upstream ASSIST
@@ -20,6 +43,10 @@ This file contains notable changes in adam-core
 
 ### Changed
 
+- `fit_least_squares` defaults to `jacobian="analytic"`; the fused Rust
+  Gauss-Newton work units of a propagator (`fit_least_squares_evaluated` /
+  `fit_least_squares`) are reached with `jacobian="2-point"` and the linear
+  loss, matching their forward-difference covariance.
 - The compiled Rust extension is now required. Public Python functions remain
   compatibility veneers while numerical, table, product, query, and
   orchestration work executes in Rust.

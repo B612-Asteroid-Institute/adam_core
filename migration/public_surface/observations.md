@@ -30,6 +30,19 @@ Only plotting/display may remain Python. Unchanged quivr constructors, descripto
 
 Scout `file=mpc` acquisition, signature validation, SHA-256, snapshot metadata, strict Obs80 parsing, and nested `ScoutObservations` assembly are covered with the query clients in `orbits.md` and `io_queries_utilities.md`.
 
+## EFCC18 star-catalog debiasing (`adam_core.observations.efcc18`)
+
+Added 2026-09-16. `bias.dat` (JPL `debias_2018.tgz`) is not bundled; Python owns
+locating, downloading, checksum-verifying and caching it, Rust owns the parse
+and every lookup.
+
+| Public API | Current ownership | Parity/timing | Disposition |
+|---|---|---|---|
+| `load_efcc18_biases`, `read_efcc18_bias_version` | Rust `efcc18_parse_bias_dat` text parse into the `(49152, 26, 4)` float32 table; Python `.npy` cache and file resolution | real-table checksum/version/spot-check test, synthetic layout tests | Compatible veneer |
+| `ra_dec_to_healpix`, `compute_efcc18_corrections`, `is_efcc18_covered`, `n_observations_covered` | Rust ring-scheme `ang2pix` (the healpix_cxx port), catalog-column map, proper-motion arithmetic | all 49152 JPL `tiles.dat` centres reproduce their row index (Rust test, env-gated on a local `tiles.dat`), 8 published anchors always, healpy oracle when installed, Python-baseline parity fixture | Rust-owned |
+| `resolve_bias_dat`, `install_efcc18_bias_table`, `download_efcc18_bias_table`, `efcc18_cache_dir` | file/network I/O | unit tests with synthetic archives | Provider/I/O boundary |
+| `EFCC18_*` constants, `MPC_ASTCAT_TO_EFCC18` | mirrored in Rust `efcc18.rs`; consistency asserted by tests | constant tests | Compatibility constants |
+
 ## Associations, detections, and exposures
 
 | Public API | Current ownership | Parity/timing | Disposition |
