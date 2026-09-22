@@ -1,0 +1,18 @@
+adam\_core.photometry.bandpasses package
+========================================
+
+.. automodule:: adam_core.photometry.bandpasses
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+Submodules
+----------
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core.photometry.bandpasses.api
+   adam_core.photometry.bandpasses.constants
+   adam_core.photometry.bandpasses.tables
+   adam_core.photometry.bandpasses.vendor

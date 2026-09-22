@@ -1,0 +1,7 @@
+adam_core
+=========
+
+.. toctree::
+   :maxdepth: 4
+
+   adam_core

@@ -1,0 +1,7 @@
+adam\_core.orbit\_determination.veres2017 module
+================================================
+
+.. automodule:: adam_core.orbit_determination.veres2017
+   :members:
+   :show-inheritance:
+   :undoc-members:

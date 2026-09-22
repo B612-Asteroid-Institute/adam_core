@@ -1,0 +1,7 @@
+adam\_core.utils.spice\_backend module
+======================================
+
+.. automodule:: adam_core.utils.spice_backend
+   :members:
+   :show-inheritance:
+   :undoc-members:

@@ -1,0 +1,7 @@
+adam\_core.observations.efcc18 module
+=====================================
+
+.. automodule:: adam_core.observations.efcc18
+   :members:
+   :show-inheritance:
+   :undoc-members:

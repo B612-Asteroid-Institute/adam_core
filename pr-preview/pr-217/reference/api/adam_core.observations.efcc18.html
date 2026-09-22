@@ -1,0 +1,839 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="adam_core.observations.exposures module" href="adam_core.observations.exposures.html"><link rel="prev" title="adam_core.observations.detections module" href="adam_core.observations.detections.html">
+        <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/reference/api/adam_core.observations.efcc18.html">
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
+        <title>adam_core.observations.efcc18 module - adam_core</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=0404406e" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #0f766e;
+  --color-brand-content: #0369a1;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #5eead4;
+  --color-brand-content: #7dd3fc;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #5eead4;
+  --color-brand-content: #7dd3fc;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../index.html"><div class="brand">adam_core</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../index.html">
+  
+  <span class="sidebar-brand-text">adam_core</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Documentation</span></p>
+<ul class="current">
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../getting_started/releasing.html">Release Process</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/time_and_windows.html">Working with Time</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/orbit_sources_and_state_tables.html">Using Orbits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/coordinates_classes.html">Coordinate Classes Guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/coordinate_covariances.html">Coordinate Covariances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/coordinate_transforms.html">Coordinate Transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/observations_and_observers.html">Observations and Observers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/residuals.html">Residuals and Fit Quality</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/moid_analysis.html">MOID Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/openspace_visualization.html">OpenSpace Visualization Assets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/ades_module.html">ADES Module: Parse, Build, and Exchange</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../use_cases/orbit_determination.html">Orbit Determination from Linked Observations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../use_cases/neo_tracking.html">NEO Tracking for Follow-Up</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../use_cases/observability_and_light_curves.html">Observability and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../use_cases/impact_risk.html">Impact Risk Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../cookbook/scaling_and_utils.html">Scaling and Utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1 current has-children"><a class="reference internal" href="../index.html">Reference</a><input aria-label="Toggle navigation of Reference" checked="" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l2 current has-children"><a class="reference internal" href="modules.html">adam_core</a><input aria-label="Toggle navigation of adam_core" checked="" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l3 current has-children"><a class="reference internal" href="adam_core.html">adam_core package</a><input aria-label="Toggle navigation of adam_core package" checked="" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.coordinates.html">adam_core.coordinates package</a><input aria-label="Toggle navigation of adam_core.coordinates package" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.cartesian.html">adam_core.coordinates.cartesian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.cometary.html">adam_core.coordinates.cometary module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.transform.html">adam_core.coordinates.transform module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.types.html">adam_core.coordinates.types module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.units.html">adam_core.coordinates.units module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.variants.html">adam_core.coordinates.variants module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.dynamics.html">adam_core.dynamics package</a><input aria-label="Toggle navigation of adam_core.dynamics package" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.aberrations.html">adam_core.dynamics.aberrations module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.barker.html">adam_core.dynamics.barker module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.chi.html">adam_core.dynamics.chi module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.ephemeris.html">adam_core.dynamics.ephemeris module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.exceptions.html">adam_core.dynamics.exceptions module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.impacts.html">adam_core.dynamics.impacts module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.kepler.html">adam_core.dynamics.kepler module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.lagrange.html">adam_core.dynamics.lagrange module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.lambert.html">adam_core.dynamics.lambert module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.moid.html">adam_core.dynamics.moid module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.plots.html">adam_core.dynamics.plots module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.propagation.html">adam_core.dynamics.propagation module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.stumpff.html">adam_core.dynamics.stumpff module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.dynamics.tisserand.html">adam_core.dynamics.tisserand module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.missions.html">adam_core.missions package</a><input aria-label="Toggle navigation of adam_core.missions package" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.missions.porkchop.html">adam_core.missions.porkchop module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 current has-children"><a class="reference internal" href="adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" checked="" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
+<li class="toctree-l5 current current-page"><a class="current reference internal" href="#">adam_core.observations.efcc18 module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.observers.html">adam_core.observers package</a><input aria-label="Toggle navigation of adam_core.observers package" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observers.observers.html">adam_core.observers.observers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observers.state.html">adam_core.observers.state module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.observers.utils.html">adam_core.observers.utils module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.orbit_determination.html">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.gauss.html">adam_core.orbit_determination.gauss module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.gibbs.html">adam_core.orbit_determination.gibbs module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.herrick_gibbs.html">adam_core.orbit_determination.herrick_gibbs module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.iod.html">adam_core.orbit_determination.iod module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.least_squares.html">adam_core.orbit_determination.least_squares module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.native_orbit_fitter.html">adam_core.orbit_determination.native_orbit_fitter module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.observation_uncertainty.html">adam_core.orbit_determination.observation_uncertainty module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.od.html">adam_core.orbit_determination.od module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.od_orchestration.html">adam_core.orbit_determination.od_orchestration module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.orbit_fitter.html">adam_core.orbit_determination.orbit_fitter module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.rejection.html">adam_core.orbit_determination.rejection module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.veres2017.html">adam_core.orbit_determination.veres2017 module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.orbits.html">adam_core.orbits package</a><input aria-label="Toggle navigation of adam_core.orbits package" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.orbits.openspace.html">adam_core.orbits.openspace package</a><input aria-label="Toggle navigation of adam_core.orbits.openspace package" class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" role="switch" type="checkbox"/><label for="toctree-checkbox-13"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.openspace.assets.html">adam_core.orbits.openspace.assets module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.openspace.lua.html">adam_core.orbits.openspace.lua module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.openspace.renderable.html">adam_core.orbits.openspace.renderable module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.openspace.translation.html">adam_core.orbits.openspace.translation module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.orbits.query.html">adam_core.orbits.query package</a><input aria-label="Toggle navigation of adam_core.orbits.query package" class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" role="switch" type="checkbox"/><label for="toctree-checkbox-14"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.query.horizons.html">adam_core.orbits.query.horizons module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.query.neocc.html">adam_core.orbits.query.neocc module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.query.sbdb.html">adam_core.orbits.query.sbdb module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.non_gravitational_parameters.html">adam_core.orbits.non_gravitational_parameters module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.photometry.html">adam_core.photometry package</a><input aria-label="Toggle navigation of adam_core.photometry package" class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" role="switch" type="checkbox"/><label for="toctree-checkbox-15"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.photometry.bandpasses.html">adam_core.photometry.bandpasses package</a><input aria-label="Toggle navigation of adam_core.photometry.bandpasses package" class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" role="switch" type="checkbox"/><label for="toctree-checkbox-16"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.bandpasses.api.html">adam_core.photometry.bandpasses.api module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.bandpasses.constants.html">adam_core.photometry.bandpasses.constants module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.bandpasses.tables.html">adam_core.photometry.bandpasses.tables module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.time.time.html">adam_core.time.time module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l7"><a class="reference internal" href="adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
+</ul>
+</li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.utils.helpers.observations.html">adam_core.utils.helpers.observations module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
+<li class="toctree-l6"><a class="reference internal" href="adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.utils.http.html">adam_core.utils.http module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.utils.spice_backend.html">adam_core.utils.spice_backend module</a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.constants.html">adam_core.constants module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../rust_benchmark_governance.html">Rust Benchmark Governance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../rust_backend_contracts.html">Rust Backend Contracts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../rust_public_compatibility.html">Rust Migration Public Compatibility</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../non_grav_support.html">Non-Gravitational Support</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="view-this-page">
+  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/blob/main/docs/source/reference/api/adam_core.observations.efcc18.rst?plain=true" title="View this page">
+    <svg><use href="#svg-eye"></use></svg>
+    <span class="visually-hidden">View this page</span>
+  </a>
+</div><div class="edit-this-page">
+  <a class="muted-link" href="https://github.com/B612-Asteroid-Institute/adam_core/edit/main/docs/source/reference/api/adam_core.observations.efcc18.rst" rel="edit" title="Edit this page">
+    <svg><use href="#svg-pencil"></use></svg>
+    <span class="visually-hidden">Edit this page</span>
+  </a>
+</div><div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <section id="module-adam_core.observations.efcc18">
+<span id="adam-core-observations-efcc18-module"></span><h1>adam_core.observations.efcc18 module<a class="headerlink" href="#module-adam_core.observations.efcc18" title="Link to this heading">¶</a></h1>
+<p>EFCC18 star-catalog debiasing of astrometric observations.</p>
+<p>Implements the per-observation correction of Eggl, Farnocchia, Chamberlin &amp;
+Chesley (2020), “Star catalog position and proper motion corrections in
+asteroid astrometry II: The Gaia era”, Icarus 339:113596 (EFCC18;
+arXiv:1909.04558). The published table <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>
+covers 26 star catalogs over a HEALPix tessellation of the sky
+(<code class="docutils literal notranslate"><span class="pre">N_side</span> <span class="pre">=</span> <span class="pre">64</span></code>, 49152 tiles, RING ordering: the k-th data row of <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>
+is HEALPix ring pixel k, as listed in the archive’s <code class="docutils literal notranslate"><span class="pre">tiles.dat</span></code>). Each
+(tile, catalog) cell
+stores four numbers: the position correction in RA*cos(Dec) at J2000
+[arcsec], the position correction in Dec at J2000 [arcsec], and the proper
+motion corrections in RA*cos(Dec) and Dec [mas/yr]. The corrections are
+expressed with respect to Gaia-DR2.</p>
+<p>To debias one observation reduced against catalog <code class="docutils literal notranslate"><span class="pre">c</span></code> in tile <code class="docutils literal notranslate"><span class="pre">k</span></code> at
+epoch <code class="docutils literal notranslate"><span class="pre">t</span></code> (years):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="n">bias_ra_arcsec</span>  <span class="o">=</span> <span class="n">dRA</span><span class="p">[</span><span class="n">k</span><span class="p">,</span> <span class="n">c</span><span class="p">]</span>  <span class="o">+</span> <span class="p">(</span><span class="n">t</span> <span class="o">-</span> <span class="mf">2000.0</span><span class="p">)</span> <span class="o">*</span> <span class="n">pmRA</span><span class="p">[</span><span class="n">k</span><span class="p">,</span> <span class="n">c</span><span class="p">]</span>  <span class="o">/</span> <span class="mi">1000</span>   <span class="c1"># cos(dec) frame</span>
+<span class="n">bias_dec_arcsec</span> <span class="o">=</span> <span class="n">dDec</span><span class="p">[</span><span class="n">k</span><span class="p">,</span> <span class="n">c</span><span class="p">]</span> <span class="o">+</span> <span class="p">(</span><span class="n">t</span> <span class="o">-</span> <span class="mf">2000.0</span><span class="p">)</span> <span class="o">*</span> <span class="n">pmDec</span><span class="p">[</span><span class="n">k</span><span class="p">,</span> <span class="n">c</span><span class="p">]</span> <span class="o">/</span> <span class="mi">1000</span>
+<span class="n">corrected_RA</span>  <span class="o">=</span> <span class="n">observed_RA</span>  <span class="o">-</span> <span class="n">bias_ra_arcsec</span>  <span class="o">/</span> <span class="p">(</span><span class="mi">3600</span> <span class="o">*</span> <span class="n">cos</span><span class="p">(</span><span class="n">Dec</span><span class="p">))</span>   <span class="c1"># degrees</span>
+<span class="n">corrected_Dec</span> <span class="o">=</span> <span class="n">observed_Dec</span> <span class="o">-</span> <span class="n">bias_dec_arcsec</span> <span class="o">/</span> <span class="mi">3600</span>                <span class="c1"># degrees</span>
+</pre></div>
+</div>
+<p>This module provides the table loader, the vectorised per-observation lookup
+(<cite>compute_efcc18_corrections</cite>), the map from MPC <code class="docutils literal notranslate"><span class="pre">astCat</span></code> codes to the
+single-character EFCC18 catalog codes, and coverage helpers. The
+<cite>~adam_core.orbit_determination.EFCC18DebiasModel</cite> applies the correction to
+<cite>~adam_core.orbit_determination.OrbitDeterminationObservations</cite> using their
+<code class="docutils literal notranslate"><span class="pre">astcat</span></code> column.</p>
+<p>The table parse, the HEALPix tile lookup (the Rust port of healpy’s
+<code class="docutils literal notranslate"><span class="pre">ang2pix</span></code> in the ring scheme) and the correction arithmetic run in the Rust
+backend (<code class="docutils literal notranslate"><span class="pre">adam_core_rs_coords::efcc18</span></code>); this module keeps the file
+handling: locating, downloading, verifying and caching <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>.</p>
+<section id="reference-data">
+<h2>Reference data<a class="headerlink" href="#reference-data" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> is public reference data published by JPL Solar System Dynamics
+in the archive <code class="docutils literal notranslate"><span class="pre">debias_2018.tgz</span></code> (<code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>, <code class="docutils literal notranslate"><span class="pre">tiles.dat</span></code>,
+<code class="docutils literal notranslate"><span class="pre">README.txt</span></code>), linked from the EFCC18 paper:</p>
+<blockquote>
+<div><p><a class="reference external" href="https://ssd.jpl.nasa.gov/ftp/ssd/debias/debias_2018.tgz">https://ssd.jpl.nasa.gov/ftp/ssd/debias/debias_2018.tgz</a></p>
+</div></blockquote>
+<p>The file header reads <code class="docutils literal notranslate"><span class="pre">BIAS_VERSION=</span> <span class="pre">3.0</span> <span class="pre">(September</span> <span class="pre">21,</span> <span class="pre">2018)</span></code>; the archive
+was last updated on 2023-03-01 to relabel the UCAC-5 column from <code class="docutils literal notranslate"><span class="pre">W</span></code> to
+<code class="docutils literal notranslate"><span class="pre">Y</span></code> (<code class="docutils literal notranslate"><span class="pre">W</span></code> is the MPC code for Gaia-DR3). Its <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> has SHA-256
+<cite>EFCC18_BIAS_DAT_SHA256</cite>. At 37 MB (9 MB compressed) it is not bundled with
+adam_core itself. The recommended way to obtain it is the <code class="docutils literal notranslate"><span class="pre">jpl-debias-2018</span></code>
+data package (<code class="docutils literal notranslate"><span class="pre">pip</span> <span class="pre">install</span> <span class="pre">jpl-debias-2018</span></code>), a B612 mirror of the archive in
+the style of <code class="docutils literal notranslate"><span class="pre">naif-de440</span></code> and <code class="docutils literal notranslate"><span class="pre">mpc-obscodes</span></code>. <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> is located, in
+order, from:</p>
+<ol class="arabic simple">
+<li><p>an explicit <code class="docutils literal notranslate"><span class="pre">bias_dat</span></code> path argument;</p></li>
+<li><p>the <code class="docutils literal notranslate"><span class="pre">ADAM_CORE_EFCC18_BIAS_DAT</span></code> environment variable;</p></li>
+<li><p>the installed <code class="docutils literal notranslate"><span class="pre">jpl_debias_2018</span></code> package;</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> inside the EFCC18 cache directory (<code class="docutils literal notranslate"><span class="pre">ADAM_CORE_EFCC18_DIR</span></code>,
+else <code class="docutils literal notranslate"><span class="pre">$XDG_CACHE_HOME/adam_core/efcc18</span></code>, else
+<code class="docutils literal notranslate"><span class="pre">~/.cache/adam_core/efcc18</span></code>).</p></li>
+</ol>
+<p>Without the package, populate the cache once with <cite>download_efcc18_bias_table</cite>
+(fetches the archive from JPL and verifies the checksum) or, on machines
+without network access, with <cite>install_efcc18_bias_table</cite> pointing at a local
+copy of the archive or of <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>. A parsed <code class="docutils literal notranslate"><span class="pre">.npy</span></code> copy is written on
+first load so subsequent loads are fast: next to <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> when that
+directory is writable, otherwise in the cache directory.</p>
+</section>
+<section id="catalog-coverage">
+<h2>Catalog coverage<a class="headerlink" href="#catalog-coverage" title="Link to this heading">¶</a></h2>
+<p><cite>MPC_ASTCAT_TO_EFCC18</cite> maps the MPC/ADES <code class="docutils literal notranslate"><span class="pre">astCat</span></code> codes to EFCC18 columns.
+Catalogs that postdate EFCC18 (Gaia-DR2/EDR3/DR3, ATLAS, Pan-STARRS, …) are
+absent and receive zero correction, as do observations whose catalog is
+unknown. The bias.dat header also states that JPL SSD does not debias four of
+the tabulated catalogs (Gaia-DR1, ACT, Tycho-2 and UCAC-5); they are listed
+in <cite>EFCC18_JPL_UNDEBIASED_ASTCATS</cite>. This module corrects them by default,
+matching the behaviour of the study code it was ported from; pass
+<code class="docutils literal notranslate"><span class="pre">exclude_astcats=EFCC18_JPL_UNDEBIASED_ASTCATS</span></code> to follow JPL’s practice.</p>
+</section>
+<dl class="py data">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.EFCC18_ARCHIVE_URL">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">EFCC18_ARCHIVE_URL</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'https://ssd.jpl.nasa.gov/ftp/ssd/debias/debias_2018.tgz'</span></em><a class="headerlink" href="#adam_core.observations.efcc18.EFCC18_ARCHIVE_URL" title="Link to this definition">¶</a></dt>
+<dd><p>Source archive published by JPL SSD (also linked from Eggl et al. 2020).</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.EFCC18_BIAS_DAT_SHA256">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">EFCC18_BIAS_DAT_SHA256</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'ef6a50830bb83d8b1161e7acb391eed988ea9708e9fbcccc0c834da6109476e3'</span></em><a class="headerlink" href="#adam_core.observations.efcc18.EFCC18_BIAS_DAT_SHA256" title="Link to this definition">¶</a></dt>
+<dd><p>SHA-256 of the <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> inside the 2023-03-01 archive.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.EFCC18_BIAS_VERSION">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">EFCC18_BIAS_VERSION</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'3.0</span> <span class="pre">(September</span> <span class="pre">21,</span> <span class="pre">2018)'</span></em><a class="headerlink" href="#adam_core.observations.efcc18.EFCC18_BIAS_VERSION" title="Link to this definition">¶</a></dt>
+<dd><p><code class="docutils literal notranslate"><span class="pre">BIAS_VERSION</span></code> tag in the header of that <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.EFCC18_CATALOG_CODES">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">EFCC18_CATALOG_CODES</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('a',</span> <span class="pre">'b',</span> <span class="pre">'c',</span> <span class="pre">'d',</span> <span class="pre">'e',</span> <span class="pre">'g',</span> <span class="pre">'i',</span> <span class="pre">'j',</span> <span class="pre">'l',</span> <span class="pre">'m',</span> <span class="pre">'n',</span> <span class="pre">'o',</span> <span class="pre">'p',</span> <span class="pre">'q',</span> <span class="pre">'r',</span> <span class="pre">'t',</span> <span class="pre">'u',</span> <span class="pre">'v',</span> <span class="pre">'w',</span> <span class="pre">'L',</span> <span class="pre">'N',</span> <span class="pre">'Q',</span> <span class="pre">'R',</span> <span class="pre">'S',</span> <span class="pre">'U',</span> <span class="pre">'Y')</span></em><a class="headerlink" href="#adam_core.observations.efcc18.EFCC18_CATALOG_CODES" title="Link to this definition">¶</a></dt>
+<dd><p>Single-character EFCC18 catalog codes, in column order of <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>
+(header line “Catalogs in this file (MPC designation)”).</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.EFCC18_JPL_UNDEBIASED_ASTCATS">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">EFCC18_JPL_UNDEBIASED_ASTCATS</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">('Gaia1',</span> <span class="pre">'ACT',</span> <span class="pre">'Tycho',</span> <span class="pre">'UCAC5')</span></em><a class="headerlink" href="#adam_core.observations.efcc18.EFCC18_JPL_UNDEBIASED_ASTCATS" title="Link to this definition">¶</a></dt>
+<dd><p>Catalogs tabulated in <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> that JPL SSD nevertheless does not
+debias (per the file header), as MPC <code class="docutils literal notranslate"><span class="pre">astCat</span></code> codes.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.EFCC18_NSIDE">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">EFCC18_NSIDE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">64</span></em><a class="headerlink" href="#adam_core.observations.efcc18.EFCC18_NSIDE" title="Link to this definition">¶</a></dt>
+<dd><p>HEALPix resolution used by EFCC18 and the resulting number of tiles.</p>
+</dd></dl>
+
+<dl class="py data">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.MPC_ASTCAT_TO_EFCC18">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">MPC_ASTCAT_TO_EFCC18</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.14)"><span class="pre">dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">{'2MASS':</span> <span class="pre">'L',</span> <span class="pre">'ACT':</span> <span class="pre">'l',</span> <span class="pre">'CMC14':</span> <span class="pre">'w',</span> <span class="pre">'CMC15':</span> <span class="pre">'Q',</span> <span class="pre">'GSC1.1':</span> <span class="pre">'i',</span> <span class="pre">'GSC1.2':</span> <span class="pre">'j',</span> <span class="pre">'GSCACT':</span> <span class="pre">'m',</span> <span class="pre">'Gaia1':</span> <span class="pre">'U',</span> <span class="pre">'NOMAD':</span> <span class="pre">'v',</span> <span class="pre">'PPM':</span> <span class="pre">'p',</span> <span class="pre">'PPMXL':</span> <span class="pre">'t',</span> <span class="pre">'SDSS7':</span> <span class="pre">'N',</span> <span class="pre">'SDSS8':</span> <span class="pre">'n',</span> <span class="pre">'SSTRC4':</span> <span class="pre">'R',</span> <span class="pre">'Tycho':</span> <span class="pre">'g',</span> <span class="pre">'UCAC1':</span> <span class="pre">'e',</span> <span class="pre">'UCAC2':</span> <span class="pre">'r',</span> <span class="pre">'UCAC3':</span> <span class="pre">'u',</span> <span class="pre">'UCAC4':</span> <span class="pre">'q',</span> <span class="pre">'UCAC5':</span> <span class="pre">'Y',</span> <span class="pre">'URAT1':</span> <span class="pre">'S',</span> <span class="pre">'USNOA1':</span> <span class="pre">'a',</span> <span class="pre">'USNOA2':</span> <span class="pre">'c',</span> <span class="pre">'USNOB1':</span> <span class="pre">'o',</span> <span class="pre">'USNOSA1':</span> <span class="pre">'b',</span> <span class="pre">'USNOSA2':</span> <span class="pre">'d'}</span></em><a class="headerlink" href="#adam_core.observations.efcc18.MPC_ASTCAT_TO_EFCC18" title="Link to this definition">¶</a></dt>
+<dd><p>Map from MPC/ADES <code class="docutils literal notranslate"><span class="pre">astCat</span></code> code to the single-character EFCC18 code.
+Catalogs that postdate EFCC18 (Gaia-DR2/EDR3/DR3, ATLAS, Pan-STARRS, …)
+are intentionally absent: they have no EFCC18 entry and pass through with
+zero correction. Mirrors the Rust <code class="docutils literal notranslate"><span class="pre">MPC_ASTCAT_TO_EFCC18</span></code> table.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.compute_efcc18_corrections">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">compute_efcc18_corrections</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ra_deg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dec_deg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">astcats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jd_tdb</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">bias_table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://numpy.org/doc/stable/reference/arrays.scalars.html#numpy.floating" title="(in NumPy v2.5)"><span class="pre">floating</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_astcats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/observations/efcc18.html#compute_efcc18_corrections"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observations.efcc18.compute_efcc18_corrections" title="Link to this definition">¶</a></dt>
+<dd><p>Compute per-observation EFCC18 corrections.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>ra_deg</strong> (<em>array_like</em><em> (</em><em>N</em><em>)</em>) – Observed RA and Dec in degrees.</p></li>
+<li><p><strong>dec_deg</strong> (<em>array_like</em><em> (</em><em>N</em><em>)</em>) – Observed RA and Dec in degrees.</p></li>
+<li><p><strong>astcats</strong> (<em>sequence</em><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>None</em><em> (</em><em>N</em><em>)</em>) – MPC <code class="docutils literal notranslate"><span class="pre">astCat</span></code> codes. Entries that are None, not in
+<cite>MPC_ASTCAT_TO_EFCC18</cite>, or listed in <code class="docutils literal notranslate"><span class="pre">exclude_astcats</span></code> receive zero
+correction, as do rows whose position or epoch is not finite.</p></li>
+<li><p><strong>jd_tdb</strong> (<em>array_like</em><em> (</em><em>N</em><em>)</em>) – Observation epochs as Julian Dates (TDB), for the proper-motion term
+<code class="docutils literal notranslate"><span class="pre">(JD</span> <span class="pre">-</span> <span class="pre">2451545.0)</span> <span class="pre">/</span> <span class="pre">365.25</span></code> years since J2000.</p></li>
+<li><p><strong>bias_table</strong> (<cite>numpy.ndarray</cite> (EFCC18_N_TILES, 26, 4), optional) – Pre-loaded table from <cite>load_efcc18_biases</cite>; loaded on demand when None.</p></li>
+<li><p><strong>exclude_astcats</strong> (<em>iterable</em><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Catalogs to leave uncorrected even though tabulated.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>corrections</strong> – <code class="docutils literal notranslate"><span class="pre">(bias_ra_arcsec,</span> <span class="pre">bias_dec_arcsec)</span></code> in the cos(dec)-corrected
+tangent-plane frame (directly comparable to MPC <code class="docutils literal notranslate"><span class="pre">rmsRA</span></code>). To debias,
+subtract <code class="docutils literal notranslate"><span class="pre">bias_ra</span> <span class="pre">/</span> <span class="pre">(3600</span> <span class="pre">cos(dec))</span></code> from RA and <code class="docutils literal notranslate"><span class="pre">bias_dec</span> <span class="pre">/</span> <span class="pre">3600</span></code>
+from Dec, both in degrees.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><cite>numpy.ndarray</cite> (N, 2), float64</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.download_efcc18_bias_table">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">download_efcc18_bias_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">url</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'https://ssd.jpl.nasa.gov/ftp/ssd/debias/debias_2018.tgz'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">destination_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verify_checksum</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">timeout_s</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">300.0</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/observations/efcc18.html#download_efcc18_bias_table"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observations.efcc18.download_efcc18_bias_table" title="Link to this definition">¶</a></dt>
+<dd><p>Download the EFCC18 archive from JPL and install <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> into the cache.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>url</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Archive URL. Default <cite>EFCC18_ARCHIVE_URL</cite>.</p></li>
+<li><p><strong>destination_dir</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>Path</em><em>, </em><em>optional</em>) – Directory to install into. Default <cite>efcc18_cache_dir</cite>.</p></li>
+<li><p><strong>verify_checksum</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Verify against <cite>EFCC18_BIAS_DAT_SHA256</cite> (default True).</p></li>
+<li><p><strong>timeout_s</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a>) – Request timeout in seconds.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>path</strong> – Path of the installed <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Path</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.efcc18_cache_dir">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">efcc18_cache_dir</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/observations/efcc18.html#efcc18_cache_dir"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observations.efcc18.efcc18_cache_dir" title="Link to this definition">¶</a></dt>
+<dd><p>Return the directory used to cache EFCC18 reference data.</p>
+<p>Resolution order: <code class="docutils literal notranslate"><span class="pre">ADAM_CORE_EFCC18_DIR</span></code>, then
+<code class="docutils literal notranslate"><span class="pre">$XDG_CACHE_HOME/adam_core/efcc18</span></code>, then <code class="docutils literal notranslate"><span class="pre">~/.cache/adam_core/efcc18</span></code>.
+The directory is not created by this function.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.install_efcc18_bias_table">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">install_efcc18_bias_table</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">source</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">destination_dir</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">verify_checksum</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/observations/efcc18.html#install_efcc18_bias_table"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observations.efcc18.install_efcc18_bias_table" title="Link to this definition">¶</a></dt>
+<dd><p>Install <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> into the EFCC18 cache from a local file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>source</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>Path</em>) – Either the <code class="docutils literal notranslate"><span class="pre">debias_2018.tgz</span></code> archive (<code class="docutils literal notranslate"><span class="pre">.tgz</span></code> / <code class="docutils literal notranslate"><span class="pre">.tar.gz</span></code> / <code class="docutils literal notranslate"><span class="pre">.tar</span></code>)
+or an already extracted <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>.</p></li>
+<li><p><strong>destination_dir</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>Path</em><em>, </em><em>optional</em>) – Directory to install into. Default <cite>efcc18_cache_dir</cite>. Created if needed.</p></li>
+<li><p><strong>verify_checksum</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a>) – Verify the installed file against <cite>EFCC18_BIAS_DAT_SHA256</cite> (default True).</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>path</strong> – Path of the installed <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Path</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.is_efcc18_covered">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">is_efcc18_covered</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">astcats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_astcats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://numpy.org/doc/stable/reference/arrays.scalars.html#numpy.bool" title="(in NumPy v2.5)"><span class="pre">bool</span></a><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/observations/efcc18.html#is_efcc18_covered"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observations.efcc18.is_efcc18_covered" title="Link to this definition">¶</a></dt>
+<dd><p>Boolean mask of which <code class="docutils literal notranslate"><span class="pre">astcats</span></code> receive an EFCC18 correction.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>astcats</strong> (<em>sequence</em><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>None</em><em> (</em><em>N</em><em>)</em>) – MPC <code class="docutils literal notranslate"><span class="pre">astCat</span></code> codes; None means unknown catalog.</p></li>
+<li><p><strong>exclude_astcats</strong> (<em>iterable</em><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – Catalogs to treat as not covered (e.g. <cite>EFCC18_JPL_UNDEBIASED_ASTCATS</cite>).</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.load_efcc18_biases">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">load_efcc18_biases</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bias_dat</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_npy</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><span class="pre">float32</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/observations/efcc18.html#load_efcc18_biases"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observations.efcc18.load_efcc18_biases" title="Link to this definition">¶</a></dt>
+<dd><p>Load EFCC18 <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> into a <code class="docutils literal notranslate"><span class="pre">(EFCC18_N_TILES,</span> <span class="pre">26,</span> <span class="pre">4)</span></code> float32 array.</p>
+<p>The last axis is <code class="docutils literal notranslate"><span class="pre">(dRA_arcsec,</span> <span class="pre">dDec_arcsec,</span> <span class="pre">pmRA_mas_yr,</span> <span class="pre">pmDec_mas_yr)</span></code>;
+RA quantities are in the cos(dec)-corrected frame. The middle axis follows
+<cite>EFCC18_CATALOG_CODES</cite>. The text is parsed in the Rust backend.</p>
+<p>A parsed <code class="docutils literal notranslate"><span class="pre">.npy</span></code> copy is written on first load and reused while it is at
+least as new as <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>: at <code class="docutils literal notranslate"><span class="pre">cache_npy</span></code> if given, else next to
+<code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> when that directory is writable, else in <cite>efcc18_cache_dir</cite>.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>bias_dat</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>Path</em><em>, </em><em>optional</em>) – Location of <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>; resolved with <cite>resolve_bias_dat</cite> when None.</p></li>
+<li><p><strong>cache_npy</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>Path</em><em>, </em><em>optional</em>) – Location of the parsed cache. Default: see above.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>bias_table</strong></p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><cite>numpy.ndarray</cite> (EFCC18_N_TILES, 26, 4), float32</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.n_observations_covered">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">n_observations_covered</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">astcats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a><span class="p"><span class="pre">]</span></span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exclude_astcats</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Iterable" title="(in Python v3.14)"><span class="pre">Iterable</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">()</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/observations/efcc18.html#n_observations_covered"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observations.efcc18.n_observations_covered" title="Link to this definition">¶</a></dt>
+<dd><p>Number of entries of <code class="docutils literal notranslate"><span class="pre">astcats</span></code> that receive an EFCC18 correction.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.ra_dec_to_healpix">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">ra_dec_to_healpix</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">ra_deg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">dec_deg</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><span class="pre">int64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/observations/efcc18.html#ra_dec_to_healpix"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observations.efcc18.ra_dec_to_healpix" title="Link to this definition">¶</a></dt>
+<dd><p>Map (RA, Dec) in degrees to EFCC18 HEALPix tile indices.</p>
+<p>Uses <code class="docutils literal notranslate"><span class="pre">N_side</span> <span class="pre">=</span> <span class="pre">64</span></code> in RING ordering on the J2000 equatorial frame. That
+is the row order of <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>: the JPL archive’s <code class="docutils literal notranslate"><span class="pre">tiles.dat</span></code> lists the
+tile centres “sorted in the same way” as <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> (README), and those
+centres are the ring-scheme pixel centres for all 49152 tiles (and
+nested-scheme centres for 1 of them). Find_Orb reads the table in ring
+order too (<code class="docutils literal notranslate"><span class="pre">bias.cpp</span></code> / <code class="docutils literal notranslate"><span class="pre">healpix.cpp</span></code>). An earlier version of this
+function used the nested scheme, which put every observation in an
+unrelated tile; see <code class="docutils literal notranslate"><span class="pre">test_tile_ordering_matches_jpl_tiles_dat</span></code>. The
+lookup runs in the Rust port of healpy’s <code class="docutils literal notranslate"><span class="pre">ang2pix</span></code>.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.read_efcc18_bias_version">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">read_efcc18_bias_version</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">bias_dat</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/observations/efcc18.html#read_efcc18_bias_version"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observations.efcc18.read_efcc18_bias_version" title="Link to this definition">¶</a></dt>
+<dd><p>Return the <code class="docutils literal notranslate"><span class="pre">BIAS_VERSION</span></code> tag from the header of <code class="docutils literal notranslate"><span class="pre">bias_dat</span></code>, if present.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.observations.efcc18.resolve_bias_dat">
+<span class="sig-prename descclassname"><span class="pre">adam_core.observations.efcc18.</span></span><span class="sig-name descname"><span class="pre">resolve_bias_dat</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.14)"><span class="pre">Path</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/observations/efcc18.html#resolve_bias_dat"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.observations.efcc18.resolve_bias_dat" title="Link to this definition">¶</a></dt>
+<dd><p>Locate the EFCC18 <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>Path</em><em>, </em><em>optional</em>) – Explicit location. If given it must exist.</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>path</strong> – The first existing candidate among: <code class="docutils literal notranslate"><span class="pre">path</span></code>, the
+<code class="docutils literal notranslate"><span class="pre">ADAM_CORE_EFCC18_BIAS_DAT</span></code> environment variable, the <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>
+shipped by the installed <code class="docutils literal notranslate"><span class="pre">jpl_debias_2018</span></code> package, and <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>
+in <cite>efcc18_cache_dir</cite>.</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Path</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If no candidate exists. The message explains how to populate the cache.</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          <a class="next-page" href="adam_core.observations.exposures.html">
+              <div class="page-info">
+                <div class="context">
+                  <span>Next</span>
+                </div>
+                <div class="title">adam_core.observations.exposures module</div>
+              </div>
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+            </a>
+          <a class="prev-page" href="adam_core.observations.detections.html">
+              <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
+              <div class="page-info">
+                <div class="context">
+                  <span>Previous</span>
+                </div>
+                
+                <div class="title">adam_core.observations.detections module</div>
+                
+              </div>
+            </a>
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2023-2026, B612 Asteroid Institute
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            <div class="last-updated">
+              Last updated on 2026-09-22</div>
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer">
+      
+      
+      <div class="toc-sticky toc-scroll">
+        <div class="toc-title-container">
+          <span class="toc-title">
+            On this page
+          </span>
+        </div>
+        <div class="toc-tree-container">
+          <div class="toc-tree">
+            <ul>
+<li><a class="reference internal" href="#">adam_core.observations.efcc18 module</a><ul>
+<li><a class="reference internal" href="#reference-data">Reference data</a></li>
+<li><a class="reference internal" href="#catalog-coverage">Catalog coverage</a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.EFCC18_ARCHIVE_URL"><code class="docutils literal notranslate"><span class="pre">EFCC18_ARCHIVE_URL</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.EFCC18_BIAS_DAT_SHA256"><code class="docutils literal notranslate"><span class="pre">EFCC18_BIAS_DAT_SHA256</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.EFCC18_BIAS_VERSION"><code class="docutils literal notranslate"><span class="pre">EFCC18_BIAS_VERSION</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.EFCC18_CATALOG_CODES"><code class="docutils literal notranslate"><span class="pre">EFCC18_CATALOG_CODES</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.EFCC18_JPL_UNDEBIASED_ASTCATS"><code class="docutils literal notranslate"><span class="pre">EFCC18_JPL_UNDEBIASED_ASTCATS</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.EFCC18_NSIDE"><code class="docutils literal notranslate"><span class="pre">EFCC18_NSIDE</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.MPC_ASTCAT_TO_EFCC18"><code class="docutils literal notranslate"><span class="pre">MPC_ASTCAT_TO_EFCC18</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.compute_efcc18_corrections"><code class="docutils literal notranslate"><span class="pre">compute_efcc18_corrections()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.download_efcc18_bias_table"><code class="docutils literal notranslate"><span class="pre">download_efcc18_bias_table()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.efcc18_cache_dir"><code class="docutils literal notranslate"><span class="pre">efcc18_cache_dir()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.install_efcc18_bias_table"><code class="docutils literal notranslate"><span class="pre">install_efcc18_bias_table()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.is_efcc18_covered"><code class="docutils literal notranslate"><span class="pre">is_efcc18_covered()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.load_efcc18_biases"><code class="docutils literal notranslate"><span class="pre">load_efcc18_biases()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.n_observations_covered"><code class="docutils literal notranslate"><span class="pre">n_observations_covered()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.ra_dec_to_healpix"><code class="docutils literal notranslate"><span class="pre">ra_dec_to_healpix()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.read_efcc18_bias_version"><code class="docutils literal notranslate"><span class="pre">read_efcc18_bias_version()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.observations.efcc18.resolve_bias_dat"><code class="docutils literal notranslate"><span class="pre">resolve_bias_dat()</span></code></a></li>
+</ul>
+</li>
+</ul>
+
+          </div>
+        </div>
+      </div>
+      
+      
+    </aside>
+  </div>
+</div><script src="../../_static/documentation_options.js?v=96453e3e"></script>
+    <script src="../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>

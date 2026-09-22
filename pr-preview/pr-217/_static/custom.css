@@ -1,0 +1,273 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+:root {
+  --adam-bg-page: radial-gradient(circle at 10% 5%, #ecfeff 0%, #f8fafc 30%, #f4f8fb 100%);
+  --adam-card: #ffffff;
+  --adam-content-surface: rgba(255, 255, 255, 0.92);
+  --adam-ink: #0f172a;
+  --adam-muted: #334155;
+  --adam-line: #cbd5e1;
+  --adam-accent: #0f766e;
+  --adam-accent-2: #0369a1;
+  --adam-shadow: 0 14px 34px rgba(2, 6, 23, 0.1);
+  --adam-hero-bg: linear-gradient(120deg, #ecfeff 0%, #eff6ff 48%, #f8fafc 100%);
+  --adam-hero-orb: rgba(15, 118, 110, 0.24);
+  --adam-card-shadow: 0 6px 18px rgba(2, 6, 23, 0.06);
+  --adam-card-shadow-hover: 0 10px 22px rgba(2, 6, 23, 0.11);
+  --adam-img-shadow: 0 10px 24px rgba(2, 6, 23, 0.07);
+  --adam-code-border: #d4dbe6;
+}
+
+body[data-theme="dark"] {
+  --adam-bg-page: radial-gradient(circle at 10% 5%, #0b1520 0%, #0f172a 45%, #111827 100%);
+  --adam-card: #0f1b2a;
+  --adam-content-surface: #0b1320;
+  --adam-ink: #e5e7eb;
+  --adam-muted: #94a3b8;
+  --adam-line: #334155;
+  --adam-accent: #5eead4;
+  --adam-accent-2: #7dd3fc;
+  --adam-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+  --adam-hero-bg: linear-gradient(120deg, #0b1724 0%, #102235 48%, #0f172a 100%);
+  --adam-hero-orb: rgba(94, 234, 212, 0.15);
+  --adam-card-shadow: 0 8px 20px rgba(0, 0, 0, 0.32);
+  --adam-card-shadow-hover: 0 12px 26px rgba(0, 0, 0, 0.42);
+  --adam-img-shadow: 0 10px 24px rgba(0, 0, 0, 0.38);
+  --adam-code-border: #334155;
+  --color-background-primary: #0f172a;
+  --color-background-secondary: #111827;
+  --color-background-border: #334155;
+  --color-card-background: #0f1b2a;
+}
+
+@media (prefers-color-scheme: dark) {
+  body:not([data-theme="light"]) {
+    --adam-bg-page: radial-gradient(circle at 10% 5%, #0b1520 0%, #0f172a 45%, #111827 100%);
+    --adam-card: #0f1b2a;
+    --adam-content-surface: #0b1320;
+    --adam-ink: #e5e7eb;
+    --adam-muted: #94a3b8;
+    --adam-line: #334155;
+    --adam-accent: #5eead4;
+    --adam-accent-2: #7dd3fc;
+    --adam-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+    --adam-hero-bg: linear-gradient(120deg, #0b1724 0%, #102235 48%, #0f172a 100%);
+    --adam-hero-orb: rgba(94, 234, 212, 0.15);
+    --adam-card-shadow: 0 8px 20px rgba(0, 0, 0, 0.32);
+    --adam-card-shadow-hover: 0 12px 26px rgba(0, 0, 0, 0.42);
+    --adam-img-shadow: 0 10px 24px rgba(0, 0, 0, 0.38);
+    --adam-code-border: #334155;
+    --color-background-primary: #0f172a;
+    --color-background-secondary: #111827;
+    --color-background-border: #334155;
+    --color-card-background: #0f1b2a;
+  }
+}
+
+html body {
+  font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  color: var(--adam-ink);
+  background: var(--adam-bg-page);
+}
+
+article[role="main"] {
+  background: var(--adam-content-surface);
+  border: 1px solid var(--adam-line);
+  border-radius: 14px;
+  box-shadow: var(--adam-card-shadow);
+  margin-top: 0.9rem;
+  padding: 0.9rem 1rem;
+}
+
+html body code,
+html body pre,
+html body kbd,
+html body samp {
+  font-family: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  letter-spacing: -0.015em;
+}
+
+.hero-panel {
+  position: relative;
+  overflow: hidden;
+  background: var(--adam-hero-bg);
+  border: 1px solid var(--adam-line);
+  border-radius: 18px;
+  padding: 1.45rem 1.55rem;
+  margin: 0.6rem 0 1.2rem;
+  box-shadow: var(--adam-shadow);
+}
+
+.hero-panel::after {
+  content: "";
+  position: absolute;
+  inset: auto -40px -40px auto;
+  width: 180px;
+  height: 180px;
+  border-radius: 999px;
+  background: radial-gradient(circle, var(--adam-hero-orb) 0%, rgba(15, 118, 110, 0) 70%);
+}
+
+.hero-kicker {
+  color: var(--adam-accent);
+  font-weight: 700;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.35rem;
+}
+
+.hero-title {
+  font-size: 1.52rem;
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0 0 0.52rem;
+}
+
+.hero-sub {
+  margin: 0;
+  color: var(--adam-muted);
+  font-size: 1rem;
+  line-height: 1.45;
+  max-width: 64ch;
+}
+
+.quick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.78rem;
+  margin: 0.95rem 0 1.5rem;
+}
+
+.quick-card {
+  border: 1px solid var(--adam-line);
+  border-radius: 14px;
+  background: var(--adam-card);
+  padding: 0.9rem 0.98rem;
+  box-shadow: var(--adam-card-shadow);
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+
+.quick-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--adam-card-shadow-hover);
+}
+
+.quick-card h3 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+  color: var(--adam-ink);
+}
+
+.quick-card p {
+  margin: 0;
+  font-size: 0.92rem;
+  color: var(--adam-muted);
+}
+
+table.visual-grid {
+  width: 100%;
+  margin: 0.75rem 0 1.25rem;
+}
+
+table.visual-grid td {
+  border: 0 !important;
+  vertical-align: top;
+  padding: 0.2rem 0.5rem 0.6rem;
+}
+
+table.visual-grid p {
+  margin: 0.36rem 0 0;
+  line-height: 1.35;
+  font-size: 0.9rem;
+  color: var(--adam-muted);
+}
+
+table.visual-grid td > p > strong {
+  color: var(--adam-ink);
+}
+
+table.visual-grid img {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+}
+
+.metric-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.62rem;
+  margin: 0.42rem 0 0.86rem;
+}
+
+.metric {
+  border: 1px solid var(--adam-line);
+  background: var(--adam-card);
+  border-radius: 12px;
+  padding: 0.64rem 0.74rem;
+}
+
+.metric .v {
+  display: block;
+  font-size: 1.12rem;
+  font-weight: 700;
+  color: var(--adam-accent-2);
+}
+
+.metric .k {
+  display: block;
+  font-size: 0.76rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--adam-muted);
+}
+
+.content img {
+  border-radius: 12px;
+  border: 1px solid var(--adam-line);
+  box-shadow: var(--adam-img-shadow);
+}
+
+div.highlight pre {
+  border-radius: 10px;
+  border: 1px solid var(--adam-code-border);
+}
+
+.admonition,
+div.admonition {
+  border-radius: 10px;
+}
+
+.toctree-wrapper > p.caption {
+  font-weight: 700;
+  color: var(--adam-accent-2);
+  letter-spacing: 0.03em;
+}
+
+@media (max-width: 720px) {
+  .hero-title {
+    font-size: 1.3rem;
+  }
+
+  .hero-panel {
+    padding: 1.1rem 1.1rem;
+  }
+
+  table.visual-grid,
+  table.visual-grid tbody,
+  table.visual-grid tr,
+  table.visual-grid td {
+    display: block;
+    width: 100%;
+  }
+
+  table.visual-grid td {
+    padding: 0.24rem 0 0.72rem;
+  }
+}

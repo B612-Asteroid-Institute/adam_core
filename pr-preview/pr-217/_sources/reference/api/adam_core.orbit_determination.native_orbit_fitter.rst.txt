@@ -1,0 +1,7 @@
+adam\_core.orbit\_determination.native\_orbit\_fitter module
+============================================================
+
+.. automodule:: adam_core.orbit_determination.native_orbit_fitter
+   :members:
+   :show-inheritance:
+   :undoc-members:

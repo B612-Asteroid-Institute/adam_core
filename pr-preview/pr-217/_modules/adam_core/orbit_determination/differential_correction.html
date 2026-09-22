@@ -1,0 +1,1568 @@
+<!doctype html>
+<html class="no-js" lang="en" data-content_root="../../../">
+  <head><meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <meta name="color-scheme" content="light dark"><link rel="index" title="Index" href="../../../genindex.html"><link rel="search" title="Search" href="../../../search.html">
+        <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/_modules/adam_core/orbit_determination/differential_correction.html">
+
+    <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
+        <title>adam_core.orbit_determination.differential_correction - adam_core</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=d111a655" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo.css?v=7bdb33bb" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/copybutton.css?v=76b2166b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/mystnb.11b39860a7a0cbfd473a3ad8a317855267ff0bd372690045ca344a6b62be495e.css" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/styles/furo-extensions.css?v=8dab3a3b" />
+    <link rel="stylesheet" type="text/css" href="../../../_static/custom.css?v=0404406e" />
+    
+    
+
+
+<style>
+  body {
+    --color-code-background: #f2f2f2;
+  --color-code-foreground: #1e1e1e;
+  --color-brand-primary: #0f766e;
+  --color-brand-content: #0369a1;
+  
+  }
+  @media not print {
+    body[data-theme="dark"] {
+      --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #5eead4;
+  --color-brand-content: #7dd3fc;
+  
+    }
+    @media (prefers-color-scheme: dark) {
+      body:not([data-theme="light"]) {
+        --color-code-background: #202020;
+  --color-code-foreground: #d0d0d0;
+  --color-brand-primary: #5eead4;
+  --color-brand-content: #7dd3fc;
+  
+      }
+    }
+  }
+</style></head>
+  <body>
+    
+    <script>
+      document.body.dataset.theme = localStorage.getItem("theme") || "auto";
+    </script>
+    
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display: none;">
+  <symbol id="svg-toc" viewBox="0 0 24 24">
+    <title>Contents</title>
+    <svg stroke="currentColor" fill="currentColor" stroke-width="0" viewBox="0 0 1024 1024">
+      <path d="M408 442h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8zm-8 204c0 4.4 3.6 8 8 8h480c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8H408c-4.4 0-8 3.6-8 8v56zm504-486H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zm0 632H120c-4.4 0-8 3.6-8 8v56c0 4.4 3.6 8 8 8h784c4.4 0 8-3.6 8-8v-56c0-4.4-3.6-8-8-8zM115.4 518.9L271.7 642c5.8 4.6 14.4.5 14.4-6.9V388.9c0-7.4-8.5-11.5-14.4-6.9L115.4 505.1a8.74 8.74 0 0 0 0 13.8z"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-menu" viewBox="0 0 24 24">
+    <title>Menu</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-menu">
+      <line x1="3" y1="12" x2="21" y2="12"></line>
+      <line x1="3" y1="6" x2="21" y2="6"></line>
+      <line x1="3" y1="18" x2="21" y2="18"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-arrow-right" viewBox="0 0 24 24">
+    <title>Expand</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather-chevron-right">
+      <polyline points="9 18 15 12 9 6"></polyline>
+    </svg>
+  </symbol>
+  <symbol id="svg-sun" viewBox="0 0 24 24">
+    <title>Light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="feather-sun">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon" viewBox="0 0 24 24">
+    <title>Dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-moon">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446a9 9 0 1 1 -8.313 -12.454z" />
+    </svg>
+  </symbol>
+  <symbol id="svg-sun-with-moon" viewBox="0 0 24 24">
+    <title>Auto light/dark, in light mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path style="opacity: 50%" d="M 5.411 14.504 C 5.471 14.504 5.532 14.504 5.591 14.504 C 3.639 16.319 4.383 19.569 6.931 20.352 C 7.693 20.586 8.512 20.551 9.25 20.252 C 8.023 23.207 4.056 23.725 2.11 21.184 C 0.166 18.642 1.702 14.949 4.874 14.536 C 5.051 14.512 5.231 14.5 5.411 14.5 L 5.411 14.504 Z"/>
+      <line x1="14.5" y1="3.25" x2="14.5" y2="1.25"/>
+      <line x1="14.5" y1="15.85" x2="14.5" y2="17.85"/>
+      <line x1="10.044" y1="5.094" x2="8.63" y2="3.68"/>
+      <line x1="19" y1="14.05" x2="20.414" y2="15.464"/>
+      <line x1="8.2" y1="9.55" x2="6.2" y2="9.55"/>
+      <line x1="20.8" y1="9.55" x2="22.8" y2="9.55"/>
+      <line x1="10.044" y1="14.006" x2="8.63" y2="15.42"/>
+      <line x1="19" y1="5.05" x2="20.414" y2="3.636"/>
+      <circle cx="14.5" cy="9.55" r="3.6"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-moon-with-sun" viewBox="0 0 24 24">
+    <title>Auto light/dark, in dark mode</title>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round"
+      class="icon-custom-derived-from-feather-sun-and-tabler-moon">
+      <path d="M 8.282 7.007 C 8.385 7.007 8.494 7.007 8.595 7.007 C 5.18 10.184 6.481 15.869 10.942 17.24 C 12.275 17.648 13.706 17.589 15 17.066 C 12.851 22.236 5.91 23.143 2.505 18.696 C -0.897 14.249 1.791 7.786 7.342 7.063 C 7.652 7.021 7.965 7 8.282 7 L 8.282 7.007 Z"/>
+      <line style="opacity: 50%" x1="18" y1="3.705" x2="18" y2="2.5"/>
+      <line style="opacity: 50%" x1="18" y1="11.295" x2="18" y2="12.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="4.816" x2="14.464" y2="3.964"/>
+      <line style="opacity: 50%" x1="20.711" y1="10.212" x2="21.563" y2="11.063"/>
+      <line style="opacity: 50%" x1="14.205" y1="7.5" x2="13.001" y2="7.5"/>
+      <line style="opacity: 50%" x1="21.795" y1="7.5" x2="23" y2="7.5"/>
+      <line style="opacity: 50%" x1="15.316" y1="10.184" x2="14.464" y2="11.036"/>
+      <line style="opacity: 50%" x1="20.711" y1="4.789" x2="21.563" y2="3.937"/>
+      <circle style="opacity: 50%" cx="18" cy="7.5" r="2.169"/>
+    </svg>
+  </symbol>
+  <symbol id="svg-pencil" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-pencil-code">
+      <path d="M4 20h4l10.5 -10.5a2.828 2.828 0 1 0 -4 -4l-10.5 10.5v4" />
+      <path d="M13.5 6.5l4 4" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+  <symbol id="svg-eye" viewBox="0 0 24 24">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="icon-tabler-eye-code">
+      <path stroke="none" d="M0 0h24v24H0z" fill="none" />
+      <path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0" />
+      <path
+        d="M11.11 17.958c-3.209 -.307 -5.91 -2.293 -8.11 -5.958c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6c-.21 .352 -.427 .688 -.647 1.008" />
+      <path d="M20 21l2 -2l-2 -2" />
+      <path d="M17 17l-2 2l2 2" />
+    </svg>
+  </symbol>
+</svg>
+
+<input type="checkbox" class="sidebar-toggle" name="__navigation" id="__navigation" aria-label="Toggle site navigation sidebar">
+<input type="checkbox" class="sidebar-toggle" name="__toc" id="__toc" aria-label="Toggle table of contents sidebar">
+<label class="overlay sidebar-overlay" for="__navigation"></label>
+<label class="overlay toc-overlay" for="__toc"></label>
+
+<a class="skip-to-content muted-link" href="#furo-main-content">Skip to content</a>
+
+
+
+<div class="page">
+  <header class="mobile-header">
+    <div class="header-left">
+      <label class="nav-overlay-icon" for="__navigation">
+        <span class="icon"><svg><use href="#svg-menu"></use></svg></span>
+      </label>
+    </div>
+    <div class="header-center">
+      <a href="../../../index.html"><div class="brand">adam_core</div></a>
+    </div>
+    <div class="header-right">
+      <div class="theme-toggle-container theme-toggle-header">
+        <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+          <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+          <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+          <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+          <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+        </button>
+      </div>
+      <label class="toc-overlay-icon toc-header-icon no-toc" for="__toc">
+        <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+      </label>
+    </div>
+  </header>
+  <aside class="sidebar-drawer">
+    <div class="sidebar-container">
+      
+      <div class="sidebar-sticky"><a class="sidebar-brand" href="../../../index.html">
+  
+  <span class="sidebar-brand-text">adam_core</span>
+  
+</a><form class="sidebar-search-container" method="get" action="../../../search.html" role="search">
+  <input class="sidebar-search" placeholder="Search" name="q" aria-label="Search">
+  <input type="hidden" name="check_keywords" value="yes">
+  <input type="hidden" name="area" value="default">
+</form>
+<div id="searchbox"></div><div class="sidebar-scroll"><div class="sidebar-tree">
+  <p class="caption" role="heading"><span class="caption-text">Documentation</span></p>
+<ul>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../getting_started/index.html">Getting Started</a><input aria-label="Toggle navigation of Getting Started" class="toctree-checkbox" id="toctree-checkbox-1" name="toctree-checkbox-1" role="switch" type="checkbox"/><label for="toctree-checkbox-1"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/installation.html">Installation</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../getting_started/releasing.html">Release Process</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../use_cases/index.html">Use Cases</a><input aria-label="Toggle navigation of Use Cases" class="toctree-checkbox" id="toctree-checkbox-2" name="toctree-checkbox-2" role="switch" type="checkbox"/><label for="toctree-checkbox-2"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/time_and_windows.html">Working with Time</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/orbit_sources_and_state_tables.html">Using Orbits</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_classes.html">Coordinate Classes Guide</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinate_covariances.html">Coordinate Covariances</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinate_transforms.html">Coordinate Transforms</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/observations_and_observers.html">Observations and Observers</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/residuals.html">Residuals and Fit Quality</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_and_residuals.html">Coordinates, Covariances, Transforms, and Residuals</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/variant_sampling_and_collapse.html">Variant Sampling and Collapse</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/photometry_and_magnitude.html">Photometry, Phase Angle, and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/rotation_periods.html">Rotation Periods and Measured Confidence</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/moid_analysis.html">MOID Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/transfer_and_porkchop.html">Lambert Solutions, Transfers, and Porkchop Plots</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/oem_and_spk_io.html">Trajectory Interchange: OEM and SPK Workflows</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/openspace_visualization.html">OpenSpace Visualization Assets</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/ades_module.html">ADES Module: Parse, Build, and Exchange</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/orbit_determination.html">Orbit Determination from Linked Observations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/neo_tracking.html">NEO Tracking for Follow-Up</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/source_multiplexing.html">Multi-Source Orbit Ingest for APIs</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/ephemeris_service.html">Ephemeris Generation for Services</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/observability_and_light_curves.html">Observability and Light Curves</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../use_cases/impact_risk.html">Impact Risk Analysis</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/scaling_and_utils.html">Scaling and Utilities</a></li>
+</ul>
+</li>
+<li class="toctree-l1 has-children"><a class="reference internal" href="../../../reference/index.html">Reference</a><input aria-label="Toggle navigation of Reference" class="toctree-checkbox" id="toctree-checkbox-3" name="toctree-checkbox-3" role="switch" type="checkbox"/><label for="toctree-checkbox-3"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l2 has-children"><a class="reference internal" href="../../../reference/api/modules.html">adam_core</a><input aria-label="Toggle navigation of adam_core" class="toctree-checkbox" id="toctree-checkbox-4" name="toctree-checkbox-4" role="switch" type="checkbox"/><label for="toctree-checkbox-4"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l3 has-children"><a class="reference internal" href="../../../reference/api/adam_core.html">adam_core package</a><input aria-label="Toggle navigation of adam_core package" class="toctree-checkbox" id="toctree-checkbox-5" name="toctree-checkbox-5" role="switch" type="checkbox"/><label for="toctree-checkbox-5"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.html">adam_core.coordinates package</a><input aria-label="Toggle navigation of adam_core.coordinates package" class="toctree-checkbox" id="toctree-checkbox-6" name="toctree-checkbox-6" role="switch" type="checkbox"/><label for="toctree-checkbox-6"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.cartesian.html">adam_core.coordinates.cartesian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.cometary.html">adam_core.coordinates.cometary module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.transform.html">adam_core.coordinates.transform module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.types.html">adam_core.coordinates.types module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.units.html">adam_core.coordinates.units module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.variants.html">adam_core.coordinates.variants module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.html">adam_core.dynamics package</a><input aria-label="Toggle navigation of adam_core.dynamics package" class="toctree-checkbox" id="toctree-checkbox-7" name="toctree-checkbox-7" role="switch" type="checkbox"/><label for="toctree-checkbox-7"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.aberrations.html">adam_core.dynamics.aberrations module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.barker.html">adam_core.dynamics.barker module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.chi.html">adam_core.dynamics.chi module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.ephemeris.html">adam_core.dynamics.ephemeris module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.exceptions.html">adam_core.dynamics.exceptions module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.impacts.html">adam_core.dynamics.impacts module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.kepler.html">adam_core.dynamics.kepler module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.lagrange.html">adam_core.dynamics.lagrange module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.lambert.html">adam_core.dynamics.lambert module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.moid.html">adam_core.dynamics.moid module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.plots.html">adam_core.dynamics.plots module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.propagation.html">adam_core.dynamics.propagation module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.stumpff.html">adam_core.dynamics.stumpff module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.dynamics.tisserand.html">adam_core.dynamics.tisserand module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.missions.html">adam_core.missions package</a><input aria-label="Toggle navigation of adam_core.missions package" class="toctree-checkbox" id="toctree-checkbox-8" name="toctree-checkbox-8" role="switch" type="checkbox"/><label for="toctree-checkbox-8"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.missions.porkchop.html">adam_core.missions.porkchop module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observations.html">adam_core.observations package</a><input aria-label="Toggle navigation of adam_core.observations package" class="toctree-checkbox" id="toctree-checkbox-9" name="toctree-checkbox-9" role="switch" type="checkbox"/><label for="toctree-checkbox-9"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.ades.html">adam_core.observations.ades module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.arrow_bridge.html">adam_core.observations.arrow_bridge module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.associations.html">adam_core.observations.associations module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.detections.html">adam_core.observations.detections module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.efcc18.html">adam_core.observations.efcc18 module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.exposures.html">adam_core.observations.exposures module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.obs80.html">adam_core.observations.obs80 module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.photometry.html">adam_core.observations.photometry module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observations.source_catalog.html">adam_core.observations.source_catalog module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.observers.html">adam_core.observers package</a><input aria-label="Toggle navigation of adam_core.observers package" class="toctree-checkbox" id="toctree-checkbox-10" name="toctree-checkbox-10" role="switch" type="checkbox"/><label for="toctree-checkbox-10"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observers.observers.html">adam_core.observers.observers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observers.state.html">adam_core.observers.state module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.observers.utils.html">adam_core.observers.utils module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.html">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.gauss.html">adam_core.orbit_determination.gauss module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.gibbs.html">adam_core.orbit_determination.gibbs module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.herrick_gibbs.html">adam_core.orbit_determination.herrick_gibbs module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.iod.html">adam_core.orbit_determination.iod module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.least_squares.html">adam_core.orbit_determination.least_squares module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.native_orbit_fitter.html">adam_core.orbit_determination.native_orbit_fitter module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.observation_uncertainty.html">adam_core.orbit_determination.observation_uncertainty module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.od.html">adam_core.orbit_determination.od module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.od_orchestration.html">adam_core.orbit_determination.od_orchestration module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.orbit_fitter.html">adam_core.orbit_determination.orbit_fitter module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.rejection.html">adam_core.orbit_determination.rejection module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.veres2017.html">adam_core.orbit_determination.veres2017 module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbits.html">adam_core.orbits package</a><input aria-label="Toggle navigation of adam_core.orbits package" class="toctree-checkbox" id="toctree-checkbox-12" name="toctree-checkbox-12" role="switch" type="checkbox"/><label for="toctree-checkbox-12"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.html">adam_core.orbits.openspace package</a><input aria-label="Toggle navigation of adam_core.orbits.openspace package" class="toctree-checkbox" id="toctree-checkbox-13" name="toctree-checkbox-13" role="switch" type="checkbox"/><label for="toctree-checkbox-13"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.assets.html">adam_core.orbits.openspace.assets module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.lua.html">adam_core.orbits.openspace.lua module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.renderable.html">adam_core.orbits.openspace.renderable module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.openspace.translation.html">adam_core.orbits.openspace.translation module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.html">adam_core.orbits.query package</a><input aria-label="Toggle navigation of adam_core.orbits.query package" class="toctree-checkbox" id="toctree-checkbox-14" name="toctree-checkbox-14" role="switch" type="checkbox"/><label for="toctree-checkbox-14"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.horizons.html">adam_core.orbits.query.horizons module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.neocc.html">adam_core.orbits.query.neocc module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.sbdb.html">adam_core.orbits.query.sbdb module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.orbits.query.scout.html">adam_core.orbits.query.scout module</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.arrow_bridge.html">adam_core.orbits.arrow_bridge module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.classification.html">adam_core.orbits.classification module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.ephemeris.html">adam_core.orbits.ephemeris module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.non_gravitational_parameters.html">adam_core.orbits.non_gravitational_parameters module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.oem_io.html">adam_core.orbits.oem_io module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.orbits.html">adam_core.orbits.orbits module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.physical_parameters.html">adam_core.orbits.physical_parameters module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.plots.html">adam_core.orbits.plots module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.spice_kernel.html">adam_core.orbits.spice_kernel module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.trajectory.html">adam_core.orbits.trajectory module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbits.variants.html">adam_core.orbits.variants module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.html">adam_core.photometry package</a><input aria-label="Toggle navigation of adam_core.photometry package" class="toctree-checkbox" id="toctree-checkbox-15" name="toctree-checkbox-15" role="switch" type="checkbox"/><label for="toctree-checkbox-15"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.html">adam_core.photometry.bandpasses package</a><input aria-label="Toggle navigation of adam_core.photometry.bandpasses package" class="toctree-checkbox" id="toctree-checkbox-16" name="toctree-checkbox-16" role="switch" type="checkbox"/><label for="toctree-checkbox-16"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.api.html">adam_core.photometry.bandpasses.api module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.constants.html">adam_core.photometry.bandpasses.constants module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.tables.html">adam_core.photometry.bandpasses.tables module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.bandpasses.vendor.html">adam_core.photometry.bandpasses.vendor module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.html">adam_core.photometry.rotation package</a><input aria-label="Toggle navigation of adam_core.photometry.rotation package" class="toctree-checkbox" id="toctree-checkbox-17" name="toctree-checkbox-17" role="switch" type="checkbox"/><label for="toctree-checkbox-17"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.core.html">adam_core.photometry.rotation.core module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.estimator.html">adam_core.photometry.rotation.estimator module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.jax_backend.html">adam_core.photometry.rotation.jax_backend module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.photometry.rotation.wrappers.html">adam_core.photometry.rotation.wrappers module</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.absolute_magnitude.html">adam_core.photometry.absolute_magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.lightcurve.html">adam_core.photometry.lightcurve module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude.html">adam_core.photometry.magnitude module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.photometry.magnitude_common.html">adam_core.photometry.magnitude_common module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.propagator.html">adam_core.propagator package</a><input aria-label="Toggle navigation of adam_core.propagator package" class="toctree-checkbox" id="toctree-checkbox-18" name="toctree-checkbox-18" role="switch" type="checkbox"/><label for="toctree-checkbox-18"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.propagator.html">adam_core.propagator.propagator module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.types.html">adam_core.propagator.types module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.propagator.utils.html">adam_core.propagator.utils module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.time.html">adam_core.time package</a><input aria-label="Toggle navigation of adam_core.time package" class="toctree-checkbox" id="toctree-checkbox-19" name="toctree-checkbox-19" role="switch" type="checkbox"/><label for="toctree-checkbox-19"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.time.time.html">adam_core.time.time module</a></li>
+</ul>
+</li>
+<li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.html">adam_core.utils package</a><input aria-label="Toggle navigation of adam_core.utils package" class="toctree-checkbox" id="toctree-checkbox-20" name="toctree-checkbox-20" role="switch" type="checkbox"/><label for="toctree-checkbox-20"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.html">adam_core.utils.helpers package</a><input aria-label="Toggle navigation of adam_core.utils.helpers package" class="toctree-checkbox" id="toctree-checkbox-21" name="toctree-checkbox-21" role="switch" type="checkbox"/><label for="toctree-checkbox-21"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.html">adam_core.utils.helpers.data package</a><input aria-label="Toggle navigation of adam_core.utils.helpers.data package" class="toctree-checkbox" id="toctree-checkbox-22" name="toctree-checkbox-22" role="switch" type="checkbox"/><label for="toctree-checkbox-22"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l7"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.data.get_test_data.html">adam_core.utils.helpers.data.get_test_data module</a></li>
+</ul>
+</li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.observations.html">adam_core.utils.helpers.observations module</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.helpers.orbits.html">adam_core.utils.helpers.orbits module</a></li>
+</ul>
+</li>
+<li class="toctree-l5 has-children"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.html">adam_core.utils.plots package</a><input aria-label="Toggle navigation of adam_core.utils.plots package" class="toctree-checkbox" id="toctree-checkbox-23" name="toctree-checkbox-23" role="switch" type="checkbox"/><label for="toctree-checkbox-23"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.data.html">adam_core.utils.plots.data package</a></li>
+<li class="toctree-l6"><a class="reference internal" href="../../../reference/api/adam_core.utils.plots.logos.html">adam_core.utils.plots.logos package</a></li>
+</ul>
+</li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.bounded_lru.html">adam_core.utils.bounded_lru module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.http.html">adam_core.utils.http module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.mpc.html">adam_core.utils.mpc module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice.html">adam_core.utils.spice module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.utils.spice_backend.html">adam_core.utils.spice_backend module</a></li>
+</ul>
+</li>
+<li class="toctree-l4"><a class="reference internal" href="../../../reference/api/adam_core.constants.html">adam_core.constants module</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/rust_benchmark_governance.html">Rust Benchmark Governance</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/rust_backend_contracts.html">Rust Backend Contracts</a></li>
+<li class="toctree-l2"><a class="reference internal" href="../../../reference/rust_public_compatibility.html">Rust Migration Public Compatibility</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="../../../non_grav_support.html">Non-Gravitational Support</a></li>
+</ul>
+
+</div>
+</div>
+
+      </div>
+      
+    </div>
+  </aside>
+  <div class="main">
+    <div class="content">
+      <div class="article-container">
+        <a href="#" class="back-to-top muted-link">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+            <path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8v12z"></path>
+          </svg>
+          <span>Back to top</span>
+        </a>
+        <div class="content-icon-container">
+          <div class="theme-toggle-container theme-toggle-content">
+            <button class="theme-toggle" aria-label="Toggle Light / Dark / Auto color theme">
+              <svg class="theme-icon-when-auto-light"><use href="#svg-sun-with-moon"></use></svg>
+              <svg class="theme-icon-when-auto-dark"><use href="#svg-moon-with-sun"></use></svg>
+              <svg class="theme-icon-when-dark"><use href="#svg-moon"></use></svg>
+              <svg class="theme-icon-when-light"><use href="#svg-sun"></use></svg>
+            </button>
+          </div>
+          <label class="toc-overlay-icon toc-content-icon no-toc" for="__toc">
+            <span class="icon"><svg><use href="#svg-toc"></use></svg></span>
+          </label>
+        </div>
+        <article role="main" id="furo-main-content">
+          <h1>Source code for adam_core.orbit_determination.differential_correction</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.optimize</span><span class="w"> </span><span class="kn">import</span> <span class="n">least_squares</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoordinateCovariances</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span><span class="p">,</span> <span class="n">OriginCodes</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.residuals</span><span class="w"> </span><span class="kn">import</span> <span class="n">Residuals</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.transform</span><span class="w"> </span><span class="kn">import</span> <span class="n">transform_coordinates</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..time.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..utils.spice</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_perturber_state</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span> <span class="n">evaluate_orbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.observation_uncertainty</span><span class="w"> </span><span class="kn">import</span> <span class="n">ObservationUncertaintyModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.outliers</span><span class="w"> </span><span class="kn">import</span> <span class="n">calculate_max_outliers</span><span class="p">,</span> <span class="n">remove_lowest_probability_observation</span>
+
+<span class="c1"># Acceptance window for the weak-direction consistency check: the measured</span>
+<span class="c1"># delta-chi2 at a 1-sigma displacement along the covariance's widest axis</span>
+<span class="c1"># should be ~1 for a trustworthy covariance at a converged minimum.</span>
+<span class="n">_DELTA_CHI2_WINDOW</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">)</span>
+
+<span class="c1"># Robust loss functions supported by fit_least_squares. "linear" is ordinary</span>
+<span class="c1"># weighted least squares (the cost is chi2); "huber" is Huber's M-estimator.</span>
+<span class="n">LossType</span> <span class="o">=</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"linear"</span><span class="p">,</span> <span class="s2">"huber"</span><span class="p">]</span>
+
+<span class="c1"># Huber transition point in units of whitened (1-sigma) residual components:</span>
+<span class="c1"># residuals within +/- f_scale are treated quadratically, larger residuals</span>
+<span class="c1"># linearly. 1.345 is the classical constant giving 95% asymptotic efficiency</span>
+<span class="c1"># for Gaussian errors (Huber 1981; Huber &amp; Ronchetti 2009, sec. 4.5).</span>
+<span class="n">HUBER_F_SCALE_DEFAULT</span> <span class="o">=</span> <span class="mf">1.345</span>
+
+<span class="c1"># Fused native fitter kwargs (bead personal-cmy.7 / personal-dqk): the Rust</span>
+<span class="c1"># Gauss-Newton work units accept only these tuning parameters.</span>
+<span class="n">_NATIVE_FIT_KWARGS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"xtol"</span><span class="p">,</span> <span class="s2">"ftol"</span><span class="p">,</span> <span class="s2">"max_iterations"</span><span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_loss</span><span class="p">(</span><span class="n">loss</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+    <span class="n">_rust_native</span><span class="o">.</span><span class="n">validate_robust_loss</span><span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_robust_cost</span><span class="p">(</span>
+    <span class="n">residuals</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">loss</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Objective minimized by `fit_least_squares` for the given loss, as a</span>
+<span class="sd">    function of the whitened residual components ``r``.</span>
+
+<span class="sd">    - ``"linear"``: ``sum(r**2)``, i.e. chi2.</span>
+<span class="sd">    - ``"huber"``: ``f_scale**2 * sum(rho(r**2 / f_scale**2))`` with</span>
+<span class="sd">      ``rho(z) = z`` for ``z &lt;= 1`` and ``rho(z) = 2 sqrt(z) - 1`` otherwise,</span>
+<span class="sd">      which is twice the ``cost`` reported by `scipy.optimize.least_squares`</span>
+<span class="sd">      and reduces to chi2 when every component lies inside the quadratic core.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span>
+        <span class="n">_rust_native</span><span class="o">.</span><span class="n">robust_cost_numpy</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">residuals</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span> <span class="n">loss</span><span class="p">,</span> <span class="n">f_scale</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_robust_weights</span><span class="p">(</span>
+    <span class="n">residuals</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">loss</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Iteratively-reweighted-least-squares weight ``rho'(z)`` of each whitened</span>
+<span class="sd">    residual component at the solution: 1 inside the quadratic core and</span>
+<span class="sd">    ``f_scale / |r|`` in the linear tail (Huber's psi(r) / r). All ones for</span>
+<span class="sd">    ``"linear"``.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+        <span class="n">_rust_native</span><span class="o">.</span><span class="n">robust_weights_numpy</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">residuals</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span> <span class="n">loss</span><span class="p">,</span> <span class="n">f_scale</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_robust_jacobian_scale</span><span class="p">(</span>
+    <span class="n">residuals</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">loss</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Row scaling that turns the Jacobian of the whitened residual vector into</span>
+<span class="sd">    the Gauss-Newton Jacobian of the robust cost, following the convention of</span>
+<span class="sd">    `scipy.optimize.least_squares` (``sqrt(rho' + 2 rho'' r**2)``, floored at</span>
+<span class="sd">    machine epsilon). For ``"linear"`` this is all ones. For ``"huber"`` the</span>
+<span class="sd">    second derivative of the loss vanishes in the linear tail, so components</span>
+<span class="sd">    beyond ``f_scale`` contribute (numerically) no curvature: the resulting</span>
+<span class="sd">    ``inv(J^T J)`` is the covariance of the M-estimate in which downweighted</span>
+<span class="sd">    observations carry no information, consistent with the local shape of</span>
+<span class="sd">    the robust cost surface probed by `_weak_direction_delta_chi2`.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+        <span class="n">_rust_native</span><span class="o">.</span><span class="n">robust_jacobian_scale_numpy</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">residuals</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span> <span class="n">loss</span><span class="p">,</span> <span class="n">f_scale</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_observation_whitening_matrices</span><span class="p">(</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Compute per-observation whitening matrices for the angular residuals.</span>
+
+<span class="sd">    For each observation, the 2x2 (lon, lat) block of the coordinate</span>
+<span class="sd">    covariance is corrected for cos(latitude) on the longitude axis (matching</span>
+<span class="sd">    the convention used by `Residuals.calculate`) and factored as C = L L^T.</span>
+<span class="sd">    The returned whitener is L^-1: applied to the cos(latitude)-corrected</span>
+<span class="sd">    (lon, lat) residual vector it yields two components whose sum of squares</span>
+<span class="sd">    equals the observation's chi2 (Mahalanobis distance squared).</span>
+
+<span class="sd">    Missing (NaN) cross terms are treated as zero, matching the convention in</span>
+<span class="sd">    `~adam_core.coordinates.residuals.calculate_chi2`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    observations : `OrbitDeterminationObservations` (N)</span>
+<span class="sd">        Observations whose covariances to factor.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    whiteners : `~numpy.ndarray` (N, 2, 2)</span>
+<span class="sd">        Inverse lower-triangular Cholesky factor per observation.</span>
+
+<span class="sd">    Raises</span>
+<span class="sd">    ------</span>
+<span class="sd">    ValueError</span>
+<span class="sd">        If any observation has non-finite angular variances or a</span>
+<span class="sd">        non-positive-definite (lon, lat) covariance block.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+        <span class="n">_rust_native</span><span class="o">.</span><span class="n">observation_whitening_matrices_numpy</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+                <span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
+            <span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+                <span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">lat</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
+                <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_whiten_residual_pairs</span><span class="p">(</span>
+    <span class="n">whiteners</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="n">residual_pairs</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Flat (2N,) whitened components from (N, 2) cos(lat)-corrected residuals."""</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+        <span class="n">_rust_native</span><span class="o">.</span><span class="n">whiten_residual_pairs_numpy</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">whiteners</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">residual_pairs</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="residual_function">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html#adam_core.orbit_determination.differential_correction.residual_function">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">residual_function</span><span class="p">(</span>
+    <span class="n">state_vector</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+    <span class="n">mjd_tdb</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Compute the whitened angular residuals for a given Cartesian orbit with</span>
+<span class="sd">    respect to a set of observations.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    state_vector : `~numpy.ndarray` (6,)</span>
+<span class="sd">        Heliocentric ecliptic state vector of the orbit in Cartesian</span>
+<span class="sd">        coordinates.</span>
+<span class="sd">    mjd_tdb : float</span>
+<span class="sd">        Time of the state vector in MJD TDB.</span>
+<span class="sd">    observations : `~adam_core.orbit_determination.OrbitDeterminationObservations` (N)</span>
+<span class="sd">        Observations to compute residuals for.</span>
+<span class="sd">    propagator : `~adam_core.propagator.Propagator`</span>
+<span class="sd">        Propagator to use to generate ephemeris.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    residuals : `~numpy.ndarray` (2N,)</span>
+<span class="sd">        Whitened (lon, lat) residual components, two per observation: the</span>
+<span class="sd">        cos(latitude)-corrected (observed - predicted) angular residual</span>
+<span class="sd">        multiplied by the inverse Cholesky factor of the matching observation</span>
+<span class="sd">        covariance block. The sum of squares over one observation's pair</span>
+<span class="sd">        equals that observation's chi2 (Mahalanobis distance squared), so the</span>
+<span class="sd">        least-squares objective matches the historical per-observation</span>
+<span class="sd">        sqrt(chi2) convention while remaining differentiable at zero residual</span>
+<span class="sd">        and preserving the direction of each residual on the sky.</span>
+<span class="sd">    """</span>
+    <span class="c1"># Generate ephemeris and compute residuals</span>
+    <span class="n">orbit</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">state_vector</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">y</span><span class="o">=</span><span class="n">state_vector</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">],</span>
+            <span class="n">z</span><span class="o">=</span><span class="n">state_vector</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span>
+            <span class="n">vx</span><span class="o">=</span><span class="n">state_vector</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">4</span><span class="p">],</span>
+            <span class="n">vy</span><span class="o">=</span><span class="n">state_vector</span><span class="p">[</span><span class="mi">4</span><span class="p">:</span><span class="mi">5</span><span class="p">],</span>
+            <span class="n">vz</span><span class="o">=</span><span class="n">state_vector</span><span class="p">[</span><span class="mi">5</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span>
+            <span class="n">time</span><span class="o">=</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">([</span><span class="n">mjd_tdb</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">"tdb"</span><span class="p">),</span>
+            <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">"SUN"</span><span class="p">]),</span>
+            <span class="n">frame</span><span class="o">=</span><span class="s2">"ecliptic"</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="p">)</span>
+    <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">propagator</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span>
+        <span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="o">.</span><span class="n">observers</span><span class="p">,</span> <span class="n">max_processes</span><span class="o">=</span><span class="mi">1</span>
+    <span class="p">)</span>
+    <span class="n">residuals</span> <span class="o">=</span> <span class="n">Residuals</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span> <span class="n">ephemeris</span><span class="o">.</span><span class="n">coordinates</span><span class="p">)</span>
+
+    <span class="c1"># Residuals.calculate returns (observed - predicted) values with the</span>
+    <span class="c1"># longitude residual wrapped to [-180, 180] and cos(latitude)-corrected.</span>
+    <span class="c1"># Whitening those (lon, lat) pairs with the matching covariance factor</span>
+    <span class="c1"># yields components r such that sum(r**2) == sum(chi2).</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">residuals</span><span class="o">.</span><span class="n">to_array</span><span class="p">()[:,</span> <span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+    <span class="n">whiteners</span> <span class="o">=</span> <span class="n">_observation_whitening_matrices</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_whiten_residual_pairs</span><span class="p">(</span><span class="n">whiteners</span><span class="p">,</span> <span class="n">values</span><span class="p">)</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_analytic_jacobian_terms</span><span class="p">(</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Precompute the observation-dependent constants of the analytic 2-body</span>
+<span class="sd">    Jacobian: observation times, barycentric observer and Sun states, and the</span>
+<span class="sd">    whitening factors, all handed to the Rust autodiff kernel.</span>
+<span class="sd">    """</span>
+    <span class="n">observers</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">observers</span>
+    <span class="n">times_tdb</span> <span class="o">=</span> <span class="n">observers</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">"tdb"</span><span class="p">)</span>
+    <span class="n">times</span> <span class="o">=</span> <span class="n">times_tdb</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">observer_states</span> <span class="o">=</span> <span class="n">transform_coordinates</span><span class="p">(</span>
+        <span class="n">observers</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
+        <span class="n">CartesianCoordinates</span><span class="p">,</span>
+        <span class="n">frame_out</span><span class="o">=</span><span class="s2">"ecliptic"</span><span class="p">,</span>
+        <span class="n">origin_out</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SOLAR_SYSTEM_BARYCENTER</span><span class="p">,</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">values</span>
+    <span class="n">sun_states</span> <span class="o">=</span> <span class="n">get_perturber_state</span><span class="p">(</span>
+        <span class="n">OriginCodes</span><span class="o">.</span><span class="n">SUN</span><span class="p">,</span>
+        <span class="n">times_tdb</span><span class="p">,</span>
+        <span class="n">frame</span><span class="o">=</span><span class="s2">"ecliptic"</span><span class="p">,</span>
+        <span class="n">origin</span><span class="o">=</span><span class="n">OriginCodes</span><span class="o">.</span><span class="n">SOLAR_SYSTEM_BARYCENTER</span><span class="p">,</span>
+    <span class="p">)</span><span class="o">.</span><span class="n">values</span>
+    <span class="n">lat</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">lat</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">cos_lats</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">radians</span><span class="p">(</span><span class="n">lat</span><span class="p">))</span>
+    <span class="n">whiteners</span> <span class="o">=</span> <span class="n">_observation_whitening_matrices</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">"n"</span><span class="p">:</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span>
+        <span class="s2">"times"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">times</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="s2">"observer_states"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">observer_states</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="s2">"sun_states"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">sun_states</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="s2">"cos_lats"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">cos_lats</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="s2">"whiteners"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">whiteners</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="s2">"mu_helio"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">"SUN"</span><span class="p">])</span><span class="o">.</span><span class="n">mu</span><span class="p">()[</span><span class="mi">0</span><span class="p">]),</span>
+        <span class="s2">"mu_bary"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">"SOLAR_SYSTEM_BARYCENTER"</span><span class="p">])</span><span class="o">.</span><span class="n">mu</span><span class="p">()[</span><span class="mi">0</span><span class="p">]),</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_analytic_jacobian</span><span class="p">(</span>
+    <span class="n">state_vector</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+    <span class="n">epoch_mjd_tdb</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">terms</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Analytic-quality Jacobian of the whitened residual vector with respect to</span>
+<span class="sd">    the epoch state: d(obs)/dx(t) chained through the 2-body state transition</span>
+<span class="sd">    matrix, computed by forward-mode automatic differentiation in the Rust</span>
+<span class="sd">    backend (``whitened_2body_jacobian``). Residuals are (observed -</span>
+<span class="sd">    predicted), hence the negation of the model Jacobian is already applied.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+        <span class="n">_rust_native</span><span class="o">.</span><span class="n">whitened_2body_jacobian_numpy</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">state_vector</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="nb">float</span><span class="p">(</span><span class="n">epoch_mjd_tdb</span><span class="p">),</span>
+            <span class="n">terms</span><span class="p">[</span><span class="s2">"times"</span><span class="p">],</span>
+            <span class="n">terms</span><span class="p">[</span><span class="s2">"observer_states"</span><span class="p">],</span>
+            <span class="n">terms</span><span class="p">[</span><span class="s2">"sun_states"</span><span class="p">],</span>
+            <span class="n">terms</span><span class="p">[</span><span class="s2">"cos_lats"</span><span class="p">],</span>
+            <span class="n">terms</span><span class="p">[</span><span class="s2">"whiteners"</span><span class="p">],</span>
+            <span class="n">terms</span><span class="p">[</span><span class="s2">"mu_helio"</span><span class="p">],</span>
+            <span class="n">terms</span><span class="p">[</span><span class="s2">"mu_bary"</span><span class="p">],</span>
+        <span class="p">),</span>
+        <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_central_difference_jacobian</span><span class="p">(</span>
+    <span class="n">state_vector</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+    <span class="n">mjd_tdb</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+    <span class="n">rel_step</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-6</span><span class="p">,</span>
+    <span class="n">abs_step_floor</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1e-3</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Central-difference Jacobian of the whitened residual vector computed</span>
+<span class="sd">    through the full residual pipeline (N-body propagation via `propagator`).</span>
+
+<span class="sd">    Step sizes are h_k = rel_step * max(|x_k|, abs_step_floor), which produce</span>
+<span class="sd">    covariances stable to four decimals over rel_step in [1e-7, 1e-5] on</span>
+<span class="sd">    angles-only NEO arcs. This is the fallback covariance path when the</span>
+<span class="sd">    2-body analytic Jacobian cannot be trusted, e.g. when the arc contains a</span>
+<span class="sd">    planetary encounter that the 2-body state transition matrix does not</span>
+<span class="sd">    model.</span>
+<span class="sd">    """</span>
+    <span class="n">n_params</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">state_vector</span><span class="p">)</span>
+    <span class="n">jacobian</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">2</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span> <span class="n">n_params</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_params</span><span class="p">):</span>
+        <span class="n">step</span> <span class="o">=</span> <span class="n">rel_step</span> <span class="o">*</span> <span class="nb">max</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">state_vector</span><span class="p">[</span><span class="n">k</span><span class="p">]),</span> <span class="n">abs_step_floor</span><span class="p">)</span>
+        <span class="n">plus</span> <span class="o">=</span> <span class="n">state_vector</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">minus</span> <span class="o">=</span> <span class="n">state_vector</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+        <span class="n">plus</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">+=</span> <span class="n">step</span>
+        <span class="n">minus</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">-=</span> <span class="n">step</span>
+        <span class="n">jacobian</span><span class="p">[:,</span> <span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">residual_function</span><span class="p">(</span><span class="n">plus</span><span class="p">,</span> <span class="n">mjd_tdb</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">propagator</span><span class="p">)</span>
+            <span class="o">-</span> <span class="n">residual_function</span><span class="p">(</span><span class="n">minus</span><span class="p">,</span> <span class="n">mjd_tdb</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">propagator</span><span class="p">)</span>
+        <span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mf">2.0</span> <span class="o">*</span> <span class="n">step</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">jacobian</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_weak_direction_delta_chi2</span><span class="p">(</span>
+    <span class="n">state_vector</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+    <span class="n">mjd_tdb</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+    <span class="n">covariance_matrix</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+    <span class="n">cost_solution</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">loss</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"linear"</span><span class="p">,</span>
+    <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Measure the actual change in the fit cost at a 1-sigma displacement along</span>
+<span class="sd">    the covariance's weakest-constrained direction.</span>
+
+<span class="sd">    The cost is chi2 for ``loss="linear"`` and the robust cost of</span>
+<span class="sd">    `_robust_cost` otherwise (``cost_solution`` must be that cost at</span>
+<span class="sd">    ``state_vector``). If the covariance is trustworthy and the solution sits</span>
+<span class="sd">    at the minimum of a locally quadratic cost surface, this is ~1 by</span>
+<span class="sd">    construction (delta = sigma^2 * v^T C^-1 v = 1 for the eigenpair</span>
+<span class="sd">    (sigma^2, v)). Values far below 1 reproduce the fabricated-confidence</span>
+<span class="sd">    failure mode where the cost valley is flat over many claimed sigma;</span>
+<span class="sd">    values far above 1 indicate the covariance overstates the uncertainty.</span>
+<span class="sd">    The displacement is applied symmetrically so that a residual gradient</span>
+<span class="sd">    (incomplete convergence) mostly cancels.</span>
+<span class="sd">    """</span>
+    <span class="n">eigenvalues</span><span class="p">,</span> <span class="n">eigenvectors</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigh</span><span class="p">(</span><span class="n">covariance_matrix</span><span class="p">)</span>
+    <span class="n">sigma</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">eigenvalues</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+    <span class="n">direction</span> <span class="o">=</span> <span class="n">eigenvectors</span><span class="p">[:,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="n">residuals_plus</span> <span class="o">=</span> <span class="n">residual_function</span><span class="p">(</span>
+        <span class="n">state_vector</span> <span class="o">+</span> <span class="n">sigma</span> <span class="o">*</span> <span class="n">direction</span><span class="p">,</span> <span class="n">mjd_tdb</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">propagator</span>
+    <span class="p">)</span>
+    <span class="n">residuals_minus</span> <span class="o">=</span> <span class="n">residual_function</span><span class="p">(</span>
+        <span class="n">state_vector</span> <span class="o">-</span> <span class="n">sigma</span> <span class="o">*</span> <span class="n">direction</span><span class="p">,</span> <span class="n">mjd_tdb</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">propagator</span>
+    <span class="p">)</span>
+    <span class="n">cost_plus</span> <span class="o">=</span> <span class="n">_robust_cost</span><span class="p">(</span><span class="n">residuals_plus</span><span class="p">,</span> <span class="n">loss</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">)</span>
+    <span class="n">cost_minus</span> <span class="o">=</span> <span class="n">_robust_cost</span><span class="p">(</span><span class="n">residuals_minus</span><span class="p">,</span> <span class="n">loss</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">)</span>
+    <span class="k">return</span> <span class="mf">0.5</span> <span class="o">*</span> <span class="p">(</span><span class="n">cost_plus</span> <span class="o">+</span> <span class="n">cost_minus</span><span class="p">)</span> <span class="o">-</span> <span class="n">cost_solution</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_validated_covariance</span><span class="p">(</span>
+    <span class="n">covariance_matrix</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+    <span class="n">jacobian_method</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">state_vector</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+    <span class="n">mjd_tdb</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+    <span class="n">cost_solution</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">loss</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"linear"</span><span class="p">,</span>
+    <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">residuals_solution</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Run the weak-direction consistency check on a fit covariance and, for the</span>
+<span class="sd">    analytic Jacobian path, fall back to the central-difference covariance</span>
+<span class="sd">    when the check fails (the signature of a dynamics regime — such as a</span>
+<span class="sd">    planetary encounter inside the arc — that the 2-body state transition</span>
+<span class="sd">    matrix does not capture).</span>
+
+<span class="sd">    ``cost_solution`` is the fit cost (chi2, or the robust cost for a robust</span>
+<span class="sd">    ``loss``) at ``state_vector``. For a robust loss the central-difference</span>
+<span class="sd">    fallback Jacobian is row-scaled with `_robust_jacobian_scale` using</span>
+<span class="sd">    ``residuals_solution`` (recomputed if not given).</span>
+<span class="sd">    """</span>
+    <span class="n">lower</span><span class="p">,</span> <span class="n">upper</span> <span class="o">=</span> <span class="n">_DELTA_CHI2_WINDOW</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">delta_chi2</span> <span class="o">=</span> <span class="n">_weak_direction_delta_chi2</span><span class="p">(</span>
+            <span class="n">state_vector</span><span class="p">,</span>
+            <span class="n">mjd_tdb</span><span class="p">,</span>
+            <span class="n">observations</span><span class="p">,</span>
+            <span class="n">propagator</span><span class="p">,</span>
+            <span class="n">covariance_matrix</span><span class="p">,</span>
+            <span class="n">cost_solution</span><span class="p">,</span>
+            <span class="n">loss</span><span class="o">=</span><span class="n">loss</span><span class="p">,</span>
+            <span class="n">f_scale</span><span class="o">=</span><span class="n">f_scale</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">"The fit covariance could not be validated: evaluating residuals "</span>
+            <span class="sa">f</span><span class="s2">"at a 1-sigma displacement along its weakest direction failed (</span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">). "</span>
+            <span class="s2">"The covariance may be unreliable in weakly constrained directions."</span><span class="p">,</span>
+            <span class="n">category</span><span class="o">=</span><span class="ne">RuntimeWarning</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">covariance_matrix</span>
+
+    <span class="k">if</span> <span class="n">lower</span> <span class="o">&lt;=</span> <span class="n">delta_chi2</span> <span class="o">&lt;=</span> <span class="n">upper</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">covariance_matrix</span>
+
+    <span class="k">if</span> <span class="n">jacobian_method</span> <span class="o">==</span> <span class="s2">"analytic"</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">"The analytic (2-body) fit covariance failed the weak-direction "</span>
+            <span class="sa">f</span><span class="s2">"consistency check (measured delta-chi2 = </span><span class="si">{</span><span class="n">delta_chi2</span><span class="si">:</span><span class="s2">.3g</span><span class="si">}</span><span class="s2"> at a "</span>
+            <span class="s2">"1-sigma displacement along the weakest axis; expected ~1). This "</span>
+            <span class="s2">"typically indicates dynamics inside the arc that the 2-body "</span>
+            <span class="s2">"state transition matrix does not model (e.g. a planetary "</span>
+            <span class="s2">"encounter). Falling back to a central-difference Jacobian "</span>
+            <span class="s2">"computed through the full residual pipeline."</span><span class="p">,</span>
+            <span class="n">category</span><span class="o">=</span><span class="ne">RuntimeWarning</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">jacobian</span> <span class="o">=</span> <span class="n">_central_difference_jacobian</span><span class="p">(</span>
+            <span class="n">state_vector</span><span class="p">,</span> <span class="n">mjd_tdb</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">propagator</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">loss</span> <span class="o">!=</span> <span class="s2">"linear"</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">residuals_solution</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">residuals_solution</span> <span class="o">=</span> <span class="n">residual_function</span><span class="p">(</span>
+                    <span class="n">state_vector</span><span class="p">,</span> <span class="n">mjd_tdb</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">propagator</span>
+                <span class="p">)</span>
+            <span class="n">jacobian</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">jacobian</span>
+                <span class="o">*</span> <span class="n">_robust_jacobian_scale</span><span class="p">(</span><span class="n">residuals_solution</span><span class="p">,</span> <span class="n">loss</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">)[:,</span> <span class="kc">None</span><span class="p">]</span>
+            <span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">covariance_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+                <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">jacobian</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">jacobian</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
+            <span class="p">)</span>
+        <span class="k">except</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">LinAlgError</span><span class="p">:</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">"The central-difference fallback covariance could not be "</span>
+                <span class="s2">"computed. The solution covariance may be unreliable."</span><span class="p">,</span>
+                <span class="n">category</span><span class="o">=</span><span class="ne">RuntimeWarning</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">covariance_matrix</span>
+        <span class="k">return</span> <span class="n">_validated_covariance</span><span class="p">(</span>
+            <span class="n">covariance_matrix</span><span class="p">,</span>
+            <span class="s2">"central"</span><span class="p">,</span>
+            <span class="n">state_vector</span><span class="p">,</span>
+            <span class="n">mjd_tdb</span><span class="p">,</span>
+            <span class="n">observations</span><span class="p">,</span>
+            <span class="n">propagator</span><span class="p">,</span>
+            <span class="n">cost_solution</span><span class="p">,</span>
+            <span class="n">loss</span><span class="o">=</span><span class="n">loss</span><span class="p">,</span>
+            <span class="n">f_scale</span><span class="o">=</span><span class="n">f_scale</span><span class="p">,</span>
+            <span class="n">residuals_solution</span><span class="o">=</span><span class="n">residuals_solution</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">jacobian_method</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"2-point"</span><span class="p">,</span> <span class="s2">"solver"</span><span class="p">):</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">"The fit covariance failed the weak-direction consistency check "</span>
+            <span class="sa">f</span><span class="s2">"(measured delta-chi2 = </span><span class="si">{</span><span class="n">delta_chi2</span><span class="si">:</span><span class="s2">.3g</span><span class="si">}</span><span class="s2"> at a 1-sigma displacement "</span>
+            <span class="s2">"along the weakest axis; expected ~1). The covariance was computed "</span>
+            <span class="s2">"from the solver's forward-difference Jacobian, whose implied steps "</span>
+            <span class="s2">"can sit below the numerical noise floor of the residual pipeline; "</span>
+            <span class="s2">"in weakly constrained (line-of-sight) directions the resulting "</span>
+            <span class="s2">"confidence is fabricated by finite-difference noise. Use "</span>
+            <span class="s2">"jacobian='analytic' or jacobian='central' instead."</span><span class="p">,</span>
+            <span class="n">category</span><span class="o">=</span><span class="ne">RuntimeWarning</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">"The fit covariance failed the weak-direction consistency check "</span>
+            <span class="sa">f</span><span class="s2">"(measured delta-chi2 = </span><span class="si">{</span><span class="n">delta_chi2</span><span class="si">:</span><span class="s2">.3g</span><span class="si">}</span><span class="s2"> at a 1-sigma displacement "</span>
+            <span class="s2">"along the weakest axis; expected ~1). The covariance may be "</span>
+            <span class="s2">"unreliable in weakly constrained directions (the chi2 surface "</span>
+            <span class="s2">"disagrees with the local quadratic model, e.g. because the "</span>
+            <span class="s2">"solution has not fully converged along a flat valley)."</span><span class="p">,</span>
+            <span class="n">category</span><span class="o">=</span><span class="ne">RuntimeWarning</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">covariance_matrix</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_member_weights</span><span class="p">(</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">included_mask</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">],</span>
+    <span class="n">included_weights</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""Per-observation weights in `observations` order: 0 for ignored rows."""</span>
+    <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">included_mask</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">weights</span><span class="p">[</span><span class="n">included_mask</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)]</span> <span class="o">=</span> <span class="n">included_weights</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">weights</span><span class="p">[:]</span> <span class="o">=</span> <span class="n">included_weights</span>
+    <span class="k">return</span> <span class="n">weights</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_native_fit_least_squares</span><span class="p">(</span>
+    <span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">observations_to_include</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+    <span class="n">ignore</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]],</span>
+    <span class="n">mask</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">],</span>
+    <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Rust-backed Gauss-Newton fit behind a propagator's fused</span>
+<span class="sd">    ``fit_least_squares_evaluated`` (one crossing) or composed</span>
+<span class="sd">    ``fit_least_squares`` (fit + `evaluate_orbits`) work units (beads</span>
+<span class="sd">    personal-cmy.7 / personal-dqk). Returns None when the propagator exposes</span>
+<span class="sd">    neither. Only reachable for the legacy forward-difference Jacobian with</span>
+<span class="sd">    the linear loss; see `fit_least_squares`.</span>
+<span class="sd">    """</span>
+    <span class="n">fused_fit</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"fit_least_squares_evaluated"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fused_fit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">ignore_mask</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">pc</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">ignore</span><span class="p">))</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">ignore</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="k">else</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="n">fused_fit</span><span class="p">(</span><span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">ignore_mask</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"state"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">covariance_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"covariance"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">converged</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"converged"</span><span class="p">])</span>
+        <span class="n">fitted_orbit</span> <span class="o">=</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
+            <span class="n">object_id</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+                <span class="n">x</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">],</span>
+                <span class="n">y</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">],</span>
+                <span class="n">z</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span>
+                <span class="n">vx</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">4</span><span class="p">],</span>
+                <span class="n">vy</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">4</span><span class="p">:</span><span class="mi">5</span><span class="p">],</span>
+                <span class="n">vz</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">5</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span>
+                <span class="n">time</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
+                <span class="n">covariance</span><span class="o">=</span><span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
+                    <span class="n">covariance_matrix</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+                <span class="p">),</span>
+                <span class="n">origin</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
+                <span class="n">frame</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">arc_length</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"arc_length"</span><span class="p">]],</span>
+            <span class="n">num_obs</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"num_obs"</span><span class="p">]],</span>
+            <span class="n">chi2</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"chi2"</span><span class="p">]],</span>
+            <span class="n">reduced_chi2</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"reduced_chi2"</span><span class="p">]],</span>
+            <span class="n">iterations</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"iterations"</span><span class="p">]],</span>
+            <span class="n">success</span><span class="o">=</span><span class="p">[</span><span class="n">converged</span><span class="p">],</span>
+            <span class="n">status_code</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span> <span class="k">if</span> <span class="n">converged</span> <span class="k">else</span> <span class="mi">0</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="n">residuals</span> <span class="o">=</span> <span class="n">Residuals</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">values</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_values"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+            <span class="n">chi2</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_chi2"</span><span class="p">],</span>
+            <span class="n">dof</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_dof"</span><span class="p">],</span>
+            <span class="n">probability</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_probability"</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="n">outlier</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"outlier"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">orbit_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
+                <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span> <span class="n">orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">"object"</span>
+            <span class="p">),</span>
+            <span class="n">obs_id</span><span class="o">=</span><span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+            <span class="n">residuals</span><span class="o">=</span><span class="n">residuals</span><span class="p">,</span>
+            <span class="n">solution</span><span class="o">=~</span><span class="n">outlier</span><span class="p">,</span>
+            <span class="n">outlier</span><span class="o">=</span><span class="n">outlier</span><span class="p">,</span>
+            <span class="n">weight</span><span class="o">=</span><span class="p">(</span><span class="o">~</span><span class="n">outlier</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span>
+
+    <span class="n">native_fit</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"fit_least_squares"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">native_fit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">fitted</span><span class="p">,</span> <span class="n">_chi2</span><span class="p">,</span> <span class="n">iterations</span><span class="p">,</span> <span class="n">converged</span> <span class="o">=</span> <span class="n">native_fit</span><span class="p">(</span>
+            <span class="n">orbit</span><span class="p">,</span> <span class="n">observations_to_include</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="p">)</span>
+        <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">evaluate_orbits</span><span class="p">(</span>
+            <span class="n">fitted</span><span class="p">,</span>
+            <span class="n">observations</span><span class="p">,</span>
+            <span class="n">propagator</span><span class="p">,</span>
+            <span class="n">parameters</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span>
+            <span class="n">ignore</span><span class="o">=</span><span class="n">ignore</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">fitted_orbit</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"iterations"</span><span class="p">,</span> <span class="p">[</span><span class="n">iterations</span><span class="p">])</span>
+            <span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"success"</span><span class="p">,</span> <span class="p">[</span><span class="n">converged</span><span class="p">])</span>
+            <span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"status_code"</span><span class="p">,</span> <span class="p">[</span><span class="mi">1</span> <span class="k">if</span> <span class="n">converged</span> <span class="k">else</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="p">)</span>
+        <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">fitted_orbit_members</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
+            <span class="s2">"solution"</span><span class="p">,</span> <span class="n">pc</span><span class="o">.</span><span class="n">invert</span><span class="p">(</span><span class="n">fitted_orbit_members</span><span class="o">.</span><span class="n">outlier</span><span class="p">)</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
+            <span class="s2">"weight"</span><span class="p">,</span>
+            <span class="n">_member_weights</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">mask</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">observations_to_include</span><span class="p">))),</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span>
+
+    <span class="k">return</span> <span class="kc">None</span>
+
+
+<div class="viewcode-block" id="fit_least_squares">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html#adam_core.orbit_determination.differential_correction.fit_least_squares">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">fit_least_squares</span><span class="p">(</span>
+    <span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+    <span class="n">ignore</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">observatory_bias_model</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ObservationUncertaintyModel</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">jacobian</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"analytic"</span><span class="p">,</span> <span class="s2">"central"</span><span class="p">,</span> <span class="s2">"2-point"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"analytic"</span><span class="p">,</span>
+    <span class="n">validate_covariance</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">loss</span><span class="p">:</span> <span class="n">LossType</span> <span class="o">=</span> <span class="s2">"linear"</span><span class="p">,</span>
+    <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">HUBER_F_SCALE_DEFAULT</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Differentially correct an orbit using (optionally robust) least squares.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    orbit : `~adam_core.orbits.Orbits` (1)</span>
+<span class="sd">        Orbit to differentially correct (heliocentric ecliptic Cartesian).</span>
+<span class="sd">    observations : `~adam_core.orbit_determination.OrbitDeterminationObservations` (N)</span>
+<span class="sd">        Observations.</span>
+<span class="sd">    propagator : `~adam_core.propagator.Propagator`</span>
+<span class="sd">        Propagator to use to generate ephemeris.</span>
+<span class="sd">    ignore : list of str</span>
+<span class="sd">        List of observation IDs to ignore when fitting the orbit with least squares.</span>
+<span class="sd">        These observations will be marked as outliers in the fitted orbit members.</span>
+<span class="sd">    observatory_bias_model : `~adam_core.orbit_determination.ObservationUncertaintyModel`, optional</span>
+<span class="sd">        Observation uncertainty model applied to the observations before fitting</span>
+<span class="sd">        (e.g. inflating per-station sigmas from an observatory bias table). Default</span>
+<span class="sd">        None leaves the observations unchanged. The model is applied once at this</span>
+<span class="sd">        entry point and is not forwarded to nested calls.</span>
+<span class="sd">    jacobian : {"analytic", "central", "2-point"}, optional</span>
+<span class="sd">        How the residual Jacobian is obtained for both the solver and the</span>
+<span class="sd">        solution covariance.</span>
+
+<span class="sd">        - ``"analytic"`` (default): the observation partials (topocentric</span>
+<span class="sd">          spherical projection including light time) chained with the 2-body</span>
+<span class="sd">          state transition matrix, computed by forward-mode automatic</span>
+<span class="sd">          differentiation in the Rust backend and passed to</span>
+<span class="sd">          `scipy.optimize.least_squares` as an exact Jacobian callable.</span>
+<span class="sd">          Residual values remain full N-body through `propagator`. This</span>
+<span class="sd">          removes the finite-difference noise that fabricates curvature — and</span>
+<span class="sd">          hence collapses the covariance — in weakly constrained</span>
+<span class="sd">          (line-of-sight) directions, and improves convergence along flat</span>
+<span class="sd">          chi2 valleys.</span>
+<span class="sd">        - ``"central"``: the solver uses its default forward differences, and</span>
+<span class="sd">          the covariance is recomputed after the fit from a central-difference</span>
+<span class="sd">          Jacobian of the whitened residual vector through the full residual</span>
+<span class="sd">          pipeline. Use this when the arc contains dynamics the 2-body state</span>
+<span class="sd">          transition matrix cannot represent (e.g. a deep planetary</span>
+<span class="sd">          encounter).</span>
+<span class="sd">        - ``"2-point"``: legacy behavior; the covariance is taken from the</span>
+<span class="sd">          solver's forward-difference Jacobian. Retained for comparison; its</span>
+<span class="sd">          covariance is untrustworthy in weakly constrained directions. With</span>
+<span class="sd">          ``loss="linear"`` and no scipy-specific ``**kwargs`` this is also the</span>
+<span class="sd">          only path that dispatches to a propagator's fused Rust</span>
+<span class="sd">          ``fit_least_squares_evaluated`` / ``fit_least_squares`` work units</span>
+<span class="sd">          (the Gauss-Newton fitter of the Rust adam-assist backend).</span>
+
+<span class="sd">        Passing an explicit ``jac`` in ``**kwargs`` overrides this parameter</span>
+<span class="sd">        and computes the covariance from the solver-reported Jacobian.</span>
+<span class="sd">    validate_covariance : bool, optional</span>
+<span class="sd">        If True (default), measure the actual chi2 change at a 1-sigma</span>
+<span class="sd">        displacement along the covariance's weakest direction (two extra</span>
+<span class="sd">        residual evaluations) and check it is ~1. On failure the analytic</span>
+<span class="sd">        path falls back to the central-difference covariance; other paths</span>
+<span class="sd">        emit a `RuntimeWarning`. This also serves as the guard against</span>
+<span class="sd">        planetary encounters inside the arc invalidating the 2-body state</span>
+<span class="sd">        transition matrix.</span>
+<span class="sd">    loss : {"linear", "huber"}, optional</span>
+<span class="sd">        Loss applied to the whitened residual components.</span>
+
+<span class="sd">        - ``"linear"`` (default): ordinary weighted least squares; the</span>
+<span class="sd">          objective is chi2. Outliers are handled only by hard rejection</span>
+<span class="sd">          (``ignore`` here, the rejection loop in `iterative_fit`).</span>
+<span class="sd">        - ``"huber"``: Huber's M-estimator. Components within ``f_scale``</span>
+<span class="sd">          (1-sigma units) contribute quadratically, larger ones linearly, so</span>
+<span class="sd">          a gross outlier's pull on the solution is bounded instead of</span>
+<span class="sd">          growing with its residual. No observation is removed: every</span>
+<span class="sd">          observation stays in the solution with an iteratively-reweighted</span>
+<span class="sd">          least-squares weight of ``min(1, f_scale / |r|)`` per component,</span>
+<span class="sd">          reported on the members (see Notes). Requires</span>
+<span class="sd">          ``method='trf'`` (default) or ``'dogbox'``.</span>
+<span class="sd">    f_scale : float, optional</span>
+<span class="sd">        Huber transition point in units of whitened (1-sigma) residual</span>
+<span class="sd">        components. Default `HUBER_F_SCALE_DEFAULT` (1.345), the classical</span>
+<span class="sd">        constant giving 95% asymptotic efficiency for Gaussian errors.</span>
+<span class="sd">        Ignored for ``loss="linear"``.</span>
+<span class="sd">    **kwargs</span>
+<span class="sd">        Additional keyword arguments to pass to `~scipy.optimize.least_squares`</span>
+<span class="sd">        (``loss`` and ``f_scale`` are the named parameters above).</span>
+<span class="sd">        Some of these parameters if not specified will be set to sensible defaults.</span>
+<span class="sd">            xtol = 1e-12</span>
+<span class="sd">            ftol = 1e-12</span>
+<span class="sd">            gtol = 1e-12</span>
+<span class="sd">            x_scale = "jac"</span>
+<span class="sd">            bounds = (-np.inf, np.inf) (for each parameter)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    fitted_orbit : `~adam_core.orbit_determination.FittedOrbits` (1)</span>
+<span class="sd">        Fitted orbit.</span>
+<span class="sd">    fitted_orbit_members : `~adam_core.orbit_determination.FittedOrbitMembers` (N)</span>
+<span class="sd">        Fitted orbit members. ``weight`` holds each observation's effective</span>
+<span class="sd">        weight in the solution: 0 for ignored observations, 1 for fully</span>
+<span class="sd">        weighted ones and, for ``loss="huber"``, the smaller of the two</span>
+<span class="sd">        per-component Huber weights for downweighted observations.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    -----</span>
+<span class="sd">    With ``loss="huber"`` the reported ``chi2`` / ``reduced_chi2`` remain the</span>
+<span class="sd">    plain (unweighted) chi2 of the included observations, so they stay</span>
+<span class="sd">    comparable across losses; the minimized robust cost is not stored. The</span>
+<span class="sd">    covariance is ``inv(J^T J)`` of the Gauss-Newton Jacobian of the robust</span>
+<span class="sd">    cost (the convention of `scipy.optimize.least_squares`): components in</span>
+<span class="sd">    the linear tail of the loss contribute no curvature, i.e. downweighted</span>
+<span class="sd">    observations carry no information in the covariance, and the</span>
+<span class="sd">    weak-direction consistency check probes the robust cost instead of chi2.</span>
+<span class="sd">    """</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbit</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"Only one orbit can be differentially corrected"</span>
+    <span class="n">_validate_loss</span><span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">jacobian</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"analytic"</span><span class="p">,</span> <span class="s2">"central"</span><span class="p">,</span> <span class="s2">"2-point"</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"jacobian must be one of 'analytic', 'central', '2-point'; "</span>
+            <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="n">jacobian</span><span class="si">!r}</span><span class="s2">"</span>
+        <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">observatory_bias_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">observations</span> <span class="o">=</span> <span class="n">observatory_bias_model</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+
+    <span class="c1"># TODO: Investigate whether we want to add fitting for the epoch as well</span>
+    <span class="c1"># Set up least squares problem</span>
+    <span class="k">if</span> <span class="n">ignore</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">pc</span><span class="o">.</span><span class="n">invert</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">ignore</span><span class="p">)))</span>
+        <span class="n">observations_to_include</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="n">observations_to_include</span> <span class="o">=</span> <span class="n">observations</span>
+
+    <span class="c1"># Legacy forward-difference path on a Rust-backed propagator: one native</span>
+    <span class="c1"># Gauss-Newton crossing (beads personal-cmy.7 / personal-dqk). The default</span>
+    <span class="c1"># analytic-Jacobian and robust-loss paths deliberately bypass it: the Rust</span>
+    <span class="c1"># work units use the same forward-difference Jacobian whose covariance the</span>
+    <span class="c1"># analytic path exists to correct.</span>
+    <span class="k">if</span> <span class="n">jacobian</span> <span class="o">==</span> <span class="s2">"2-point"</span> <span class="ow">and</span> <span class="n">loss</span> <span class="o">==</span> <span class="s2">"linear"</span> <span class="ow">and</span> <span class="nb">set</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">_NATIVE_FIT_KWARGS</span><span class="p">:</span>
+        <span class="n">native</span> <span class="o">=</span> <span class="n">_native_fit_least_squares</span><span class="p">(</span>
+            <span class="n">orbit</span><span class="p">,</span>
+            <span class="n">observations</span><span class="p">,</span>
+            <span class="n">observations_to_include</span><span class="p">,</span>
+            <span class="n">propagator</span><span class="p">,</span>
+            <span class="n">ignore</span><span class="p">,</span>
+            <span class="n">mask</span><span class="p">,</span>
+            <span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">native</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">native</span>
+
+    <span class="n">observed_values</span> <span class="o">=</span> <span class="n">observations_to_include</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">observed_values</span><span class="p">[:,</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">]])):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"fit_least_squares only supports angular (lon, lat) observations; "</span>
+            <span class="s2">"found finite values in rho or velocity dimensions."</span>
+        <span class="p">)</span>
+
+    <span class="n">parameters</span> <span class="o">=</span> <span class="mi">6</span>
+    <span class="c1"># Extract epoch and state vector from orbit</span>
+    <span class="n">epoch</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">"tdb"</span><span class="p">)</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">state_vector</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">args</span> <span class="o">=</span> <span class="p">(</span><span class="n">epoch</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">observations_to_include</span><span class="p">,</span> <span class="n">propagator</span><span class="p">)</span>
+
+    <span class="c1"># Define some sensible defaults for the least squares fitting procedure</span>
+    <span class="k">if</span> <span class="s2">"xtol"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">"xtol"</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1e-12</span>
+    <span class="k">if</span> <span class="s2">"ftol"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">"ftol"</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1e-12</span>
+    <span class="k">if</span> <span class="s2">"gtol"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">"gtol"</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1e-12</span>
+    <span class="k">if</span> <span class="s2">"x_scale"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">"x_scale"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"jac"</span>
+    <span class="k">if</span> <span class="s2">"bounds"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">"bounds"</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="n">parameters</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="s2">"args"</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"args"</span><span class="p">)</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">"The args parameter is not supported and will be ignored."</span><span class="p">,</span>
+            <span class="n">category</span><span class="o">=</span><span class="ne">RuntimeWarning</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">kwargs</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"max_iterations"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">loss</span> <span class="o">!=</span> <span class="s2">"linear"</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"method"</span><span class="p">)</span> <span class="o">==</span> <span class="s2">"lm"</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"loss=</span><span class="si">{</span><span class="n">loss</span><span class="si">!r}</span><span class="s2"> is not supported by method='lm'; use method='trf' "</span>
+                <span class="s2">"(default) or 'dogbox'."</span>
+            <span class="p">)</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">"loss"</span><span class="p">]</span> <span class="o">=</span> <span class="n">loss</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">"f_scale"</span><span class="p">]</span> <span class="o">=</span> <span class="n">f_scale</span>
+
+    <span class="n">jacobian_method</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">jacobian</span>
+    <span class="k">if</span> <span class="s2">"jac"</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
+        <span class="n">jacobian_method</span> <span class="o">=</span> <span class="s2">"solver"</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">"An explicit jac was passed to least_squares; the jacobian "</span>
+            <span class="s2">"parameter is ignored and the covariance is computed from the "</span>
+            <span class="s2">"solver-reported Jacobian."</span><span class="p">,</span>
+            <span class="n">category</span><span class="o">=</span><span class="ne">RuntimeWarning</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">elif</span> <span class="n">jacobian</span> <span class="o">==</span> <span class="s2">"analytic"</span><span class="p">:</span>
+        <span class="n">terms</span> <span class="o">=</span> <span class="n">_analytic_jacobian_terms</span><span class="p">(</span><span class="n">observations_to_include</span><span class="p">)</span>
+        <span class="n">epoch_mjd_tdb</span> <span class="o">=</span> <span class="n">epoch</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">jac</span><span class="p">(</span><span class="n">x</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span> <span class="o">*</span><span class="n">_args</span><span class="p">:</span> <span class="nb">object</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
+            <span class="k">return</span> <span class="n">_analytic_jacobian</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">epoch_mjd_tdb</span><span class="p">,</span> <span class="n">terms</span><span class="p">)</span>
+
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">"jac"</span><span class="p">]</span> <span class="o">=</span> <span class="n">jac</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">kwargs</span><span class="p">[</span><span class="s2">"jac"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"2-point"</span>
+
+    <span class="c1"># Run least squares</span>
+    <span class="n">solution</span> <span class="o">=</span> <span class="n">least_squares</span><span class="p">(</span><span class="n">residual_function</span><span class="p">,</span> <span class="n">state_vector</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+    <span class="c1"># Extract solution state vector and covariance matrix</span>
+    <span class="n">mjd_tdb</span> <span class="o">=</span> <span class="n">epoch</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">,</span> <span class="n">vx</span><span class="p">,</span> <span class="n">vy</span><span class="p">,</span> <span class="n">vz</span> <span class="o">=</span> <span class="n">solution</span><span class="o">.</span><span class="n">x</span>
+
+    <span class="c1"># Whitened residual components at the solution (unscaled by the loss) and</span>
+    <span class="c1"># the value of the minimized objective (chi2 for the linear loss).</span>
+    <span class="n">residuals_solution</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">solution</span><span class="o">.</span><span class="n">fun</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">cost_solution</span> <span class="o">=</span> <span class="n">_robust_cost</span><span class="p">(</span><span class="n">residuals_solution</span><span class="p">,</span> <span class="n">loss</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">jacobian_method</span> <span class="o">==</span> <span class="s2">"central"</span><span class="p">:</span>
+        <span class="n">solution_jacobian</span> <span class="o">=</span> <span class="n">_central_difference_jacobian</span><span class="p">(</span>
+            <span class="n">solution</span><span class="o">.</span><span class="n">x</span><span class="p">,</span> <span class="n">mjd_tdb</span><span class="p">,</span> <span class="n">observations_to_include</span><span class="p">,</span> <span class="n">propagator</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">loss</span> <span class="o">!=</span> <span class="s2">"linear"</span><span class="p">:</span>
+            <span class="c1"># Match the solver's convention: the covariance is that of the</span>
+            <span class="c1"># robust cost, whose Gauss-Newton Jacobian is the residual</span>
+            <span class="c1"># Jacobian row-scaled by the loss curvature.</span>
+            <span class="n">solution_jacobian</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">solution_jacobian</span>
+                <span class="o">*</span> <span class="n">_robust_jacobian_scale</span><span class="p">(</span><span class="n">residuals_solution</span><span class="p">,</span> <span class="n">loss</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">)[:,</span> <span class="kc">None</span><span class="p">]</span>
+            <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="c1"># For a robust loss, scipy reports the Jacobian already scaled for</span>
+        <span class="c1"># the loss (J^T J approximates the Hessian of the robust cost).</span>
+        <span class="n">solution_jacobian</span> <span class="o">=</span> <span class="n">solution</span><span class="o">.</span><span class="n">jac</span>
+
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">covariance_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">solution_jacobian</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">solution_jacobian</span><span class="p">),</span>
+            <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="k">except</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">LinAlgError</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="s2">"The covariance matrix could not be computed. The solution may be "</span>
+            <span class="s2">"unreliable."</span><span class="p">,</span>
+            <span class="n">category</span><span class="o">=</span><span class="ne">RuntimeWarning</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="n">covariance_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">validate_covariance</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">covariance_matrix</span><span class="p">)):</span>
+        <span class="n">covariance_matrix</span> <span class="o">=</span> <span class="n">_validated_covariance</span><span class="p">(</span>
+            <span class="n">covariance_matrix</span><span class="p">,</span>
+            <span class="n">jacobian_method</span><span class="p">,</span>
+            <span class="n">solution</span><span class="o">.</span><span class="n">x</span><span class="p">,</span>
+            <span class="n">mjd_tdb</span><span class="p">,</span>
+            <span class="n">observations_to_include</span><span class="p">,</span>
+            <span class="n">propagator</span><span class="p">,</span>
+            <span class="n">cost_solution</span><span class="p">,</span>
+            <span class="n">loss</span><span class="o">=</span><span class="n">loss</span><span class="p">,</span>
+            <span class="n">f_scale</span><span class="o">=</span><span class="n">f_scale</span><span class="p">,</span>
+            <span class="n">residuals_solution</span><span class="o">=</span><span class="n">residuals_solution</span><span class="p">,</span>
+        <span class="p">)</span>
+
+    <span class="c1"># Create orbit with solution state vector and use it to generate ephemeris</span>
+    <span class="c1"># and calculate the residuals with respect to the observations</span>
+    <span class="n">orbit</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
+        <span class="n">object_id</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">object_id</span><span class="p">,</span>
+        <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">x</span><span class="o">=</span><span class="p">[</span><span class="n">x</span><span class="p">],</span>
+            <span class="n">y</span><span class="o">=</span><span class="p">[</span><span class="n">y</span><span class="p">],</span>
+            <span class="n">z</span><span class="o">=</span><span class="p">[</span><span class="n">z</span><span class="p">],</span>
+            <span class="n">vx</span><span class="o">=</span><span class="p">[</span><span class="n">vx</span><span class="p">],</span>
+            <span class="n">vy</span><span class="o">=</span><span class="p">[</span><span class="n">vy</span><span class="p">],</span>
+            <span class="n">vz</span><span class="o">=</span><span class="p">[</span><span class="n">vz</span><span class="p">],</span>
+            <span class="n">time</span><span class="o">=</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">([</span><span class="n">mjd_tdb</span><span class="p">],</span> <span class="n">scale</span><span class="o">=</span><span class="s2">"tdb"</span><span class="p">),</span>
+            <span class="n">covariance</span><span class="o">=</span><span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
+                <span class="n">covariance_matrix</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+            <span class="p">),</span>
+            <span class="n">origin</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
+            <span class="n">frame</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Evaluate the solution orbit and return it as a fitted orbit and fitted orbit members</span>
+    <span class="c1"># which contain the residuals with respect to the observations and the overall</span>
+    <span class="c1"># quality of the fit</span>
+    <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">evaluate_orbits</span><span class="p">(</span>
+        <span class="n">orbit</span><span class="p">,</span>
+        <span class="n">observations</span><span class="p">,</span>
+        <span class="n">propagator</span><span class="p">,</span>
+        <span class="n">parameters</span><span class="o">=</span><span class="n">parameters</span><span class="p">,</span>
+        <span class="n">ignore</span><span class="o">=</span><span class="n">ignore</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">fitted_orbit</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"iterations"</span><span class="p">,</span> <span class="p">[</span><span class="n">solution</span><span class="o">.</span><span class="n">nfev</span><span class="p">])</span>
+        <span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"success"</span><span class="p">,</span> <span class="p">[</span><span class="n">solution</span><span class="o">.</span><span class="n">success</span><span class="p">])</span>
+        <span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"status_code"</span><span class="p">,</span> <span class="p">[</span><span class="n">solution</span><span class="o">.</span><span class="n">status</span><span class="p">])</span>
+    <span class="p">)</span>
+    <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">fitted_orbit_members</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
+        <span class="s2">"solution"</span><span class="p">,</span> <span class="n">pc</span><span class="o">.</span><span class="n">invert</span><span class="p">(</span><span class="n">fitted_orbit_members</span><span class="o">.</span><span class="n">outlier</span><span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Effective weight of each observation in the solution: the smaller of its</span>
+    <span class="c1"># two per-component IRLS weights (all ones for the linear loss), and 0 for</span>
+    <span class="c1"># ignored observations. Members are in the order of `observations`.</span>
+    <span class="n">component_weights</span> <span class="o">=</span> <span class="n">_robust_weights</span><span class="p">(</span><span class="n">residuals_solution</span><span class="p">,</span> <span class="n">loss</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">)</span>
+    <span class="n">included_weights</span> <span class="o">=</span> <span class="n">component_weights</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">fitted_orbit_members</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
+        <span class="s2">"weight"</span><span class="p">,</span> <span class="n">_member_weights</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">mask</span><span class="p">,</span> <span class="n">included_weights</span><span class="p">)</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span></div>
+
+
+
+<div class="viewcode-block" id="iterative_fit">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html#adam_core.orbit_determination.differential_correction.iterative_fit">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">iterative_fit</span><span class="p">(</span>
+    <span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+    <span class="n">rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+    <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
+    <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">contamination_percentage</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">20.0</span><span class="p">,</span>
+    <span class="n">observatory_bias_model</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ObservationUncertaintyModel</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">loss</span><span class="p">:</span> <span class="n">LossType</span> <span class="o">=</span> <span class="s2">"linear"</span><span class="p">,</span>
+    <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">HUBER_F_SCALE_DEFAULT</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Iteratively fit an orbit using least squares with outlier rejection.</span>
+
+<span class="sd">    Wraps `fit_least_squares` with an outlier rejection loop: after each fit,</span>
+<span class="sd">    if the reduced chi2 exceeds `rchi2_threshold`, the observation with the</span>
+<span class="sd">    worst residual is removed and the fit is repeated. This continues until</span>
+<span class="sd">    the fit converges, no more outliers are allowed, or arc length / minimum</span>
+<span class="sd">    observation constraints would be violated.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    orbit : `~adam_core.orbits.Orbits` (1)</span>
+<span class="sd">        Initial orbit to differentially correct.</span>
+<span class="sd">    observations : `~adam_core.orbit_determination.OrbitDeterminationObservations` (N)</span>
+<span class="sd">        Observations to fit against.</span>
+<span class="sd">    propagator : `~adam_core.propagator.Propagator`</span>
+<span class="sd">        Propagator to use to generate ephemeris.</span>
+<span class="sd">    rchi2_threshold : float, optional</span>
+<span class="sd">        Reduced chi2 threshold below which the fit is considered converged.</span>
+<span class="sd">        Default is 10.0.</span>
+<span class="sd">    min_obs : int, optional</span>
+<span class="sd">        Minimum number of observations required to retain the fit.</span>
+<span class="sd">        Default is 6.</span>
+<span class="sd">    min_arc_length : float, optional</span>
+<span class="sd">        Minimum arc length in days required to retain the fit.</span>
+<span class="sd">        Default is 1.0.</span>
+<span class="sd">    contamination_percentage : float, optional</span>
+<span class="sd">        Maximum percentage of observations that may be rejected as outliers.</span>
+<span class="sd">        Range is [0, 100]. Default is 20.0.</span>
+<span class="sd">    observatory_bias_model : `~adam_core.orbit_determination.ObservationUncertaintyModel`, optional</span>
+<span class="sd">        Observation uncertainty model applied to the observations before fitting</span>
+<span class="sd">        (e.g. inflating per-station sigmas from an observatory bias table). Default</span>
+<span class="sd">        None leaves the observations unchanged. The model is applied once at this</span>
+<span class="sd">        entry point and is not forwarded to nested calls.</span>
+<span class="sd">    loss : {"linear", "huber"}, optional</span>
+<span class="sd">        Loss used by every `fit_least_squares` call. ``"huber"`` bounds the</span>
+<span class="sd">        influence of large residuals by downweighting them instead of (or in</span>
+<span class="sd">        addition to) removing observations; see `fit_least_squares`. To use</span>
+<span class="sd">        Huber M-estimation as the sole outlier treatment, pass</span>
+<span class="sd">        ``contamination_percentage=0.0`` so that the hard-rejection loop is</span>
+<span class="sd">        disabled; with a non-zero contamination the two compose (a robust fit</span>
+<span class="sd">        at every pass, with observations still removed while the reduced chi2</span>
+<span class="sd">        exceeds ``rchi2_threshold``).</span>
+<span class="sd">    f_scale : float, optional</span>
+<span class="sd">        Huber transition point in units of whitened (1-sigma) residual</span>
+<span class="sd">        components; see `fit_least_squares`. Ignored for ``loss="linear"``.</span>
+<span class="sd">    **kwargs</span>
+<span class="sd">        Additional keyword arguments passed to `fit_least_squares` (including</span>
+<span class="sd">        `jacobian` and `validate_covariance`) and ultimately to</span>
+<span class="sd">        `~scipy.optimize.least_squares`.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    fitted_orbit : `~adam_core.orbit_determination.FittedOrbits` (1)</span>
+<span class="sd">        Best fitted orbit found.</span>
+<span class="sd">    fitted_orbit_members : `~adam_core.orbit_determination.FittedOrbitMembers` (N)</span>
+<span class="sd">        Fitted orbit members with residuals, outlier flags and weights.</span>
+<span class="sd">    """</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbit</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"Only one orbit can be iteratively fitted"</span>
+
+    <span class="k">if</span> <span class="n">observatory_bias_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># Applied once here; the inflated observations (not the model) are</span>
+        <span class="c1"># passed to the nested fit_least_squares calls below.</span>
+        <span class="n">observations</span> <span class="o">=</span> <span class="n">observatory_bias_model</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+
+    <span class="n">num_obs</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+    <span class="n">max_outliers</span> <span class="o">=</span> <span class="n">calculate_max_outliers</span><span class="p">(</span><span class="n">num_obs</span><span class="p">,</span> <span class="n">min_obs</span><span class="p">,</span> <span class="n">contamination_percentage</span><span class="p">)</span>
+
+    <span class="n">ignore</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">best_fitted_orbit</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">best_fitted_orbit_members</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_outliers</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">fit_least_squares</span><span class="p">(</span>
+            <span class="n">orbit</span><span class="p">,</span>
+            <span class="n">observations</span><span class="p">,</span>
+            <span class="n">propagator</span><span class="p">,</span>
+            <span class="n">ignore</span><span class="o">=</span><span class="n">ignore</span> <span class="k">if</span> <span class="n">ignore</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
+            <span class="n">loss</span><span class="o">=</span><span class="n">loss</span><span class="p">,</span>
+            <span class="n">f_scale</span><span class="o">=</span><span class="n">f_scale</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Track the best fit seen so far (lowest reduced chi2 among successful fits)</span>
+        <span class="k">if</span> <span class="n">best_fitted_orbit</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span>
+            <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">success</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+            <span class="ow">and</span> <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">reduced_chi2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+            <span class="o">&lt;</span> <span class="n">best_fitted_orbit</span><span class="o">.</span><span class="n">reduced_chi2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+        <span class="p">):</span>
+            <span class="n">best_fitted_orbit</span> <span class="o">=</span> <span class="n">fitted_orbit</span>
+            <span class="n">best_fitted_orbit_members</span> <span class="o">=</span> <span class="n">fitted_orbit_members</span>
+
+        <span class="c1"># Check convergence</span>
+        <span class="n">rchi2</span> <span class="o">=</span> <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">reduced_chi2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">rchi2</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">rchi2</span> <span class="o">&lt;=</span> <span class="n">rchi2_threshold</span><span class="p">:</span>
+            <span class="k">break</span>
+
+        <span class="c1"># Stop if we've already used up all allowed outlier slots</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ignore</span><span class="p">)</span> <span class="o">&gt;=</span> <span class="n">max_outliers</span><span class="p">:</span>
+            <span class="k">break</span>
+
+        <span class="c1"># Identify the worst non-outlier observation among the current solution members</span>
+        <span class="n">solution_members</span> <span class="o">=</span> <span class="n">fitted_orbit_members</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span>
+            <span class="n">pc</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">fitted_orbit_members</span><span class="o">.</span><span class="n">outlier</span><span class="p">,</span> <span class="kc">False</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">solution_members</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">break</span>
+
+        <span class="n">obs_id</span><span class="p">,</span> <span class="n">remaining_observations</span> <span class="o">=</span> <span class="n">remove_lowest_probability_observation</span><span class="p">(</span>
+            <span class="n">solution_members</span><span class="p">,</span> <span class="n">observations</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Check that removing this observation still leaves enough arc length</span>
+        <span class="n">arc_length</span> <span class="o">=</span> <span class="n">remaining_observations</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
+        <span class="k">if</span> <span class="p">(</span>
+            <span class="nb">len</span><span class="p">(</span><span class="n">arc_length</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">min_obs</span>
+            <span class="ow">or</span> <span class="p">(</span><span class="n">arc_length</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">-</span> <span class="n">arc_length</span><span class="o">.</span><span class="n">min</span><span class="p">())</span> <span class="o">&lt;</span> <span class="n">min_arc_length</span>
+        <span class="p">):</span>
+            <span class="k">break</span>
+
+        <span class="n">ignore</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obs_id</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">best_fitted_orbit</span><span class="p">,</span> <span class="n">best_fitted_orbit_members</span></div>
+
+</pre></div>
+        </article>
+      </div>
+      <footer>
+        
+        <div class="related-pages">
+          
+          
+        </div>
+        <div class="bottom-of-page">
+          <div class="left-details">
+            <div class="copyright">
+                Copyright &#169; 2023-2026, B612 Asteroid Institute
+            </div>
+            Made with <a href="https://www.sphinx-doc.org/">Sphinx</a> and <a class="muted-link" href="https://pradyunsg.me">@pradyunsg</a>'s
+            
+            <a href="https://github.com/pradyunsg/furo">Furo</a>
+            <div class="last-updated">
+              Last updated on 2026-09-22</div>
+          </div>
+          <div class="right-details">
+            
+          </div>
+        </div>
+        
+      </footer>
+    </div>
+    <aside class="toc-drawer no-toc">
+      
+      
+      
+    </aside>
+  </div>
+</div><script src="../../../_static/documentation_options.js?v=96453e3e"></script>
+    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/scripts/furo.js?v=46bd48cc"></script>
+    <script src="../../../_static/clipboard.min.js?v=a7894cd8"></script>
+    <script src="../../../_static/copybutton.js?v=f281be69"></script>
+    </body>
+</html>
