@@ -80,6 +80,31 @@ scipy optimizer driving a user-supplied `Propagator`:
   `EphemerisMixin` composition); the synthetic two-body propagator strips orbit
   covariance before propagating, as a backend's `generate_ephemeris(covariance=False)` does.
 
+## 2026-09-23 follow-up: OD defaults handoff
+
+The Python baseline moved to `kk/obs-uncertainty-interface` @ `23d8bfc6`
+(`bc727239` SigmaFillModel + station-only / global sigma-table rows, `23d8bfc6`
+test follow-up); both are ported here: `VeresSigmaRow.astcat` is `Option`,
+`VeresSigmaLookup` resolves (station, catalog) → station → catalog → global row
+→ fallback, `SigmaFillModel` (Rust `veres2017::SigmaFillModel`, PyO3 model
+`"fill"`) fills only missing per-axis variances and zeroes the cross-term where
+it filled. The Python test module is the baseline's file verbatim.
+
+The study's defaults handoff
+(`adam_od_experiments/docs/OD_DEFAULTS_HANDOFF_rust_migration.md`) prescribes
+the shipped stack: `SigmaFillModel(load_sigma_fill_table())` → `EFCC18DebiasModel`
+(RING) → `EmpiricalCovarianceModel(bias_table, mode="add")` →
+`NightBatchDeweightingModel(cap=4)` with `NativeOrbitFitter(outlier_rejection=
+"cmc2003")`; not defaults: Huber, any Veres model, `SigmaFloorModel`,
+`PerformanceWeightedModel`, `cap=1`. That stack is documented in
+`docs/source/use_cases/orbit_determination.rst`. Class-level defaults were NOT
+flipped, mirroring the Python baseline: `NativeOrbitFitter` still defaults to
+`outlier_rejection="worst_residual"`, `NightBatchDeweightingModel` already
+defaults to `cap=4`, `EmpiricalCovarianceModel` to `mode="add"`, and
+`SigmaFillModel(sigma_table=None)` falls back to the bundled Veres table because
+adam_core never imports the private data package. Flipping the fitter default is
+a one-line change if wanted.
+
 ## Correctness gates
 
 * **HEALPix RING order.** `efcc18::tests::ring_order_matches_jpl_tiles_dat`

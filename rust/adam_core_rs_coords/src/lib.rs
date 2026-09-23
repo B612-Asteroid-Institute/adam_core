@@ -46,8 +46,8 @@ pub use observation_uncertainty::{
 
 pub mod veres2017;
 pub use veres2017::{
-    veres2017_sigma_table, VeresFloorModel, VeresReplaceModel, VeresSigmaLookup, VeresSigmaRow,
-    VERES2017_CATALOG_DEFAULTS, VERES2017_FALLBACK_SIGMA_ARCSEC,
+    veres2017_sigma_table, SigmaFillModel, VeresFloorModel, VeresReplaceModel, VeresSigmaLookup,
+    VeresSigmaRow, VERES2017_CATALOG_DEFAULTS, VERES2017_FALLBACK_SIGMA_ARCSEC,
     VERES2017_STATION_CATALOG_OVERRIDES,
 };
 

@@ -8,7 +8,14 @@
 //! no uncertainty, or as floors on the reported ones. This module ships the
 //! per-(station, catalog) sigma table used by the Asteroid Institute's OD
 //! experiments together with the interpreters that apply it
-//! ([`VeresFloorModel`], [`VeresReplaceModel`]).
+//! ([`VeresFloorModel`], [`VeresReplaceModel`], [`SigmaFillModel`]).
+//!
+//! The table and [`VeresSigmaLookup`] are GENERIC: rows may be (station,
+//! catalog), station-only (`astcat` None), catalog defaults (`obs_code` None)
+//! or one global row (both None). The Asteroid Institute's production fill-in
+//! table (`v2_sigma_fill`, v2 LOOO study RMS per station x catalog for
+//! high-confidence stations) uses exactly this shape with [`SigmaFillModel`];
+//! the bundled Veres numbers are the legacy reference (decision 2026-09-23).
 //!
 //! Table provenance
 //! ----------------
@@ -99,12 +106,13 @@ pub const VERES2017_STATION_CATALOG_OVERRIDES: [(&str, &str, f64, f64); 14] = [
     ("W68", "Gaia2", 0.25, 0.25), // ATLAS Chile
 ];
 
-/// One row of a Veres-style sigma table: a per-catalog default (`obs_code`
-/// None) or a (station, catalog) override.
+/// One row of a station/catalog sigma table: a (station, catalog) row, a
+/// station-only row (`astcat` None), a per-catalog default (`obs_code` None)
+/// or the single global row (both None).
 #[derive(Debug, Clone, PartialEq)]
 pub struct VeresSigmaRow {
     pub obs_code: Option<String>,
-    pub astcat: String,
+    pub astcat: Option<String>,
     pub sigma_ra_arcsec: f64,
     pub sigma_dec_arcsec: f64,
 }
@@ -117,7 +125,7 @@ pub fn veres2017_sigma_table() -> Vec<VeresSigmaRow> {
     for (astcat, sigma_ra, sigma_dec) in VERES2017_CATALOG_DEFAULTS {
         rows.push(VeresSigmaRow {
             obs_code: None,
-            astcat: astcat.to_string(),
+            astcat: Some(astcat.to_string()),
             sigma_ra_arcsec: sigma_ra,
             sigma_dec_arcsec: sigma_dec,
         });
@@ -125,7 +133,7 @@ pub fn veres2017_sigma_table() -> Vec<VeresSigmaRow> {
     for (code, astcat, sigma_ra, sigma_dec) in VERES2017_STATION_CATALOG_OVERRIDES {
         rows.push(VeresSigmaRow {
             obs_code: Some(code.to_string()),
-            astcat: astcat.to_string(),
+            astcat: Some(astcat.to_string()),
             sigma_ra_arcsec: sigma_ra,
             sigma_dec_arcsec: sigma_dec,
         });
@@ -144,36 +152,49 @@ fn validate_sigma(name: &str, value: f64) -> Result<(), String> {
 
 /// Resolve (station, catalog) to `(sigma_ra_arcsec, sigma_dec_arcsec)`.
 ///
-/// Lookup order: the (station, catalog) override row, then the catalog
-/// default row (`obs_code` None), then `fallback_sigma_arcsec` for both axes;
-/// `None` as fallback means "no sigma known" (the caller passes the
+/// Lookup order: the (station, catalog) row, then the station row (`astcat`
+/// None), then the catalog default row (`obs_code` None), then the table's
+/// global row (both None) if present, then `fallback_sigma_arcsec` for both
+/// axes; `None` as fallback means "no sigma known" (the caller passes the
 /// observation through).
 #[derive(Debug, Clone, PartialEq)]
 pub struct VeresSigmaLookup {
     by_station_catalog: HashMap<(String, String), (f64, f64)>,
+    by_station: HashMap<String, (f64, f64)>,
     by_catalog: HashMap<String, (f64, f64)>,
+    global: Option<(f64, f64)>,
     pub fallback_sigma_arcsec: Option<f64>,
 }
 
 impl VeresSigmaLookup {
     pub fn new(rows: &[VeresSigmaRow], fallback_sigma_arcsec: Option<f64>) -> Result<Self, String> {
         let mut by_station_catalog = HashMap::new();
+        let mut by_station = HashMap::new();
         let mut by_catalog = HashMap::new();
+        let mut global = None;
         for row in rows {
             validate_sigma("sigma_ra_arcsec", row.sigma_ra_arcsec)?;
             validate_sigma("sigma_dec_arcsec", row.sigma_dec_arcsec)?;
             let sigmas = (row.sigma_ra_arcsec, row.sigma_dec_arcsec);
-            match &row.obs_code {
-                None => {
-                    if by_catalog.insert(row.astcat.clone(), sigmas).is_some() {
-                        return Err(format!(
-                            "Duplicate catalog default row for {:?}",
-                            row.astcat
-                        ));
+            match (&row.obs_code, &row.astcat) {
+                (None, None) => {
+                    if global.is_some() {
+                        return Err("Duplicate global row (obs_code and astcat null)".to_string());
+                    }
+                    global = Some(sigmas);
+                }
+                (None, Some(astcat)) => {
+                    if by_catalog.insert(astcat.clone(), sigmas).is_some() {
+                        return Err(format!("Duplicate catalog default row for {astcat:?}"));
                     }
                 }
-                Some(code) => {
-                    let key = (code.clone(), row.astcat.clone());
+                (Some(code), None) => {
+                    if by_station.insert(code.clone(), sigmas).is_some() {
+                        return Err(format!("Duplicate station row for {code:?}"));
+                    }
+                }
+                (Some(code), Some(astcat)) => {
+                    let key = (code.clone(), astcat.clone());
                     if by_station_catalog.contains_key(&key) {
                         return Err(format!("Duplicate override row for {key:?}"));
                     }
@@ -183,7 +204,9 @@ impl VeresSigmaLookup {
         }
         Ok(Self {
             by_station_catalog,
+            by_station,
             by_catalog,
+            global,
             fallback_sigma_arcsec,
         })
     }
@@ -207,10 +230,18 @@ impl VeresSigmaLookup {
                 return Some(*sigmas);
             }
         }
+        if let Some(code) = obs_code {
+            if let Some(sigmas) = self.by_station.get(code) {
+                return Some(*sigmas);
+            }
+        }
         if let Some(astcat) = astcat {
             if let Some(sigmas) = self.by_catalog.get(astcat) {
                 return Some(*sigmas);
             }
+        }
+        if let Some(sigmas) = self.global {
+            return Some(sigmas);
         }
         self.fallback_sigma_arcsec.map(|sigma| (sigma, sigma))
     }
@@ -330,27 +361,86 @@ impl ObservationUncertaintyModel for VeresReplaceModel {
     }
 }
 
+/// Fill ONLY the per-axis variances that are missing (non-finite or
+/// non-positive) from the station/catalog sigma table; every reported sigma
+/// is left exactly as reported. Where an axis is filled the RA/Dec cross-term
+/// is set to zero (the table carries no correlation and a reported
+/// correlation without a reported sigma is meaningless). Observations that
+/// resolve to no sigma pass through with their NaN variances. This is the
+/// Asteroid Institute default with the `v2_sigma_fill` table (decision
+/// 2026-09-23).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SigmaFillModel {
+    pub lookup: VeresSigmaLookup,
+}
+
+impl ObservationUncertaintyModel for SigmaFillModel {
+    fn apply(&self, observations: &mut OrbitDeterminationAstrometry) -> Result<bool, String> {
+        apply_veres_model(
+            &self.lookup,
+            observations,
+            |var_lon, var_lat, fill_var_lon, fill_var_lat| {
+                let lon_missing = !(var_lon.is_finite() && var_lon > 0.0);
+                let lat_missing = !(var_lat.is_finite() && var_lat > 0.0);
+                if !(lon_missing || lat_missing) {
+                    return None;
+                }
+                Some((
+                    if lon_missing { fill_var_lon } else { var_lon },
+                    if lat_missing { fill_var_lat } else { var_lat },
+                    true,
+                ))
+            },
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn row(
+        obs_code: Option<&str>,
+        astcat: Option<&str>,
+        sigma_ra_arcsec: f64,
+        sigma_dec_arcsec: f64,
+    ) -> VeresSigmaRow {
+        VeresSigmaRow {
+            obs_code: obs_code.map(str::to_string),
+            astcat: astcat.map(str::to_string),
+            sigma_ra_arcsec,
+            sigma_dec_arcsec,
+        }
+    }
+
+    /// (station, catalog) + station-only + catalog default + global row.
+    fn fill_lookup(fallback: Option<f64>) -> VeresSigmaLookup {
+        let rows = vec![
+            row(Some("703"), Some("Gaia2"), 0.30, 0.31),
+            row(Some("703"), None, 0.50, 0.51),
+            row(None, Some("Gaia2"), 0.20, 0.21),
+            row(None, None, 0.40, 0.41),
+        ];
+        VeresSigmaLookup::new(&rows, fallback).unwrap()
+    }
 
     fn small_lookup(fallback: Option<f64>) -> VeresSigmaLookup {
         let rows = vec![
             VeresSigmaRow {
                 obs_code: None,
-                astcat: "Gaia2".into(),
+                astcat: Some("Gaia2".into()),
                 sigma_ra_arcsec: 0.20,
                 sigma_dec_arcsec: 0.20,
             },
             VeresSigmaRow {
                 obs_code: None,
-                astcat: "UCAC4".into(),
+                astcat: Some("UCAC4".into()),
                 sigma_ra_arcsec: 0.30,
                 sigma_dec_arcsec: 0.40,
             },
             VeresSigmaRow {
                 obs_code: Some("703".into()),
-                astcat: "Gaia2".into(),
+                astcat: Some("Gaia2".into()),
                 sigma_ra_arcsec: 0.34,
                 sigma_dec_arcsec: 0.34,
             },
@@ -391,6 +481,7 @@ mod tests {
         assert_eq!(rows.len(), 48);
         assert!(rows[..34].iter().all(|row| row.obs_code.is_none()));
         assert!(rows[34..].iter().all(|row| row.obs_code.is_some()));
+        assert!(rows.iter().all(|row| row.astcat.is_some()));
         let lookup = VeresSigmaLookup::bundled();
         assert_eq!(
             lookup.sigmas(Some("F51"), Some("Gaia2")),
@@ -434,7 +525,7 @@ mod tests {
 
         let bad = vec![VeresSigmaRow {
             obs_code: None,
-            astcat: "X".into(),
+            astcat: Some("X".into()),
             sigma_ra_arcsec: 0.0,
             sigma_dec_arcsec: 0.1,
         }];
@@ -444,13 +535,13 @@ mod tests {
         let dup = vec![
             VeresSigmaRow {
                 obs_code: None,
-                astcat: "X".into(),
+                astcat: Some("X".into()),
                 sigma_ra_arcsec: 0.1,
                 sigma_dec_arcsec: 0.1,
             },
             VeresSigmaRow {
                 obs_code: None,
-                astcat: "X".into(),
+                astcat: Some("X".into()),
                 sigma_ra_arcsec: 0.2,
                 sigma_dec_arcsec: 0.2,
             },
@@ -458,6 +549,111 @@ mod tests {
         assert!(VeresSigmaLookup::new(&dup, None)
             .unwrap_err()
             .contains("Duplicate"));
+    }
+
+    #[test]
+    fn generic_rows_lookup_order_station_catalog_station_catalog_global() {
+        let lookup = fill_lookup(None);
+        assert_eq!(
+            lookup.sigmas(Some("703"), Some("Gaia2")),
+            Some((0.30, 0.31))
+        );
+        assert_eq!(
+            lookup.sigmas(Some("703"), Some("UCAC4")),
+            Some((0.50, 0.51))
+        );
+        assert_eq!(lookup.sigmas(Some("703"), None), Some((0.50, 0.51)));
+        assert_eq!(
+            lookup.sigmas(Some("G96"), Some("Gaia2")),
+            Some((0.20, 0.21))
+        );
+        assert_eq!(
+            lookup.sigmas(Some("G96"), Some("UCAC4")),
+            Some((0.40, 0.41))
+        );
+        assert_eq!(lookup.sigmas(None, None), Some((0.40, 0.41)));
+        // The global row beats the fallback.
+        assert_eq!(
+            fill_lookup(Some(9.0)).sigmas(Some("X99"), Some("ZZZ")),
+            Some((0.40, 0.41))
+        );
+
+        let dup_station = vec![
+            row(Some("703"), None, 0.4, 0.4),
+            row(Some("703"), None, 0.5, 0.5),
+        ];
+        assert!(VeresSigmaLookup::new(&dup_station, None)
+            .unwrap_err()
+            .contains("Duplicate station row"));
+        let dup_global = vec![row(None, None, 0.4, 0.4), row(None, None, 0.5, 0.5)];
+        assert!(VeresSigmaLookup::new(&dup_global, None)
+            .unwrap_err()
+            .contains("Duplicate global row"));
+    }
+
+    #[test]
+    fn fill_model_fills_only_missing_axes_and_zeroes_cross_term() {
+        let model = SigmaFillModel {
+            lookup: fill_lookup(None),
+        };
+        // Three observations: reported, missing lon only, missing both (with
+        // a stale cross-term and no sigma).
+        let mut obs = observations(
+            &["703", "703", "G96"],
+            &[Some("Gaia2"), Some("UCAC4"), Some("Gaia2")],
+            &[0.0, 30.0, -45.0],
+        );
+        obs.covariance[36 + VAR_LON] = f64::NAN;
+        obs.covariance[72 + VAR_LON] = f64::NAN;
+        obs.covariance[72 + VAR_LAT] = f64::NAN;
+        obs.covariance[72 + COV_LON_LAT] = 1e-12;
+        obs.covariance[72 + COV_LAT_LON] = 1e-12;
+        let before = obs.clone();
+        assert!(model.apply(&mut obs).unwrap());
+        assert_eq!(obs.lon, before.lon);
+        assert_eq!(obs.lat, before.lat);
+        // Reported observation untouched (NaN-aware comparison).
+        assert!(obs.covariance[..36]
+            .iter()
+            .zip(&before.covariance[..36])
+            .all(|(a, b)| same_value(*a, *b)));
+        // lon-only missing at dec=30 from the station row (0.50"), lat kept.
+        let cos30 = 30.0_f64.to_radians().cos();
+        assert!(close(
+            obs.covariance[36 + VAR_LON],
+            (0.50 / (ARCSEC_PER_DEG * cos30)).powi(2)
+        ));
+        assert_eq!(
+            obs.covariance[36 + VAR_LAT],
+            before.covariance[36 + VAR_LAT]
+        );
+        assert_eq!(obs.covariance[36 + COV_LON_LAT], 0.0);
+        assert_eq!(obs.covariance[36 + COV_LAT_LON], 0.0);
+        // Both missing at dec=-45 from the catalog default (0.20", 0.21").
+        let cos45 = (-45.0_f64).to_radians().cos();
+        assert!(close(
+            obs.covariance[72 + VAR_LON],
+            (0.20 / (ARCSEC_PER_DEG * cos45)).powi(2)
+        ));
+        assert!(close(
+            obs.covariance[72 + VAR_LAT],
+            (0.21 / ARCSEC_PER_DEG).powi(2)
+        ));
+        assert_eq!(obs.covariance[72 + COV_LON_LAT], 0.0);
+
+        // Nothing missing: unchanged.
+        let mut obs = observations(&["703"], &[Some("Gaia2")], &[10.0]);
+        assert!(!model.apply(&mut obs).unwrap());
+
+        // Unresolvable without a global row or fallback: stays NaN.
+        let strict = SigmaFillModel {
+            lookup: VeresSigmaLookup::new(&[row(Some("703"), Some("Gaia2"), 0.30, 0.31)], None)
+                .unwrap(),
+        };
+        let mut obs = observations(&["G96"], &[Some("UCAC4")], &[0.0]);
+        obs.covariance[VAR_LON] = f64::NAN;
+        assert!(!strict.apply(&mut obs).unwrap());
+        assert!(obs.covariance[VAR_LON].is_nan());
     }
 
     #[test]

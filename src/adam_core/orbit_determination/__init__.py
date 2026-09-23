@@ -42,6 +42,7 @@ from .rejection import CMC2003Fit, cmc2003_fit, cmc2003_fit_detailed
 from .veres2017 import (
     VERES2017_FALLBACK_SIGMA_ARCSEC,
     VERES2017_SIGMA_TABLE_SCHEMA,
+    SigmaFillModel,
     VeresFloorModel,
     VeresReplaceModel,
     VeresSigmaLookup,

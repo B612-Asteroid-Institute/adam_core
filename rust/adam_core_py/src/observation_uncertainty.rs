@@ -11,7 +11,7 @@ use adam_core_rs_coords::{
     ra_dec_to_healpix, read_efcc18_bias_version, veres2017_sigma_table, BiasTable, BiasTableRow,
     Efcc18BiasTable, Efcc18DebiasModel, EmpiricalCovarianceMode, EmpiricalCovarianceModel,
     NightBatchDeweightingModel, ObservationUncertaintyModel, OrbitDeterminationAstrometry,
-    PerformanceWeightedModel, SigmaFloorModel, VeresFloorModel, VeresReplaceModel,
+    PerformanceWeightedModel, SigmaFillModel, SigmaFloorModel, VeresFloorModel, VeresReplaceModel,
     VeresSigmaLookup, VeresSigmaRow, EFCC18_N_CATALOGS, EFCC18_N_COMPONENTS, EFCC18_N_TILES,
 };
 use numpy::{IntoPyArray, PyArray1, PyArray2, PyArray3, PyReadonlyArray1, PyReadonlyArray3};
@@ -409,7 +409,7 @@ fn efcc18_corrections_numpy<'py>(
         .map_err(|err| value_error(err.to_string()))
 }
 
-type SigmaTableColumns = (Vec<Option<String>>, Vec<String>, Vec<f64>, Vec<f64>);
+type SigmaTableColumns = (Vec<Option<String>>, Vec<Option<String>>, Vec<f64>, Vec<f64>);
 
 /// The bundled VFC2017-style sigma table as `(obs_code, astcat,
 /// sigma_ra_arcsec, sigma_dec_arcsec)` columns.
@@ -426,7 +426,7 @@ fn veres2017_sigma_table_columns() -> SigmaTableColumns {
 
 fn veres_lookup(
     table_obs_code: Vec<Option<String>>,
-    table_astcat: Vec<String>,
+    table_astcat: Vec<Option<String>>,
     sigma_ra_arcsec: &PyReadonlyArray1<'_, f64>,
     sigma_dec_arcsec: &PyReadonlyArray1<'_, f64>,
     fallback_sigma_arcsec: Option<f64>,
@@ -453,15 +453,16 @@ fn veres_lookup(
     VeresSigmaLookup::new(&rows, fallback_sigma_arcsec).map_err(value_error)
 }
 
-/// Resolve `(obs_code, astcat)` pairs through a VFC2017 sigma table:
+/// Resolve `(obs_code, astcat)` pairs through a station/catalog sigma table
+/// (rows may be (station, catalog), station-only, catalog-only or global):
 /// `(sigma_ra_arcsec, sigma_dec_arcsec)` per observation, NaN where no sigma
-/// is known (unknown catalog without a fallback).
+/// is known (nothing matched, no global row, no fallback).
 #[pyfunction]
 #[pyo3(signature = (table_obs_code, table_astcat, sigma_ra_arcsec, sigma_dec_arcsec, fallback_sigma_arcsec, obs_code, astcat))]
 fn veres_sigma_lookup_numpy<'py>(
     py: Python<'py>,
     table_obs_code: Vec<Option<String>>,
-    table_astcat: Vec<String>,
+    table_astcat: Vec<Option<String>>,
     sigma_ra_arcsec: PyReadonlyArray1<'py, f64>,
     sigma_dec_arcsec: PyReadonlyArray1<'py, f64>,
     fallback_sigma_arcsec: Option<f64>,
@@ -491,8 +492,8 @@ fn veres_sigma_lookup_numpy<'py>(
         .map_err(|err| value_error(err.to_string()))
 }
 
-/// Apply a VFC2017 sigma interpreter (`floor` or `replace`) to the
-/// observations' covariance block. `None` when no entry changed.
+/// Apply a station/catalog sigma interpreter (`floor`, `replace` or `fill`)
+/// to the observations' covariance block. `None` when no entry changed.
 #[pyfunction]
 #[pyo3(signature = (model, fill_missing, table_obs_code, table_astcat, sigma_ra_arcsec, sigma_dec_arcsec, fallback_sigma_arcsec, lat, covariances, obs_code, astcat))]
 #[allow(clippy::too_many_arguments)]
@@ -501,7 +502,7 @@ fn veres_model_apply_numpy<'py>(
     model: &str,
     fill_missing: bool,
     table_obs_code: Vec<Option<String>>,
-    table_astcat: Vec<String>,
+    table_astcat: Vec<Option<String>>,
     sigma_ra_arcsec: PyReadonlyArray1<'py, f64>,
     sigma_dec_arcsec: PyReadonlyArray1<'py, f64>,
     fallback_sigma_arcsec: Option<f64>,
@@ -535,7 +536,12 @@ fn veres_model_apply_numpy<'py>(
             fill_missing,
         }),
         "replace" => Box::new(VeresReplaceModel { lookup }),
-        _ => return Err(value_error("model must be one of {'floor', 'replace'}")),
+        "fill" => Box::new(SigmaFillModel { lookup }),
+        _ => {
+            return Err(value_error(
+                "model must be one of {'floor', 'replace', 'fill'}",
+            ))
+        }
     };
     let changed = model.apply(&mut observations).map_err(value_error)?;
     if !changed {

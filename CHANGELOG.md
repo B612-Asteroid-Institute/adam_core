@@ -15,8 +15,13 @@ This file contains notable changes in adam-core
   `NightBatchDeweightingModel`, `CompositeModel`, `IdentityModel`) driven by the
   `BIAS_TABLE_SCHEMA` observatory bias table; EFCC18 star-catalog debiasing
   (`adam_core.observations.efcc18`, `EFCC18DebiasModel`) reading JPL's
-  `bias.dat` in HEALPix RING order through the Rust `ang2pix` port; the VFC2017
-  station/catalog sigma table (`VeresFloorModel`, `VeresReplaceModel`); the
+  `bias.dat` in HEALPix RING order through the Rust `ang2pix` port; the
+  station/catalog sigma table (`VERES2017_SIGMA_TABLE_SCHEMA`, now allowing
+  station-only and global rows) with its interpreters `SigmaFillModel` (fills
+  only missing sigmas; the Asteroid Institute default with the `v2_sigma_fill`
+  table of the private data package), `VeresFloorModel` and
+  `VeresReplaceModel` (the bundled Veres 2017 numbers are the legacy
+  reference); the
   `astcat` column and `from_ades` converter on `OrbitDeterminationObservations`;
   `OrbitFitter.refine_fit` / `full_od` and `NativeOrbitFitter`; and the
   `observatory_bias_model` parameter on every module-level OD entry point.

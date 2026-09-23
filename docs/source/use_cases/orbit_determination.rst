@@ -101,6 +101,13 @@ returns members carrying the original and the used astrometry of every
 observation. The models never reach the fitter; it receives pre-transformed
 observations, so the ``OrbitFitter`` interface stays flag-free.
 
+* ``SigmaFillModel`` fills ONLY the per-axis sigmas an observation lacks (MPC
+  records without ``rmsRACosDec`` / ``rmsDec``) from a station/catalog sigma
+  table (``VERES2017_SIGMA_TABLE_SCHEMA``; rows may be (station, catalog),
+  station-only, catalog-only or one global row). Reported sigmas are never
+  touched. The Asteroid Institute default table is ``v2_sigma_fill`` from the
+  private ``adam-observatory-uncertainties`` package; the bundled Veres et al.
+  (2017) table is the legacy reference.
 * ``EFCC18DebiasModel`` subtracts the Eggl et al. (2020) star-catalog bias
   from the observed positions (JPL's ``bias.dat`` in HEALPix RING order,
   keyed on the ``astcat`` column carried by
@@ -113,6 +120,21 @@ observations, so the ``OrbitFitter`` interface stays flag-free.
   None of them changes a position.
 * ``CompositeModel`` (or a plain sequence) applies models left to right.
 
+Recommended defaults (Asteroid Institute 100-object walk-forward study,
+decision 2026-09-23): fill missing sigmas with ``SigmaFillModel`` first so
+every later model sees a finite covariance, debias positions with
+``EFCC18DebiasModel`` before anything reads them, add the station's empirical
+residual covariance with ``EmpiricalCovarianceModel(bias_table, mode="add")``,
+deweight same-station same-night batches with
+``NightBatchDeweightingModel(cap=4)`` (sigma scaled by sqrt(N/4) for N > 4),
+and fit with ``NativeOrbitFitter(outlier_rejection="cmc2003")``. Kept as
+options but not recommended as defaults: ``loss="huber"`` (open covariance
+pathology on short arcs), ``VeresFloorModel`` / ``VeresReplaceModel``,
+``SigmaFloorModel`` (no-op), ``PerformanceWeightedModel`` (over-inflates by
+about 1.5x) and ``NightBatchDeweightingModel(cap=1)`` (sqrt(N), about 1.9x
+inflation with no position benefit). The models act on the fit only: judge a
+held-out observation against its nominal position and original sigma.
+
 .. code-block:: python
 
    from adam_core.orbit_determination import (
@@ -120,23 +142,30 @@ observations, so the ``OrbitFitter`` interface stays flag-free.
        EFCC18DebiasModel,
        EmpiricalCovarianceModel,
        NativeOrbitFitter,
+       NightBatchDeweightingModel,
+       SigmaFillModel,
        run_od,
    )
 
    fitter = NativeOrbitFitter(
        propagator_class=ASSISTPropagator,
-       loss="huber",                     # bounded influence of gross residuals
        outlier_rejection="cmc2003",      # Carpino-Milani-Chesley reject/re-include
+   )
+   models = CompositeModel(
+       SigmaFillModel(sigma_fill_table, fallback_sigma_arcsec=None),  # fill first
+       EFCC18DebiasModel(),                                           # RING order
+       EmpiricalCovarianceModel(bias_table),                          # mode="add"
+       NightBatchDeweightingModel(cap=4),
    )
    fitted_orbits, members = run_od(
        observations,
        fitter,
-       CompositeModel(EFCC18DebiasModel(), EmpiricalCovarianceModel(bias_table)),
+       models,
        propagator=ASSISTPropagator(),
        object_id="2024 XY",
    )
    # members.original_astrometry vs members.used_astrometry show what the fit saw;
-   # members.weight holds the Huber weights, members.astcat the star catalog.
+   # members.weight holds per-observation weights, members.astcat the star catalog.
 
 ``fit_least_squares`` itself minimizes the whitened (lon, lat) residuals with
 an exact two-body Jacobian (Rust autodiff) and validates the covariance along

@@ -8,10 +8,19 @@ use such tables as default weights for observations that report no
 uncertainty, or as floors on the reported ones. This module ships the
 per-(station, catalog) sigma table used by the Asteroid Institute's OD
 experiments together with the interpreters that apply it (`VeresFloorModel`,
-`VeresReplaceModel`, both `ObservationUncertaintyModel` subclasses), so that OD
-runs using it are reproducible from adam_core alone. The table and the
-interpreter arithmetic live in the Rust backend
+`VeresReplaceModel`, `SigmaFillModel`, all `ObservationUncertaintyModel`
+subclasses), so that OD runs using it are reproducible from adam_core alone.
+The table and the interpreter arithmetic live in the Rust backend
 (``adam_core_rs_coords::veres2017``).
+
+The table schema and `VeresSigmaLookup` are GENERIC: any station/catalog
+sigma table in `VERES2017_SIGMA_TABLE_SCHEMA` can be supplied, including
+station-only rows (``astcat`` null) and one global row (both keys null).
+The Asteroid Institute's production fill-in table (v2 LOOO study RMS per
+station x catalog for high-confidence stations, ``v2_sigma_fill`` in the
+private ``adam-observatory-uncertainties`` package) uses exactly this
+schema with `SigmaFillModel`; the bundled Veres numbers are the legacy
+reference (decision 2026-09-23).
 
 Table provenance
 ----------------
@@ -44,6 +53,7 @@ from .observation_uncertainty import ObservationUncertaintyModel
 __all__ = [
     "VERES2017_FALLBACK_SIGMA_ARCSEC",
     "VERES2017_SIGMA_TABLE_SCHEMA",
+    "SigmaFillModel",
     "VeresFloorModel",
     "VeresReplaceModel",
     "VeresSigmaLookup",
@@ -51,13 +61,14 @@ __all__ = [
     "veres2017_sigma_table",
 ]
 
-#: Standard schema for a Veres-style sigma table: one row per catalog default
-#: (``obs_code`` null) or per (station, catalog) override. Sigmas in arcsec,
-#: RA in the cos(dec)-corrected frame.
+#: Standard schema for a station/catalog sigma table: rows are (station,
+#: catalog), station-only (``astcat`` null), catalog default (``obs_code``
+#: null) or one global row (both null). Sigmas in arcsec, RA in the
+#: cos(dec)-corrected frame.
 VERES2017_SIGMA_TABLE_SCHEMA = pa.schema(
     [
         pa.field("obs_code", pa.large_string(), nullable=True),
-        pa.field("astcat", pa.large_string(), nullable=False),
+        pa.field("astcat", pa.large_string(), nullable=True),
         pa.field("sigma_ra_arcsec", pa.float64(), nullable=False),
         pa.field("sigma_dec_arcsec", pa.float64(), nullable=False),
     ]
@@ -101,8 +112,10 @@ def validate_veres_sigma_table(table: pa.Table) -> pa.Table:
     Raises
     ------
     ValueError
-        If required columns are missing, cannot be cast, ``astcat`` has
-        nulls, or a sigma is not a positive finite number.
+        If required columns are missing, cannot be cast, more than one row
+        has both keys null (global row), or a sigma is not a positive finite
+        number. Rows may be (station, catalog), station-only (``astcat``
+        null), catalog-only (``obs_code`` null) or global (both null).
     """
     missing = [
         name
@@ -121,8 +134,17 @@ def validate_veres_sigma_table(table: pa.Table) -> pa.Table:
         raise ValueError(
             f"Sigma table columns could not be cast to the standard schema: {e}"
         ) from e
-    if table["astcat"].null_count > 0:
-        raise ValueError("Sigma table column 'astcat' must not contain nulls")
+    both_null = sum(
+        1
+        for code, astcat in zip(
+            table["obs_code"].to_pylist(), table["astcat"].to_pylist()
+        )
+        if code is None and astcat is None
+    )
+    if both_null > 1:
+        raise ValueError(
+            "Sigma table may contain at most one global row (obs_code and astcat null)"
+        )
     for name in ("sigma_ra_arcsec", "sigma_dec_arcsec"):
         values = table[name].to_pylist()
         if any(v is None or not (v > 0.0) or v == float("inf") for v in values):
@@ -136,11 +158,13 @@ class VeresSigmaLookup:
     """
     Resolve (station, catalog) to (sigma_ra_arcsec, sigma_dec_arcsec).
 
-    Lookup order: the (station, catalog) override row, then the catalog
-    default row (``obs_code`` null), then ``fallback_sigma_arcsec`` for both
-    axes; None as fallback means "no sigma known" (the caller passes the
-    observation through). The resolution runs in the Rust
-    ``VeresSigmaLookup``; this object carries the validated table columns.
+    Lookup order: the (station, catalog) row, then the station row
+    (``astcat`` null), then the catalog default row (``obs_code`` null),
+    then the table's global row (both keys null) if present, then
+    ``fallback_sigma_arcsec`` for both axes; None as fallback means "no sigma
+    known" (the caller passes the observation through). The resolution runs
+    in the Rust ``VeresSigmaLookup``; this object carries the validated table
+    columns.
 
     Parameters
     ----------
@@ -162,7 +186,7 @@ class VeresSigmaLookup:
         self.sigma_table = table
         self.fallback_sigma_arcsec = fallback_sigma_arcsec
         self._obs_codes: list[str | None] = table["obs_code"].to_pylist()
-        self._astcats: list[str] = table["astcat"].to_pylist()
+        self._astcats: list[str | None] = table["astcat"].to_pylist()
         self._sigma_ra = np.ascontiguousarray(
             table["sigma_ra_arcsec"].to_numpy(zero_copy_only=False), dtype=np.float64
         )
@@ -216,8 +240,9 @@ class _VeresSigmaModel(ObservationUncertaintyModel):
     table by default) to per-axis sigmas in arcseconds with RA in the
     cos(dec)-corrected frame; subclasses decide how the resulting variances
     combine with the reported covariance. Observations that resolve to no
-    sigma (unknown catalog with ``fallback_sigma_arcsec=None``) or with a
-    degenerate cos(dec) pass through unchanged. Positions are never modified.
+    sigma (unknown station and catalog, no global row,
+    ``fallback_sigma_arcsec=None``) or with a degenerate cos(dec) pass
+    through unchanged. Positions are never modified.
     """
 
     _MODEL: str = ""
@@ -311,3 +336,38 @@ class VeresReplaceModel(_VeresSigmaModel):
     """
 
     _MODEL = "replace"
+
+
+class SigmaFillModel(_VeresSigmaModel):
+    """
+    Fill ONLY the per-axis variances that are missing (non-finite or
+    non-positive) from the station/catalog sigma table; every reported
+    sigma is left exactly as reported. This is the "default uncertainty
+    when none is reported" use of such tables, isolated from the floor /
+    replace semantics of `VeresFloorModel` / `VeresReplaceModel`.
+
+    Where an axis is filled the RA/Dec cross-term is set to zero (the table
+    carries no correlation and a reported correlation without a reported
+    sigma is meaningless). Observations that resolve to no sigma (unknown
+    station and catalog, no global row, ``fallback_sigma_arcsec=None``) pass
+    through with their NaN variances, so the caller can detect them.
+
+    The Asteroid Institute default is this model with the ``v2_sigma_fill``
+    table (v2 LOOO study RMS per station x catalog, high-confidence stations,
+    with station / catalog / global fallbacks) from the private
+    ``adam-observatory-uncertainties`` package; the bundled Veres table is the
+    legacy reference (decision 2026-09-23, adam_od_experiments bead d2f:
+    orbits unchanged, prediction covariance x0.82, better-calibrated noise
+    model at 32 of 39 stations).
+
+    Parameters
+    ----------
+    sigma_table : `pyarrow.Table`, optional
+        Sigma table (`VERES2017_SIGMA_TABLE_SCHEMA`; station-only and global
+        rows allowed); default the bundled `veres2017_sigma_table`.
+    fallback_sigma_arcsec : float or None
+        Sigma used when nothing in the table matches; None leaves the
+        observation unfilled. Default 0.75".
+    """
+
+    _MODEL = "fill"

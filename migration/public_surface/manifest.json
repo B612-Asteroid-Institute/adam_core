@@ -12,9 +12,9 @@
     "plotting_policy": "plotting/display may remain Python; all other symbols require review"
   },
   "summary": {
-    "symbols": 707,
+    "symbols": 708,
     "by_kind": {
-      "class": 101,
+      "class": 102,
       "classmethod": 34,
       "constant": 101,
       "constructor": 12,
@@ -29,7 +29,7 @@
       "missions": 16,
       "observations": 62,
       "observers": 19,
-      "orbit_determination": 90,
+      "orbit_determination": 91,
       "orbits": 115,
       "photometry": 69,
       "propagator": 7,
@@ -37,7 +37,7 @@
       "utils": 56
     },
     "by_implementation_class": {
-      "compatibility_data_or_external_generic": 200,
+      "compatibility_data_or_external_generic": 201,
       "mixed_rust_python_gap": 103,
       "plotting_exemption_candidate": 16,
       "python_gap_or_external_boundary": 268,
@@ -49,7 +49,7 @@
   "frozen_updated_upstream_reconciliation": {
     "commit": "757c09fca86adf9e3d5899952db3d379e09413f6",
     "upstream_symbols": 600,
-    "current_symbols": 707,
+    "current_symbols": 708,
     "upstream_only_symbols": 22,
     "all_upstream_only_symbols_classified": true,
     "disposition": "The listed upstream implementation helpers are intentionally retired; their useful public workflows are Rust-backed or are explicit provider boundaries in the referenced domain audit.",
@@ -11678,6 +11678,34 @@
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
     {
+      "id": "adam_core.orbit_determination.veres2017:SigmaFillModel",
+      "module": "adam_core.orbit_determination.veres2017",
+      "qualname": "SigmaFillModel",
+      "name": "SigmaFillModel",
+      "kind": "class",
+      "domain": "orbit_determination",
+      "source": "src/adam_core/orbit_determination/veres2017.py",
+      "line": 341,
+      "explicit_export": true,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": false,
+        "python_loop": false,
+        "numpy_reference": false,
+        "pyarrow_reference": true,
+        "quivr_reference": false,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "compatibility_data_or_external_generic",
+      "rust_entrypoint": null,
+      "parity_coverage": "compatibility_or_schema_see_domain_audit",
+      "native_timing": "not_applicable_data_or_generic",
+      "tracking_issue": "personal-cmy.37.3",
+      "audit_document": "migration/public_surface/dynamics_od.md"
+    },
+    {
       "id": "adam_core.orbit_determination.veres2017:VERES2017_FALLBACK_SIGMA_ARCSEC",
       "module": "adam_core.orbit_determination.veres2017",
       "qualname": "VERES2017_FALLBACK_SIGMA_ARCSEC",
@@ -11685,7 +11713,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 67,
+      "line": 78,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11713,7 +11741,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 57,
+      "line": 68,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11741,7 +11769,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 262,
+      "line": 287,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11769,7 +11797,7 @@
       "kind": "constructor",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 287,
+      "line": 312,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11797,7 +11825,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 297,
+      "line": 322,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11825,7 +11853,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 135,
+      "line": 157,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11853,7 +11881,7 @@
       "kind": "constructor",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 154,
+      "line": 178,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11881,7 +11909,7 @@
       "kind": "method",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 200,
+      "line": 224,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11909,7 +11937,7 @@
       "kind": "method",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 184,
+      "line": 208,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11937,7 +11965,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 97,
+      "line": 108,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11965,7 +11993,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/veres2017.py",
-      "line": 70,
+      "line": 81,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
