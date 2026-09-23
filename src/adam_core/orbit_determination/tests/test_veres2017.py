@@ -223,3 +223,109 @@ class TestVeresReplaceModel:
             result.coordinates.covariance.to_matrix()[0, 2, 2],
             (0.20 / ARCSEC_PER_DEG) ** 2,
         )
+
+
+# ---------------------------------------------------------------------------
+# Generic table rows (station-only / global) and the fill-only model
+# ---------------------------------------------------------------------------
+from ..veres2017 import SigmaFillModel  # noqa: E402
+
+
+def table_nullable(rows: list[tuple[str | None, str | None, float, float]]) -> pa.Table:
+    return pa.table(
+        {
+            "obs_code": pa.array([r[0] for r in rows], pa.large_string()),
+            "astcat": pa.array([r[1] for r in rows], pa.large_string()),
+            "sigma_ra_arcsec": pa.array([r[2] for r in rows], pa.float64()),
+            "sigma_dec_arcsec": pa.array([r[3] for r in rows], pa.float64()),
+        },
+        schema=VERES2017_SIGMA_TABLE_SCHEMA,
+    )
+
+
+FILL_TABLE = table_nullable(
+    [
+        ("703", "Gaia2", 0.30, 0.31),  # station x catalog
+        ("703", None, 0.50, 0.51),  # station-only
+        (None, "Gaia2", 0.20, 0.21),  # catalog default
+        (None, None, 0.40, 0.41),  # global
+    ]
+)
+
+
+class TestGenericLookupRows:
+    def test_lookup_order_station_catalog_station_catalog_global(self) -> None:
+        lookup = VeresSigmaLookup(FILL_TABLE, fallback_sigma_arcsec=None)
+        assert lookup.sigmas("703", "Gaia2") == (0.30, 0.31)
+        assert lookup.sigmas("703", "UCAC4") == (0.50, 0.51)  # station row
+        assert lookup.sigmas("703", None) == (0.50, 0.51)
+        assert lookup.sigmas("G96", "Gaia2") == (0.20, 0.21)  # catalog default
+        assert lookup.sigmas("G96", "UCAC4") == (0.40, 0.41)  # global row
+        assert lookup.sigmas(None, None) == (0.40, 0.41)
+
+    def test_global_row_beats_fallback_and_is_unique(self) -> None:
+        lookup = VeresSigmaLookup(FILL_TABLE, fallback_sigma_arcsec=9.0)
+        assert lookup.sigmas("X99", "ZZZ") == (0.40, 0.41)
+        with pytest.raises(ValueError, match="at most one global row"):
+            validate_veres_sigma_table(
+                table_nullable([(None, None, 0.4, 0.4), (None, None, 0.5, 0.5)])
+            )
+        with pytest.raises(ValueError, match="Duplicate station row"):
+            VeresSigmaLookup(table_nullable([("703", None, 0.4, 0.4), ("703", None, 0.5, 0.5)]))
+
+    def test_bundled_veres_table_still_validates(self) -> None:
+        lookup = VeresSigmaLookup()
+        assert lookup.sigmas("703", "Gaia2") == (0.34, 0.34)
+        assert lookup.sigmas("X99", "ZZZ") == (
+            VERES2017_FALLBACK_SIGMA_ARCSEC,
+            VERES2017_FALLBACK_SIGMA_ARCSEC,
+        )
+
+
+class TestSigmaFillModel:
+    def _obs(self):
+        # three observations: reported, missing lon only, missing both
+        obs = observations_with(["703", "703", "G96"], ["Gaia2", "UCAC4", "Gaia2"], [0.0, 30.0, -45.0])
+        cov = obs.coordinates.covariance.to_matrix().copy()
+        cov[1, 1, 1] = np.nan
+        cov[2, 1, 1] = np.nan
+        cov[2, 2, 2] = np.nan
+        cov[2, 1, 2] = cov[2, 2, 1] = 1e-12  # stale cross-term with no sigma
+        return obs.set_column("coordinates.covariance", CoordinateCovariances.from_matrix(cov))
+
+    def test_fills_only_missing_axes_and_keeps_reported(self) -> None:
+        obs = self._obs()
+        before = obs.coordinates.covariance.to_matrix()
+        model = SigmaFillModel(FILL_TABLE, fallback_sigma_arcsec=None)
+        out = model.apply(obs)
+        assert_positions_unchanged(obs, out)
+        after = out.coordinates.covariance.to_matrix()
+        # reported observation untouched
+        npt.assert_array_equal(after[0], before[0])
+        # lon-only missing at dec=30 from the station row (0.50"), lat kept
+        cos30 = np.cos(np.deg2rad(30.0))
+        npt.assert_allclose(after[1, 1, 1], (0.50 / (ARCSEC_PER_DEG * cos30)) ** 2)
+        npt.assert_array_equal(after[1, 2, 2], before[1, 2, 2])
+        assert after[1, 1, 2] == 0.0 and after[1, 2, 1] == 0.0
+        # both missing at dec=-45 from the catalog default (0.20", 0.21")
+        cos45 = np.cos(np.deg2rad(-45.0))
+        npt.assert_allclose(after[2, 1, 1], (0.20 / (ARCSEC_PER_DEG * cos45)) ** 2)
+        npt.assert_allclose(after[2, 2, 2], (0.21 / ARCSEC_PER_DEG) ** 2)
+        assert after[2, 1, 2] == 0.0
+
+    def test_nothing_missing_returns_same_object(self) -> None:
+        obs = observations_with(["703"], ["Gaia2"], [10.0])
+        assert SigmaFillModel(FILL_TABLE).apply(obs) is obs
+
+    def test_unresolvable_without_global_or_fallback_stays_nan(self) -> None:
+        obs = self._obs()
+        no_global = table_nullable([("703", "Gaia2", 0.30, 0.31)])
+        out = SigmaFillModel(no_global, fallback_sigma_arcsec=None).apply(obs)
+        after = out.coordinates.covariance.to_matrix()
+        assert np.isnan(after[1, 1, 1]) and np.isnan(after[2, 2, 2])
+
+    def test_composes_after_efcc18_style_position_models(self) -> None:
+        obs = self._obs()
+        model = CompositeModel(SigmaFillModel(FILL_TABLE), NightBatchDeweightingModel(cap=4))
+        out = model.apply(obs)
+        assert np.all(np.isfinite(out.coordinates.covariance.to_matrix()[:, 1, 1]))

@@ -8,8 +8,17 @@ use such tables as default weights for observations that report no
 uncertainty, or as floors on the reported ones. This module ships the
 per-(station, catalog) sigma table used by the Asteroid Institute's OD
 experiments together with the interpreters that apply it (`VeresFloorModel`,
-`VeresReplaceModel`, both `ObservationUncertaintyModel` subclasses), so that OD
-runs using it are reproducible from adam_core alone.
+`VeresReplaceModel`, `SigmaFillModel`, all `ObservationUncertaintyModel`
+subclasses), so that OD runs using it are reproducible from adam_core alone.
+
+The table schema and `VeresSigmaLookup` are GENERIC: any station/catalog
+sigma table in `VERES2017_SIGMA_TABLE_SCHEMA` can be supplied, including
+station-only rows (``astcat`` null) and one global row (both keys null).
+The Asteroid Institute's production fill-in table (v2 LOOO study RMS per
+station x catalog for high-confidence stations, ``v2_sigma_fill`` in the
+private ``adam-observatory-uncertainties`` package) uses exactly this
+schema with `SigmaFillModel`; the bundled Veres numbers are the legacy
+reference (decision 2026-09-23).
 
 Table provenance
 ----------------
@@ -41,6 +50,7 @@ from .observation_uncertainty import ARCSEC_PER_DEG, ObservationUncertaintyModel
 __all__ = [
     "VERES2017_FALLBACK_SIGMA_ARCSEC",
     "VERES2017_SIGMA_TABLE_SCHEMA",
+    "SigmaFillModel",
     "VeresFloorModel",
     "VeresReplaceModel",
     "VeresSigmaLookup",
@@ -48,13 +58,14 @@ __all__ = [
     "veres2017_sigma_table",
 ]
 
-#: Standard schema for a Veres-style sigma table: one row per catalog default
-#: (``obs_code`` null) or per (station, catalog) override. Sigmas in arcsec,
-#: RA in the cos(dec)-corrected frame.
+#: Standard schema for a station/catalog sigma table: rows are (station,
+#: catalog), station-only (``astcat`` null), catalog default (``obs_code``
+#: null) or one global row (both null). Sigmas in arcsec, RA in the
+#: cos(dec)-corrected frame.
 VERES2017_SIGMA_TABLE_SCHEMA = pa.schema(
     [
         pa.field("obs_code", pa.large_string(), nullable=True),
-        pa.field("astcat", pa.large_string(), nullable=False),
+        pa.field("astcat", pa.large_string(), nullable=True),
         pa.field("sigma_ra_arcsec", pa.float64(), nullable=False),
         pa.field("sigma_dec_arcsec", pa.float64(), nullable=False),
     ]
@@ -165,10 +176,11 @@ class VeresSigmaLookup:
     """
     Resolve (station, catalog) to (sigma_ra_arcsec, sigma_dec_arcsec).
 
-    Lookup order: the (station, catalog) override row, then the catalog
-    default row (``obs_code`` null), then ``fallback_sigma_arcsec`` for both
-    axes; None as fallback means "no sigma known" (the caller passes the
-    observation through).
+    Lookup order: the (station, catalog) row, then the station row
+    (``astcat`` null), then the catalog default row (``obs_code`` null),
+    then the table's global row (both keys null) if present, then
+    ``fallback_sigma_arcsec`` for both axes; None as fallback means "no sigma
+    known" (the caller passes the observation through).
 
     Parameters
     ----------
@@ -189,7 +201,9 @@ class VeresSigmaLookup:
         )
         self.fallback_sigma_arcsec = fallback_sigma_arcsec
         self._by_station_catalog: dict[tuple[str, str], tuple[float, float]] = {}
+        self._by_station: dict[str, tuple[float, float]] = {}
         self._by_catalog: dict[str, tuple[float, float]] = {}
+        self._global: tuple[float, float] | None = None
         for code, astcat, ra, dec in zip(
             table["obs_code"].to_pylist(),
             table["astcat"].to_pylist(),
@@ -197,10 +211,18 @@ class VeresSigmaLookup:
             table["sigma_dec_arcsec"].to_pylist(),
         ):
             sigmas = (float(ra), float(dec))
-            if code is None:
+            if code is None and astcat is None:
+                if self._global is not None:
+                    raise ValueError("Duplicate global row (obs_code and astcat null)")
+                self._global = sigmas
+            elif code is None:
                 if astcat in self._by_catalog:
                     raise ValueError(f"Duplicate catalog default row for {astcat!r}")
                 self._by_catalog[astcat] = sigmas
+            elif astcat is None:
+                if code in self._by_station:
+                    raise ValueError(f"Duplicate station row for {code!r}")
+                self._by_station[code] = sigmas
             else:
                 key = (code, astcat)
                 if key in self._by_station_catalog:
@@ -215,10 +237,16 @@ class VeresSigmaLookup:
             override = self._by_station_catalog.get((obs_code, astcat))
             if override is not None:
                 return override
+        if obs_code is not None:
+            station = self._by_station.get(obs_code)
+            if station is not None:
+                return station
         if astcat is not None:
             default = self._by_catalog.get(astcat)
             if default is not None:
                 return default
+        if self._global is not None:
+            return self._global
         if self.fallback_sigma_arcsec is None:
             return None
         return (self.fallback_sigma_arcsec, self.fallback_sigma_arcsec)
@@ -231,8 +259,10 @@ def validate_veres_sigma_table(table: pa.Table) -> pa.Table:
     Raises
     ------
     ValueError
-        If required columns are missing, cannot be cast, ``astcat`` has
-        nulls, or a sigma is not a positive finite number.
+        If required columns are missing, cannot be cast, more than one row
+        has both keys null (global row), or a sigma is not a positive finite
+        number. Rows may be (station, catalog), station-only (``astcat``
+        null), catalog-only (``obs_code`` null) or global (both null).
     """
     missing = [
         name
@@ -251,8 +281,17 @@ def validate_veres_sigma_table(table: pa.Table) -> pa.Table:
         raise ValueError(
             f"Sigma table columns could not be cast to the standard schema: {e}"
         ) from e
-    if table["astcat"].null_count > 0:
-        raise ValueError("Sigma table column 'astcat' must not contain nulls")
+    both_null = sum(
+        1
+        for code, astcat in zip(
+            table["obs_code"].to_pylist(), table["astcat"].to_pylist()
+        )
+        if code is None and astcat is None
+    )
+    if both_null > 1:
+        raise ValueError(
+            "Sigma table may contain at most one global row (obs_code and astcat null)"
+        )
     for name in ("sigma_ra_arcsec", "sigma_dec_arcsec"):
         values = table[name].to_pylist()
         if any(v is None or not (v > 0.0) or v == float("inf") for v in values):
@@ -415,3 +454,54 @@ class VeresReplaceModel(_VeresSigmaModel):
         veres_var_lat: float,
     ) -> tuple[float, float, bool] | None:
         return (veres_var_lon, veres_var_lat, True)
+
+
+class SigmaFillModel(_VeresSigmaModel):
+    """
+    Fill ONLY the per-axis variances that are missing (non-finite or
+    non-positive) from the station/catalog sigma table; every reported
+    sigma is left exactly as reported. This is the "default uncertainty
+    when none is reported" use of such tables, isolated from the floor /
+    replace semantics of `VeresFloorModel` / `VeresReplaceModel`.
+
+    Where an axis is filled the RA/Dec cross-term is set to zero (the table
+    carries no correlation and a reported correlation without a reported
+    sigma is meaningless). Observations that resolve to no sigma (unknown
+    station and catalog, no global row, ``fallback_sigma_arcsec=None``) pass
+    through with their NaN variances, so the caller can detect them.
+
+    The Asteroid Institute default is this model with the ``v2_sigma_fill``
+    table (v2 LOOO study RMS per station x catalog, high-confidence stations,
+    with station / catalog / global fallbacks) from the private
+    ``adam-observatory-uncertainties`` package; the bundled Veres table is the
+    legacy reference (decision 2026-09-23, adam_od_experiments bead d2f:
+    orbits unchanged, prediction covariance x0.82, better-calibrated noise
+    model at 32 of 39 stations).
+
+    Parameters
+    ----------
+    sigma_table : `pyarrow.Table`, optional
+        Sigma table (`VERES2017_SIGMA_TABLE_SCHEMA`; station-only and global
+        rows allowed); default the bundled `veres2017_sigma_table`.
+    fallback_sigma_arcsec : float or None
+        Sigma used when nothing in the table matches; None leaves the
+        observation unfilled. Default 0.75".
+    """
+
+    def _updated_variances(
+        self,
+        var_lon: float,
+        var_lat: float,
+        veres_var_lon: float,
+        veres_var_lat: float,
+    ) -> tuple[float, float, bool] | None:
+        lon_missing = not (np.isfinite(var_lon) and var_lon > 0.0)
+        lat_missing = not (np.isfinite(var_lat) and var_lat > 0.0)
+        if not (lon_missing or lat_missing):
+            return None
+        return (
+            veres_var_lon if lon_missing else var_lon,
+            veres_var_lat if lat_missing else var_lat,
+            True,
+        )
+
