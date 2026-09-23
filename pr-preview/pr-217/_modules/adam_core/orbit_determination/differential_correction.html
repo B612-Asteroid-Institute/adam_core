@@ -1055,6 +1055,44 @@
     <span class="k">return</span> <span class="kc">None</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_validate_native_covariance</span><span class="p">(</span>
+    <span class="n">fitted_orbit</span><span class="p">:</span> <span class="n">FittedOrbits</span><span class="p">,</span>
+    <span class="n">observations_to_include</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Run the weak-direction consistency check of `_validated_covariance` on the</span>
+<span class="sd">    covariance returned by a propagator's fused Rust work unit, which is the</span>
+<span class="sd">    forward-difference ``inv(J^T J)`` of the Gauss-Newton fitter. The fit is</span>
+<span class="sd">    left unchanged: as on the scipy ``"2-point"`` path, a failed check emits a</span>
+<span class="sd">    `RuntimeWarning` instead of replacing the covariance. Costs three residual</span>
+<span class="sd">    evaluations (the cost at the solution plus the two probe displacements).</span>
+<span class="sd">    """</span>
+    <span class="n">covariance_matrix</span> <span class="o">=</span> <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">covariance_matrix</span><span class="p">)):</span>
+        <span class="k">return</span>
+    <span class="n">state_vector</span> <span class="o">=</span> <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">mjd_tdb</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span>
+        <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">"tdb"</span><span class="p">)</span>
+        <span class="o">.</span><span class="n">mjd</span><span class="p">()</span>
+        <span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="p">)</span>
+    <span class="n">residuals_solution</span> <span class="o">=</span> <span class="n">residual_function</span><span class="p">(</span>
+        <span class="n">state_vector</span><span class="p">,</span> <span class="n">mjd_tdb</span><span class="p">,</span> <span class="n">observations_to_include</span><span class="p">,</span> <span class="n">propagator</span>
+    <span class="p">)</span>
+    <span class="n">_validated_covariance</span><span class="p">(</span>
+        <span class="n">covariance_matrix</span><span class="p">,</span>
+        <span class="s2">"2-point"</span><span class="p">,</span>
+        <span class="n">state_vector</span><span class="p">,</span>
+        <span class="n">mjd_tdb</span><span class="p">,</span>
+        <span class="n">observations_to_include</span><span class="p">,</span>
+        <span class="n">propagator</span><span class="p">,</span>
+        <span class="n">_robust_cost</span><span class="p">(</span><span class="n">residuals_solution</span><span class="p">,</span> <span class="s2">"linear"</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span>
+        <span class="n">loss</span><span class="o">=</span><span class="s2">"linear"</span><span class="p">,</span>
+        <span class="n">residuals_solution</span><span class="o">=</span><span class="n">residuals_solution</span><span class="p">,</span>
+    <span class="p">)</span>
+
+
 <div class="viewcode-block" id="fit_least_squares">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html#adam_core.orbit_determination.differential_correction.fit_least_squares">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">fit_least_squares</span><span class="p">(</span>
@@ -1125,7 +1163,10 @@
 <span class="sd">        path falls back to the central-difference covariance; other paths</span>
 <span class="sd">        emit a `RuntimeWarning`. This also serves as the guard against</span>
 <span class="sd">        planetary encounters inside the arc invalidating the 2-body state</span>
-<span class="sd">        transition matrix.</span>
+<span class="sd">        transition matrix. On the fused Rust path (``jacobian="2-point"``</span>
+<span class="sd">        with a Rust-backed propagator) the check adds three residual</span>
+<span class="sd">        evaluations to the single native crossing and warns on failure; pass</span>
+<span class="sd">        ``False`` to keep that path to one crossing.</span>
 <span class="sd">    loss : {"linear", "huber"}, optional</span>
 <span class="sd">        Loss applied to the whitened residual components.</span>
 
@@ -1212,6 +1253,10 @@
             <span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">native</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">validate_covariance</span><span class="p">:</span>
+                <span class="n">_validate_native_covariance</span><span class="p">(</span>
+                    <span class="n">native</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">observations_to_include</span><span class="p">,</span> <span class="n">propagator</span>
+                <span class="p">)</span>
             <span class="k">return</span> <span class="n">native</span>
 
     <span class="n">observed_values</span> <span class="o">=</span> <span class="n">observations_to_include</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">values</span>
@@ -1455,7 +1500,9 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    fitted_orbit : `~adam_core.orbit_determination.FittedOrbits` (1)</span>
-<span class="sd">        Best fitted orbit found.</span>
+<span class="sd">        Best fitted orbit found: the lowest reduced chi2 among the passes</span>
+<span class="sd">        whose fit succeeded (converged) or, if none did, the lowest reduced</span>
+<span class="sd">        chi2 overall (``success`` is then False).</span>
 <span class="sd">    fitted_orbit_members : `~adam_core.orbit_determination.FittedOrbitMembers` (N)</span>
 <span class="sd">        Fitted orbit members with residuals, outlier flags and weights.</span>
 <span class="sd">    """</span>
@@ -1470,8 +1517,12 @@
     <span class="n">max_outliers</span> <span class="o">=</span> <span class="n">calculate_max_outliers</span><span class="p">(</span><span class="n">num_obs</span><span class="p">,</span> <span class="n">min_obs</span><span class="p">,</span> <span class="n">contamination_percentage</span><span class="p">)</span>
 
     <span class="n">ignore</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">best_fitted_orbit</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">best_fitted_orbit_members</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1"># Best fit across the passes: the lowest reduced chi2 among the successful</span>
+    <span class="c1"># (converged) fits or, if no pass converged, the lowest reduced chi2 overall.</span>
+    <span class="n">best_fit</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">best_rchi2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+    <span class="n">fallback_fit</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">fallback_rchi2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
 
     <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_outliers</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>
         <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">fit_least_squares</span><span class="p">(</span>
@@ -1484,17 +1535,18 @@
             <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
         <span class="p">)</span>
 
-        <span class="c1"># Track the best fit seen so far (lowest reduced chi2 among successful fits)</span>
-        <span class="k">if</span> <span class="n">best_fitted_orbit</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="p">(</span>
-            <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">success</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
-            <span class="ow">and</span> <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">reduced_chi2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
-            <span class="o">&lt;</span> <span class="n">best_fitted_orbit</span><span class="o">.</span><span class="n">reduced_chi2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+        <span class="n">rchi2</span> <span class="o">=</span> <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">reduced_chi2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
+        <span class="n">rchi2_key</span> <span class="o">=</span> <span class="n">rchi2</span> <span class="k">if</span> <span class="n">rchi2</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+        <span class="k">if</span> <span class="n">fallback_fit</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">rchi2_key</span> <span class="o">&lt;</span> <span class="n">fallback_rchi2</span><span class="p">:</span>
+            <span class="n">fallback_fit</span> <span class="o">=</span> <span class="p">(</span><span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span><span class="p">)</span>
+            <span class="n">fallback_rchi2</span> <span class="o">=</span> <span class="n">rchi2_key</span>
+        <span class="k">if</span> <span class="nb">bool</span><span class="p">(</span><span class="n">fitted_orbit</span><span class="o">.</span><span class="n">success</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">())</span> <span class="ow">and</span> <span class="p">(</span>
+            <span class="n">best_fit</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="n">rchi2_key</span> <span class="o">&lt;</span> <span class="n">best_rchi2</span>
         <span class="p">):</span>
-            <span class="n">best_fitted_orbit</span> <span class="o">=</span> <span class="n">fitted_orbit</span>
-            <span class="n">best_fitted_orbit_members</span> <span class="o">=</span> <span class="n">fitted_orbit_members</span>
+            <span class="n">best_fit</span> <span class="o">=</span> <span class="p">(</span><span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span><span class="p">)</span>
+            <span class="n">best_rchi2</span> <span class="o">=</span> <span class="n">rchi2_key</span>
 
         <span class="c1"># Check convergence</span>
-        <span class="n">rchi2</span> <span class="o">=</span> <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">reduced_chi2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">rchi2</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">rchi2</span> <span class="o">&lt;=</span> <span class="n">rchi2_threshold</span><span class="p">:</span>
             <span class="k">break</span>
 
@@ -1523,7 +1575,11 @@
 
         <span class="n">ignore</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obs_id</span><span class="p">)</span>
 
-    <span class="k">return</span> <span class="n">best_fitted_orbit</span><span class="p">,</span> <span class="n">best_fitted_orbit_members</span></div>
+    <span class="k">if</span> <span class="n">best_fit</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="c1"># No pass converged; the loop ran at least once so a fallback exists.</span>
+        <span class="k">assert</span> <span class="n">fallback_fit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="n">best_fit</span> <span class="o">=</span> <span class="n">fallback_fit</span>
+    <span class="k">return</span> <span class="n">best_fit</span></div>
 
 </pre></div>
         </article>
@@ -1543,7 +1599,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-22</div>
+              Last updated on 2026-09-23</div>
           </div>
           <div class="right-details">
             

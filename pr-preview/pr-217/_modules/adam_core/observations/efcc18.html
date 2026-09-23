@@ -654,15 +654,18 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    path : Path</span>
-<span class="sd">        The first existing candidate among: ``path``, the</span>
-<span class="sd">        ``ADAM_CORE_EFCC18_BIAS_DAT`` environment variable, the ``bias.dat``</span>
-<span class="sd">        shipped by the installed ``jpl_debias_2018`` package, and ``bias.dat``</span>
-<span class="sd">        in `efcc18_cache_dir`.</span>
+<span class="sd">        ``path`` if given, else the ``ADAM_CORE_EFCC18_BIAS_DAT`` environment</span>
+<span class="sd">        variable if set; both must point at an existing file and neither falls</span>
+<span class="sd">        through to the next candidate. Otherwise the first existing of the</span>
+<span class="sd">        ``bias.dat`` shipped by the installed ``jpl_debias_2018`` package and</span>
+<span class="sd">        ``bias.dat`` in `efcc18_cache_dir`.</span>
 
 <span class="sd">    Raises</span>
 <span class="sd">    ------</span>
 <span class="sd">    FileNotFoundError</span>
-<span class="sd">        If no candidate exists. The message explains how to populate the cache.</span>
+<span class="sd">        If an explicit ``path`` or a set ``ADAM_CORE_EFCC18_BIAS_DAT`` does not</span>
+<span class="sd">        point at a file, or if no fallback candidate exists. The message</span>
+<span class="sd">        explains how to populate the cache.</span>
 <span class="sd">    """</span>
     <span class="k">if</span> <span class="n">path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">candidate</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">expanduser</span><span class="p">()</span>
@@ -1131,7 +1134,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-22</div>
+              Last updated on 2026-09-23</div>
           </div>
           <div class="right-details">
             

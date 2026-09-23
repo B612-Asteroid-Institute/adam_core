@@ -530,7 +530,10 @@ residual evaluations) and check it is ~1. On failure the analytic
 path falls back to the central-difference covariance; other paths
 emit a <cite>RuntimeWarning</cite>. This also serves as the guard against
 planetary encounters inside the arc invalidating the 2-body state
-transition matrix.</p></li>
+transition matrix. On the fused Rust path (<code class="docutils literal notranslate"><span class="pre">jacobian=&quot;2-point&quot;</span></code>
+with a Rust-backed propagator) the check adds three residual
+evaluations to the single native crossing and warns on failure; pass
+<code class="docutils literal notranslate"><span class="pre">False</span></code> to keep that path to one crossing.</p></li>
 <li><p><strong>loss</strong> (<em>{&quot;linear&quot;</em><em>, </em><em>&quot;huber&quot;}</em><em>, </em><em>optional</em>) – <p>Loss applied to the whitened residual components.</p>
 <ul>
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;linear&quot;</span></code> (default): ordinary weighted least squares; the
@@ -629,7 +632,9 @@ components; see <cite>fit_least_squares</cite>. Ignored for <code class="docutil
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
 <dd class="field-even"><p><ul class="simple">
-<li><p><strong>fitted_orbit</strong> (<cite>~adam_core.orbit_determination.FittedOrbits</cite> (1)) – Best fitted orbit found.</p></li>
+<li><p><strong>fitted_orbit</strong> (<cite>~adam_core.orbit_determination.FittedOrbits</cite> (1)) – Best fitted orbit found: the lowest reduced chi2 among the passes
+whose fit succeeded (converged) or, if none did, the lowest reduced
+chi2 overall (<code class="docutils literal notranslate"><span class="pre">success</span></code> is then False).</p></li>
 <li><p><strong>fitted_orbit_members</strong> (<cite>~adam_core.orbit_determination.FittedOrbitMembers</cite> (N)) – Fitted orbit members with residuals, outlier flags and weights.</p></li>
 </ul>
 </p>
@@ -674,7 +679,7 @@ components; see <cite>fit_least_squares</cite>. Ignored for <code class="docutil
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-22</div>
+              Last updated on 2026-09-23</div>
           </div>
           <div class="right-details">
             

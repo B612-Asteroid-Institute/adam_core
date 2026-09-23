@@ -470,6 +470,7 @@
 <span class="sd">        Propagator *class* (not instance) used during IOD ephemeris evaluation.</span>
 <span class="sd">    propagator_kwargs : dict, optional</span>
 <span class="sd">        Keyword arguments forwarded to the propagator constructor / IOD call.</span>
+<span class="sd">        Copied; default None means no arguments.</span>
 <span class="sd">    min_obs : int, optional</span>
 <span class="sd">        Minimum number of observations required for a valid fit.  Default 6.</span>
 <span class="sd">    min_arc_length : float, optional</span>
@@ -519,7 +520,7 @@
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">propagator_class</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Propagator</span><span class="p">],</span>
-        <span class="n">propagator_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{},</span>
+        <span class="n">propagator_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
         <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
         <span class="n">contamination_percentage</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">20.0</span><span class="p">,</span>
@@ -539,7 +540,7 @@
                 <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="n">outlier_rejection</span><span class="si">!r}</span><span class="s2">"</span>
             <span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">propagator_class</span> <span class="o">=</span> <span class="n">propagator_class</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span> <span class="o">=</span> <span class="n">propagator_kwargs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">propagator_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">min_obs</span> <span class="o">=</span> <span class="n">min_obs</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">min_arc_length</span> <span class="o">=</span> <span class="n">min_arc_length</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">contamination_percentage</span> <span class="o">=</span> <span class="n">contamination_percentage</span>
@@ -688,7 +689,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-22</div>
+              Last updated on 2026-09-23</div>
           </div>
           <div class="right-details">
             

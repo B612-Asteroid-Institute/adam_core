@@ -726,16 +726,19 @@ lookup runs in the Rust port of healpy’s <code class="docutils literal notrans
 <dd class="field-odd"><p><strong>path</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em> or </em><em>Path</em><em>, </em><em>optional</em>) – Explicit location. If given it must exist.</p>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>path</strong> – The first existing candidate among: <code class="docutils literal notranslate"><span class="pre">path</span></code>, the
-<code class="docutils literal notranslate"><span class="pre">ADAM_CORE_EFCC18_BIAS_DAT</span></code> environment variable, the <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>
-shipped by the installed <code class="docutils literal notranslate"><span class="pre">jpl_debias_2018</span></code> package, and <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code>
-in <cite>efcc18_cache_dir</cite>.</p>
+<dd class="field-even"><p><strong>path</strong> – <code class="docutils literal notranslate"><span class="pre">path</span></code> if given, else the <code class="docutils literal notranslate"><span class="pre">ADAM_CORE_EFCC18_BIAS_DAT</span></code> environment
+variable if set; both must point at an existing file and neither falls
+through to the next candidate. Otherwise the first existing of the
+<code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> shipped by the installed <code class="docutils literal notranslate"><span class="pre">jpl_debias_2018</span></code> package and
+<code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> in <cite>efcc18_cache_dir</cite>.</p>
 </dd>
 <dt class="field-odd">Return type<span class="colon">:</span></dt>
 <dd class="field-odd"><p>Path</p>
 </dd>
 <dt class="field-even">Raises<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If no candidate exists. The message explains how to populate the cache.</p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#FileNotFoundError" title="(in Python v3.14)"><strong>FileNotFoundError</strong></a> – If an explicit <code class="docutils literal notranslate"><span class="pre">path</span></code> or a set <code class="docutils literal notranslate"><span class="pre">ADAM_CORE_EFCC18_BIAS_DAT</span></code> does not
+    point at a file, or if no fallback candidate exists. The message
+    explains how to populate the cache.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -777,7 +780,7 @@ in <cite>efcc18_cache_dir</cite>.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-22</div>
+              Last updated on 2026-09-23</div>
           </div>
           <div class="right-details">
             
