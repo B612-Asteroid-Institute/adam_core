@@ -90,6 +90,61 @@ Runnable Example
    non_outlier = evaluated_members.apply_mask(pc.invert(evaluated_members.outlier))
    print(non_outlier.group_by("orbit_id").aggregate([("obs_id", "count")]))
 
+Fit-Time Observation Models and Provenance
+------------------------------------------
+
+``run_od`` is the blessed entry point when the provenance of a fit matters.
+It applies observation models to the ORIGINAL observations at fit time,
+drives any ``OrbitFitter`` backend (``NativeOrbitFitter``: Gauss IOD followed
+by differential correction; plugins such as adam_fo override ``full_od``), and
+returns members carrying the original and the used astrometry of every
+observation. The models never reach the fitter; it receives pre-transformed
+observations, so the ``OrbitFitter`` interface stays flag-free.
+
+* ``EFCC18DebiasModel`` subtracts the Eggl et al. (2020) star-catalog bias
+  from the observed positions (JPL's ``bias.dat`` in HEALPix RING order,
+  keyed on the ``astcat`` column carried by
+  ``OrbitDeterminationObservations.from_ades``). It is the one shipped model
+  that moves positions.
+* ``EmpiricalCovarianceModel``, ``PerformanceWeightedModel`` and
+  ``SigmaFloorModel`` interpret an observatory bias table
+  (``BIAS_TABLE_SCHEMA``) as covariance only; ``NightBatchDeweightingModel``
+  and the VFC2017 ``VeresFloorModel`` / ``VeresReplaceModel`` need no table.
+  None of them changes a position.
+* ``CompositeModel`` (or a plain sequence) applies models left to right.
+
+.. code-block:: python
+
+   from adam_core.orbit_determination import (
+       CompositeModel,
+       EFCC18DebiasModel,
+       EmpiricalCovarianceModel,
+       NativeOrbitFitter,
+       run_od,
+   )
+
+   fitter = NativeOrbitFitter(
+       propagator_class=ASSISTPropagator,
+       loss="huber",                     # bounded influence of gross residuals
+       outlier_rejection="cmc2003",      # Carpino-Milani-Chesley reject/re-include
+   )
+   fitted_orbits, members = run_od(
+       observations,
+       fitter,
+       CompositeModel(EFCC18DebiasModel(), EmpiricalCovarianceModel(bias_table)),
+       propagator=ASSISTPropagator(),
+       object_id="2024 XY",
+   )
+   # members.original_astrometry vs members.used_astrometry show what the fit saw;
+   # members.weight holds the Huber weights, members.astcat the star catalog.
+
+``fit_least_squares`` itself minimizes the whitened (lon, lat) residuals with
+an exact two-body Jacobian (Rust autodiff) and validates the covariance along
+its weakest direction, so line-of-sight uncertainties are no longer fabricated
+by finite differences. Pass ``jacobian="2-point"`` to reach a propagator's
+fused Rust Gauss-Newton work unit with the legacy forward-difference
+covariance.
+
 When to Use This Pattern
 ------------------------
 

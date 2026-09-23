@@ -21,6 +21,7 @@ from . import (
     drop_duplicate_orbits,
 )
 from .gauss import MU, C, gaussIOD
+from .observation_uncertainty import ObservationUncertaintyModel
 from .outliers import calculate_max_outliers
 
 logger = logging.getLogger(__name__)
@@ -314,6 +315,7 @@ def iod(
     iterate: bool = False,
     light_time: bool = True,
     propagator_kwargs: dict = {},
+    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
     Run initial orbit determination on a set of observations believed to belong to a single
@@ -349,6 +351,11 @@ def iod(
     propagator_kwargs : dict, optional
         Settings and additional parameters to pass to selected
         propagator.
+    observatory_bias_model : `~adam_core.orbit_determination.ObservationUncertaintyModel`, optional
+        Observation uncertainty model applied to the observations before fitting
+        (e.g. inflating per-station sigmas from an observatory bias table). Default
+        None leaves the observations unchanged. The model is applied once at this
+        entry point and is not forwarded to nested calls.
 
     Returns
     -------
@@ -379,6 +386,11 @@ def iod(
             "outlier" : Flag to indicate which observations are potential outliers (their chi2 is higher than
                 the chi2 threshold) [float]
     """
+    # Apply the observatory bias model (if any) before fitting: inflates the
+    # observation uncertainties once at this entry point.
+    if observatory_bias_model is not None:
+        observations = observatory_bias_model.apply(observations)
+
     # Initialize the propagator
     prop = propagator(**propagator_kwargs)
 
@@ -609,12 +621,21 @@ def initial_orbit_determination(
     propagator_kwargs: dict = {},
     chunk_size: int = 1,
     max_processes: Optional[int] = 1,
+    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
     Run initial orbit determination on linkages found in observations.
+
+    If `observatory_bias_model` is provided it is applied to the observations
+    once at this entry point (e.g. inflating per-station sigmas from an
+    observatory bias table) before any orbits are fit; the default None
+    leaves the observations unchanged.
     """
     time_start = time.perf_counter()
     logger.info("Running initial orbit determination...")
+
+    if observatory_bias_model is not None:
+        observations = observatory_bias_model.apply(observations)
 
     # The supported native provider owns the entire multi-linkage workflow in
     # one crossing; chunk_size is consumed by Rust and max_processes is kept

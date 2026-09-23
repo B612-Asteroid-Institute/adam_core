@@ -25,6 +25,22 @@ the 44-row parity registry is only a benchmark subset.
 | `iod_worker`, linkage IOD, and `initial_orbit_determination` | fused Rust orchestration through the selected backend; Python supplies nondeterministic IDs and fallback for unsupported providers | full-linkage fixture, root/order tests, ASSIST integration, timing |
 | top-level OD batch and scheduling parameters | Rust/ASSIST scheduling; historical Ray parameters are signature-compatible no-ops; `iod_worker_remote` and `od_worker_remote` are retired | serial/parallel parity and no-Ray import tests |
 
+## Fit-time observation models and robust differential correction
+
+Added 2026-09-16 (branch `od-obs-uncertainty-rust`, reimplementing the Python
+`kk/obs-uncertainty-interface` branch at `d56114ac`). Rust owns every
+per-observation arithmetic; Python owns the quivr tables, schema validation and
+the fitter orchestration that drives a supplied `Propagator`.
+
+| Surface group | Disposition | Evidence |
+|---|---|---|
+| `ObservationUncertaintyModel` interpreters (`EmpiricalCovarianceModel`, `PerformanceWeightedModel`, `SigmaFloorModel`, `NightBatchDeweightingModel`, `CompositeModel`, `IdentityModel`) | one Rust crossing per `apply` (`bias_table_model_apply`, `night_batch_deweighting_model_apply`); `validate_bias_table` is pyarrow schema work | Rust unit tests, Python unit tests, Python-baseline parity fixture (positions provably unchanged) |
+| `EFCC18DebiasModel`, VFC2017 `VeresFloorModel` / `VeresReplaceModel`, `veres2017_sigma_table` | Rust-owned table, lookup and arithmetic (`efcc18_debias_model_apply`, `veres_model_apply`, `veres_sigma_lookup`) | RING tile-index parity vs JPL `tiles.dat`, healpy oracle test, Python-baseline parity fixture |
+| `OrbitDeterminationObservations.from_ades` / `astcat` | Rust `ades_angular_covariance` kernel; table assembly and `Observers.from_codes` crossing in Python | unit tests, parity fixture |
+| `fit_least_squares` (whitened residuals, analytic Jacobian, Huber loss, weak-direction probe), `iterative_fit` | Rust kernels for whitening, the `Dual<6>` 2-body Jacobian and the robust-loss helpers; scipy trust-region optimizer and N-body residuals through the supplied `Propagator` stay Python (explicit provider boundary); `jacobian="2-point"` + linear loss dispatches to a propagator's fused Rust work units | synthetic 2-body/linear fixtures, Python-baseline parity fixture (state 1e-9 rel, covariance 1e-6 rel) |
+| `cmc2003_fit`, `cmc2003_fit_detailed` | Rust decision kernels (`cmc2003_apparitions`, `cmc2003_expected_residual_chi2`, `cmc2003_select`); Python refit loop | hand-built rule tests, outlier-injection integration tests, parity fixture |
+| `run_od`, `apply_observation_models`, `attach_observation_provenance`, `ObservationAstrometry`, `OrbitFitter.refine_fit` / `full_od`, `NativeOrbitFitter` | Python orchestration over pyarrow joins and the `OrbitFitter` plugin boundary (adam_fo overrides `full_od`); `sqrt_values` Rust kernel for sigmas | orchestration unit tests, end-to-end `Composite([EFCC18Debias, EmpiricalCovariance])` provenance test |
+
 ## Impacts and associations
 
 | Surface group | Disposition | Evidence |

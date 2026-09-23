@@ -873,6 +873,49 @@ pub fn ades_parse_obs_contexts(ades_string: &str) -> SchemaResult<String> {
         .map_err(|err| invalid(format!("failed to encode ObsContexts: {err}")))
 }
 
+/// `(N, 36)` row-major spherical covariance (degrees²) from ADES angular
+/// uncertainties, as `OrbitDeterminationObservations.from_ades` builds it:
+/// `rmsRACosDec` / `rmsDec` are arcseconds with the RA uncertainty scaled by
+/// cos(dec), so the lon sigma is `rmsRACosDec / 3600 / cos(dec)` (NaN when
+/// cos(dec) is zero) and the lat sigma `rmsDec / 3600`; a null `rmsCorr` is a
+/// zero correlation. Null uncertainties (NaN) yield NaN variances -- no
+/// uncertainty is invented here -- and every entry outside the (lon, lat)
+/// block is NaN (unset).
+pub fn ades_angular_covariance_flat(
+    dec_deg: &[f64],
+    rms_ra_cos_dec: &[f64],
+    rms_dec: &[f64],
+    rms_corr: &[f64],
+) -> SchemaResult<Vec<f64>> {
+    let n = dec_deg.len();
+    if rms_ra_cos_dec.len() != n || rms_dec.len() != n || rms_corr.len() != n {
+        return Err(invalid(
+            "dec, rmsRACosDec, rmsDec and rmsCorr must have equal length".to_string(),
+        ));
+    }
+    let mut covariance = vec![f64::NAN; n * 36];
+    for row in 0..n {
+        let cos_dec = dec_deg[row].to_radians().cos();
+        let sigma_lon = if cos_dec != 0.0 {
+            rms_ra_cos_dec[row] / 3600.0 / cos_dec
+        } else {
+            f64::NAN
+        };
+        let sigma_lat = rms_dec[row] / 3600.0;
+        let corr = if rms_corr[row].is_finite() {
+            rms_corr[row]
+        } else {
+            0.0
+        };
+        let block = &mut covariance[row * 36..(row + 1) * 36];
+        block[7] = sigma_lon * sigma_lon;
+        block[14] = sigma_lat * sigma_lat;
+        block[8] = corr * sigma_lon * sigma_lat;
+        block[13] = block[8];
+    }
+    Ok(covariance)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

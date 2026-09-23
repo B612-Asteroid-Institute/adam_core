@@ -17,6 +17,7 @@ from ..propagator import Propagator
 from ..time import Timestamp
 from ..utils.iter import _iterate_chunks
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
+from .observation_uncertainty import ObservationUncertaintyModel
 from .outliers import calculate_max_outliers
 
 logger = logging.getLogger(__name__)
@@ -197,7 +198,13 @@ def od(
     max_iter: int = 20,
     method: Literal["central", "finite"] = "central",
     propagator_kwargs: dict = {},
+    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    # Apply the observatory bias model (if any) before fitting: inflates the
+    # observation uncertainties once at this entry point.
+    if observatory_bias_model is not None:
+        observations = observatory_bias_model.apply(observations)
+
     # Intialize the propagator
     prop = propagator(**propagator_kwargs)
 
@@ -648,6 +655,7 @@ def differential_correction(
     max_processes: Optional[int] = 1,
     orbit_ids: Optional[npt.NDArray[np.str_]] = None,
     obs_ids: Optional[npt.NDArray[np.str_]] = None,
+    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
     Differentially correct (via finite/central differencing).
@@ -661,9 +669,16 @@ def differential_correction(
     parallel_backend : str, optional
         Which parallelization backend to use {'ray', 'mp', 'cf'}. Defaults to using Python's concurrent.futures
         module ('cf').
+    observatory_bias_model : `~adam_core.orbit_determination.ObservationUncertaintyModel`, optional
+        Observation uncertainty model applied to the observations once at this
+        entry point before fitting. Default None leaves the observations unchanged.
     """
     time_start = time.perf_counter()
     logger.info("Running differential correction...")
+    if observatory_bias_model is not None:
+        # Applied once here, before any fitting, so every orbit sees the
+        # transformed uncertainties.
+        observations = observatory_bias_model.apply(observations)
     # Object-store inputs were part of the retired Ray execution contract.
     # Plain-table filtering remains available through the compatibility
     # selectors and occurs before the serial provider fallback.

@@ -111,6 +111,21 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "transform_coordinates_with_covariance_numpy",
     "weighted_covariance_numpy",
     "weighted_mean_numpy",
+    # Observation uncertainty models, EFCC18 debiasing, VFC2017 sigmas and the
+    # whitened-residual / CMC2003 differential-correction kernels.
+    "bias_table_model_apply_numpy",
+    "night_batch_deweighting_model_apply_numpy",
+    "efcc18_debias_model_apply_numpy",
+    "efcc18_ra_dec_to_healpix_numpy",
+    "efcc18_parse_bias_dat",
+    "efcc18_corrections_numpy",
+    "veres_model_apply_numpy",
+    "veres2017_sigma_table_columns",
+    "ades_angular_covariance_numpy",
+    "observation_whitening_matrices_numpy",
+    "whitened_2body_jacobian_numpy",
+    "robust_cost_numpy",
+    "cmc2003_select_numpy",
 )
 
 _missing_native_symbols = tuple(

@@ -120,6 +120,63 @@ Current Migrated APIs
   - Backend default: legacy path, with Rust path held in ``dual`` mode pending +20% p50/p95 perf gate.
   - Error behavior: velocity-method validation raises ``ValueError`` for unsupported solver names.
 
+- ``orbit_determination.fit_least_squares`` (whitened residuals, analytic Jacobian, robust loss)
+  - Boundary: NumPy ``float64`` arrays; the scipy trust-region optimizer and the
+    N-body residual evaluation through the supplied ``Propagator`` remain a
+    Python provider boundary, while the numerics it needs run in Rust.
+  - Rust entrypoints: ``adam_core._rust_native.observation_whitening_matrices_numpy``
+    (``(N, 6, 6)`` covariance + ``(N,)`` latitude -> ``(N, 2, 2)`` inverse Cholesky
+    factors), ``whiten_residual_pairs_numpy``, ``whitened_2body_jacobian_numpy``
+    (``(2N, 6)`` forward-mode autodiff Jacobian of the whitened 2-body model;
+    barycentric ecliptic observer and Sun states in), ``robust_cost_numpy`` /
+    ``robust_weights_numpy`` / ``robust_jacobian_scale_numpy`` and
+    ``validate_robust_loss``.
+  - Error behavior: raises ``ValueError`` naming the observation whose
+    (lon, lat) covariance block is non-finite or not positive definite, on shape
+    mismatch, and on an unknown loss or non-positive ``f_scale``.
+  - Dispatch: ``jacobian="2-point"`` with ``loss="linear"`` and no scipy kwargs
+    routes to a propagator's fused ``fit_least_squares_evaluated`` /
+    ``fit_least_squares`` Rust work units (forward-difference Gauss-Newton).
+
+- ``orbit_determination.cmc2003_fit`` / ``cmc2003_fit_detailed``
+  - Boundary: NumPy arrays per pass; the refit loop is Python.
+  - Rust entrypoints: ``adam_core._rust_native.cmc2003_apparitions_numpy``,
+    ``cmc2003_expected_residual_chi2_numpy`` (``(N, 2)`` whitened residuals,
+    ``(2N, 6)`` Jacobian, optional ``(6, 6)`` covariance, selection mask),
+    ``cmc2003_select_numpy``.
+  - Error behavior: raises ``ValueError`` on shape mismatch.
+
+- ``orbit_determination`` observation uncertainty models
+  - Boundary: NumPy ``(N, 6, 6)`` covariance plus Python lists of station codes,
+    bands and star catalogs; the quivr table is rebuilt in Python only when Rust
+    reports a change (``None`` return = input object returned untouched).
+  - Rust entrypoints: ``adam_core._rust_native.bias_table_model_apply_numpy``
+    (``empirical_covariance`` / ``performance_weighted`` / ``sigma_floor``),
+    ``night_batch_deweighting_model_apply_numpy``,
+    ``efcc18_debias_model_apply_numpy`` (positions), ``veres_model_apply_numpy``
+    (``floor`` / ``replace``), ``veres_sigma_lookup_numpy``,
+    ``veres2017_sigma_table_columns``, ``ades_angular_covariance_numpy``.
+  - Position rule: every model except ``efcc18_debias_model_apply`` leaves the
+    lon/lat columns untouched; ``efcc18_debias_model_apply`` leaves the
+    covariance untouched.
+  - Error behavior: raises ``ValueError`` on duplicate ``(obs_code, band)`` bias
+    rows, an unknown ``mode``/``model``, a non-positive ``cap`` or sigma, and
+    on shape mismatch.
+
+- ``observations.efcc18`` (star-catalog debiasing)
+  - Boundary: NumPy ``float64`` RA/Dec/JD arrays and Python catalog lists; the
+    ``(49152, 26, 4)`` float32 table crosses as a contiguous NumPy array.
+  - Rust entrypoints: ``adam_core._rust_native.efcc18_ra_dec_to_healpix_numpy``
+    (``N_side = 64`` RING, the healpix_cxx ``ang2pix`` port),
+    ``efcc18_parse_bias_dat``, ``efcc18_read_bias_version``,
+    ``efcc18_catalog_columns_numpy``, ``efcc18_corrections_numpy``,
+    ``healpix_ang2pix_lonlat_numpy``.
+  - Contract: row ``k`` of ``bias.dat`` is HEALPix ring pixel ``k``; the Rust
+    test suite pins the 8 published ``tiles.dat`` anchors and, when
+    ``ADAM_CORE_EFCC18_TILES_DAT`` names a local copy, all 49152 tile centres.
+  - Error behavior: raises ``ValueError`` on a malformed table layout, a wrong
+    table shape, or a colatitude outside ``[0, pi]``.
+
 Fallback and Waivers
 --------------------
 
