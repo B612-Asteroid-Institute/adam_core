@@ -115,12 +115,29 @@ class TestValidateTable:
         with pytest.raises(ValueError, match="missing required columns"):
             validate_veres_sigma_table(SMALL_TABLE.drop_columns(["sigma_dec_arcsec"]))
 
-    def test_null_astcat_raises(self) -> None:
-        bad = SMALL_TABLE.set_column(
-            1, "astcat", pa.array(["Gaia2", None, "Gaia2"], pa.large_string())
+    def test_null_astcat_is_a_station_or_global_row(self) -> None:
+        # astcat null is legal: station-only rows (obs_code set) and ONE
+        # global row (both null); a second global row raises.
+        t = pa.table(
+            {
+                "obs_code": pa.array(["703", None], pa.large_string()),
+                "astcat": pa.array([None, None], pa.large_string()),
+                "sigma_ra_arcsec": pa.array([0.5, 0.4], pa.float64()),
+                "sigma_dec_arcsec": pa.array([0.5, 0.4], pa.float64()),
+            }
         )
-        with pytest.raises(ValueError, match="astcat"):
-            validate_veres_sigma_table(bad)
+        validated = validate_veres_sigma_table(t)
+        assert validated.num_rows == 2
+        two_global = pa.table(
+            {
+                "obs_code": pa.array([None, None], pa.large_string()),
+                "astcat": pa.array([None, None], pa.large_string()),
+                "sigma_ra_arcsec": pa.array([0.5, 0.4], pa.float64()),
+                "sigma_dec_arcsec": pa.array([0.5, 0.4], pa.float64()),
+            }
+        )
+        with pytest.raises(ValueError, match="at most one global row"):
+            validate_veres_sigma_table(two_global)
 
     def test_non_positive_sigma_raises(self) -> None:
         bad = SMALL_TABLE.set_column(
