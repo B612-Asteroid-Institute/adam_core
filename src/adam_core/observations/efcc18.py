@@ -212,15 +212,18 @@ def resolve_bias_dat(path: Optional[Union[str, Path]] = None) -> Path:
     Returns
     -------
     path : Path
-        The first existing candidate among: ``path``, the
-        ``ADAM_CORE_EFCC18_BIAS_DAT`` environment variable, the ``bias.dat``
-        shipped by the installed ``jpl_debias_2018`` package, and ``bias.dat``
-        in `efcc18_cache_dir`.
+        ``path`` if given, else the ``ADAM_CORE_EFCC18_BIAS_DAT`` environment
+        variable if set; both must point at an existing file and neither falls
+        through to the next candidate. Otherwise the first existing of the
+        ``bias.dat`` shipped by the installed ``jpl_debias_2018`` package and
+        ``bias.dat`` in `efcc18_cache_dir`.
 
     Raises
     ------
     FileNotFoundError
-        If no candidate exists. The message explains how to populate the cache.
+        If an explicit ``path`` or a set ``ADAM_CORE_EFCC18_BIAS_DAT`` does not
+        point at a file, or if no fallback candidate exists. The message
+        explains how to populate the cache.
     """
     if path is not None:
         candidate = Path(path).expanduser()

@@ -8,12 +8,26 @@ try:
 except ImportError:
     PYOORBPropagator = None
 
+from ...propagator.propagator import Propagator
 from ..native_orbit_fitter import NativeOrbitFitter
 from ..orbit_fitter import OrbitFitter
 
 
 def test_native_orbit_fitter_is_orbit_fitter():
     assert issubclass(NativeOrbitFitter, OrbitFitter)
+
+
+def test_native_orbit_fitter_propagator_kwargs_are_not_shared():
+    """The default propagator_kwargs must not be one dict shared by every
+    default-constructed fitter, and a caller's dict must be copied."""
+    first = NativeOrbitFitter(propagator_class=Propagator)
+    first.propagator_kwargs["mutated"] = True
+    assert NativeOrbitFitter(propagator_class=Propagator).propagator_kwargs == {}
+
+    supplied = {"a": 1}
+    fitter = NativeOrbitFitter(propagator_class=Propagator, propagator_kwargs=supplied)
+    supplied["b"] = 2
+    assert fitter.propagator_kwargs == {"a": 1}
 
 
 @pytest.mark.skipif(PYOORBPropagator is None, reason="PYOORBPropagator not available")

@@ -46,7 +46,18 @@ This file contains notable changes in adam-core
 - `fit_least_squares` defaults to `jacobian="analytic"`; the fused Rust
   Gauss-Newton work units of a propagator (`fit_least_squares_evaluated` /
   `fit_least_squares`) are reached with `jacobian="2-point"` and the linear
-  loss, matching their forward-difference covariance.
+  loss, matching their forward-difference covariance. The default therefore
+  runs the scipy solver with one N-body ephemeris per residual evaluation,
+  plus the two-evaluation covariance probe and, when it fails, a
+  twelve-evaluation central-difference fallback, on every rejection pass,
+  instead of a single native crossing; choose `jacobian="2-point"` where the
+  legacy covariance is acceptable and throughput matters. With
+  `validate_covariance=True` (the default) the fused path now runs the same
+  weak-direction probe on the native covariance and warns when it fails.
+- `OrbitFitter.refine_fit` joins the fitter interface with a default that
+  raises `NotImplementedError`, so fitters implementing only `initial_fit`
+  (for example `adam_fo` releases predating this method) stay instantiable and
+  usable for `initial_fit`; `full_od` and `run_od` require an override.
 - The compiled Rust extension is now required. Public Python functions remain
   compatibility veneers while numerical, table, product, query, and
   orchestration work executes in Rust.
@@ -64,6 +75,14 @@ This file contains notable changes in adam-core
 - `gaussIOD(mu=...)` now uses the supplied central-body gravitational parameter
   consistently for candidate geometry and velocity. The legacy implementation
   incorrectly reverted to the solar constant inside its velocity helpers.
+
+### Fixed
+
+- `iterative_fit` returns the lowest reduced chi2 among the passes whose fit
+  succeeded, falling back to the lowest overall only when no pass converged;
+  previously a failed first pass was kept over a later converged fit.
+- `NativeOrbitFitter` copies `propagator_kwargs` instead of sharing one
+  mutable default dictionary across instances.
 
 ### Compatibility
 

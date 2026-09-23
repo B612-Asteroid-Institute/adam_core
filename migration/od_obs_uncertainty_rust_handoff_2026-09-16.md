@@ -57,7 +57,11 @@ scipy optimizer driving a user-supplied `Propagator`:
   / `fit_least_squares`) is therefore reached only with `jacobian="2-point"`,
   `loss="linear"` and no scipy kwargs: it uses the same forward-difference
   Jacobian whose covariance the analytic path exists to correct. Members from
-  that path now also carry `weight` (1 / 0).
+  that path now also carry `weight` (1 / 0), and with `validate_covariance=True`
+  (the default) the native covariance is put through the same weak-direction
+  probe (three extra residual evaluations; a `RuntimeWarning` on failure, the
+  fit unchanged) — pass `validate_covariance=False` for the single-crossing
+  behaviour of `main`.
 * **`od.differential_correction` is not deprecated** (the Python branch
   deprecated it in favor of `iterative_fit`); on `main` it is a Rust-backed
   supported entry point. It gained `observatory_bias_model` like the others.

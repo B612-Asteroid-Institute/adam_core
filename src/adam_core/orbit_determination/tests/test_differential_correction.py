@@ -33,7 +33,11 @@ from ..differential_correction import (
     fit_least_squares,
     residual_function,
 )
-from ..evaluate import OrbitDeterminationObservations, OrbitDeterminationPhotometry
+from ..evaluate import (
+    OrbitDeterminationObservations,
+    OrbitDeterminationPhotometry,
+    evaluate_orbits,
+)
 
 TRUTH_STATE = np.array([0.9, 0.5, 0.05, -0.008, 0.012, 0.0005])
 EPOCH_MJD_TDB = 61000.0
@@ -580,3 +584,108 @@ def test_fit_least_squares_fused_ignore_marks_outliers(pure_iod_orbit):
     assert fitted_members.weight.to_pylist() == [
         0.0 if obs_id in ignore else 1.0 for obs_id in observations.id.to_pylist()
     ]
+
+
+class FusedTwoBodyPropagator(TwoBodyPropagator):
+    """
+    `TwoBodyPropagator` posing as a Rust backend whose fused
+    ``fit_least_squares_evaluated`` work unit returns a scripted state and
+    covariance (the real work unit's forward-difference ``inv(J^T J)``), with
+    the evaluation columns filled from `evaluate_orbits` at that state.
+    """
+
+    def __init__(self, state, covariance):
+        self._state = np.asarray(state, dtype=np.float64)
+        self._covariance = np.asarray(covariance, dtype=np.float64)
+
+    def fit_least_squares_evaluated(self, orbit, observations, ignore_mask, **kwargs):
+        fitted = Orbits.from_kwargs(
+            orbit_id=orbit.orbit_id,
+            object_id=orbit.object_id,
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=self._state[0:1],
+                y=self._state[1:2],
+                z=self._state[2:3],
+                vx=self._state[3:4],
+                vy=self._state[4:5],
+                vz=self._state[5:6],
+                time=orbit.coordinates.time,
+                origin=orbit.coordinates.origin,
+                frame=orbit.coordinates.frame,
+            ),
+        )
+        evaluated, members = evaluate_orbits(fitted, observations, self, parameters=6)
+        return {
+            "state": self._state,
+            "covariance": self._covariance.reshape(36),
+            "converged": True,
+            "arc_length": evaluated.arc_length[0].as_py(),
+            "num_obs": evaluated.num_obs[0].as_py(),
+            "chi2": evaluated.chi2[0].as_py(),
+            "reduced_chi2": evaluated.reduced_chi2[0].as_py(),
+            "iterations": 3,
+            "residual_values": members.residuals.to_array(),
+            "residual_chi2": members.residuals.chi2.to_pylist(),
+            "residual_dof": members.residuals.dof.to_pylist(),
+            "residual_probability": members.residuals.probability.to_pylist(),
+            "outlier": list(ignore_mask),
+        }
+
+
+def _consistency_warnings(records):
+    return [
+        r
+        for r in records
+        if issubclass(r.category, RuntimeWarning)
+        and "weak-direction consistency check" in str(r.message)
+    ]
+
+
+def test_fused_path_validates_covariance_when_requested():
+    """validate_covariance=True must probe the covariance handed back by a
+    propagator's fused work unit and warn when the chi2 surface disagrees with
+    it, as the scipy forward-difference path does; the fit itself is unchanged
+    and validate_covariance=False keeps the path to its single native crossing."""
+    observations = make_synthetic_observations()
+    # Claims ~1e-10 au precision: chi2 is flat over many claimed sigma.
+    fabricated = np.eye(6) * 1e-20
+    propagator = FusedTwoBodyPropagator(TRUTH_STATE, fabricated)
+
+    with warnings.catch_warnings(record=True) as records:
+        warnings.simplefilter("always")
+        fitted_orbit, _members = fit_least_squares(
+            make_initial_guess(), observations, propagator, jacobian="2-point"
+        )
+    assert len(_consistency_warnings(records)) == 1
+    npt.assert_array_equal(
+        fitted_orbit.coordinates.covariance.to_matrix()[0], fabricated
+    )
+
+    with warnings.catch_warnings(record=True) as records:
+        warnings.simplefilter("always")
+        fit_least_squares(
+            make_initial_guess(),
+            observations,
+            propagator,
+            jacobian="2-point",
+            validate_covariance=False,
+        )
+    assert _consistency_warnings(records) == []
+
+
+def test_fused_path_accepts_consistent_covariance():
+    """A native covariance consistent with the chi2 surface (here the exact
+    2-body inv(J^T J) at the truth state) passes the probe silently."""
+    observations = make_synthetic_observations()
+    jacobian = _analytic_jacobian(
+        TRUTH_STATE, EPOCH_MJD_TDB, _analytic_jacobian_terms(observations)
+    )
+    covariance = np.linalg.inv(jacobian.T @ jacobian)
+    propagator = FusedTwoBodyPropagator(TRUTH_STATE, covariance)
+
+    with warnings.catch_warnings(record=True) as records:
+        warnings.simplefilter("always")
+        fit_least_squares(
+            make_initial_guess(), observations, propagator, jacobian="2-point"
+        )
+    assert _consistency_warnings(records) == []

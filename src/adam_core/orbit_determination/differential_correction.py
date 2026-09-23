@@ -615,6 +615,44 @@ def _native_fit_least_squares(
     return None
 
 
+def _validate_native_covariance(
+    fitted_orbit: FittedOrbits,
+    observations_to_include: OrbitDeterminationObservations,
+    propagator: Propagator,
+) -> None:
+    """
+    Run the weak-direction consistency check of `_validated_covariance` on the
+    covariance returned by a propagator's fused Rust work unit, which is the
+    forward-difference ``inv(J^T J)`` of the Gauss-Newton fitter. The fit is
+    left unchanged: as on the scipy ``"2-point"`` path, a failed check emits a
+    `RuntimeWarning` instead of replacing the covariance. Costs three residual
+    evaluations (the cost at the solution plus the two probe displacements).
+    """
+    covariance_matrix = fitted_orbit.coordinates.covariance.to_matrix()[0]
+    if not np.all(np.isfinite(covariance_matrix)):
+        return
+    state_vector = fitted_orbit.coordinates.values[0]
+    mjd_tdb = float(
+        fitted_orbit.coordinates.time.rescale("tdb")
+        .mjd()
+        .to_numpy(zero_copy_only=False)[0]
+    )
+    residuals_solution = residual_function(
+        state_vector, mjd_tdb, observations_to_include, propagator
+    )
+    _validated_covariance(
+        covariance_matrix,
+        "2-point",
+        state_vector,
+        mjd_tdb,
+        observations_to_include,
+        propagator,
+        _robust_cost(residuals_solution, "linear", 1.0),
+        loss="linear",
+        residuals_solution=residuals_solution,
+    )
+
+
 def fit_least_squares(
     orbit: Orbits,
     observations: OrbitDeterminationObservations,
@@ -683,7 +721,10 @@ def fit_least_squares(
         path falls back to the central-difference covariance; other paths
         emit a `RuntimeWarning`. This also serves as the guard against
         planetary encounters inside the arc invalidating the 2-body state
-        transition matrix.
+        transition matrix. On the fused Rust path (``jacobian="2-point"``
+        with a Rust-backed propagator) the check adds three residual
+        evaluations to the single native crossing and warns on failure; pass
+        ``False`` to keep that path to one crossing.
     loss : {"linear", "huber"}, optional
         Loss applied to the whitened residual components.
 
@@ -770,6 +811,10 @@ def fit_least_squares(
             kwargs,
         )
         if native is not None:
+            if validate_covariance:
+                _validate_native_covariance(
+                    native[0], observations_to_include, propagator
+                )
             return native
 
     observed_values = observations_to_include.coordinates.values
@@ -1010,7 +1055,9 @@ def iterative_fit(
     Returns
     -------
     fitted_orbit : `~adam_core.orbit_determination.FittedOrbits` (1)
-        Best fitted orbit found.
+        Best fitted orbit found: the lowest reduced chi2 among the passes
+        whose fit succeeded (converged) or, if none did, the lowest reduced
+        chi2 overall (``success`` is then False).
     fitted_orbit_members : `~adam_core.orbit_determination.FittedOrbitMembers` (N)
         Fitted orbit members with residuals, outlier flags and weights.
     """
@@ -1025,8 +1072,12 @@ def iterative_fit(
     max_outliers = calculate_max_outliers(num_obs, min_obs, contamination_percentage)
 
     ignore: List[str] = []
-    best_fitted_orbit = None
-    best_fitted_orbit_members = None
+    # Best fit across the passes: the lowest reduced chi2 among the successful
+    # (converged) fits or, if no pass converged, the lowest reduced chi2 overall.
+    best_fit: Optional[Tuple[FittedOrbits, FittedOrbitMembers]] = None
+    best_rchi2 = np.inf
+    fallback_fit: Optional[Tuple[FittedOrbits, FittedOrbitMembers]] = None
+    fallback_rchi2 = np.inf
 
     for _ in range(max_outliers + 1):
         fitted_orbit, fitted_orbit_members = fit_least_squares(
@@ -1039,17 +1090,18 @@ def iterative_fit(
             **kwargs,
         )
 
-        # Track the best fit seen so far (lowest reduced chi2 among successful fits)
-        if best_fitted_orbit is None or (
-            fitted_orbit.success[0].as_py()
-            and fitted_orbit.reduced_chi2[0].as_py()
-            < best_fitted_orbit.reduced_chi2[0].as_py()
+        rchi2 = fitted_orbit.reduced_chi2[0].as_py()
+        rchi2_key = rchi2 if rchi2 is not None else np.inf
+        if fallback_fit is None or rchi2_key < fallback_rchi2:
+            fallback_fit = (fitted_orbit, fitted_orbit_members)
+            fallback_rchi2 = rchi2_key
+        if bool(fitted_orbit.success[0].as_py()) and (
+            best_fit is None or rchi2_key < best_rchi2
         ):
-            best_fitted_orbit = fitted_orbit
-            best_fitted_orbit_members = fitted_orbit_members
+            best_fit = (fitted_orbit, fitted_orbit_members)
+            best_rchi2 = rchi2_key
 
         # Check convergence
-        rchi2 = fitted_orbit.reduced_chi2[0].as_py()
         if rchi2 is not None and rchi2 <= rchi2_threshold:
             break
 
@@ -1078,4 +1130,8 @@ def iterative_fit(
 
         ignore.append(obs_id)
 
-    return best_fitted_orbit, best_fitted_orbit_members
+    if best_fit is None:
+        # No pass converged; the loop ran at least once so a fallback exists.
+        assert fallback_fit is not None
+        best_fit = fallback_fit
+    return best_fit

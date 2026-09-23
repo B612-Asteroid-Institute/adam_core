@@ -82,7 +82,6 @@ class OrbitFitter(ABC):
         """
         pass
 
-    @abstractmethod
     def refine_fit(
         self,
         fitted_orbit: FittedOrbits,
@@ -93,6 +92,14 @@ class OrbitFitter(ABC):
 
         Takes a previously fitted orbit (e.g. from IOD) and improves it
         via iterative least-squares with outlier rejection.
+
+        Fitters that support differential correction override this method.
+        The default raises `NotImplementedError` (like `__getstate__` /
+        `__setstate__` above) rather than being abstract, so that fitters
+        written against the original ``initial_fit``-only interface, such as
+        plugin releases predating this method, remain instantiable and usable
+        for `initial_fit`. `full_od` and `~adam_core.orbit_determination.run_od`
+        require an override.
 
         Parameters
         ----------
@@ -110,7 +117,11 @@ class OrbitFitter(ABC):
         fitted_orbit_members : FittedOrbitMembers (N)
             Observations with residuals and outlier/solution flags set.
         """
-        pass
+        raise NotImplementedError(
+            f"{type(self).__name__} does not implement refine_fit; only "
+            "initial_fit is available. Implement refine_fit to use full_od / "
+            "run_od with this fitter."
+        )
 
     def full_od(
         self,

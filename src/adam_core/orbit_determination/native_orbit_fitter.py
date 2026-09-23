@@ -31,6 +31,7 @@ class NativeOrbitFitter(OrbitFitter):
         Propagator *class* (not instance) used during IOD ephemeris evaluation.
     propagator_kwargs : dict, optional
         Keyword arguments forwarded to the propagator constructor / IOD call.
+        Copied; default None means no arguments.
     min_obs : int, optional
         Minimum number of observations required for a valid fit.  Default 6.
     min_arc_length : float, optional
@@ -80,7 +81,7 @@ class NativeOrbitFitter(OrbitFitter):
     def __init__(
         self,
         propagator_class: Type[Propagator],
-        propagator_kwargs: dict = {},
+        propagator_kwargs: Optional[dict[str, Any]] = None,
         min_obs: int = 6,
         min_arc_length: float = 1.0,
         contamination_percentage: float = 20.0,
@@ -100,7 +101,7 @@ class NativeOrbitFitter(OrbitFitter):
                 f"got {outlier_rejection!r}"
             )
         self.propagator_class = propagator_class
-        self.propagator_kwargs = propagator_kwargs
+        self.propagator_kwargs = dict(propagator_kwargs or {})
         self.min_obs = min_obs
         self.min_arc_length = min_arc_length
         self.contamination_percentage = contamination_percentage
