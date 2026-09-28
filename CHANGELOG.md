@@ -20,8 +20,10 @@ This file contains notable changes in adam-core
   station-only and global rows) with its interpreters `SigmaFillModel` (fills
   only missing sigmas; the Asteroid Institute default with the `v2_sigma_fill`
   table of the private data package), `VeresFloorModel` and
-  `VeresReplaceModel` (the bundled Veres 2017 numbers are the legacy
-  reference); the
+  `VeresReplaceModel` (its legacy `veres2017_working` table); adam_core bundles
+  no sigma table and resolves these defaults by importing the
+  `observatory_uncertainties` data package on demand (`load_sigma_table`),
+  raising `ImportError` when it is absent; the
   `astcat` column and `from_ades` converter on `OrbitDeterminationObservations`;
   `OrbitFitter.refine_fit` / `full_od` and `NativeOrbitFitter`; and the
   `observatory_bias_model` parameter on every module-level OD entry point.

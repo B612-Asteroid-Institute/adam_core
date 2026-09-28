@@ -24,7 +24,7 @@ branch; every per-observation arithmetic runs in Rust.
 | Residuals | `compute_residuals_chi2_flat`, `chi2_survival`, `bound_longitude_value`, cos-lat correction, Cholesky chi2 | `observation_whitening_matrices`, `whiten_residual_pairs` (2N whitened components) |
 | Fitter | `orbit_least_squares::fit_orbit_least_squares_with_predictor` — Gauss-Newton, **forward-difference** Jacobian, `inv(JᵀJ)`; `propagation::od` drivers (`fit_orbit_least_squares_evaluated_barycentric`, legacy `od_fit_barycentric`, Vallado, IOD) generic over the Rust `Propagator` trait | `whitened_2body_model_angles` / `whitened_2body_jacobian`: exact Jacobian of the whitened 2-body model over `Dual<6>` (the autodiff crate already made `propagate_2body_row` and `generate_ephemeris_2body_row` generic over `Scalar`); `robust_cost` / `robust_weights` / `robust_jacobian_scale` (Huber, scipy convention) |
 | Outliers | worst-observation policy, `calculate_max_outliers` | `cmc2003_apparitions`, `cmc2003_expected_residual_chi2` (`I ∓ J C Jᵀ` with eigenvalue floor), `cmc2003_select` |
-| Observation models | — | `ObservationUncertaintyModel` trait + `IdentityModel`, `EmpiricalCovarianceModel`, `PerformanceWeightedModel`, `SigmaFloorModel`, `NightBatchDeweightingModel`, `Efcc18DebiasModel`, `CompositeModel`; `BiasTable` lookup; `efcc18` parse / lookup / corrections / debias; `veres2017` bundled table, `VeresSigmaLookup`, `VeresFloorModel`, `VeresReplaceModel` |
+| Observation models | — | `ObservationUncertaintyModel` trait + `IdentityModel`, `EmpiricalCovarianceModel`, `PerformanceWeightedModel`, `SigmaFloorModel`, `NightBatchDeweightingModel`, `Efcc18DebiasModel`, `CompositeModel`; `BiasTable` lookup; `efcc18` parse / lookup / corrections / debias; `veres2017` generic `VeresSigmaLookup`, `VeresFloorModel`, `VeresReplaceModel`, `SigmaFillModel` (tables come from the data package) |
 | PyO3 (`adam_core_py`) | `od_ops.rs`, `orbit_determination.rs` (Gauss IOD), `coordinate_ops::evaluate_orbits_numpy`, Arrow propagate / ephemeris | `observation_uncertainty.rs` (13 functions), `differential_correction.rs` (11 functions); registered in `lib.rs`, guarded in `_rust/api.py` |
 
 New Rust files: `rust/adam_core_rs_coords/src/{efcc18,observation_uncertainty,veres2017,cmc2003,differential_correction}.rs`,
@@ -42,7 +42,7 @@ scipy optimizer driving a user-supplied `Propagator`:
 | `EmpiricalCovarianceModel` / `PerformanceWeightedModel` / `SigmaFloorModel` | `bias_table_model_apply_numpy` | `validate_bias_table` (pyarrow cast), quivr `set_column` only when Rust reports a change |
 | `NightBatchDeweightingModel` | `night_batch_deweighting_model_apply_numpy` | — |
 | `EFCC18DebiasModel`, `observations.efcc18.*` | `efcc18_parse_bias_dat`, `efcc18_ra_dec_to_healpix_numpy`, `efcc18_catalog_columns_numpy`, `efcc18_corrections_numpy`, `efcc18_debias_model_apply_numpy`, `healpix_ang2pix_lonlat_numpy` | locating / downloading / checksumming / caching `bias.dat` (I/O) |
-| `VeresFloorModel` / `VeresReplaceModel` / `VeresSigmaLookup` / `veres2017_sigma_table` | `veres2017_sigma_table_columns`, `veres_sigma_lookup_numpy`, `veres_model_apply_numpy` | `validate_veres_sigma_table` (pyarrow cast) |
+| `VeresFloorModel` / `VeresReplaceModel` / `SigmaFillModel` / `VeresSigmaLookup` / `load_sigma_table` | `veres_sigma_lookup_numpy`, `veres_model_apply_numpy` | `validate_veres_sigma_table` (pyarrow cast); default tables resolved by importing the private `observatory_uncertainties` data package (no table bundled, 2026-09-27) |
 | `fit_least_squares` (whitened residuals, `jacobian="analytic"`, `loss="huber"`, weak-direction probe), `iterative_fit`, `residual_function` | `observation_whitening_matrices_numpy`, `whiten_residual_pairs_numpy`, `whitened_2body_jacobian_numpy`, `robust_*_numpy`, `validate_robust_loss` | `scipy.optimize.least_squares` (the grid-validated optimizer), N-body residuals through `propagator.generate_ephemeris`, the probe / central-difference fallback (they call the propagator) |
 | `cmc2003_fit`, `cmc2003_fit_detailed` | `cmc2003_apparitions_numpy`, `cmc2003_expected_residual_chi2_numpy`, `cmc2003_select_numpy` | the refit loop (calls `fit_least_squares`) |
 | `run_od`, `apply_observation_models`, `attach_observation_provenance`, `ObservationAstrometry`, `FittedOrbitMembers.{weight, original_astrometry, used_astrometry, astcat}` | `sqrt_values_numpy` | pyarrow `index_in` / `take` joins; drives any `OrbitFitter` (adam_fo overrides `full_od`) |
@@ -101,9 +101,11 @@ the shipped stack: `SigmaFillModel(load_sigma_fill_table())` → `EFCC18DebiasMo
 flipped, mirroring the Python baseline: `NativeOrbitFitter` still defaults to
 `outlier_rejection="worst_residual"`, `NightBatchDeweightingModel` already
 defaults to `cap=4`, `EmpiricalCovarianceModel` to `mode="add"`, and
-`SigmaFillModel(sigma_table=None)` falls back to the bundled Veres table because
-adam_core never imports the private data package. Flipping the fitter default is
-a one-line change if wanted.
+`SigmaFillModel(sigma_table=None)` now (2026-09-27) resolves `v2_sigma_fill`
+by importing the private `observatory_uncertainties` data package, and the
+Veres models resolve its `veres2017_working` table; adam_core bundles no sigma
+table and still does not depend on the package (ImportError names it when
+missing). Flipping the fitter default is a one-line change if wanted.
 
 ## Correctness gates
 

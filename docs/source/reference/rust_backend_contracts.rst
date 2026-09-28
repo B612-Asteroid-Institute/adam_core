@@ -154,8 +154,11 @@ Current Migrated APIs
     (``empirical_covariance`` / ``performance_weighted`` / ``sigma_floor``),
     ``night_batch_deweighting_model_apply_numpy``,
     ``efcc18_debias_model_apply_numpy`` (positions), ``veres_model_apply_numpy``
-    (``floor`` / ``replace``), ``veres_sigma_lookup_numpy``,
-    ``veres2017_sigma_table_columns``, ``ades_angular_covariance_numpy``.
+    (``floor`` / ``replace`` / ``fill``), ``veres_sigma_lookup_numpy``,
+    ``ades_angular_covariance_numpy``. No sigma table is bundled: the Python
+    veneer resolves a default table by importing the private
+    ``observatory_uncertainties`` data package (a soft import, never a
+    dependency) and raises ``ImportError`` naming it when absent.
   - Position rule: every model except ``efcc18_debias_model_apply`` leaves the
     lon/lat columns untouched; ``efcc18_debias_model_apply`` leaves the
     covariance untouched.

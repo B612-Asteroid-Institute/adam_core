@@ -8,8 +8,8 @@
 use adam_core_rs_coords::healpix::ang2pix_lonlat;
 use adam_core_rs_coords::{
     ades_angular_covariance_flat, compute_efcc18_corrections, efcc18_catalog_columns,
-    ra_dec_to_healpix, read_efcc18_bias_version, veres2017_sigma_table, BiasTable, BiasTableRow,
-    Efcc18BiasTable, Efcc18DebiasModel, EmpiricalCovarianceMode, EmpiricalCovarianceModel,
+    ra_dec_to_healpix, read_efcc18_bias_version, BiasTable, BiasTableRow, Efcc18BiasTable,
+    Efcc18DebiasModel, EmpiricalCovarianceMode, EmpiricalCovarianceModel,
     NightBatchDeweightingModel, ObservationUncertaintyModel, OrbitDeterminationAstrometry,
     PerformanceWeightedModel, SigmaFillModel, SigmaFloorModel, VeresFloorModel, VeresReplaceModel,
     VeresSigmaLookup, VeresSigmaRow, EFCC18_N_CATALOGS, EFCC18_N_COMPONENTS, EFCC18_N_TILES,
@@ -409,21 +409,6 @@ fn efcc18_corrections_numpy<'py>(
         .map_err(|err| value_error(err.to_string()))
 }
 
-type SigmaTableColumns = (Vec<Option<String>>, Vec<Option<String>>, Vec<f64>, Vec<f64>);
-
-/// The bundled VFC2017-style sigma table as `(obs_code, astcat,
-/// sigma_ra_arcsec, sigma_dec_arcsec)` columns.
-#[pyfunction]
-fn veres2017_sigma_table_columns() -> SigmaTableColumns {
-    let rows = veres2017_sigma_table();
-    (
-        rows.iter().map(|row| row.obs_code.clone()).collect(),
-        rows.iter().map(|row| row.astcat.clone()).collect(),
-        rows.iter().map(|row| row.sigma_ra_arcsec).collect(),
-        rows.iter().map(|row| row.sigma_dec_arcsec).collect(),
-    )
-}
-
 fn veres_lookup(
     table_obs_code: Vec<Option<String>>,
     table_astcat: Vec<Option<String>>,
@@ -585,7 +570,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(efcc18_read_bias_version, m)?)?;
     m.add_function(wrap_pyfunction!(efcc18_catalog_columns_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(efcc18_corrections_numpy, m)?)?;
-    m.add_function(wrap_pyfunction!(veres2017_sigma_table_columns, m)?)?;
     m.add_function(wrap_pyfunction!(veres_sigma_lookup_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(veres_model_apply_numpy, m)?)?;
     m.add_function(wrap_pyfunction!(ades_angular_covariance_numpy, m)?)?;

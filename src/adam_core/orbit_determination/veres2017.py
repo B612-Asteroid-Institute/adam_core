@@ -6,31 +6,32 @@ derived station- and catalog-dependent astrometric uncertainties for MPC
 observations from the residual statistics of well-determined orbits. Agencies
 use such tables as default weights for observations that report no
 uncertainty, or as floors on the reported ones. This module ships the
-per-(station, catalog) sigma table used by the Asteroid Institute's OD
-experiments together with the interpreters that apply it (`VeresFloorModel`,
-`VeresReplaceModel`, `SigmaFillModel`, all `ObservationUncertaintyModel`
-subclasses), so that OD runs using it are reproducible from adam_core alone.
-The table and the interpreter arithmetic live in the Rust backend
-(``adam_core_rs_coords::veres2017``).
+interpreters that apply such a table (`VeresFloorModel`, `VeresReplaceModel`,
+`SigmaFillModel`, all `ObservationUncertaintyModel` subclasses) and the
+generic `VeresSigmaLookup`; the interpreter arithmetic lives in the Rust
+backend (``adam_core_rs_coords::veres2017``).
 
 The table schema and `VeresSigmaLookup` are GENERIC: any station/catalog
 sigma table in `VERES2017_SIGMA_TABLE_SCHEMA` can be supplied, including
 station-only rows (``astcat`` null) and one global row (both keys null).
-The Asteroid Institute's production fill-in table (v2 LOOO study RMS per
-station x catalog for high-confidence stations, ``v2_sigma_fill`` in the
-private ``adam-observatory-uncertainties`` package) uses exactly this
-schema with `SigmaFillModel`; the bundled Veres numbers are the legacy
-reference (decision 2026-09-23).
 
-Table provenance
-----------------
-`veres2017_sigma_table` is the working table maintained in
-``adam_orbit_det_eval`` (``VERES2017_CATALOG_DEFAULTS`` +
-``VERES2017_STN_CATALOG_OVERRIDES``, fallback 0.75"), transcribed verbatim.
-It is a catalog-level summary in the spirit of VFC2017's Table 1 plus a few
-station-specific overrides; it is NOT a transcription of the paper's full
-station table. Verify against the publication (or supply your own table via
-``sigma_table``) before citing results that depend on the numbers.
+Tables
+------
+adam_core bundles NO sigma table. The tables are data shipped by the private
+``adam-observatory-uncertainties`` package (import name
+``observatory_uncertainties``), which adam_core never depends on: a model
+constructed without ``sigma_table`` resolves its default table by importing
+that package (`load_sigma_table`), the same soft-import pattern
+`~adam_core.observations.efcc18` uses for the ``jpl_debias_2018`` data
+package, and raises an `ImportError` naming the package when it is not
+installed. Defaults (decision 2026-09-23): `SigmaFillModel` reads
+``v2_sigma_fill`` (v2 LOOO study RMS per station x catalog for
+high-confidence stations, with station / catalog / global fallbacks);
+`VeresFloorModel` and `VeresReplaceModel` read ``veres2017_working`` (the
+VFC2017-style working table the OD experiments used before, 34 catalog
+defaults plus 14 station overrides, NOT a transcription of the paper's full
+station table). Verify against the publication, or supply your own table via
+``sigma_table``, before citing results that depend on the numbers.
 
 Frames and units
 ----------------
@@ -42,6 +43,8 @@ cos(dec) once (in addition to the arcsec -> degree scaling) before squaring.
 
 from __future__ import annotations
 
+import importlib
+
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
@@ -51,14 +54,17 @@ from .evaluate import OrbitDeterminationObservations
 from .observation_uncertainty import ObservationUncertaintyModel
 
 __all__ = [
+    "SIGMA_TABLE_PACKAGE",
+    "V2_SIGMA_FILL_TABLE",
     "VERES2017_FALLBACK_SIGMA_ARCSEC",
     "VERES2017_SIGMA_TABLE_SCHEMA",
+    "VERES2017_WORKING_TABLE",
     "SigmaFillModel",
     "VeresFloorModel",
     "VeresReplaceModel",
     "VeresSigmaLookup",
+    "load_sigma_table",
     "validate_veres_sigma_table",
-    "veres2017_sigma_table",
 ]
 
 #: Standard schema for a station/catalog sigma table: rows are (station,
@@ -78,31 +84,56 @@ VERES2017_SIGMA_TABLE_SCHEMA = pa.schema(
 VERES2017_FALLBACK_SIGMA_ARCSEC = 0.75
 
 
-def veres2017_sigma_table() -> pa.Table:
+#: Import name of the private ``adam-observatory-uncertainties`` data package
+#: that ships the sigma tables. adam_core does not depend on it; it is
+#: imported on demand when a model is constructed without ``sigma_table``.
+SIGMA_TABLE_PACKAGE = "observatory_uncertainties"
+#: Package table: the Asteroid Institute default fill-in table (v2 LOOO RMS).
+V2_SIGMA_FILL_TABLE = "v2_sigma_fill"
+#: Package table: the legacy VFC2017-style working table.
+VERES2017_WORKING_TABLE = "veres2017_working"
+
+_PACKAGE_INSTALL_HINT = (
+    'pip install "git+ssh://git@github.com/B612-Asteroid-Institute/'
+    'adam-observatory-uncertainties.git@v0.3.0"'
+)
+
+
+def load_sigma_table(name: str = V2_SIGMA_FILL_TABLE) -> pa.Table:
     """
-    The bundled Veres-style sigma table (see module docstring for provenance).
+    Load a per-observation sigma table from the ``adam-observatory-uncertainties``
+    data package.
+
+    Parameters
+    ----------
+    name : str
+        Table name in the package (`V2_SIGMA_FILL_TABLE` or
+        `VERES2017_WORKING_TABLE`, or any name listed by the package's
+        ``list_sigma_tables``).
 
     Returns
     -------
     table : `pyarrow.Table`
-        Rows with ``obs_code`` null are per-catalog defaults; rows with an
-        ``obs_code`` are (station, catalog) overrides. Schema
-        `VERES2017_SIGMA_TABLE_SCHEMA`.
-    """
-    from adam_core import _rust_native
+        The table validated and cast to `VERES2017_SIGMA_TABLE_SCHEMA`
+        (extra package columns such as ``level`` are dropped).
 
-    obs_codes, astcats, sigma_ra, sigma_dec = (
-        _rust_native.veres2017_sigma_table_columns()
-    )
-    return pa.table(
-        {
-            "obs_code": pa.array(obs_codes, pa.large_string()),
-            "astcat": pa.array(astcats, pa.large_string()),
-            "sigma_ra_arcsec": pa.array(sigma_ra, pa.float64()),
-            "sigma_dec_arcsec": pa.array(sigma_dec, pa.float64()),
-        },
-        schema=VERES2017_SIGMA_TABLE_SCHEMA,
-    )
+    Raises
+    ------
+    ImportError
+        If the data package is not installed. adam_core does not depend on
+        it; install it or pass an explicit ``sigma_table`` to the model.
+    """
+    try:
+        package = importlib.import_module(SIGMA_TABLE_PACKAGE)
+    except ImportError as e:
+        raise ImportError(
+            f"The sigma table {name!r} ships with the private "
+            f"adam-observatory-uncertainties data package "
+            f"(import name {SIGMA_TABLE_PACKAGE!r}), which is not installed. "
+            f"Install it ({_PACKAGE_INSTALL_HINT}) or pass an explicit "
+            "sigma_table."
+        ) from e
+    return validate_veres_sigma_table(package.load_sigma_table(name))
 
 
 def validate_veres_sigma_table(table: pa.Table) -> pa.Table:
@@ -170,18 +201,25 @@ class VeresSigmaLookup:
     ----------
     sigma_table : `pyarrow.Table`, optional
         Table with `VERES2017_SIGMA_TABLE_SCHEMA` columns. Default: the
-        bundled `veres2017_sigma_table`.
+        ``default_table`` of the ``adam-observatory-uncertainties`` data
+        package (`load_sigma_table`).
     fallback_sigma_arcsec : float or None
         Global fallback sigma (both axes). Default 0.75".
+    default_table : str
+        Package table loaded when ``sigma_table`` is None. Default
+        `V2_SIGMA_FILL_TABLE`.
     """
 
     def __init__(
         self,
         sigma_table: pa.Table | None = None,
         fallback_sigma_arcsec: float | None = VERES2017_FALLBACK_SIGMA_ARCSEC,
+        default_table: str = V2_SIGMA_FILL_TABLE,
     ) -> None:
-        table = validate_veres_sigma_table(
-            sigma_table if sigma_table is not None else veres2017_sigma_table()
+        table = (
+            validate_veres_sigma_table(sigma_table)
+            if sigma_table is not None
+            else load_sigma_table(default_table)
         )
         self.sigma_table = table
         self.fallback_sigma_arcsec = fallback_sigma_arcsec
@@ -236,8 +274,9 @@ class _VeresSigmaModel(ObservationUncertaintyModel):
     Shared machinery for the VFC2017 station/catalog sigma interpreters.
 
     Each observation's (station, star catalog) is resolved through a
-    `~adam_core.orbit_determination.veres2017.VeresSigmaLookup` (the bundled
-    table by default) to per-axis sigmas in arcseconds with RA in the
+    `~adam_core.orbit_determination.veres2017.VeresSigmaLookup` (the
+    subclass's ``_DEFAULT_TABLE`` of the data package by default) to
+    per-axis sigmas in arcseconds with RA in the
     cos(dec)-corrected frame; subclasses decide how the resulting variances
     combine with the reported covariance. Observations that resolve to no
     sigma (unknown station and catalog, no global row,
@@ -246,13 +285,16 @@ class _VeresSigmaModel(ObservationUncertaintyModel):
     """
 
     _MODEL: str = ""
+    _DEFAULT_TABLE: str = V2_SIGMA_FILL_TABLE
 
     def __init__(
         self,
         sigma_table: pa.Table | None = None,
         fallback_sigma_arcsec: float | None = VERES2017_FALLBACK_SIGMA_ARCSEC,
     ) -> None:
-        self.lookup = VeresSigmaLookup(sigma_table, fallback_sigma_arcsec)
+        self.lookup = VeresSigmaLookup(
+            sigma_table, fallback_sigma_arcsec, default_table=self._DEFAULT_TABLE
+        )
         self.fill_missing = False
 
     def apply(
@@ -297,8 +339,9 @@ class VeresFloorModel(_VeresSigmaModel):
     Parameters
     ----------
     sigma_table : `pyarrow.Table`, optional
-        Sigma table (`VERES2017_SIGMA_TABLE_SCHEMA`); default the bundled
-        `veres2017_sigma_table`.
+        Sigma table (`VERES2017_SIGMA_TABLE_SCHEMA`); default the
+        ``veres2017_working`` table of the ``adam-observatory-uncertainties``
+        data package (`load_sigma_table`).
     fallback_sigma_arcsec : float or None
         Sigma used for (station, catalog) pairs absent from the table;
         None passes such observations through. Default 0.75".
@@ -308,6 +351,7 @@ class VeresFloorModel(_VeresSigmaModel):
     """
 
     _MODEL = "floor"
+    _DEFAULT_TABLE = VERES2017_WORKING_TABLE
 
     def __init__(
         self,
@@ -328,14 +372,16 @@ class VeresReplaceModel(_VeresSigmaModel):
     Parameters
     ----------
     sigma_table : `pyarrow.Table`, optional
-        Sigma table (`VERES2017_SIGMA_TABLE_SCHEMA`); default the bundled
-        `veres2017_sigma_table`.
+        Sigma table (`VERES2017_SIGMA_TABLE_SCHEMA`); default the
+        ``veres2017_working`` table of the ``adam-observatory-uncertainties``
+        data package (`load_sigma_table`).
     fallback_sigma_arcsec : float or None
         Sigma used for (station, catalog) pairs absent from the table;
         None passes such observations through. Default 0.75".
     """
 
     _MODEL = "replace"
+    _DEFAULT_TABLE = VERES2017_WORKING_TABLE
 
 
 class SigmaFillModel(_VeresSigmaModel):
@@ -355,19 +401,22 @@ class SigmaFillModel(_VeresSigmaModel):
     The Asteroid Institute default is this model with the ``v2_sigma_fill``
     table (v2 LOOO study RMS per station x catalog, high-confidence stations,
     with station / catalog / global fallbacks) from the private
-    ``adam-observatory-uncertainties`` package; the bundled Veres table is the
-    legacy reference (decision 2026-09-23, adam_od_experiments bead d2f:
-    orbits unchanged, prediction covariance x0.82, better-calibrated noise
-    model at 32 of 39 stations).
+    ``adam-observatory-uncertainties`` package, which this model loads by
+    default; that package's ``veres2017_working`` table is the legacy
+    reference (decision 2026-09-23, adam_od_experiments bead d2f: orbits
+    unchanged, prediction covariance x0.82, better-calibrated noise model at
+    32 of 39 stations).
 
     Parameters
     ----------
     sigma_table : `pyarrow.Table`, optional
         Sigma table (`VERES2017_SIGMA_TABLE_SCHEMA`; station-only and global
-        rows allowed); default the bundled `veres2017_sigma_table`.
+        rows allowed); default the ``v2_sigma_fill`` table of the data
+        package (`load_sigma_table`).
     fallback_sigma_arcsec : float or None
         Sigma used when nothing in the table matches; None leaves the
         observation unfilled. Default 0.75".
     """
 
     _MODEL = "fill"
+    _DEFAULT_TABLE = V2_SIGMA_FILL_TABLE

@@ -17,14 +17,14 @@
 //! high-confidence stations) uses exactly this shape with [`SigmaFillModel`];
 //! the bundled Veres numbers are the legacy reference (decision 2026-09-23).
 //!
-//! Table provenance
-//! ----------------
-//! [`veres2017_sigma_table`] is the working table maintained in
-//! `adam_orbit_det_eval` (`VERES2017_CATALOG_DEFAULTS` +
-//! `VERES2017_STN_CATALOG_OVERRIDES`, fallback 0.75"), transcribed verbatim.
-//! It is a catalog-level summary in the spirit of VFC2017's Table 1 plus a few
-//! station-specific overrides; it is NOT a transcription of the paper's full
-//! station table.
+//! Tables
+//! ------
+//! adam_core bundles NO sigma table. The tables (the Asteroid Institute
+//! `v2_sigma_fill` default, the legacy `veres2017_working` reference) are data
+//! shipped by the private `adam-observatory-uncertainties` package and handed
+//! in as [`VeresSigmaRow`] rows; the Python veneer resolves a default table by
+//! importing that package, the way EFCC18 resolves the `jpl_debias_2018` data
+//! package.
 //!
 //! Frames and units
 //! ----------------
@@ -41,71 +41,6 @@ use std::collections::HashMap;
 /// Global fallback when neither a (station, catalog) nor a catalog row exists.
 pub const VERES2017_FALLBACK_SIGMA_ARCSEC: f64 = 0.75;
 
-/// Per-catalog defaults `(astcat, sigma_ra_arcsec, sigma_dec_arcsec)`; keys
-/// are MPC `astCat` codes as carried on `OrbitDeterminationObservations.astcat`.
-pub const VERES2017_CATALOG_DEFAULTS: [(&str, f64, f64); 34] = [
-    // Gaia family
-    ("Gaia3E", 0.15, 0.15),
-    ("Gaia3", 0.15, 0.15),
-    ("Gaia2", 0.18, 0.18),
-    ("Gaia1", 0.25, 0.25),
-    // ATLAS family
-    ("ATLAS2", 0.20, 0.20),
-    ("ATLAS", 0.25, 0.25),
-    // UCAC family
-    ("UCAC5", 0.25, 0.25),
-    ("SSTRC4", 0.25, 0.25),
-    ("UCAC4", 0.30, 0.30),
-    ("UCAC3", 0.30, 0.30),
-    ("UCAC2", 0.40, 0.40),
-    ("UCAC1", 0.50, 0.50),
-    // 2MASS
-    ("2MASS", 0.20, 0.20),
-    // USNO catalogs
-    ("USNOB1", 0.50, 0.50),
-    ("USNOA2", 0.60, 0.60),
-    ("USNOSA2", 0.60, 0.60),
-    ("USNOA1", 0.80, 0.80),
-    // GSC family
-    ("GSC", 0.50, 0.50),
-    ("GSC1.1", 0.50, 0.50),
-    ("GSC1.2", 0.50, 0.50),
-    ("GSC2.2", 0.40, 0.40),
-    ("GSC2.3", 0.35, 0.35),
-    ("GSCACT", 0.50, 0.50),
-    // PPMXL / PPM
-    ("PPMXL", 0.35, 0.35),
-    ("PPM", 0.50, 0.50),
-    // Other catalogs
-    ("SDSS8", 0.20, 0.20),
-    ("SDSS7", 0.20, 0.20),
-    ("NOMAD", 0.40, 0.40),
-    ("CMC14", 0.35, 0.35),
-    ("CMC15", 0.30, 0.30),
-    ("Tycho", 0.06, 0.06),
-    ("AC", 0.80, 0.80),
-    ("Yale", 1.00, 1.00),
-    ("UNK", 1.00, 1.00),
-];
-
-/// Per-(station, catalog) overrides `(obs_code, astcat, sigma_ra_arcsec, sigma_dec_arcsec)`.
-pub const VERES2017_STATION_CATALOG_OVERRIDES: [(&str, &str, f64, f64); 14] = [
-    ("703", "Gaia2", 0.34, 0.34), // Catalina Sky Survey: wider PSF
-    ("703", "UCAC4", 0.45, 0.45),
-    ("703", "UCAC2", 0.55, 0.55),
-    ("G96", "Gaia2", 0.25, 0.25), // Mt. Lemmon Survey
-    ("G96", "UCAC4", 0.35, 0.35),
-    ("704", "USNOA2", 0.60, 0.75), // Spacewatch: known Dec bias
-    ("F51", "Gaia2", 0.15, 0.15),  // Pan-STARRS 1
-    ("F51", "Gaia1", 0.18, 0.18),
-    ("F51", "2MASS", 0.20, 0.20),
-    ("F52", "Gaia3E", 0.15, 0.15), // Pan-STARRS 2
-    ("F52", "Gaia1", 0.18, 0.18),
-    ("T05", "Gaia2", 0.25, 0.25), // ATLAS Haleakala
-    ("T08", "Gaia2", 0.25, 0.25), // ATLAS Mauna Loa
-    ("W68", "Gaia2", 0.25, 0.25), // ATLAS Chile
-];
-
 /// One row of a station/catalog sigma table: a (station, catalog) row, a
 /// station-only row (`astcat` None), a per-catalog default (`obs_code` None)
 /// or the single global row (both None).
@@ -115,30 +50,6 @@ pub struct VeresSigmaRow {
     pub astcat: Option<String>,
     pub sigma_ra_arcsec: f64,
     pub sigma_dec_arcsec: f64,
-}
-
-/// The bundled sigma table (catalog defaults first, then overrides).
-pub fn veres2017_sigma_table() -> Vec<VeresSigmaRow> {
-    let mut rows = Vec::with_capacity(
-        VERES2017_CATALOG_DEFAULTS.len() + VERES2017_STATION_CATALOG_OVERRIDES.len(),
-    );
-    for (astcat, sigma_ra, sigma_dec) in VERES2017_CATALOG_DEFAULTS {
-        rows.push(VeresSigmaRow {
-            obs_code: None,
-            astcat: Some(astcat.to_string()),
-            sigma_ra_arcsec: sigma_ra,
-            sigma_dec_arcsec: sigma_dec,
-        });
-    }
-    for (code, astcat, sigma_ra, sigma_dec) in VERES2017_STATION_CATALOG_OVERRIDES {
-        rows.push(VeresSigmaRow {
-            obs_code: Some(code.to_string()),
-            astcat: Some(astcat.to_string()),
-            sigma_ra_arcsec: sigma_ra,
-            sigma_dec_arcsec: sigma_dec,
-        });
-    }
-    rows
 }
 
 fn validate_sigma(name: &str, value: f64) -> Result<(), String> {
@@ -209,15 +120,6 @@ impl VeresSigmaLookup {
             global,
             fallback_sigma_arcsec,
         })
-    }
-
-    /// The bundled table with the default fallback.
-    pub fn bundled() -> Self {
-        Self::new(
-            &veres2017_sigma_table(),
-            Some(VERES2017_FALLBACK_SIGMA_ARCSEC),
-        )
-        .expect("bundled sigma table is valid")
     }
 
     /// `(sigma_ra_arcsec, sigma_dec_arcsec)` for the observation, or `None`.
@@ -476,13 +378,24 @@ mod tests {
     }
 
     #[test]
-    fn bundled_table_is_valid_and_ordered() {
-        let rows = veres2017_sigma_table();
-        assert_eq!(rows.len(), 48);
-        assert!(rows[..34].iter().all(|row| row.obs_code.is_none()));
-        assert!(rows[34..].iter().all(|row| row.obs_code.is_some()));
-        assert!(rows.iter().all(|row| row.astcat.is_some()));
-        let lookup = VeresSigmaLookup::bundled();
+    fn rows_mirror_a_package_sigma_table() {
+        // The row shapes `adam-observatory-uncertainties` ships: a (station,
+        // catalog) override and a catalog default, plus the scalar fallback.
+        let rows = vec![
+            VeresSigmaRow {
+                obs_code: Some("F51".into()),
+                astcat: Some("Gaia2".into()),
+                sigma_ra_arcsec: 0.15,
+                sigma_dec_arcsec: 0.15,
+            },
+            VeresSigmaRow {
+                obs_code: None,
+                astcat: Some("Gaia2".into()),
+                sigma_ra_arcsec: 0.18,
+                sigma_dec_arcsec: 0.18,
+            },
+        ];
+        let lookup = VeresSigmaLookup::new(&rows, Some(0.75)).unwrap();
         assert_eq!(
             lookup.sigmas(Some("F51"), Some("Gaia2")),
             Some((0.15, 0.15))
@@ -490,10 +403,6 @@ mod tests {
         assert_eq!(
             lookup.sigmas(Some("500"), Some("Gaia2")),
             Some((0.18, 0.18))
-        );
-        assert_eq!(
-            lookup.sigmas(Some("704"), Some("USNOA2")),
-            Some((0.60, 0.75))
         );
         assert_eq!(
             lookup.sigmas(Some("500"), Some("NEWCAT")),

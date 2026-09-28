@@ -105,9 +105,11 @@ observations, so the ``OrbitFitter`` interface stays flag-free.
   records without ``rmsRACosDec`` / ``rmsDec``) from a station/catalog sigma
   table (``VERES2017_SIGMA_TABLE_SCHEMA``; rows may be (station, catalog),
   station-only, catalog-only or one global row). Reported sigmas are never
-  touched. The Asteroid Institute default table is ``v2_sigma_fill`` from the
-  private ``adam-observatory-uncertainties`` package; the bundled Veres et al.
-  (2017) table is the legacy reference.
+  touched. adam_core bundles no sigma table: with no ``sigma_table`` the model
+  imports the private ``adam-observatory-uncertainties`` data package and reads
+  its ``v2_sigma_fill`` table (the Asteroid Institute default), the way
+  EFCC18 imports ``jpl_debias_2018``; ``VeresFloorModel`` /
+  ``VeresReplaceModel`` read that package's legacy ``veres2017_working`` table.
 * ``EFCC18DebiasModel`` subtracts the Eggl et al. (2020) star-catalog bias
   from the observed positions (JPL's ``bias.dat`` in HEALPix RING order,
   keyed on the ``astcat`` column carried by

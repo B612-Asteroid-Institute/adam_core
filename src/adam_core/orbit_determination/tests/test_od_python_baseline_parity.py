@@ -20,6 +20,7 @@ EFCC18 table skip when ``bias.dat`` is not installed.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import warnings
 from pathlib import Path
@@ -55,7 +56,13 @@ from ..observation_uncertainty import (
 )
 from ..od_orchestration import run_od
 from ..rejection import cmc2003_fit_detailed
-from ..veres2017 import VeresFloorModel, VeresReplaceModel
+from ..veres2017 import (
+    SIGMA_TABLE_PACKAGE,
+    VERES2017_WORKING_TABLE,
+    VeresFloorModel,
+    VeresReplaceModel,
+    load_sigma_table,
+)
 from .test_differential_correction import TwoBodyPropagator, fit_least_squares
 
 FIXTURE = (
@@ -360,11 +367,21 @@ class TestSigmaInterpreters:
             "composite": CompositeModel(
                 PerformanceWeightedModel(table), NightBatchDeweightingModel(cap=4)
             ),
-            "veres_floor": VeresFloorModel(),
-            "veres_floor_fill": VeresFloorModel(fill_missing=True),
-            "veres_replace": VeresReplaceModel(),
-            "veres_floor_nofallback": VeresFloorModel(fallback_sigma_arcsec=None),
         }
+        # The Veres products were recorded with the working table the Python
+        # baseline bundled; it now ships in the data package.
+        if importlib.util.find_spec(SIGMA_TABLE_PACKAGE) is not None:
+            working = load_sigma_table(VERES2017_WORKING_TABLE)
+            models.update(
+                {
+                    "veres_floor": VeresFloorModel(working),
+                    "veres_floor_fill": VeresFloorModel(working, fill_missing=True),
+                    "veres_replace": VeresReplaceModel(working),
+                    "veres_floor_nofallback": VeresFloorModel(
+                        working, fallback_sigma_arcsec=None
+                    ),
+                }
+            )
         observations = _observations(fixture["inputs"])
         obs_cross = _observations(fixture["inputs"], cross_term=1e-9)
         expected = fixture["products"]["models"]

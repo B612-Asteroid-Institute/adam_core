@@ -120,7 +120,6 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "efcc18_parse_bias_dat",
     "efcc18_corrections_numpy",
     "veres_model_apply_numpy",
-    "veres2017_sigma_table_columns",
     "ades_angular_covariance_numpy",
     "observation_whitening_matrices_numpy",
     "whitened_2body_jacobian_numpy",

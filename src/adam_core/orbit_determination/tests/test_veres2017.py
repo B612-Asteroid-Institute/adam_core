@@ -1,9 +1,13 @@
 """
 Tests for the VFC2017 station/catalog sigma interpreters (`VeresFloorModel`,
-`VeresReplaceModel`) and the bundled sigma table. Synthetic observations only.
+`VeresReplaceModel`, `SigmaFillModel`). Synthetic tables only; the tests that
+read the data package's tables skip when ``observatory_uncertainties`` is not
+installed (adam_core does not depend on it).
 """
 
 from __future__ import annotations
+
+import sys
 
 import numpy as np
 import numpy.testing as npt
@@ -19,13 +23,17 @@ from ..observation_uncertainty import (
     assert_positions_unchanged,
 )
 from ..veres2017 import (
+    SIGMA_TABLE_PACKAGE,
+    V2_SIGMA_FILL_TABLE,
     VERES2017_FALLBACK_SIGMA_ARCSEC,
     VERES2017_SIGMA_TABLE_SCHEMA,
+    VERES2017_WORKING_TABLE,
+    SigmaFillModel,
     VeresFloorModel,
     VeresReplaceModel,
     VeresSigmaLookup,
+    load_sigma_table,
     validate_veres_sigma_table,
-    veres2017_sigma_table,
 )
 from .test_observation_uncertainty import make_observations
 
@@ -60,21 +68,27 @@ def observations_with(
     return observations.set_column("astcat", pa.array(astcats, pa.large_string()))
 
 
-class TestBundledTable:
-    def test_schema_and_sanity(self) -> None:
-        bundled = veres2017_sigma_table()
-        assert bundled.schema.equals(VERES2017_SIGMA_TABLE_SCHEMA)
-        sigma_ra = np.array(bundled["sigma_ra_arcsec"].to_pylist())
-        sigma_dec = np.array(bundled["sigma_dec_arcsec"].to_pylist())
+class TestPackageTables:
+    """The sigma tables are data of the private observatory-uncertainties
+    package; adam_core resolves them by import and bundles none."""
+
+    @pytest.fixture(autouse=True)
+    def _package(self) -> None:
+        pytest.importorskip(SIGMA_TABLE_PACKAGE)
+
+    def test_working_table_schema_and_sanity(self) -> None:
+        working = load_sigma_table(VERES2017_WORKING_TABLE)
+        assert working.schema.equals(VERES2017_SIGMA_TABLE_SCHEMA)
+        sigma_ra = np.array(working["sigma_ra_arcsec"].to_pylist())
+        sigma_dec = np.array(working["sigma_dec_arcsec"].to_pylist())
         assert np.all(sigma_ra > 0) and np.all(sigma_dec > 0)
         assert np.all(sigma_ra <= 1.0) and np.all(sigma_dec <= 1.0)
-        keys = list(zip(bundled["obs_code"].to_pylist(), bundled["astcat"].to_pylist()))
+        keys = list(zip(working["obs_code"].to_pylist(), working["astcat"].to_pylist()))
         assert len(keys) == len(set(keys))
-        # Validation of the bundled table is clean
-        validate_veres_sigma_table(bundled)
+        validate_veres_sigma_table(working)
 
-    def test_known_entries(self) -> None:
-        lookup = VeresSigmaLookup()
+    def test_known_working_table_entries(self) -> None:
+        lookup = VeresSigmaLookup(load_sigma_table(VERES2017_WORKING_TABLE))
         assert lookup.sigmas("703", "Gaia2") == (0.34, 0.34)  # station override
         assert lookup.sigmas("F51", "UCAC4") == (0.30, 0.30)  # catalog default
         assert lookup.sigmas("704", "USNOA2") == (0.60, 0.75)  # asymmetric override
@@ -82,6 +96,36 @@ class TestBundledTable:
             VERES2017_FALLBACK_SIGMA_ARCSEC,
             VERES2017_FALLBACK_SIGMA_ARCSEC,
         )
+
+    def test_model_defaults_resolve_the_package_tables(self) -> None:
+        # SigmaFillModel -> v2_sigma_fill (global row present, so the scalar
+        # fallback is never reached); the Veres models -> veres2017_working.
+        fill = SigmaFillModel()
+        assert fill.lookup.sigma_table.equals(load_sigma_table(V2_SIGMA_FILL_TABLE))
+        assert fill.lookup.sigmas("X99", "NoSuchCatalog") != (
+            VERES2017_FALLBACK_SIGMA_ARCSEC,
+            VERES2017_FALLBACK_SIGMA_ARCSEC,
+        )
+        for model in (VeresFloorModel(), VeresReplaceModel()):
+            assert model.lookup.sigma_table.equals(
+                load_sigma_table(VERES2017_WORKING_TABLE)
+            )
+        assert VeresSigmaLookup().sigma_table.equals(
+            load_sigma_table(V2_SIGMA_FILL_TABLE)
+        )
+
+
+class TestPackageMissing:
+    def test_default_table_without_the_package_raises_import_error(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setitem(sys.modules, SIGMA_TABLE_PACKAGE, None)
+        with pytest.raises(ImportError, match="adam-observatory-uncertainties"):
+            SigmaFillModel()
+        with pytest.raises(ImportError, match="sigma_table"):
+            VeresFloorModel()
+        # An explicit table never touches the package.
+        VeresFloorModel(SMALL_TABLE)
 
 
 class TestLookup:
@@ -245,7 +289,6 @@ class TestVeresReplaceModel:
 # ---------------------------------------------------------------------------
 # Generic table rows (station-only / global) and the fill-only model
 # ---------------------------------------------------------------------------
-from ..veres2017 import SigmaFillModel  # noqa: E402
 
 
 def table_nullable(rows: list[tuple[str | None, str | None, float, float]]) -> pa.Table:
@@ -292,8 +335,9 @@ class TestGenericLookupRows:
                 table_nullable([("703", None, 0.4, 0.4), ("703", None, 0.5, 0.5)])
             )
 
-    def test_bundled_veres_table_still_validates(self) -> None:
-        lookup = VeresSigmaLookup()
+    def test_package_working_table_still_validates(self) -> None:
+        pytest.importorskip(SIGMA_TABLE_PACKAGE)
+        lookup = VeresSigmaLookup(load_sigma_table(VERES2017_WORKING_TABLE))
         assert lookup.sigmas("703", "Gaia2") == (0.34, 0.34)
         assert lookup.sigmas("X99", "ZZZ") == (
             VERES2017_FALLBACK_SIGMA_ARCSEC,
