@@ -23,7 +23,7 @@ import pytest
 import quivr as qv
 
 from ...coordinates.covariances import CoordinateCovariances
-from ..defaults import default_observation_models, default_orbit_fitter
+from ..defaults import default_observation_models
 from ..evaluate import OrbitDeterminationObservations
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits, ObservationAstrometry
 from ..native_orbit_fitter import NativeOrbitFitter
@@ -413,7 +413,7 @@ class TestRunOdProvenance:
         observations = make_observations(["500", "F51", "W84"], [0.0, 30.0, -45.0])
         fitter = RecordingFitter(outlier_ids=("obs_02",))
 
-        _, members = run_od(observations, fitter, propagator=UNUSED_PROPAGATOR)
+        _, members = run_od(observations, fitter, None, propagator=UNUSED_PROPAGATOR)
 
         assert members.outlier.to_pylist() == [False, False, True]
         assert members.solution.to_pylist() == [True, True, False]
@@ -461,12 +461,15 @@ class TestRunOdProvenance:
             "id", pa.array(["dup", "dup"], pa.large_string())
         )
         with pytest.raises(ValueError, match="unique"):
-            run_od(observations, RecordingFitter(), propagator=UNUSED_PROPAGATOR)
+            run_od(observations, RecordingFitter(), None, propagator=UNUSED_PROPAGATOR)
 
     def test_empty_observations_return_empty_tables(self) -> None:
         fitter = RecordingFitter()
         fitted_orbits, members = run_od(
-            OrbitDeterminationObservations.empty(), fitter, propagator=UNUSED_PROPAGATOR
+            OrbitDeterminationObservations.empty(),
+            fitter,
+            None,
+            propagator=UNUSED_PROPAGATOR,
         )
         assert len(fitted_orbits) == 0
         assert len(members) == 0
@@ -477,13 +480,19 @@ class TestRunOdProvenance:
         fitter = RecordingFitter()
 
         fitted_orbits, _ = run_od(
-            observations, fitter, propagator=UNUSED_PROPAGATOR, object_id="2024 XY"
+            observations,
+            fitter,
+            None,
+            propagator=UNUSED_PROPAGATOR,
+            object_id="2024 XY",
         )
         assert fitter.object_ids == ["2024 XY"]
         assert fitted_orbits.object_id.to_pylist() == ["2024 XY"]
 
         fitter = RecordingFitter()
-        fitted_orbits, _ = run_od(observations, fitter, propagator=UNUSED_PROPAGATOR)
+        fitted_orbits, _ = run_od(
+            observations, fitter, None, propagator=UNUSED_PROPAGATOR
+        )
         assert isinstance(fitter.object_ids[0], str) and fitter.object_ids[0]
         assert fitted_orbits.object_id.to_pylist() == [None]
 
@@ -557,7 +566,7 @@ class TestRunOdNativeOrbitFitter:
         propagator = TwoBodyPropagator()
 
         orbits_plain, members_plain = run_od(
-            two_body_observations, native_fitter(), propagator=propagator
+            two_body_observations, native_fitter(), None, propagator=propagator
         )
         orbits_model, members_model = run_od(
             two_body_observations,
@@ -610,7 +619,7 @@ class TestRunOdNativeOrbitFitter:
     ) -> None:
         propagator = TwoBodyPropagator()
         orbits_plain, _ = run_od(
-            two_body_observations, native_fitter(), propagator=propagator
+            two_body_observations, native_fitter(), None, propagator=propagator
         )
         orbits_identity, members = run_od(
             two_body_observations,
@@ -704,11 +713,13 @@ def test_run_od_with_the_default_stack(
     two_body_observations: OrbitDeterminationObservations,
 ) -> None:
     """
-    The shipped defaults (`default_observation_models` + `default_orbit_fitter`)
-    run end to end through `run_od`: EFCC18 moves the UCAC4 positions, the
-    empirical covariance and night-batch models only inflate sigmas, and the
-    members record original vs. used astrometry. Skipped without the
-    ``adam-observatory-uncertainties`` data package or JPL's ``bias.dat``.
+    `run_od` with no ``models`` argument and a plainly constructed
+    `NativeOrbitFitter` IS the shipped default configuration: the
+    `default_observation_models` stack (EFCC18 moves the UCAC4 positions, the
+    empirical covariance and night-batch models only inflate sigmas) and
+    CMC2003 rejection, with original vs. used astrometry on the members.
+    Skipped without the ``adam-observatory-uncertainties`` data package or
+    JPL's ``bias.dat``.
     """
     pytest.importorskip(BIAS_TABLE_PACKAGE)
     efcc18 = pytest.importorskip("adam_core.observations.efcc18")
@@ -719,17 +730,39 @@ def test_run_od_with_the_default_stack(
     observations = with_astcat(
         two_body_observations, ["UCAC4"] * len(two_body_observations)
     )
+    fitter = NativeOrbitFitter(
+        propagator_class=TwoBodyPropagator, iod_rchi2_threshold=1e6
+    )
+    assert fitter.outlier_rejection == "cmc2003"
     fitted, members = run_od(
-        observations,
-        default_orbit_fitter(TwoBodyPropagator, iod_rchi2_threshold=1e6),
-        default_observation_models(),
-        propagator=TwoBodyPropagator(),
-        object_id="default-stack",
+        observations, fitter, propagator=TwoBodyPropagator(), object_id="defaults"
     )
     assert len(fitted) == 1 and fitted.success[0].as_py()
     assert members.table["original_astrometry"].null_count == 0
     used = members.used_astrometry
     original = members.original_astrometry
-    # EFCC18 moved the UCAC4 positions; the empirical covariance inflated sigmas.
     assert not np.array_equal(used.lon.to_numpy(), original.lon.to_numpy())
     assert np.all(used.sigma_lon.to_numpy() >= original.sigma_lon.to_numpy())
+
+    # The same stack, spelled out, gives the same fit.
+    explicit, _ = run_od(
+        observations,
+        fitter,
+        default_observation_models(),
+        propagator=TwoBodyPropagator(),
+        object_id="defaults",
+    )
+    npt.assert_allclose(
+        explicit.coordinates.values, fitted.coordinates.values, rtol=0, atol=1e-12
+    )
+
+
+def test_run_od_rejects_unknown_models_string() -> None:
+    observations = make_observations(["500", "500", "500"], [0.0, 1.0, 2.0])
+    with pytest.raises(ValueError, match="models must be"):
+        run_od(
+            observations,
+            RecordingFitter(),
+            "defaults",  # type: ignore[arg-type]
+            propagator=UNUSED_PROPAGATOR,
+        )

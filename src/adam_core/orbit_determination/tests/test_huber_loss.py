@@ -385,8 +385,13 @@ class TestIterativeFitAndFitter:
     def test_native_fitter_forwards_loss_and_pickles(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        # The worst-residual path forwards through iterative_fit (the default
+        # CMC2003 path is covered in test_cmc2003_rejection).
         fitter = NativeOrbitFitter(
-            propagator_class=TwoBodyPropagator, loss="huber", f_scale=2.0
+            propagator_class=TwoBodyPropagator,
+            loss="huber",
+            f_scale=2.0,
+            outlier_rejection="worst_residual",
         )
         restored = pickle.loads(pickle.dumps(fitter))
         assert restored.loss == "huber" and restored.f_scale == 2.0

@@ -27,12 +27,15 @@ This file contains notable changes in adam-core
   `astcat` column and `from_ades` converter on `OrbitDeterminationObservations`;
   `OrbitFitter.refine_fit` / `full_od` and `NativeOrbitFitter`; and the
   `observatory_bias_model` parameter on every module-level OD entry point.
-- `adam_core.orbit_determination.defaults`: `OD_DEFAULTS` (every lever value of
-  the shipped configuration, decision 2026-09-23), `default_observation_models`
-  (SigmaFill -> EFCC18 -> EmpiricalCovariance add -> NightBatch cap 4) and
-  `default_orbit_fitter` (CMC2003 rejection, linear loss, analytic Jacobian),
-  plus `load_bias_table` resolving the observatory bias table from the data
-  package like `load_sigma_table`.
+- The shipped defaults are the signature defaults: `NativeOrbitFitter` now
+  defaults to `outlier_rejection="cmc2003"` (was `"worst_residual"`), and
+  `run_od` called without `models` applies the default observation-model
+  stack `default_observation_models()` (SigmaFill `v2_sigma_fill` -> EFCC18 ->
+  EmpiricalCovariance `v2_full` add -> NightBatch cap 4), resolving its tables
+  from the data packages; pass `models=None` to fit the observations as
+  supplied. `load_bias_table` resolves the observatory bias table from the
+  data package like `load_sigma_table`. The full defaults summary lives in the
+  `adam_core.orbit_determination.defaults` module docstring.
 - Whitened-residual differential correction: `fit_least_squares` now minimizes
   the 2N whitened (lon, lat) residual components with an exact 2-body
   Jacobian from the Rust forward-mode autodiff kernels, validates the

@@ -32,17 +32,20 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
+from typing import Literal
 
 import pyarrow as pa
 import pyarrow.compute as pc
 
 from ..propagator.propagator import Propagator
+from .defaults import default_observation_models
 from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, ObservationAstrometry
 from .observation_uncertainty import CompositeModel, ObservationUncertaintyModel
 from .orbit_fitter import OrbitFitter
 
 __all__ = [
+    "DEFAULT_MODELS",
     "ObservationModels",
     "apply_observation_models",
     "attach_observation_provenance",
@@ -54,6 +57,10 @@ __all__ = [
 ObservationModels = (
     ObservationUncertaintyModel | Sequence[ObservationUncertaintyModel] | None
 )
+
+#: `run_od` default for ``models``: the shipped observation-model stack of
+#: `~adam_core.orbit_determination.defaults.default_observation_models`.
+DEFAULT_MODELS: Literal["default"] = "default"
 
 
 def _as_array(column: pa.Array | pa.ChunkedArray) -> pa.Array:
@@ -179,7 +186,7 @@ def attach_observation_provenance(
 def run_od(
     observations: OrbitDeterminationObservations,
     fitter: OrbitFitter,
-    models: ObservationModels = None,
+    models: ObservationModels | Literal["default"] = DEFAULT_MODELS,
     *,
     propagator: Propagator,
     object_id: str | None = None,
@@ -212,10 +219,17 @@ def run_od(
         Backend used for the fit, e.g. `NativeOrbitFitter` or an external
         plugin. The fitter receives the transformed observations and never
         the models.
-    models : `ObservationUncertaintyModel`, sequence of them, or None, optional
-        Observation model(s) to apply before fitting, in order. Default None
-        fits the observations as supplied (members then record
-        ``used_astrometry`` equal to ``original_astrometry``).
+    models : `ObservationUncertaintyModel`, sequence of them, None, or "default"
+        Observation model(s) to apply before fitting, in order. The default
+        ``"default"`` applies the shipped stack of
+        `~adam_core.orbit_determination.defaults.default_observation_models`
+        (sigma fill, EFCC18 debiasing, empirical station covariance, nightly
+        deweighting), resolving its tables from the data packages and raising
+        an `ImportError` / `FileNotFoundError` naming the missing data when
+        they are not installed. Pass None (or an empty sequence) to fit the
+        observations exactly as supplied (members then record
+        ``used_astrometry`` equal to ``original_astrometry``), or your own
+        model(s).
     propagator : `~adam_core.propagator.Propagator`
         Propagator used by the backend during refinement.
     object_id : str, optional
@@ -237,8 +251,12 @@ def run_od(
     ------
     ValueError
         If observation ids are not unique, if the models change the set or
-        order of observations, or if the fitter returns members referencing
-        unknown observation ids.
+        order of observations, if the fitter returns members referencing
+        unknown observation ids, or if ``models`` is a string other than
+        ``"default"``.
+    ImportError, FileNotFoundError
+        If ``models="default"`` and the ``adam-observatory-uncertainties``
+        data package or JPL's EFCC18 ``bias.dat`` is not installed.
 
     Notes
     -----
@@ -254,6 +272,13 @@ def run_od(
     if ids.null_count > 0 or pc.count_distinct(ids).as_py() != len(ids):
         raise ValueError("Observation ids must be unique and non-null")
 
+    if isinstance(models, str):
+        if models != DEFAULT_MODELS:
+            raise ValueError(
+                f"models must be observation models, None or {DEFAULT_MODELS!r}; "
+                f"got {models!r}"
+            )
+        models = default_observation_models()
     used = apply_observation_models(observations, models)
 
     backend_object_id = object_id if object_id is not None else uuid.uuid4().hex

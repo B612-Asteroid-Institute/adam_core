@@ -58,20 +58,23 @@ class NativeOrbitFitter(OrbitFitter):
     f_scale : float, optional
         Huber transition point in units of whitened (1-sigma) residual
         components. Default 1.345. Ignored for ``loss="linear"``.
-    outlier_rejection : {"worst_residual", "cmc2003"}, optional
+    outlier_rejection : {"cmc2003", "worst_residual"}, optional
         Outlier treatment during differential correction.
 
-        - ``"worst_residual"`` (default): `iterative_fit`, which removes the
+        - ``"cmc2003"`` (default): `cmc2003_fit`, Carpino-Milani-Chesley
+          (2003) rejection with re-inclusion against the expected post-fit
+          residual covariance, with OrbFit's ``reject.def`` constants.
+          ``rchi2_threshold``, ``min_obs``, ``min_arc_length`` and
+          ``contamination_percentage`` then apply to IOD only; tune the
+          scheme through ``rejection_kwargs``.
+        - ``"worst_residual"``: `iterative_fit`, which removes the
           worst-residual observation and refits while the reduced chi2
           exceeds ``rchi2_threshold``, bounded by ``contamination_percentage``,
-          ``min_obs`` and ``min_arc_length``.
-        - ``"cmc2003"``: `cmc2003_fit`, Carpino-Milani-Chesley (2003)
-          rejection with re-inclusion against the expected post-fit residual
-          covariance (OrbFit defaults). ``rchi2_threshold``, ``min_obs``,
-          ``min_arc_length`` and ``contamination_percentage`` then apply to
-          IOD only; tune the scheme through ``rejection_kwargs``.
+          ``min_obs`` and ``min_arc_length`` (the pre-2026-09 behaviour).
 
-        Both compose with ``loss="huber"``.
+        Both compose with ``loss="huber"``. See
+        `adam_core.orbit_determination.defaults` for the full default
+        configuration.
     rejection_kwargs : dict, optional
         Extra keyword arguments for the rejection function (e.g.
         ``chi2_reject``, ``chi2_recover`` for ``"cmc2003"``; ``jacobian``,
@@ -92,7 +95,7 @@ class NativeOrbitFitter(OrbitFitter):
         ] = "combinations",
         loss: LossType = "linear",
         f_scale: float = HUBER_F_SCALE_DEFAULT,
-        outlier_rejection: Literal["worst_residual", "cmc2003"] = "worst_residual",
+        outlier_rejection: Literal["worst_residual", "cmc2003"] = "cmc2003",
         rejection_kwargs: dict[str, Any] | None = None,
     ) -> None:
         if outlier_rejection not in ("worst_residual", "cmc2003"):

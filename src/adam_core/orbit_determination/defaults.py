@@ -1,166 +1,104 @@
 """
-The Asteroid Institute default orbit-determination settings, in one place.
+The shipped orbit-determination defaults, and the notes that explain them.
 
-Every lever of the fit-time observation handling and of the fitter has a
-value here (`OD_DEFAULTS`), and two factories build the shipped configuration
-from those values so that downstream pipelines reproduce it by construction
-instead of re-assembling it:
+There is no configuration object: every default is the default value of the
+signature that owns it, so calling the pieces with no arguments gives the
+shipped behaviour. The one thing a signature cannot express is the
+observation-model STACK (an ordered composition with external tables), which
+`default_observation_models` builds and `run_od` applies when it is called
+without ``models``.
 
-* `default_observation_models` -- the model stack applied to the ORIGINAL
-  observations at fit time by `~adam_core.orbit_determination.run_od`, in the
-  prescribed order: fill sigmas the MPC does not report (`SigmaFillModel`,
-  ``v2_sigma_fill``), debias positions (`EFCC18DebiasModel`, RING order), add
-  the station's empirical residual covariance (`EmpiricalCovarianceModel`,
-  ``v2_full``, ``mode="add"``), deweight same-station same-night batches
-  (`NightBatchDeweightingModel`, ``cap=4``).
-* `default_orbit_fitter` -- `NativeOrbitFitter` with Carpino-Milani-Chesley
-  (2003) rejection, the linear loss, and the analytic-Jacobian /
-  validated-covariance differential correction.
+NOTES: the default configuration (decision 2026-09-23)
+======================================================
 
-The values are the outcome of the Asteroid Institute 100-object walk-forward
-study (decision 2026-09-23, ``adam_od_experiments`` defaults handoff). Kept as
-options but NOT defaults: ``loss="huber"`` (open covariance pathology on short
-arcs), `VeresFloorModel` / `VeresReplaceModel`, `SigmaFloorModel` (no-op on
-that study), `PerformanceWeightedModel` (over-inflates by about 1.5x) and
-``NightBatchDeweightingModel(cap=1)`` (about 1.9x inflation, no position
-benefit). The models act on the fit only: judge a held-out observation against
-its nominal position and original sigma.
+Outcome of the Asteroid Institute 100-object walk-forward study
+(``adam_od_experiments``, defaults handoff of 2026-09-23). Every lever, its
+default, and the signature that owns it:
 
-The tables are data of the private ``adam-observatory-uncertainties`` package
-and JPL's ``bias.dat`` (``jpl_debias_2018``); the factories resolve them by
-import when no table is passed and raise an `ImportError` / `FileNotFoundError`
-naming the missing data otherwise. Pass tables explicitly to pin a study.
+Observation models, applied in this order by `run_od` (default ``models``)
+---------------------------------------------------------------------------
+1. Sigma where the MPC reports none
+       `SigmaFillModel` with the ``v2_sigma_fill`` table of the private
+       ``adam-observatory-uncertainties`` package (`load_sigma_table`), global
+       fallback 0.75" (`VERES2017_FALLBACK_SIGMA_ARCSEC`). Fills ONLY missing
+       sigmas; reported sigmas are never touched. Runs first so every later
+       model sees a finite covariance.
+2. Star-catalog debiasing (the only default that MOVES positions)
+       `EFCC18DebiasModel`: JPL ``bias.dat`` (``jpl_debias_2018`` package,
+       env var or cache; see `adam_core.observations.efcc18`), HEALPix RING
+       order, every tabulated catalog corrected (``exclude_astcats=()``;
+       `EFCC18_JPL_UNDEBIASED_ASTCATS` is opt-in).
+3. Station weighting
+       `EmpiricalCovarianceModel` with the ``v2_full`` bias table
+       (`load_bias_table`), ``mode="add"``, ``min_resid_cov_n=30``: the
+       station's measured 2x2 residual covariance is ADDED to the reported
+       covariance; stations with fewer residuals pass through.
+4. Nightly deweighting
+       `NightBatchDeweightingModel(cap=4)`: sigma scaled by sqrt(N/4) for
+       same-station same-night batches with N > 4.
+
+Fitter (`NativeOrbitFitter` defaults)
+-------------------------------------
+- ``outlier_rejection="cmc2003"``: Carpino-Milani-Chesley (2003) rejection
+  with re-inclusion (`cmc2003_fit`), OrbFit ``reject.def`` constants:
+  chi2 reject 8, recover 7, frac 0.25, 15 passes, at most 50 % rejected,
+  180-day apparitions, 5 % eigenvalue floor (`CMC2003_*` constants).
+- ``loss="linear"``, ``f_scale=1.345`` (Huber is available, not default).
+- Differential correction `fit_least_squares` defaults: whitened 2N residuals,
+  ``jacobian="analytic"`` (exact 2-body STM, autodiff), ``validate_covariance``
+  True (weak-direction probe with central-difference fallback).
+- IOD: Gauss on every triplet (``observation_selection_method="combinations"``),
+  ``iod_rchi2_threshold=200``, ``min_obs=6``, ``min_arc_length=1`` day,
+  ``contamination_percentage=20``, ``rchi2_threshold=10`` (under CMC2003 the
+  last four bound IOD only).
+
+Provenance and scoring
+----------------------
+- The models act on the FIT only. `FittedOrbitMembers` record original vs
+  used astrometry, ``astcat`` and ``weight``. Judge a held-out observation
+  against its nominal position and ORIGINAL sigma (2026-09-16 rule).
+
+Options kept, not defaults
+--------------------------
+- ``loss="huber"`` (open covariance pathology on short arcs).
+- `VeresFloorModel` / `VeresReplaceModel` (``veres2017_working`` table is the
+  legacy reference).
+- `SigmaFloorModel` (no-op on the study), `PerformanceWeightedModel`
+  (over-inflates by about 1.5x), ``NightBatchDeweightingModel(cap=1)``
+  (about 1.9x inflation, no position benefit), ``mode="replace"``.
+- ``outlier_rejection="worst_residual"`` (the pre-2026-09 loop).
+
+Opting out
+----------
+- ``run_od(..., models=None)`` fits the observations exactly as supplied;
+  pass your own model list to pin a study. The tables can be injected
+  (``default_observation_models(bias_table=..., sigma_table=...)``).
+- The lower-level entry points (`initial_orbit_determination`,
+  `differential_correction`, `iterative_fit`, ...) take an optional
+  ``observatory_bias_model`` that defaults to None (identity): they are the
+  building blocks, not the shipped pipeline, and must work without the data
+  packages.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Optional, Type, Union
+from typing import Optional, Union
 
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 
-from ..propagator.propagator import Propagator
-from .differential_correction import HUBER_F_SCALE_DEFAULT, LossType
-from .native_orbit_fitter import NativeOrbitFitter
 from .observation_uncertainty import (
-    V2_FULL_BIAS_TABLE,
     EFCC18DebiasModel,
     EmpiricalCovarianceModel,
     NightBatchDeweightingModel,
     ObservationUncertaintyModel,
     load_bias_table,
 )
-from .rejection import (
-    CMC2003_APPARITION_GAP_DAYS,
-    CMC2003_CHI2_FRAC,
-    CMC2003_CHI2_RECOVER,
-    CMC2003_CHI2_REJECT,
-    CMC2003_MAX_ITERATIONS,
-    CMC2003_MAX_REJECTED_FRACTION,
-    CMC2003_PSD_FLOOR_FRAC,
-)
-from .veres2017 import (
-    V2_SIGMA_FILL_TABLE,
-    VERES2017_FALLBACK_SIGMA_ARCSEC,
-    SigmaFillModel,
-    load_sigma_table,
-)
+from .veres2017 import SigmaFillModel, load_sigma_table
 
-__all__ = [
-    "OD_DEFAULTS",
-    "OrbitDeterminationDefaults",
-    "default_observation_models",
-    "default_orbit_fitter",
-]
-
-
-@dataclass(frozen=True)
-class OrbitDeterminationDefaults:
-    """
-    Every default lever of the shipped orbit-determination configuration.
-
-    Observation models (applied in this order by `default_observation_models`)
-    -------------------------------------------------------------------------
-    sigma_fill_table : str
-        Data-package sigma table `SigmaFillModel` fills missing MPC sigmas from.
-    sigma_fill_fallback_arcsec : float
-        Sigma used when nothing in that table matches (both axes).
-    efcc18_exclude_astcats : tuple of str
-        Catalogs `EFCC18DebiasModel` leaves uncorrected although tabulated.
-        Empty: every tabulated catalog is debiased (the study's behaviour;
-        pass `EFCC18_JPL_UNDEBIASED_ASTCATS` to follow JPL's practice).
-    bias_table : str
-        Data-package observatory bias table for `EmpiricalCovarianceModel`.
-    empirical_covariance_mode : {"add", "replace"}
-        Combine the measured residual covariance with the reported one.
-    min_resid_cov_n : int
-        Stations with fewer residuals than this pass through unchanged.
-    night_batch_cap : int
-        Same-station same-night batches larger than this are scaled by N/cap.
-
-    Fitter (`default_orbit_fitter`)
-    --------------------------------
-    outlier_rejection : {"worst_residual", "cmc2003"}
-        Outlier treatment of the differential correction.
-    cmc2003_chi2_reject, cmc2003_chi2_recover, cmc2003_chi2_frac,
-    cmc2003_max_iterations, cmc2003_max_rejected_fraction,
-    cmc2003_apparition_gap_days, cmc2003_psd_floor_frac
-        OrbFit ``reject.def`` constants used by the CMC2003 scheme.
-    loss : {"linear", "huber"}, f_scale : float
-        Loss of the differential correction (Huber is an option, not default).
-    jacobian : {"analytic", "central", "2-point"}, validate_covariance : bool
-        Jacobian and covariance validation of `fit_least_squares`.
-    min_obs, min_arc_length, contamination_percentage, rchi2_threshold
-        `NativeOrbitFitter` IOD / worst-residual loop bounds (rchi2 and
-        contamination apply to IOD only under CMC2003 rejection).
-    iod_rchi2_threshold, observation_selection_method
-        Gauss IOD acceptance threshold and triplet selection.
-    """
-
-    sigma_fill_table: str = V2_SIGMA_FILL_TABLE
-    sigma_fill_fallback_arcsec: float = VERES2017_FALLBACK_SIGMA_ARCSEC
-    efcc18_exclude_astcats: tuple[str, ...] = ()
-    bias_table: str = V2_FULL_BIAS_TABLE
-    empirical_covariance_mode: Literal["add", "replace"] = "add"
-    min_resid_cov_n: int = 30
-    night_batch_cap: int = 4
-
-    outlier_rejection: Literal["worst_residual", "cmc2003"] = "cmc2003"
-    cmc2003_chi2_reject: float = CMC2003_CHI2_REJECT
-    cmc2003_chi2_recover: float = CMC2003_CHI2_RECOVER
-    cmc2003_chi2_frac: float = CMC2003_CHI2_FRAC
-    cmc2003_max_iterations: int = CMC2003_MAX_ITERATIONS
-    cmc2003_max_rejected_fraction: float = CMC2003_MAX_REJECTED_FRACTION
-    cmc2003_apparition_gap_days: float = CMC2003_APPARITION_GAP_DAYS
-    cmc2003_psd_floor_frac: float = CMC2003_PSD_FLOOR_FRAC
-    loss: LossType = "linear"
-    f_scale: float = HUBER_F_SCALE_DEFAULT
-    jacobian: Literal["analytic", "central", "2-point"] = "analytic"
-    validate_covariance: bool = True
-    min_obs: int = 6
-    min_arc_length: float = 1.0
-    contamination_percentage: float = 20.0
-    rchi2_threshold: float = 10.0
-    iod_rchi2_threshold: float = 200.0
-    observation_selection_method: Literal[
-        "combinations", "first+middle+last", "thirds"
-    ] = "combinations"
-
-    def model_order(self) -> tuple[str, ...]:
-        """Class names of the default model stack, in application order."""
-        return (
-            "SigmaFillModel",
-            "EFCC18DebiasModel",
-            "EmpiricalCovarianceModel",
-            "NightBatchDeweightingModel",
-        )
-
-
-#: The shipped defaults (decision 2026-09-23).
-OD_DEFAULTS = OrbitDeterminationDefaults()
+__all__ = ["default_observation_models"]
 
 
 def default_observation_models(
@@ -168,106 +106,48 @@ def default_observation_models(
     sigma_table: Optional[pa.Table] = None,
     efcc18_bias_table: Optional[npt.NDArray[np.floating]] = None,
     efcc18_bias_dat: Optional[Union[str, Path]] = None,
-    defaults: OrbitDeterminationDefaults = OD_DEFAULTS,
 ) -> list[ObservationUncertaintyModel]:
     """
-    The default observation-model stack, in application order, for
-    `~adam_core.orbit_determination.run_od`.
+    The default observation-model stack, in application order: what `run_od`
+    applies when called without ``models`` (see the module notes).
 
     Parameters
     ----------
     bias_table : `pyarrow.Table`, optional
-        Observatory bias table (`BIAS_TABLE_SCHEMA`). Default: the
-        ``defaults.bias_table`` table of the ``adam-observatory-uncertainties``
-        data package.
+        Observatory bias table (`BIAS_TABLE_SCHEMA`) for the empirical
+        covariance model. Default: the ``v2_full`` table of the
+        ``adam-observatory-uncertainties`` data package (`load_bias_table`).
     sigma_table : `pyarrow.Table`, optional
-        Station/catalog sigma table (`VERES2017_SIGMA_TABLE_SCHEMA`). Default:
-        the ``defaults.sigma_fill_table`` table of the data package.
+        Station/catalog sigma table (`VERES2017_SIGMA_TABLE_SCHEMA`) for the
+        sigma fill. Default: the ``v2_sigma_fill`` table of the data package
+        (`load_sigma_table`).
     efcc18_bias_table : `numpy.ndarray` (49152, 26, 4), optional
         Pre-loaded EFCC18 table; otherwise located from ``efcc18_bias_dat``,
         the environment, the ``jpl_debias_2018`` package or the cache.
     efcc18_bias_dat : path, optional
         Explicit ``bias.dat`` location (only when ``efcc18_bias_table`` is None).
-    defaults : `OrbitDeterminationDefaults`
-        Lever values; `OD_DEFAULTS` unless overridden.
 
     Returns
     -------
     models : list of `ObservationUncertaintyModel`
         ``[SigmaFillModel, EFCC18DebiasModel, EmpiricalCovarianceModel,
-        NightBatchDeweightingModel]`` configured from ``defaults``.
+        NightBatchDeweightingModel]``.
+
+    Raises
+    ------
+    ImportError
+        If a table is not passed and the ``adam-observatory-uncertainties``
+        package is not installed.
+    FileNotFoundError
+        If no EFCC18 ``bias.dat`` can be located.
     """
     if sigma_table is None:
-        sigma_table = load_sigma_table(defaults.sigma_fill_table)
+        sigma_table = load_sigma_table()
     if bias_table is None:
-        bias_table = load_bias_table(defaults.bias_table)
+        bias_table = load_bias_table()
     return [
-        SigmaFillModel(
-            sigma_table, fallback_sigma_arcsec=defaults.sigma_fill_fallback_arcsec
-        ),
-        EFCC18DebiasModel(
-            bias_table=efcc18_bias_table,
-            bias_dat=efcc18_bias_dat,
-            exclude_astcats=defaults.efcc18_exclude_astcats,
-        ),
-        EmpiricalCovarianceModel(
-            bias_table,
-            mode=defaults.empirical_covariance_mode,
-            min_resid_cov_n=defaults.min_resid_cov_n,
-        ),
-        NightBatchDeweightingModel(cap=defaults.night_batch_cap),
+        SigmaFillModel(sigma_table),
+        EFCC18DebiasModel(bias_table=efcc18_bias_table, bias_dat=efcc18_bias_dat),
+        EmpiricalCovarianceModel(bias_table),
+        NightBatchDeweightingModel(),
     ]
-
-
-def default_orbit_fitter(
-    propagator_class: Type[Propagator],
-    propagator_kwargs: Optional[dict[str, Any]] = None,
-    defaults: OrbitDeterminationDefaults = OD_DEFAULTS,
-    **overrides: Any,
-) -> NativeOrbitFitter:
-    """
-    `NativeOrbitFitter` configured with the shipped defaults: CMC2003 outlier
-    rejection with OrbFit's constants, the linear loss, and the
-    analytic-Jacobian / validated-covariance differential correction.
-
-    Parameters
-    ----------
-    propagator_class : type
-        Propagator class used for IOD ephemerides (an instance of it, or any
-        other propagator, is passed separately to `run_od` for refinement).
-    propagator_kwargs : dict, optional
-        Constructor arguments for that class.
-    defaults : `OrbitDeterminationDefaults`
-        Lever values; `OD_DEFAULTS` unless overridden.
-    **overrides
-        Any `NativeOrbitFitter` keyword to override a default with.
-    """
-    rejection_kwargs: dict[str, Any] = {
-        "jacobian": defaults.jacobian,
-        "validate_covariance": defaults.validate_covariance,
-    }
-    if defaults.outlier_rejection == "cmc2003":
-        rejection_kwargs.update(
-            chi2_reject=defaults.cmc2003_chi2_reject,
-            chi2_recover=defaults.cmc2003_chi2_recover,
-            chi2_frac=defaults.cmc2003_chi2_frac,
-            max_iterations=defaults.cmc2003_max_iterations,
-            max_rejected_fraction=defaults.cmc2003_max_rejected_fraction,
-            apparition_gap_days=defaults.cmc2003_apparition_gap_days,
-            psd_floor_frac=defaults.cmc2003_psd_floor_frac,
-        )
-    settings: dict[str, Any] = {
-        "propagator_kwargs": propagator_kwargs,
-        "min_obs": defaults.min_obs,
-        "min_arc_length": defaults.min_arc_length,
-        "contamination_percentage": defaults.contamination_percentage,
-        "rchi2_threshold": defaults.rchi2_threshold,
-        "iod_rchi2_threshold": defaults.iod_rchi2_threshold,
-        "observation_selection_method": defaults.observation_selection_method,
-        "loss": defaults.loss,
-        "f_scale": defaults.f_scale,
-        "outlier_rejection": defaults.outlier_rejection,
-        "rejection_kwargs": rejection_kwargs,
-    }
-    settings.update(overrides)
-    return NativeOrbitFitter(propagator_class, **settings)

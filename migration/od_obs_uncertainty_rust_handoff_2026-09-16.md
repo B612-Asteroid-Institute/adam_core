@@ -105,18 +105,21 @@ defaults to `cap=4`, `EmpiricalCovarianceModel` to `mode="add"`, and
 by importing the private `observatory_uncertainties` data package, and the
 Veres models resolve its `veres2017_working` table; adam_core bundles no sigma
 table and still does not depend on the package (ImportError names it when
-missing). Flipping the fitter default is a one-line change if wanted.
+missing). (Superseded 2026-09-28: the fitter default was flipped, see below.)
 
-## 2026-09-28 follow-up: importable defaults (PR review)
+## 2026-09-28 follow-up: the defaults are the signature defaults (PR review)
 
-`adam_core.orbit_determination.defaults` makes the shipped configuration
-explicit and reproducible: `OD_DEFAULTS` (frozen dataclass with every lever
-value), `default_observation_models()` (SigmaFill `v2_sigma_fill` → EFCC18 →
-EmpiricalCovariance `v2_full` add, min_resid_cov_n 30 → NightBatch cap 4) and
-`default_orbit_fitter(propagator_class)` (CMC2003 with OrbFit constants, linear
-loss, analytic Jacobian, validated covariance). `load_bias_table` resolves the
-bias table from the data package like `load_sigma_table`. Class-level defaults
-are still not flipped (`NativeOrbitFitter()` alone = worst-residual).
+Kathleen's decision: no configuration object. `NativeOrbitFitter()` now
+defaults to `outlier_rejection="cmc2003"`; `run_od()` called without `models`
+applies `default_observation_models()` (SigmaFill `v2_sigma_fill` → EFCC18 →
+EmpiricalCovariance `v2_full` add, min_resid_cov_n 30 → NightBatch cap 4),
+resolving the tables from the data packages and raising an ImportError /
+FileNotFoundError naming the missing data otherwise; `models=None` opts out.
+`load_bias_table` resolves the bias table from the data package like
+`load_sigma_table`. The lower-level entry points keep `observatory_bias_model=None`
+(identity). The full defaults summary is the module docstring of
+`adam_core.orbit_determination.defaults`, mirrored by the docs table
+"The shipped defaults".
 
 ## Correctness gates
 

@@ -286,9 +286,9 @@ class TestTwoBodyIntegration:
 
 
 class TestNativeOrbitFitterDispatch:
-    def test_default_is_worst_residual(self) -> None:
+    def test_default_is_cmc2003(self) -> None:
         fitter = NativeOrbitFitter(propagator_class=TwoBodyPropagator)
-        assert fitter.outlier_rejection == "worst_residual"
+        assert fitter.outlier_rejection == "cmc2003"
         assert fitter.rejection_kwargs == {}
 
     def test_unknown_scheme_raises(self) -> None:
