@@ -510,9 +510,11 @@ fn parse_numbered_comet(designation: &str) -> Result<(u64, u8, Option<&str>, Opt
                     .any(|ch| matches!(ch, '|' | '\r' | '\n' | '\t'))
                 && !name.starts_with(' ')
                 && !name.ends_with(' ')
-                && name
-                    .split_once(' ')
-                    .is_none_or(|(year, _)| parse_signed_year(year, designation).is_err()) =>
+                && parse_signed_year(
+                    name.split_once(' ').map_or(name, |(year, _)| year),
+                    designation,
+                )
+                .is_err() =>
         {
             (identity, Some(name))
         }
@@ -1025,17 +1027,18 @@ fn roman_value(roman: &str) -> Option<u64> {
         b'M' => 1000,
         _ => 0,
     };
-    let mut total = 0_u64;
-    let mut previous = 0_u64;
+    let mut total = 0_i64;
+    let mut previous = 0_i64;
     for byte in roman.bytes().rev() {
         let value = digit(byte);
         if value < previous {
-            total -= value;
+            total = total.checked_sub(value)?;
         } else {
-            total += value;
+            total = total.checked_add(value)?;
             previous = value;
         }
     }
+    let total = u64::try_from(total).ok()?;
     if !(1..=999).contains(&total) || to_roman(total) != roman {
         return None;
     }
@@ -1276,12 +1279,30 @@ fn is_canonical_minor_provisional(value: &str) -> bool {
     unpack_provisional_designation(&packed).is_ok_and(|unpacked| unpacked == value)
 }
 
-fn looks_like_compact_provisional(value: &str) -> bool {
-    let letter_count = value.bytes().take_while(u8::is_ascii_uppercase).count();
-    (1..=2).contains(&letter_count)
-        && value[letter_count..]
+fn looks_like_malformed_minor_identity(number_text: &str, display_tail: &str) -> bool {
+    if number_text.len() != 4
+        || !number_text.bytes().all(|byte| byte.is_ascii_digit())
+        || !display_tail
             .bytes()
-            .all(|byte| byte.is_ascii_digit() || byte == b'-')
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b' ' | b'-'))
+    {
+        return false;
+    }
+
+    let upper_tail = display_tail.to_ascii_uppercase();
+    let compact_tail = upper_tail.replace(' ', "");
+    let normalized = format!("{number_text} {compact_tail}");
+    if is_canonical_minor_provisional(&normalized) || survey_parts(&normalized).is_ok() {
+        return true;
+    }
+
+    // Preserve ordinary title-cased proper names while rejecting short
+    // all-uppercase fragments that structurally resemble malformed MPC tails.
+    (1..=3).contains(&compact_tail.len())
+        && display_tail
+            .bytes()
+            .all(|byte| byte.is_ascii_uppercase() || matches!(byte, b' ' | b'-'))
+        && compact_tail.bytes().any(|byte| byte.is_ascii_uppercase())
 }
 
 fn is_canonical_proper_name(value: &str) -> bool {
@@ -1388,7 +1409,7 @@ pub fn parse_ades_designation(
     // Legacy MPC display labels combine a permanent minor-planet number, an
     // optional proper name, and an optional parenthesized provisional designation.
     if let Some((number_text, display_tail)) = designation.split_once(' ') {
-        if number_text.len() == 4 && looks_like_compact_provisional(display_tail) {
+        if looks_like_malformed_minor_identity(number_text, display_tail) {
             return Err(MpcDesignationError::Value(
                 "malformed minor-planet provisional designation".to_string(),
             ));
@@ -1715,6 +1736,35 @@ mod tests {
             parse_ades_designation("S/2019 (134340) 620").unwrap(),
             (None, Some("S/2019 (134340) 620".to_string()), None)
         );
+    }
+
+    #[test]
+    fn ades_classification_rejects_malformed_identity_like_labels_without_panicking() {
+        for designation in [
+            "2015 Bx",
+            "1995 X A",
+            "2040 P-l",
+            "2015 BXA",
+            "Jupiter IIIIIIIIIIIX",
+            "1P/1986",
+        ] {
+            assert!(
+                parse_ades_designation(designation).is_err(),
+                "{designation}"
+            );
+        }
+        assert!(roman_value("IIIIIIIIIIX").is_none());
+
+        for designation in [
+            "2015 BZ631",
+            "2040 P-L",
+            "17032 Edlu (1999 FM9)",
+            "1036 Ganymed",
+            "1P/Halley",
+            "1P/1986 F1",
+        ] {
+            assert!(parse_ades_designation(designation).is_ok(), "{designation}");
+        }
     }
 
     #[test]

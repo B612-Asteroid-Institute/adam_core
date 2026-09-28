@@ -475,3 +475,53 @@ def test_ades_parser_preserves_valid_satellite_number_boundaries(designation, ex
         expected.prov_id,
         expected.trk_sub,
     )
+
+
+@pytest.mark.parametrize(
+    "designation",
+    [
+        "2015 Bx",
+        "1995 X A",
+        "2040 P-l",
+        "2015 BXA",
+        "Jupiter IIIIIIIIIIIX",
+        "1P/1986",
+    ],
+)
+def test_ades_parser_rejects_malformed_identity_like_display_labels(designation):
+    from adam_core import _rust_native
+
+    with pytest.raises(ValueError):
+        parse_ades_designation(designation)
+    with pytest.raises(ValueError):
+        _rust_native.parse_ades_designation(designation)
+
+
+@pytest.mark.parametrize(
+    ("designation", "expected"),
+    [
+        ("2015 BZ631", ADESDesignationParts(prov_id="2015 BZ631")),
+        ("2040 P-L", ADESDesignationParts(prov_id="2040 P-L")),
+        (
+            "17032 Edlu (1999 FM9)",
+            ADESDesignationParts(perm_id="17032", prov_id="1999 FM9"),
+        ),
+        ("1036 Ganymed", ADESDesignationParts(perm_id="1036")),
+        ("1P/Halley", ADESDesignationParts(perm_id="1P")),
+        (
+            "1P/1986 F1",
+            ADESDesignationParts(perm_id="1P", prov_id="P/1986 F1"),
+        ),
+    ],
+)
+def test_ades_parser_preserves_valid_identity_and_name_boundaries(
+    designation, expected
+):
+    from adam_core import _rust_native
+
+    assert parse_ades_designation(designation) == expected
+    assert _rust_native.parse_ades_designation(designation) == (
+        expected.perm_id,
+        expected.prov_id,
+        expected.trk_sub,
+    )
