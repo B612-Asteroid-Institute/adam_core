@@ -242,6 +242,8 @@ def test_unpackers_reject_noncanonical_or_out_of_range_values(value):
         ("2015 BZ631", ADESDesignationParts(prov_id="2015 BZ631")),
         ("A904 OA", ADESDesignationParts(prov_id="A904 OA")),
         ("2040 P-L", ADESDesignationParts(prov_id="2040 P-L")),
+        ("40 P-L", ADESDesignationParts(prov_id="40 P-L")),
+        ("40 Paul", ADESDesignationParts(perm_id="40")),
         ("(2010 AB1)", ADESDesignationParts(prov_id="2010 AB1")),
         (
             "17032 Edlu (1999 FM9)",
@@ -493,6 +495,8 @@ def test_ades_parser_preserves_valid_satellite_number_boundaries(designation, ex
         "2015 Bx",
         "1995 X A",
         "2040 P-l",
+        "40 P-l",
+        "204 P - L",
         "1908 Cj",
         "Jupiter IIIIIIIIIIIX",
         "1P/1986",
@@ -512,6 +516,8 @@ def test_ades_parser_rejects_malformed_identity_like_display_labels(designation)
     [
         ("2015 BZ631", ADESDesignationParts(prov_id="2015 BZ631")),
         ("2040 P-L", ADESDesignationParts(prov_id="2040 P-L")),
+        ("40 P-L", ADESDesignationParts(prov_id="40 P-L")),
+        ("40 Paul", ADESDesignationParts(perm_id="40")),
         (
             "17032 Edlu (1999 FM9)",
             ADESDesignationParts(perm_id="17032", prov_id="1999 FM9"),

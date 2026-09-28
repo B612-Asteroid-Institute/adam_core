@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-from astropy.time import Time
 
 from ..mpc import (
     ADESDesignationParts,
@@ -73,6 +72,7 @@ DESIGNATIONS_UP2P = {
 
 
 def test_convert_mpc_packed_dates():
+    Time = pytest.importorskip("astropy.time").Time
     # Use a few modified examples from https://minorplanetcenter.net/iau/info/PackedDates.html
     # and test conversion from packed form to MJDs
     isot_tt = np.array(
@@ -263,6 +263,7 @@ def test_provisional_designation_rejects_malformed_or_out_of_range_values(value)
     [
         ("2015 BZ631", ADESDesignationParts(prov_id="2015 BZ631")),
         ("2040 P-L", ADESDesignationParts(prov_id="2040 P-L")),
+        ("1991 V", ADESDesignationParts(perm_id="1991")),
         ("A904 OA", ADESDesignationParts(prov_id="A904 OA")),
         ("C/2013 A1", ADESDesignationParts(prov_id="C/2013 A1")),
         ("I/2017 U1", ADESDesignationParts(prov_id="I/2017 U1")),
@@ -287,7 +288,6 @@ def test_parse_ades_designation_official_forms(value, expected):
     "value",
     [
         "",
-        "1991 V",
         "2015 BZ0631",
         "99999999",
         "C/2013 A1-ABC",

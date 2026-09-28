@@ -1280,8 +1280,7 @@ fn is_canonical_minor_provisional(value: &str) -> bool {
 }
 
 fn looks_like_malformed_minor_identity(number_text: &str, display_tail: &str) -> bool {
-    if number_text.len() != 4
-        || !number_text.bytes().all(|byte| byte.is_ascii_digit())
+    if !number_text.bytes().all(|byte| byte.is_ascii_digit())
         || !display_tail
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b' ' | b'-'))
@@ -1294,6 +1293,9 @@ fn looks_like_malformed_minor_identity(number_text: &str, display_tail: &str) ->
     let normalized_survey = format!("{number_text} {compact_tail}");
     if survey_parts(&normalized_survey).is_ok() {
         return true;
+    }
+    if number_text.len() != 4 {
+        return false;
     }
 
     let provisional_year = number_text
@@ -1747,6 +1749,8 @@ mod tests {
             "2015 Bx",
             "1995 X A",
             "2040 P-l",
+            "40 P-l",
+            "204 P - L",
             "1908 Cj",
             "Jupiter IIIIIIIIIIIX",
             "1P/1986",
@@ -1761,6 +1765,8 @@ mod tests {
         for designation in [
             "2015 BZ631",
             "2040 P-L",
+            "40 P-L",
+            "40 Paul",
             "17032 Edlu (1999 FM9)",
             "1036 Ganymed",
             "1991 V",
