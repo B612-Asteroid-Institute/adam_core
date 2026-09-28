@@ -1299,7 +1299,7 @@ fn looks_like_malformed_minor_identity(number_text: &str, display_tail: &str) ->
     let Ok(year) = number_text.parse::<u64>() else {
         return false;
     };
-    if !(1000..=2199).contains(&year) {
+    if !(1800..=2199).contains(&year) {
         return false;
     }
     if is_canonical_minor_provisional(&normalized) {
@@ -1781,6 +1781,7 @@ mod tests {
             "2040 P-L",
             "17032 Edlu (1999 FM9)",
             "1036 Ganymed",
+            "1700 AAS",
             "5000 IAU",
             "3654 AAS",
             "2062 Aten",
