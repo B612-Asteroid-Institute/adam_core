@@ -1291,36 +1291,21 @@ fn looks_like_malformed_minor_identity(number_text: &str, display_tail: &str) ->
 
     let upper_tail = display_tail.to_ascii_uppercase();
     let compact_tail = upper_tail.replace(' ', "");
-    let normalized = format!("{number_text} {compact_tail}");
-    if survey_parts(&normalized).is_ok() {
+    let normalized_survey = format!("{number_text} {compact_tail}");
+    if survey_parts(&normalized_survey).is_ok() {
         return true;
     }
 
-    let Ok(year) = number_text.parse::<u64>() else {
-        return false;
-    };
-    if !(1800..=2199).contains(&year) {
-        return false;
-    }
-    if is_canonical_minor_provisional(&normalized) {
-        return true;
-    }
-
-    let bytes = compact_tail.as_bytes();
-    if bytes.is_empty() || !is_half_month(bytes[0]) {
-        return false;
-    }
-    if bytes.len() == 1 {
-        return true;
-    }
-    if !is_sequence_letter(bytes[1]) {
-        return false;
-    }
-
-    // Preserve title-cased names of four or more characters while rejecting
-    // bounded tails that retain a genuine provisional-designation prefix.
-    compact_tail.len() <= 3
-        || (compact_tail.len() <= 4 && !display_tail.bytes().any(|byte| byte.is_ascii_lowercase()))
+    let provisional_year = number_text
+        .parse::<u64>()
+        .ok()
+        .filter(|year| (1800..=1924).contains(year))
+        .map_or_else(
+            || number_text.to_string(),
+            |year| format!("A{}", year - 1000),
+        );
+    let normalized_provisional = format!("{provisional_year} {compact_tail}");
+    is_canonical_minor_provisional(&normalized_provisional)
 }
 
 fn is_canonical_proper_name(value: &str) -> bool {
@@ -1762,9 +1747,6 @@ mod tests {
             "2015 Bx",
             "1995 X A",
             "2040 P-l",
-            "2015 BXA",
-            "2015 Bxa",
-            "2015 BXAB",
             "1908 Cj",
             "Jupiter IIIIIIIIIIIX",
             "1P/1986",
@@ -1781,6 +1763,13 @@ mod tests {
             "2040 P-L",
             "17032 Edlu (1999 FM9)",
             "1036 Ganymed",
+            "1991 V",
+            "1983 Bok",
+            "1840 Hus",
+            "2031 BAM",
+            "2015 BXA",
+            "2015 Bxa",
+            "2015 BXAB",
             "1700 AAS",
             "5000 IAU",
             "3654 AAS",
