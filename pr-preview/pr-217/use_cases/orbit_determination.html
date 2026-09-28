@@ -542,6 +542,15 @@ returns members carrying the original and the used astrometry of every
 observation. The models never reach the fitter; it receives pre-transformed
 observations, so the <code class="docutils literal notranslate"><span class="pre">OrbitFitter</span></code> interface stays flag-free.</p>
 <ul class="simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">SigmaFillModel</span></code> fills ONLY the per-axis sigmas an observation lacks (MPC
+records without <code class="docutils literal notranslate"><span class="pre">rmsRACosDec</span></code> / <code class="docutils literal notranslate"><span class="pre">rmsDec</span></code>) from a station/catalog sigma
+table (<code class="docutils literal notranslate"><span class="pre">VERES2017_SIGMA_TABLE_SCHEMA</span></code>; rows may be (station, catalog),
+station-only, catalog-only or one global row). Reported sigmas are never
+touched. adam_core bundles no sigma table: with no <code class="docutils literal notranslate"><span class="pre">sigma_table</span></code> the model
+imports the private <code class="docutils literal notranslate"><span class="pre">adam-observatory-uncertainties</span></code> data package and reads
+its <code class="docutils literal notranslate"><span class="pre">v2_sigma_fill</span></code> table (the Asteroid Institute default), the way
+EFCC18 imports <code class="docutils literal notranslate"><span class="pre">jpl_debias_2018</span></code>; <code class="docutils literal notranslate"><span class="pre">VeresFloorModel</span></code> /
+<code class="docutils literal notranslate"><span class="pre">VeresReplaceModel</span></code> read that package’s legacy <code class="docutils literal notranslate"><span class="pre">veres2017_working</span></code> table.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">EFCC18DebiasModel</span></code> subtracts the Eggl et al. (2020) star-catalog bias
 from the observed positions (JPL’s <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> in HEALPix RING order,
 keyed on the <code class="docutils literal notranslate"><span class="pre">astcat</span></code> column carried by
@@ -554,28 +563,49 @@ and the VFC2017 <code class="docutils literal notranslate"><span class="pre">Ver
 None of them changes a position.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">CompositeModel</span></code> (or a plain sequence) applies models left to right.</p></li>
 </ul>
+<p>Recommended defaults (Asteroid Institute 100-object walk-forward study,
+decision 2026-09-23): fill missing sigmas with <code class="docutils literal notranslate"><span class="pre">SigmaFillModel</span></code> first so
+every later model sees a finite covariance, debias positions with
+<code class="docutils literal notranslate"><span class="pre">EFCC18DebiasModel</span></code> before anything reads them, add the station’s empirical
+residual covariance with <code class="docutils literal notranslate"><span class="pre">EmpiricalCovarianceModel(bias_table,</span> <span class="pre">mode=&quot;add&quot;)</span></code>,
+deweight same-station same-night batches with
+<code class="docutils literal notranslate"><span class="pre">NightBatchDeweightingModel(cap=4)</span></code> (sigma scaled by sqrt(N/4) for N &gt; 4),
+and fit with <code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter(outlier_rejection=&quot;cmc2003&quot;)</span></code>. Kept as
+options but not recommended as defaults: <code class="docutils literal notranslate"><span class="pre">loss=&quot;huber&quot;</span></code> (open covariance
+pathology on short arcs), <code class="docutils literal notranslate"><span class="pre">VeresFloorModel</span></code> / <code class="docutils literal notranslate"><span class="pre">VeresReplaceModel</span></code>,
+<code class="docutils literal notranslate"><span class="pre">SigmaFloorModel</span></code> (no-op), <code class="docutils literal notranslate"><span class="pre">PerformanceWeightedModel</span></code> (over-inflates by
+about 1.5x) and <code class="docutils literal notranslate"><span class="pre">NightBatchDeweightingModel(cap=1)</span></code> (sqrt(N), about 1.9x
+inflation with no position benefit). The models act on the fit only: judge a
+held-out observation against its nominal position and original sigma.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">CompositeModel</span><span class="p">,</span>
     <span class="n">EFCC18DebiasModel</span><span class="p">,</span>
     <span class="n">EmpiricalCovarianceModel</span><span class="p">,</span>
     <span class="n">NativeOrbitFitter</span><span class="p">,</span>
+    <span class="n">NightBatchDeweightingModel</span><span class="p">,</span>
+    <span class="n">SigmaFillModel</span><span class="p">,</span>
     <span class="n">run_od</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="n">fitter</span> <span class="o">=</span> <span class="n">NativeOrbitFitter</span><span class="p">(</span>
     <span class="n">propagator_class</span><span class="o">=</span><span class="n">ASSISTPropagator</span><span class="p">,</span>
-    <span class="n">loss</span><span class="o">=</span><span class="s2">"huber"</span><span class="p">,</span>                     <span class="c1"># bounded influence of gross residuals</span>
     <span class="n">outlier_rejection</span><span class="o">=</span><span class="s2">"cmc2003"</span><span class="p">,</span>      <span class="c1"># Carpino-Milani-Chesley reject/re-include</span>
+<span class="p">)</span>
+<span class="n">models</span> <span class="o">=</span> <span class="n">CompositeModel</span><span class="p">(</span>
+    <span class="n">SigmaFillModel</span><span class="p">(</span><span class="n">sigma_fill_table</span><span class="p">,</span> <span class="n">fallback_sigma_arcsec</span><span class="o">=</span><span class="kc">None</span><span class="p">),</span>  <span class="c1"># fill first</span>
+    <span class="n">EFCC18DebiasModel</span><span class="p">(),</span>                                           <span class="c1"># RING order</span>
+    <span class="n">EmpiricalCovarianceModel</span><span class="p">(</span><span class="n">bias_table</span><span class="p">),</span>                          <span class="c1"># mode="add"</span>
+    <span class="n">NightBatchDeweightingModel</span><span class="p">(</span><span class="n">cap</span><span class="o">=</span><span class="mi">4</span><span class="p">),</span>
 <span class="p">)</span>
 <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">members</span> <span class="o">=</span> <span class="n">run_od</span><span class="p">(</span>
     <span class="n">observations</span><span class="p">,</span>
     <span class="n">fitter</span><span class="p">,</span>
-    <span class="n">CompositeModel</span><span class="p">(</span><span class="n">EFCC18DebiasModel</span><span class="p">(),</span> <span class="n">EmpiricalCovarianceModel</span><span class="p">(</span><span class="n">bias_table</span><span class="p">)),</span>
+    <span class="n">models</span><span class="p">,</span>
     <span class="n">propagator</span><span class="o">=</span><span class="n">ASSISTPropagator</span><span class="p">(),</span>
     <span class="n">object_id</span><span class="o">=</span><span class="s2">"2024 XY"</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="c1"># members.original_astrometry vs members.used_astrometry show what the fit saw;</span>
-<span class="c1"># members.weight holds the Huber weights, members.astcat the star catalog.</span>
+<span class="c1"># members.weight holds per-observation weights, members.astcat the star catalog.</span>
 </pre></div>
 </div>
 <p><code class="docutils literal notranslate"><span class="pre">fit_least_squares</span></code> itself minimizes the whitened (lon, lat) residuals with
@@ -635,7 +665,7 @@ cleanup of observation-to-orbit assignments.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-23</div>
+              Last updated on 2026-09-28</div>
           </div>
           <div class="right-details">
             

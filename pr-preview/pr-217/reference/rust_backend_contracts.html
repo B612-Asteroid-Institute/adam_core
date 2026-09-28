@@ -604,8 +604,11 @@ reports a change (<code class="docutils literal notranslate"><span class="pre">N
 (<code class="docutils literal notranslate"><span class="pre">empirical_covariance</span></code> / <code class="docutils literal notranslate"><span class="pre">performance_weighted</span></code> / <code class="docutils literal notranslate"><span class="pre">sigma_floor</span></code>),
 <code class="docutils literal notranslate"><span class="pre">night_batch_deweighting_model_apply_numpy</span></code>,
 <code class="docutils literal notranslate"><span class="pre">efcc18_debias_model_apply_numpy</span></code> (positions), <code class="docutils literal notranslate"><span class="pre">veres_model_apply_numpy</span></code>
-(<code class="docutils literal notranslate"><span class="pre">floor</span></code> / <code class="docutils literal notranslate"><span class="pre">replace</span></code>), <code class="docutils literal notranslate"><span class="pre">veres_sigma_lookup_numpy</span></code>,
-<code class="docutils literal notranslate"><span class="pre">veres2017_sigma_table_columns</span></code>, <code class="docutils literal notranslate"><span class="pre">ades_angular_covariance_numpy</span></code>.</p></li>
+(<code class="docutils literal notranslate"><span class="pre">floor</span></code> / <code class="docutils literal notranslate"><span class="pre">replace</span></code> / <code class="docutils literal notranslate"><span class="pre">fill</span></code>), <code class="docutils literal notranslate"><span class="pre">veres_sigma_lookup_numpy</span></code>,
+<code class="docutils literal notranslate"><span class="pre">ades_angular_covariance_numpy</span></code>. No sigma table is bundled: the Python
+veneer resolves a default table by importing the private
+<code class="docutils literal notranslate"><span class="pre">observatory_uncertainties</span></code> data package (a soft import, never a
+dependency) and raises <code class="docutils literal notranslate"><span class="pre">ImportError</span></code> naming it when absent.</p></li>
 <li><p>Position rule: every model except <code class="docutils literal notranslate"><span class="pre">efcc18_debias_model_apply</span></code> leaves the
 lon/lat columns untouched; <code class="docutils literal notranslate"><span class="pre">efcc18_debias_model_apply</span></code> leaves the
 covariance untouched.</p></li>
@@ -712,7 +715,7 @@ are explicit compatibility/provider boundaries rather than default backends.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-23</div>
+              Last updated on 2026-09-28</div>
           </div>
           <div class="right-details">
             
