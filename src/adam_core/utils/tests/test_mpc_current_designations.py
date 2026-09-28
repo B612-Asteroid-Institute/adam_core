@@ -386,3 +386,58 @@ def test_python_ades_parser_matches_direct_rust_surface():
         assert (parsed.perm_id, parsed.prov_id, parsed.trk_sub) == (
             _rust_native.parse_ades_designation(value)
         )
+
+
+_INVALID_UNPACKABLE_PROVISIONALS = (
+    "1999 AA620",
+    "2062 AA620",
+    "2025 AA591674",
+)
+_INVALID_UNPACKABLE_ADES_FORMS = tuple(
+    value
+    for designation in _INVALID_UNPACKABLE_PROVISIONALS
+    for value in (
+        designation,
+        f"({designation})",
+        f"17032 Edlu ({designation})",
+        f"S/2000 ({designation}) 1",
+    )
+)
+
+
+@pytest.mark.parametrize("value", _INVALID_UNPACKABLE_ADES_FORMS)
+def test_ades_parser_rejects_unpacked_but_unencodable_provisionals_in_every_context(
+    value,
+):
+    from adam_core import _rust_native
+
+    with pytest.raises(ValueError):
+        parse_ades_designation(value)
+    with pytest.raises(ValueError):
+        _rust_native.parse_ades_designation(value)
+
+
+@pytest.mark.parametrize("designation", ["2061 AZ620", "2029 FL591673"])
+def test_ades_parser_accepts_packable_extended_boundaries_in_every_context(designation):
+    from adam_core import _rust_native
+
+    values = [
+        (designation, ADESDesignationParts(prov_id=designation)),
+        (f"({designation})", ADESDesignationParts(prov_id=designation)),
+        (
+            f"17032 Edlu ({designation})",
+            ADESDesignationParts(perm_id="17032", prov_id=designation),
+        ),
+        (
+            f"S/2000 ({designation}) 1",
+            ADESDesignationParts(prov_id=f"S/2000 ({designation}) 1"),
+        ),
+    ]
+    for value, expected in values:
+        parsed = parse_ades_designation(value)
+        assert parsed == expected
+        assert _rust_native.parse_ades_designation(value) == (
+            expected.perm_id,
+            expected.prov_id,
+            expected.trk_sub,
+        )

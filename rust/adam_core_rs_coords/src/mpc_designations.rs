@@ -1222,7 +1222,7 @@ pub fn pack_mpc_designation(designation: &str) -> Result<String> {
     if survey_parts(designation).is_ok() {
         return pack_survey_designation(designation);
     }
-    if parse_minor_provisional(designation).is_ok() {
+    if is_canonical_minor_provisional(designation) {
         return pack_provisional_designation(designation);
     }
     Err(invalid("unpacked MPC designation", designation))
@@ -1267,6 +1267,13 @@ pub fn unpack_mpc_designation(designation: &str) -> Result<String> {
         }
         _ => Err(invalid("packed MPC designation", designation)),
     }
+}
+
+fn is_canonical_minor_provisional(value: &str) -> bool {
+    let Ok(packed) = pack_provisional_designation(value) else {
+        return false;
+    };
+    unpack_provisional_designation(&packed).is_ok_and(|unpacked| unpacked == value)
 }
 
 fn looks_like_compact_provisional(value: &str) -> bool {
@@ -1335,7 +1342,7 @@ fn is_ades_provisional_satellite(value: &str) -> bool {
     };
     parse_canonical_u64(inner, "satellite primary")
         .is_ok_and(|number| (1..=MAX_NUMBERED_MINOR_PLANET).contains(&number))
-        || parse_minor_provisional(inner).is_ok()
+        || is_canonical_minor_provisional(inner)
         || survey_parts(inner).is_ok()
 }
 
@@ -1352,7 +1359,7 @@ pub fn parse_ades_designation(
         .strip_prefix('(')
         .and_then(|value| value.strip_suffix(')'))
     {
-        if survey_parts(inner).is_ok() || parse_minor_provisional(inner).is_ok() {
+        if survey_parts(inner).is_ok() || is_canonical_minor_provisional(inner) {
             return Ok((None, Some(inner.to_string()), None));
         }
         return Err(MpcDesignationError::Value(
@@ -1370,7 +1377,7 @@ pub fn parse_ades_designation(
         )));
     }
 
-    if survey_parts(designation).is_ok() || parse_minor_provisional(designation).is_ok() {
+    if survey_parts(designation).is_ok() || is_canonical_minor_provisional(designation) {
         return Ok((None, Some(designation.to_string()), None));
     }
 
@@ -1419,7 +1426,7 @@ pub fn parse_ades_designation(
                         return Err(invalid("numbered minor-planet display label", designation));
                     }
                     if survey_parts(candidate).is_err()
-                        && parse_minor_provisional(candidate).is_err()
+                        && !is_canonical_minor_provisional(candidate)
                     {
                         return Err(MpcDesignationError::Value(
                             "parenthesized MPC identity is not a provisional designation"
@@ -1639,6 +1646,44 @@ mod tests {
         }
         for value in ["00000", "~zzzzx", "_!A0000", "0000P", "J000S", "SK19S000"] {
             assert!(unpack_mpc_designation(value).is_err(), "{value}");
+        }
+    }
+
+    #[test]
+    fn ades_minor_provisionals_require_packable_boundaries_in_every_context() {
+        for designation in ["1999 AA620", "2062 AA620", "2025 AA591674"] {
+            for value in [
+                designation.to_string(),
+                format!("({designation})"),
+                format!("17032 Edlu ({designation})"),
+                format!("S/2000 ({designation}) 1"),
+            ] {
+                assert!(parse_ades_designation(&value).is_err(), "{value}");
+            }
+        }
+
+        for designation in ["2061 AZ620", "2029 FL591673"] {
+            assert_eq!(
+                parse_ades_designation(designation).unwrap(),
+                (None, Some(designation.to_string()), None)
+            );
+            assert_eq!(
+                parse_ades_designation(&format!("({designation})")).unwrap(),
+                (None, Some(designation.to_string()), None)
+            );
+            assert_eq!(
+                parse_ades_designation(&format!("17032 Edlu ({designation})")).unwrap(),
+                (
+                    Some("17032".to_string()),
+                    Some(designation.to_string()),
+                    None
+                )
+            );
+            let satellite = format!("S/2000 ({designation}) 1");
+            assert_eq!(
+                parse_ades_designation(&satellite).unwrap(),
+                (None, Some(satellite), None)
+            );
         }
     }
 
