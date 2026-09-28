@@ -1332,7 +1332,11 @@ fn is_ades_provisional_satellite(value: &str) -> bool {
         return false;
     }
     if primary.len() == 1 && SATELLITE_PLANETS.contains(&primary.as_bytes()[0]) {
-        return true;
+        let Ok(packed) = pack_provisional_satellite_designation(value) else {
+            return false;
+        };
+        return unpack_provisional_satellite_designation(&packed)
+            .is_ok_and(|unpacked| unpacked == value);
     }
     let Some(inner) = primary
         .strip_prefix('(')
@@ -1685,6 +1689,32 @@ mod tests {
                 (None, Some(satellite), None)
             );
         }
+    }
+
+    #[test]
+    fn ades_planetary_satellite_numbers_must_be_packable() {
+        assert_eq!(
+            pack_provisional_satellite_designation("S/2019 S 619").unwrap(),
+            "SK19Sz90"
+        );
+        assert_eq!(
+            parse_ades_designation("S/2019 S 619").unwrap(),
+            (None, Some("S/2019 S 619".to_string()), None)
+        );
+        for designation in ["S/2019 S 620", "S/2019 S 999999", "S/2019 S 0619"] {
+            assert!(
+                parse_ades_designation(designation).is_err(),
+                "{designation}"
+            );
+        }
+
+        // Parenthesized minor-planet primaries are an ADES form without a
+        // planet-letter packed codec, so their positive canonical ordinal is
+        // intentionally not constrained by the two-character packed field.
+        assert_eq!(
+            parse_ades_designation("S/2019 (134340) 620").unwrap(),
+            (None, Some("S/2019 (134340) 620".to_string()), None)
+        );
     }
 
     #[test]

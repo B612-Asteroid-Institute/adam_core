@@ -441,3 +441,37 @@ def test_ades_parser_accepts_packable_extended_boundaries_in_every_context(desig
             expected.prov_id,
             expected.trk_sub,
         )
+
+
+@pytest.mark.parametrize(
+    "designation",
+    ["S/2019 S 620", "S/2019 S 999999", "S/2019 S 0619"],
+)
+def test_ades_parser_rejects_unencodable_planetary_satellite_numbers(designation):
+    from adam_core import _rust_native
+
+    with pytest.raises(ValueError):
+        parse_ades_designation(designation)
+    with pytest.raises(ValueError):
+        _rust_native.parse_ades_designation(designation)
+
+
+@pytest.mark.parametrize(
+    ("designation", "expected"),
+    [
+        ("S/2019 S 619", ADESDesignationParts(prov_id="S/2019 S 619")),
+        (
+            "S/2019 (134340) 620",
+            ADESDesignationParts(prov_id="S/2019 (134340) 620"),
+        ),
+    ],
+)
+def test_ades_parser_preserves_valid_satellite_number_boundaries(designation, expected):
+    from adam_core import _rust_native
+
+    assert parse_ades_designation(designation) == expected
+    assert _rust_native.parse_ades_designation(designation) == (
+        expected.perm_id,
+        expected.prov_id,
+        expected.trk_sub,
+    )
