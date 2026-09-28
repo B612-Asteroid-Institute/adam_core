@@ -1,0 +1,7 @@
+adam\_core.orbit\_determination.defaults module
+===============================================
+
+.. automodule:: adam_core.orbit_determination.defaults
+   :members:
+   :show-inheritance:
+   :undoc-members:

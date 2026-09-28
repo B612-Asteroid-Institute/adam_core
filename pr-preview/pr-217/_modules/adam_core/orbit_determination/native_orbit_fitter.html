@@ -291,6 +291,7 @@
 </ul>
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.html">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.defaults.html">adam_core.orbit_determination.defaults module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
@@ -497,20 +498,23 @@
 <span class="sd">    f_scale : float, optional</span>
 <span class="sd">        Huber transition point in units of whitened (1-sigma) residual</span>
 <span class="sd">        components. Default 1.345. Ignored for ``loss="linear"``.</span>
-<span class="sd">    outlier_rejection : {"worst_residual", "cmc2003"}, optional</span>
+<span class="sd">    outlier_rejection : {"cmc2003", "worst_residual"}, optional</span>
 <span class="sd">        Outlier treatment during differential correction.</span>
 
-<span class="sd">        - ``"worst_residual"`` (default): `iterative_fit`, which removes the</span>
+<span class="sd">        - ``"cmc2003"`` (default): `cmc2003_fit`, Carpino-Milani-Chesley</span>
+<span class="sd">          (2003) rejection with re-inclusion against the expected post-fit</span>
+<span class="sd">          residual covariance, with OrbFit's ``reject.def`` constants.</span>
+<span class="sd">          ``rchi2_threshold``, ``min_obs``, ``min_arc_length`` and</span>
+<span class="sd">          ``contamination_percentage`` then apply to IOD only; tune the</span>
+<span class="sd">          scheme through ``rejection_kwargs``.</span>
+<span class="sd">        - ``"worst_residual"``: `iterative_fit`, which removes the</span>
 <span class="sd">          worst-residual observation and refits while the reduced chi2</span>
 <span class="sd">          exceeds ``rchi2_threshold``, bounded by ``contamination_percentage``,</span>
-<span class="sd">          ``min_obs`` and ``min_arc_length``.</span>
-<span class="sd">        - ``"cmc2003"``: `cmc2003_fit`, Carpino-Milani-Chesley (2003)</span>
-<span class="sd">          rejection with re-inclusion against the expected post-fit residual</span>
-<span class="sd">          covariance (OrbFit defaults). ``rchi2_threshold``, ``min_obs``,</span>
-<span class="sd">          ``min_arc_length`` and ``contamination_percentage`` then apply to</span>
-<span class="sd">          IOD only; tune the scheme through ``rejection_kwargs``.</span>
+<span class="sd">          ``min_obs`` and ``min_arc_length`` (the pre-2026-09 behaviour).</span>
 
-<span class="sd">        Both compose with ``loss="huber"``.</span>
+<span class="sd">        Both compose with ``loss="huber"``. See</span>
+<span class="sd">        `adam_core.orbit_determination.defaults` for the full default</span>
+<span class="sd">        configuration.</span>
 <span class="sd">    rejection_kwargs : dict, optional</span>
 <span class="sd">        Extra keyword arguments for the rejection function (e.g.</span>
 <span class="sd">        ``chi2_reject``, ``chi2_recover`` for ``"cmc2003"``; ``jacobian``,</span>
@@ -531,7 +535,7 @@
         <span class="p">]</span> <span class="o">=</span> <span class="s2">"combinations"</span><span class="p">,</span>
         <span class="n">loss</span><span class="p">:</span> <span class="n">LossType</span> <span class="o">=</span> <span class="s2">"linear"</span><span class="p">,</span>
         <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">HUBER_F_SCALE_DEFAULT</span><span class="p">,</span>
-        <span class="n">outlier_rejection</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"worst_residual"</span><span class="p">,</span> <span class="s2">"cmc2003"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"worst_residual"</span><span class="p">,</span>
+        <span class="n">outlier_rejection</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"worst_residual"</span><span class="p">,</span> <span class="s2">"cmc2003"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"cmc2003"</span><span class="p">,</span>
         <span class="n">rejection_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">outlier_rejection</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"worst_residual"</span><span class="p">,</span> <span class="s2">"cmc2003"</span><span class="p">):</span>

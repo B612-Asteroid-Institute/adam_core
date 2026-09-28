@@ -291,6 +291,7 @@
 </ul>
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.html">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.defaults.html">adam_core.orbit_determination.defaults module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
@@ -469,17 +470,20 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.defaults</span><span class="w"> </span><span class="kn">import</span> <span class="n">default_observation_models</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">ObservationAstrometry</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.observation_uncertainty</span><span class="w"> </span><span class="kn">import</span> <span class="n">CompositeModel</span><span class="p">,</span> <span class="n">ObservationUncertaintyModel</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.orbit_fitter</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitFitter</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="s2">"DEFAULT_MODELS"</span><span class="p">,</span>
     <span class="s2">"ObservationModels"</span><span class="p">,</span>
     <span class="s2">"apply_observation_models"</span><span class="p">,</span>
     <span class="s2">"attach_observation_provenance"</span><span class="p">,</span>
@@ -491,6 +495,10 @@
 <span class="n">ObservationModels</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">ObservationUncertaintyModel</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">ObservationUncertaintyModel</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span>
 <span class="p">)</span>
+
+<span class="c1">#: `run_od` default for ``models``: the shipped observation-model stack of</span>
+<span class="c1">#: `~adam_core.orbit_determination.defaults.default_observation_models`.</span>
+<span class="n">DEFAULT_MODELS</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"default"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"default"</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_as_array</span><span class="p">(</span><span class="n">column</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span> <span class="o">|</span> <span class="n">pa</span><span class="o">.</span><span class="n">ChunkedArray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">:</span>
@@ -624,7 +632,7 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">run_od</span><span class="p">(</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
     <span class="n">fitter</span><span class="p">:</span> <span class="n">OrbitFitter</span><span class="p">,</span>
-    <span class="n">models</span><span class="p">:</span> <span class="n">ObservationModels</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">models</span><span class="p">:</span> <span class="n">ObservationModels</span> <span class="o">|</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"default"</span><span class="p">]</span> <span class="o">=</span> <span class="n">DEFAULT_MODELS</span><span class="p">,</span>
     <span class="o">*</span><span class="p">,</span>
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
     <span class="n">object_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -657,10 +665,17 @@
 <span class="sd">        Backend used for the fit, e.g. `NativeOrbitFitter` or an external</span>
 <span class="sd">        plugin. The fitter receives the transformed observations and never</span>
 <span class="sd">        the models.</span>
-<span class="sd">    models : `ObservationUncertaintyModel`, sequence of them, or None, optional</span>
-<span class="sd">        Observation model(s) to apply before fitting, in order. Default None</span>
-<span class="sd">        fits the observations as supplied (members then record</span>
-<span class="sd">        ``used_astrometry`` equal to ``original_astrometry``).</span>
+<span class="sd">    models : `ObservationUncertaintyModel`, sequence of them, None, or "default"</span>
+<span class="sd">        Observation model(s) to apply before fitting, in order. The default</span>
+<span class="sd">        ``"default"`` applies the shipped stack of</span>
+<span class="sd">        `~adam_core.orbit_determination.defaults.default_observation_models`</span>
+<span class="sd">        (sigma fill, EFCC18 debiasing, empirical station covariance, nightly</span>
+<span class="sd">        deweighting), resolving its tables from the data packages and raising</span>
+<span class="sd">        an `ImportError` / `FileNotFoundError` naming the missing data when</span>
+<span class="sd">        they are not installed. Pass None (or an empty sequence) to fit the</span>
+<span class="sd">        observations exactly as supplied (members then record</span>
+<span class="sd">        ``used_astrometry`` equal to ``original_astrometry``), or your own</span>
+<span class="sd">        model(s).</span>
 <span class="sd">    propagator : `~adam_core.propagator.Propagator`</span>
 <span class="sd">        Propagator used by the backend during refinement.</span>
 <span class="sd">    object_id : str, optional</span>
@@ -682,8 +697,12 @@
 <span class="sd">    ------</span>
 <span class="sd">    ValueError</span>
 <span class="sd">        If observation ids are not unique, if the models change the set or</span>
-<span class="sd">        order of observations, or if the fitter returns members referencing</span>
-<span class="sd">        unknown observation ids.</span>
+<span class="sd">        order of observations, if the fitter returns members referencing</span>
+<span class="sd">        unknown observation ids, or if ``models`` is a string other than</span>
+<span class="sd">        ``"default"``.</span>
+<span class="sd">    ImportError, FileNotFoundError</span>
+<span class="sd">        If ``models="default"`` and the ``adam-observatory-uncertainties``</span>
+<span class="sd">        data package or JPL's EFCC18 ``bias.dat`` is not installed.</span>
 
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
@@ -699,6 +718,13 @@
     <span class="k">if</span> <span class="n">ids</span><span class="o">.</span><span class="n">null_count</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">pc</span><span class="o">.</span><span class="n">count_distinct</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Observation ids must be unique and non-null"</span><span class="p">)</span>
 
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">models</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">models</span> <span class="o">!=</span> <span class="n">DEFAULT_MODELS</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"models must be observation models, None or </span><span class="si">{</span><span class="n">DEFAULT_MODELS</span><span class="si">!r}</span><span class="s2">; "</span>
+                <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="n">models</span><span class="si">!r}</span><span class="s2">"</span>
+            <span class="p">)</span>
+        <span class="n">models</span> <span class="o">=</span> <span class="n">default_observation_models</span><span class="p">()</span>
     <span class="n">used</span> <span class="o">=</span> <span class="n">apply_observation_models</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">models</span><span class="p">)</span>
 
     <span class="n">backend_object_id</span> <span class="o">=</span> <span class="n">object_id</span> <span class="k">if</span> <span class="n">object_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span>

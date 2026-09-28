@@ -293,6 +293,7 @@
 </ul>
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.html">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.defaults.html">adam_core.orbit_determination.defaults module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
@@ -563,20 +564,109 @@ and the VFC2017 <code class="docutils literal notranslate"><span class="pre">Ver
 None of them changes a position.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">CompositeModel</span></code> (or a plain sequence) applies models left to right.</p></li>
 </ul>
-<p>Recommended defaults (Asteroid Institute 100-object walk-forward study,
-decision 2026-09-23): fill missing sigmas with <code class="docutils literal notranslate"><span class="pre">SigmaFillModel</span></code> first so
-every later model sees a finite covariance, debias positions with
-<code class="docutils literal notranslate"><span class="pre">EFCC18DebiasModel</span></code> before anything reads them, add the station’s empirical
-residual covariance with <code class="docutils literal notranslate"><span class="pre">EmpiricalCovarianceModel(bias_table,</span> <span class="pre">mode=&quot;add&quot;)</span></code>,
-deweight same-station same-night batches with
-<code class="docutils literal notranslate"><span class="pre">NightBatchDeweightingModel(cap=4)</span></code> (sigma scaled by sqrt(N/4) for N &gt; 4),
-and fit with <code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter(outlier_rejection=&quot;cmc2003&quot;)</span></code>. Kept as
-options but not recommended as defaults: <code class="docutils literal notranslate"><span class="pre">loss=&quot;huber&quot;</span></code> (open covariance
-pathology on short arcs), <code class="docutils literal notranslate"><span class="pre">VeresFloorModel</span></code> / <code class="docutils literal notranslate"><span class="pre">VeresReplaceModel</span></code>,
-<code class="docutils literal notranslate"><span class="pre">SigmaFloorModel</span></code> (no-op), <code class="docutils literal notranslate"><span class="pre">PerformanceWeightedModel</span></code> (over-inflates by
-about 1.5x) and <code class="docutils literal notranslate"><span class="pre">NightBatchDeweightingModel(cap=1)</span></code> (sqrt(N), about 1.9x
-inflation with no position benefit). The models act on the fit only: judge a
-held-out observation against its nominal position and original sigma.</p>
+<section id="the-shipped-defaults">
+<h3>The shipped defaults<a class="headerlink" href="#the-shipped-defaults" title="Link to this heading">¶</a></h3>
+<p>Calling the pieces with no arguments gives the Asteroid Institute default
+configuration (the outcome of the 100-object walk-forward study, decision
+2026-09-23). Every default is the default value of the signature that owns
+it; the observation-model stack, which no single signature can express, is
+built by <code class="docutils literal notranslate"><span class="pre">default_observation_models</span></code> and applied by <code class="docutils literal notranslate"><span class="pre">run_od</span></code> when it is
+called without <code class="docutils literal notranslate"><span class="pre">models</span></code>:</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="n">NativeOrbitFitter</span><span class="p">,</span> <span class="n">run_od</span>
+
+<span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">members</span> <span class="o">=</span> <span class="n">run_od</span><span class="p">(</span>
+    <span class="n">observations</span><span class="p">,</span>
+    <span class="n">NativeOrbitFitter</span><span class="p">(</span><span class="n">ASSISTPropagator</span><span class="p">),</span>
+    <span class="n">propagator</span><span class="o">=</span><span class="n">ASSISTPropagator</span><span class="p">(),</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>The tables come from the data packages (<code class="docutils literal notranslate"><span class="pre">adam-observatory-uncertainties</span></code>
+and <code class="docutils literal notranslate"><span class="pre">jpl_debias_2018</span></code>); without them <code class="docutils literal notranslate"><span class="pre">run_od</span></code> raises an <code class="docutils literal notranslate"><span class="pre">ImportError</span></code> /
+<code class="docutils literal notranslate"><span class="pre">FileNotFoundError</span></code> naming the missing data. <code class="docutils literal notranslate"><span class="pre">models=None</span></code> fits the
+observations exactly as supplied; <code class="docutils literal notranslate"><span class="pre">default_observation_models(bias_table=...,</span>
+<span class="pre">sigma_table=...)</span></code> injects tables to pin a study.</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 22.0%" />
+<col style="width: 44.0%" />
+<col style="width: 34.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Lever</p></th>
+<th class="head"><p>Default</p></th>
+<th class="head"><p>Owned by</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Sigma where the MPC reports none</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SigmaFillModel</span></code> with the <code class="docutils literal notranslate"><span class="pre">v2_sigma_fill</span></code> table, 0.75” fallback
+(fills ONLY missing sigmas; reported sigmas are never touched)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">SigmaFillModel()</span></code> / <code class="docutils literal notranslate"><span class="pre">load_sigma_table()</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Star-catalog debias (positions)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">EFCC18DebiasModel</span></code>: JPL <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> in HEALPix RING order, every
+tabulated catalog corrected</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">EFCC18DebiasModel()</span></code> (<code class="docutils literal notranslate"><span class="pre">exclude_astcats=()</span></code>)</p></td>
+</tr>
+<tr class="row-even"><td><p>Station weighting</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">EmpiricalCovarianceModel</span></code>: the station’s measured 2x2 residual
+covariance is ADDED to the reported one; stations with fewer than 30
+residuals pass through</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">EmpiricalCovarianceModel(mode=&quot;add&quot;,</span> <span class="pre">min_resid_cov_n=30)</span></code> /
+<code class="docutils literal notranslate"><span class="pre">load_bias_table()</span></code> (<code class="docutils literal notranslate"><span class="pre">v2_full</span></code>)</p></td>
+</tr>
+<tr class="row-odd"><td><p>Nightly deweighting</p></td>
+<td><p>sigma scaled by sqrt(N/4) for same-station same-night batches with N &gt; 4</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NightBatchDeweightingModel(cap=4)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Model order</p></td>
+<td><p>fill, then EFCC18, then empirical covariance, then nightly deweighting
+(fill first so every later model sees a finite covariance; debias
+positions before anything reads them)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">default_observation_models()</span></code> / <code class="docutils literal notranslate"><span class="pre">run_od(models=&quot;default&quot;)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>Outlier rejection</p></td>
+<td><p>Carpino-Milani-Chesley (2003) with OrbFit’s <code class="docutils literal notranslate"><span class="pre">reject.def</span></code> constants
+(reject 8, recover 7, frac 0.25, 15 passes, 50% max rejected, 180-day
+apparitions, 5% eigenvalue floor)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter(outlier_rejection=&quot;cmc2003&quot;)</span></code> / <code class="docutils literal notranslate"><span class="pre">cmc2003_fit()</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Differential correction</p></td>
+<td><p>whitened residuals, exact 2-body Jacobian, weak-direction covariance
+probe, linear loss</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fit_least_squares(jacobian=&quot;analytic&quot;,</span> <span class="pre">validate_covariance=True,</span>
+<span class="pre">loss=&quot;linear&quot;)</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p>IOD</p></td>
+<td><p>Gauss on every observation triplet, accepted below reduced chi2 200;
+at least 6 observations over 1 day</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter(observation_selection_method=&quot;combinations&quot;,</span>
+<span class="pre">iod_rchi2_threshold=200,</span> <span class="pre">min_obs=6,</span> <span class="pre">min_arc_length=1)</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p>Provenance</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">FittedOrbitMembers</span></code> record original vs used astrometry, <code class="docutils literal notranslate"><span class="pre">astcat</span></code>
+and <code class="docutils literal notranslate"><span class="pre">weight</span></code>; the models act on the fit only. Judge a held-out
+observation against its nominal position and original sigma.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">run_od</span></code></p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>Kept as options but not defaults: <code class="docutils literal notranslate"><span class="pre">loss=&quot;huber&quot;</span></code> (open covariance pathology
+on short arcs), <code class="docutils literal notranslate"><span class="pre">VeresFloorModel</span></code> / <code class="docutils literal notranslate"><span class="pre">VeresReplaceModel</span></code>, <code class="docutils literal notranslate"><span class="pre">SigmaFloorModel</span></code>
+(no-op on the study), <code class="docutils literal notranslate"><span class="pre">PerformanceWeightedModel</span></code> (over-inflates by about
+1.5x), <code class="docutils literal notranslate"><span class="pre">NightBatchDeweightingModel(cap=1)</span></code> (sqrt(N), about 1.9x inflation
+with no position benefit) and <code class="docutils literal notranslate"><span class="pre">outlier_rejection=&quot;worst_residual&quot;</span></code> (the
+pre-2026-09 loop). The lower-level entry points (<code class="docutils literal notranslate"><span class="pre">initial_orbit_determination</span></code>,
+<code class="docutils literal notranslate"><span class="pre">differential_correction</span></code>, <code class="docutils literal notranslate"><span class="pre">iterative_fit</span></code>) take an optional
+<code class="docutils literal notranslate"><span class="pre">observatory_bias_model</span></code> that defaults to None: they are building blocks,
+not the shipped pipeline, and work without the data packages. The full notes
+live in the <code class="docutils literal notranslate"><span class="pre">adam_core.orbit_determination.defaults</span></code> module docstring.</p>
+</section>
+<section id="the-pieces-one-by-one">
+<h3>The pieces, one by one<a class="headerlink" href="#the-pieces-one-by-one" title="Link to this heading">¶</a></h3>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">CompositeModel</span><span class="p">,</span>
     <span class="n">EFCC18DebiasModel</span><span class="p">,</span>
@@ -614,6 +704,7 @@ its weakest direction, so line-of-sight uncertainties are no longer fabricated
 by finite differences. Pass <code class="docutils literal notranslate"><span class="pre">jacobian=&quot;2-point&quot;</span></code> to reach a propagator’s
 fused Rust Gauss-Newton work unit with the legacy forward-difference
 covariance.</p>
+</section>
 </section>
 <section id="when-to-use-this-pattern">
 <h2>When to Use This Pattern<a class="headerlink" href="#when-to-use-this-pattern" title="Link to this heading">¶</a></h2>
@@ -691,7 +782,11 @@ cleanup of observation-to-orbit assignments.</p>
 <li><a class="reference internal" href="#what-you-get-back">What You Get Back</a></li>
 <li><a class="reference internal" href="#implementation-options-and-tradeoffs">Implementation Options and Tradeoffs</a></li>
 <li><a class="reference internal" href="#runnable-example">Runnable Example</a></li>
-<li><a class="reference internal" href="#fit-time-observation-models-and-provenance">Fit-Time Observation Models and Provenance</a></li>
+<li><a class="reference internal" href="#fit-time-observation-models-and-provenance">Fit-Time Observation Models and Provenance</a><ul>
+<li><a class="reference internal" href="#the-shipped-defaults">The shipped defaults</a></li>
+<li><a class="reference internal" href="#the-pieces-one-by-one">The pieces, one by one</a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#when-to-use-this-pattern">When to Use This Pattern</a></li>
 <li><a class="reference internal" href="#related-documentation">Related Documentation</a></li>
 </ul>
