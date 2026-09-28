@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="adam_core.orbit_determination.defaults module" href="adam_core.orbit_determination.defaults.html"><link rel="prev" title="adam_core.observers.utils module" href="adam_core.observers.utils.html">
+<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="adam_core.orbit_determination.differential_correction module" href="adam_core.orbit_determination.differential_correction.html"><link rel="prev" title="adam_core.observers.utils module" href="adam_core.observers.utils.html">
         <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/reference/api/adam_core.orbit_determination.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
@@ -292,7 +292,6 @@
 </ul>
 </li>
 <li class="toctree-l4 current has-children current-page"><a class="current reference internal" href="#">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" checked="" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.defaults.html">adam_core.orbit_determination.defaults module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
@@ -452,18 +451,6 @@
 <h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading">¶</a></h2>
 <div class="toctree-wrapper compound">
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="adam_core.orbit_determination.defaults.html">adam_core.orbit_determination.defaults module</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.defaults.html#notes-the-default-configuration-decision-2026-09-23">NOTES: the default configuration (decision 2026-09-23)</a><ul>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.defaults.html#observation-models-applied-in-this-order-by-run-od-default-models">Observation models, applied in this order by <cite>run_od</cite> (default <code class="docutils literal notranslate"><span class="pre">models</span></code>)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.defaults.html#fitter-nativeorbitfitter-defaults">Fitter (<cite>NativeOrbitFitter</cite> defaults)</a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.defaults.html#provenance-and-scoring">Provenance and scoring</a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.defaults.html#options-kept-not-defaults">Options kept, not defaults</a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.defaults.html#opting-out">Opting out</a></li>
-</ul>
-</li>
-<li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.defaults.html#adam_core.orbit_determination.defaults.default_observation_models"><code class="docutils literal notranslate"><span class="pre">default_observation_models()</span></code></a></li>
-</ul>
-</li>
 <li class="toctree-l1"><a class="reference internal" href="adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.differential_correction.html#adam_core.orbit_determination.differential_correction.residual_function"><code class="docutils literal notranslate"><span class="pre">residual_function()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.differential_correction.html#adam_core.orbit_determination.differential_correction.fit_least_squares"><code class="docutils literal notranslate"><span class="pre">fit_least_squares()</span></code></a></li>
@@ -604,7 +591,6 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="adam_core.orbit_determination.od_orchestration.html">adam_core.orbit_determination.od_orchestration module</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.od_orchestration.html#design">Design</a></li>
-<li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.od_orchestration.html#adam_core.orbit_determination.od_orchestration.DEFAULT_MODELS"><code class="docutils literal notranslate"><span class="pre">DEFAULT_MODELS</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.od_orchestration.html#adam_core.orbit_determination.od_orchestration.apply_observation_models"><code class="docutils literal notranslate"><span class="pre">apply_observation_models()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.od_orchestration.html#adam_core.orbit_determination.od_orchestration.attach_observation_provenance"><code class="docutils literal notranslate"><span class="pre">attach_observation_provenance()</span></code></a></li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.od_orchestration.html#adam_core.orbit_determination.od_orchestration.run_od"><code class="docutils literal notranslate"><span class="pre">run_od()</span></code></a></li>
@@ -669,12 +655,12 @@
       <footer>
         
         <div class="related-pages">
-          <a class="next-page" href="adam_core.orbit_determination.defaults.html">
+          <a class="next-page" href="adam_core.orbit_determination.differential_correction.html">
               <div class="page-info">
                 <div class="context">
                   <span>Next</span>
                 </div>
-                <div class="title">adam_core.orbit_determination.defaults module</div>
+                <div class="title">adam_core.orbit_determination.differential_correction module</div>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>

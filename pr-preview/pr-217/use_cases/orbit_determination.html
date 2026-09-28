@@ -293,7 +293,6 @@
 </ul>
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.html">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.defaults.html">adam_core.orbit_determination.defaults module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
@@ -569,9 +568,8 @@ None of them changes a position.</p></li>
 <p>Calling the pieces with no arguments gives the Asteroid Institute default
 configuration (the outcome of the 100-object walk-forward study, decision
 2026-09-23). Every default is the default value of the signature that owns
-it; the observation-model stack, which no single signature can express, is
-built by <code class="docutils literal notranslate"><span class="pre">default_observation_models</span></code> and applied by <code class="docutils literal notranslate"><span class="pre">run_od</span></code> when it is
-called without <code class="docutils literal notranslate"><span class="pre">models</span></code>:</p>
+it, and <code class="docutils literal notranslate"><span class="pre">run_od</span></code> called without <code class="docutils literal notranslate"><span class="pre">models</span></code> applies the default model stack,
+which is written out in its body and explained in its docstring:</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="n">NativeOrbitFitter</span><span class="p">,</span> <span class="n">run_od</span>
 
 <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">members</span> <span class="o">=</span> <span class="n">run_od</span><span class="p">(</span>
@@ -581,11 +579,16 @@ called without <code class="docutils literal notranslate"><span class="pre">mode
 <span class="p">)</span>
 </pre></div>
 </div>
-<p>The tables come from the data packages (<code class="docutils literal notranslate"><span class="pre">adam-observatory-uncertainties</span></code>
-and <code class="docutils literal notranslate"><span class="pre">jpl_debias_2018</span></code>); without them <code class="docutils literal notranslate"><span class="pre">run_od</span></code> raises an <code class="docutils literal notranslate"><span class="pre">ImportError</span></code> /
-<code class="docutils literal notranslate"><span class="pre">FileNotFoundError</span></code> naming the missing data. <code class="docutils literal notranslate"><span class="pre">models=None</span></code> fits the
-observations exactly as supplied; <code class="docutils literal notranslate"><span class="pre">default_observation_models(bias_table=...,</span>
-<span class="pre">sigma_table=...)</span></code> injects tables to pin a study.</p>
+<p>Some of the default models import data packages for their tables.
+<code class="docutils literal notranslate"><span class="pre">SigmaFillModel()</span></code> and <code class="docutils literal notranslate"><span class="pre">EmpiricalCovarianceModel()</span></code> load
+<code class="docutils literal notranslate"><span class="pre">v2_sigma_fill</span></code> and <code class="docutils literal notranslate"><span class="pre">v2_full</span></code> from the private
+<code class="docutils literal notranslate"><span class="pre">adam-observatory-uncertainties</span></code> package, and <code class="docutils literal notranslate"><span class="pre">EFCC18DebiasModel()</span></code>
+locates JPL’s <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> through the <code class="docutils literal notranslate"><span class="pre">jpl_debias_2018</span></code> package, the
+<code class="docutils literal notranslate"><span class="pre">ADAM_CORE_EFCC18_BIAS_DAT</span></code> environment variable or the EFCC18 cache.
+adam_core does not depend on these packages: without them <code class="docutils literal notranslate"><span class="pre">run_od</span></code> raises
+an <code class="docutils literal notranslate"><span class="pre">ImportError</span></code> / <code class="docutils literal notranslate"><span class="pre">FileNotFoundError</span></code> naming the missing one.
+<code class="docutils literal notranslate"><span class="pre">models=None</span></code> fits the observations exactly as supplied, and an explicit
+model list built with your own tables needs no package.</p>
 <div class="table-wrapper colwidths-given docutils container">
 <table class="docutils align-default">
 <colgroup>
@@ -614,36 +617,36 @@ tabulated catalog corrected</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">EmpiricalCovarianceModel</span></code>: the station’s measured 2x2 residual
 covariance is ADDED to the reported one; stations with fewer than 30
 residuals pass through</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">EmpiricalCovarianceModel(mode=&quot;add&quot;,</span> <span class="pre">min_resid_cov_n=30)</span></code> /
-<code class="docutils literal notranslate"><span class="pre">load_bias_table()</span></code> (<code class="docutils literal notranslate"><span class="pre">v2_full</span></code>)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">EmpiricalCovarianceModel()</span></code> (<code class="docutils literal notranslate"><span class="pre">mode=&quot;add&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">min_resid_cov_n=30</span></code>)
+/ <code class="docutils literal notranslate"><span class="pre">load_bias_table()</span></code> (<code class="docutils literal notranslate"><span class="pre">v2_full</span></code>)</p></td>
 </tr>
 <tr class="row-odd"><td><p>Nightly deweighting</p></td>
 <td><p>sigma scaled by sqrt(N/4) for same-station same-night batches with N &gt; 4</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">NightBatchDeweightingModel(cap=4)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NightBatchDeweightingModel()</span></code> (<code class="docutils literal notranslate"><span class="pre">cap=4</span></code>)</p></td>
 </tr>
 <tr class="row-even"><td><p>Model order</p></td>
 <td><p>fill, then EFCC18, then empirical covariance, then nightly deweighting
 (fill first so every later model sees a finite covariance; debias
 positions before anything reads them)</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">default_observation_models()</span></code> / <code class="docutils literal notranslate"><span class="pre">run_od(models=&quot;default&quot;)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">run_od(models=&quot;default&quot;)</span></code></p></td>
 </tr>
 <tr class="row-odd"><td><p>Outlier rejection</p></td>
 <td><p>Carpino-Milani-Chesley (2003) with OrbFit’s <code class="docutils literal notranslate"><span class="pre">reject.def</span></code> constants
 (reject 8, recover 7, frac 0.25, 15 passes, 50% max rejected, 180-day
 apparitions, 5% eigenvalue floor)</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter(outlier_rejection=&quot;cmc2003&quot;)</span></code> / <code class="docutils literal notranslate"><span class="pre">cmc2003_fit()</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter()</span></code> (<code class="docutils literal notranslate"><span class="pre">outlier_rejection=&quot;cmc2003&quot;</span></code>) / <code class="docutils literal notranslate"><span class="pre">cmc2003_fit()</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p>Differential correction</p></td>
 <td><p>whitened residuals, exact 2-body Jacobian, weak-direction covariance
 probe, linear loss</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">fit_least_squares(jacobian=&quot;analytic&quot;,</span> <span class="pre">validate_covariance=True,</span>
-<span class="pre">loss=&quot;linear&quot;)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">fit_least_squares()</span></code> (<code class="docutils literal notranslate"><span class="pre">jacobian=&quot;analytic&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">validate_covariance=True</span></code>, <code class="docutils literal notranslate"><span class="pre">loss=&quot;linear&quot;</span></code>)</p></td>
 </tr>
 <tr class="row-odd"><td><p>IOD</p></td>
 <td><p>Gauss on every observation triplet, accepted below reduced chi2 200;
 at least 6 observations over 1 day</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter(observation_selection_method=&quot;combinations&quot;,</span>
-<span class="pre">iod_rchi2_threshold=200,</span> <span class="pre">min_obs=6,</span> <span class="pre">min_arc_length=1)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter()</span></code> (<code class="docutils literal notranslate"><span class="pre">observation_selection_method=&quot;combinations&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">iod_rchi2_threshold=200</span></code>, <code class="docutils literal notranslate"><span class="pre">min_obs=6</span></code>, <code class="docutils literal notranslate"><span class="pre">min_arc_length=1</span></code>)</p></td>
 </tr>
 <tr class="row-even"><td><p>Provenance</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">FittedOrbitMembers</span></code> record original vs used astrometry, <code class="docutils literal notranslate"><span class="pre">astcat</span></code>
@@ -662,8 +665,8 @@ with no position benefit) and <code class="docutils literal notranslate"><span c
 pre-2026-09 loop). The lower-level entry points (<code class="docutils literal notranslate"><span class="pre">initial_orbit_determination</span></code>,
 <code class="docutils literal notranslate"><span class="pre">differential_correction</span></code>, <code class="docutils literal notranslate"><span class="pre">iterative_fit</span></code>) take an optional
 <code class="docutils literal notranslate"><span class="pre">observatory_bias_model</span></code> that defaults to None: they are building blocks,
-not the shipped pipeline, and work without the data packages. The full notes
-live in the <code class="docutils literal notranslate"><span class="pre">adam_core.orbit_determination.defaults</span></code> module docstring.</p>
+not the shipped pipeline, and work without the data packages. The same notes
+are in the <code class="docutils literal notranslate"><span class="pre">run_od</span></code> docstring.</p>
 </section>
 <section id="the-pieces-one-by-one">
 <h3>The pieces, one by one<a class="headerlink" href="#the-pieces-one-by-one" title="Link to this heading">¶</a></h3>

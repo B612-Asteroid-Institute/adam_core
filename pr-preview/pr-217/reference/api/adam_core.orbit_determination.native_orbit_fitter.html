@@ -292,7 +292,6 @@
 </ul>
 </li>
 <li class="toctree-l4 current has-children"><a class="reference internal" href="adam_core.orbit_determination.html">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" checked="" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
-<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.defaults.html">adam_core.orbit_determination.defaults module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
@@ -496,9 +495,8 @@ worst-residual observation and refits while the reduced chi2
 exceeds <code class="docutils literal notranslate"><span class="pre">rchi2_threshold</span></code>, bounded by <code class="docutils literal notranslate"><span class="pre">contamination_percentage</span></code>,
 <code class="docutils literal notranslate"><span class="pre">min_obs</span></code> and <code class="docutils literal notranslate"><span class="pre">min_arc_length</span></code> (the pre-2026-09 behaviour).</p></li>
 </ul>
-<p>Both compose with <code class="docutils literal notranslate"><span class="pre">loss=&quot;huber&quot;</span></code>. See
-<cite>adam_core.orbit_determination.defaults</cite> for the full default
-configuration.</p>
+<p>Both compose with <code class="docutils literal notranslate"><span class="pre">loss=&quot;huber&quot;</span></code>. See the Notes of <cite>run_od</cite> for
+the full default configuration.</p>
 </p></li>
 <li><p><strong>rejection_kwargs</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>, </em><em>optional</em>) – Extra keyword arguments for the rejection function (e.g.
 <code class="docutils literal notranslate"><span class="pre">chi2_reject</span></code>, <code class="docutils literal notranslate"><span class="pre">chi2_recover</span></code> for <code class="docutils literal notranslate"><span class="pre">&quot;cmc2003&quot;</span></code>; <code class="docutils literal notranslate"><span class="pre">jacobian</span></code>,

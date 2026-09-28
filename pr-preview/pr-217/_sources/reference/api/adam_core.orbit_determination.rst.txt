@@ -12,7 +12,6 @@ Submodules
 .. toctree::
    :maxdepth: 4
 
-   adam_core.orbit_determination.defaults
    adam_core.orbit_determination.differential_correction
    adam_core.orbit_determination.evaluate
    adam_core.orbit_determination.fitted_orbits

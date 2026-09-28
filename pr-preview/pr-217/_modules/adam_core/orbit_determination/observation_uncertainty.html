@@ -291,7 +291,6 @@
 </ul>
 </li>
 <li class="toctree-l4 has-children"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.html">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul>
-<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.defaults.html">adam_core.orbit_determination.defaults module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
@@ -823,6 +822,11 @@
 <span class="sd">    sample size ``resid_cov_n`` is null or below ``min_resid_cov_n``. The</span>
 <span class="sd">    per-row arithmetic is the Rust ``bias_table_model_apply`` kernel selected</span>
 <span class="sd">    by ``_MODEL``.</span>
+
+<span class="sd">    Constructed without a ``bias_table``, the model loads the ``v2_full``</span>
+<span class="sd">    table of the private ``adam-observatory-uncertainties`` data package</span>
+<span class="sd">    (`load_bias_table`), raising an `ImportError` naming the package when it</span>
+<span class="sd">    is not installed.</span>
 <span class="sd">    """</span>
 
     <span class="n">_MODEL</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">""</span>
@@ -838,7 +842,11 @@
         <span class="s2">"chi2_per_obs"</span><span class="p">,</span>
     <span class="p">)</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">bias_table</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span> <span class="n">min_resid_cov_n</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">30</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">bias_table</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">pa</span><span class="o">.</span><span class="n">Table</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">min_resid_cov_n</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">30</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">bias_table</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">bias_table</span> <span class="o">=</span> <span class="n">load_bias_table</span><span class="p">()</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">bias_table</span> <span class="o">=</span> <span class="n">validate_bias_table</span><span class="p">(</span><span class="n">bias_table</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">min_resid_cov_n</span> <span class="o">=</span> <span class="n">min_resid_cov_n</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">mode</span> <span class="o">=</span> <span class="s2">"add"</span>
@@ -898,13 +906,17 @@
 <span class="sd">    missing off-diagonal terms are zero); non-finite baseline variances</span>
 <span class="sd">    propagate as NaN. Observations whose station lacks finite residual</span>
 <span class="sd">    covariance values, or with degenerate cos(dec), pass through unchanged.</span>
+
+<span class="sd">    ``EmpiricalCovarianceModel()`` (no table) is the shipped default station</span>
+<span class="sd">    weighting: the ``v2_full`` table of the ``adam-observatory-uncertainties``</span>
+<span class="sd">    data package, ``mode="add"``, ``min_resid_cov_n=30``.</span>
 <span class="sd">    """</span>
 
     <span class="n">_MODEL</span> <span class="o">=</span> <span class="s2">"empirical_covariance"</span>
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">bias_table</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+        <span class="n">bias_table</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">pa</span><span class="o">.</span><span class="n">Table</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">mode</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"add"</span><span class="p">,</span> <span class="s2">"replace"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"add"</span><span class="p">,</span>
         <span class="n">min_resid_cov_n</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">30</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>

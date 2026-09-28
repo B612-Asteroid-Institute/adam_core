@@ -292,7 +292,6 @@
 </ul>
 </li>
 <li class="toctree-l4 current has-children"><a class="reference internal" href="adam_core.orbit_determination.html">adam_core.orbit_determination package</a><input aria-label="Toggle navigation of adam_core.orbit_determination package" checked="" class="toctree-checkbox" id="toctree-checkbox-11" name="toctree-checkbox-11" role="switch" type="checkbox"/><label for="toctree-checkbox-11"><span class="icon"><svg><use href="#svg-arrow-right"></use></svg></span></label><ul class="current">
-<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.defaults.html">adam_core.orbit_determination.defaults module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.differential_correction.html">adam_core.orbit_determination.differential_correction module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.evaluate.html">adam_core.orbit_determination.evaluate module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a></li>
@@ -474,20 +473,11 @@ pre-transformed observations, keeping the <cite>OrbitFitter</cite> interface fla
 <li><p><code class="docutils literal notranslate"><span class="pre">model.apply(observations)</span> <span class="pre">-&gt;</span> <span class="pre">observations</span></code> stays the internal primitive,
 shared with the <code class="docutils literal notranslate"><span class="pre">observatory_bias_model</span></code> parameter of the lower-level OD
 functions. Prefer <cite>run_od</cite> when the provenance of the fit matters.</p></li>
+<li><p>Called without <code class="docutils literal notranslate"><span class="pre">models</span></code>, <cite>run_od</cite> applies the shipped default model stack,
+written out in its body and explained in its Notes. Some of those models
+import data packages for their tables.</p></li>
 </ul>
 </section>
-<dl class="py data">
-<dt class="sig sig-object py" id="adam_core.orbit_determination.od_orchestration.DEFAULT_MODELS">
-<span class="sig-prename descclassname"><span class="pre">adam_core.orbit_determination.od_orchestration.</span></span><span class="sig-name descname"><span class="pre">DEFAULT_MODELS</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.14)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'default'</span></span><span class="p"><span class="pre">]</span></span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'default'</span></em><a class="headerlink" href="#adam_core.orbit_determination.od_orchestration.DEFAULT_MODELS" title="Link to this definition">¶</a></dt>
-<dd><p>the shipped observation-model stack of
-<cite>~adam_core.orbit_determination.defaults.default_observation_models</cite>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><cite>run_od</cite> default for <code class="docutils literal notranslate"><span class="pre">models</span></code></p>
-</dd>
-</dl>
-</dd></dl>
-
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.orbit_determination.od_orchestration.apply_observation_models">
 <span class="sig-prename descclassname"><span class="pre">adam_core.orbit_determination.od_orchestration.</span></span><span class="sig-name descname"><span class="pre">apply_observation_models</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.evaluate.html#adam_core.orbit_determination.evaluate.OrbitDeterminationObservations" title="adam_core.orbit_determination.evaluate.OrbitDeterminationObservations"><span class="pre">OrbitDeterminationObservations</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">models</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.observation_uncertainty.html#adam_core.orbit_determination.observation_uncertainty.ObservationUncertaintyModel" title="adam_core.orbit_determination.observation_uncertainty.ObservationUncertaintyModel"><span class="pre">ObservationUncertaintyModel</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/collections.abc.html#collections.abc.Sequence" title="(in Python v3.14)"><span class="pre">Sequence</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="adam_core.orbit_determination.observation_uncertainty.html#adam_core.orbit_determination.observation_uncertainty.ObservationUncertaintyModel" title="adam_core.orbit_determination.observation_uncertainty.ObservationUncertaintyModel"><span class="pre">ObservationUncertaintyModel</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbit_determination.evaluate.html#adam_core.orbit_determination.evaluate.OrbitDeterminationObservations" title="adam_core.orbit_determination.evaluate.OrbitDeterminationObservations"><span class="pre">OrbitDeterminationObservations</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbit_determination/od_orchestration.html#apply_observation_models"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbit_determination.od_orchestration.apply_observation_models" title="Link to this definition">¶</a></dt>
@@ -576,15 +566,12 @@ returned members.</p></li>
 plugin. The fitter receives the transformed observations and never
 the models.</p></li>
 <li><p><strong>models</strong> (<cite>ObservationUncertaintyModel</cite>, sequence of them, None, or “default”) – Observation model(s) to apply before fitting, in order. The default
-<code class="docutils literal notranslate"><span class="pre">&quot;default&quot;</span></code> applies the shipped stack of
-<cite>~adam_core.orbit_determination.defaults.default_observation_models</cite>
-(sigma fill, EFCC18 debiasing, empirical station covariance, nightly
-deweighting), resolving its tables from the data packages and raising
-an <cite>ImportError</cite> / <cite>FileNotFoundError</cite> naming the missing data when
-they are not installed. Pass None (or an empty sequence) to fit the
-observations exactly as supplied (members then record
-<code class="docutils literal notranslate"><span class="pre">used_astrometry</span></code> equal to <code class="docutils literal notranslate"><span class="pre">original_astrometry</span></code>), or your own
-model(s).</p></li>
+<code class="docutils literal notranslate"><span class="pre">&quot;default&quot;</span></code> applies the shipped stack (sigma fill, EFCC18
+debiasing, empirical station covariance, nightly deweighting; see
+Notes), whose tables come from data packages. Pass None (or an empty
+sequence) to fit the observations exactly as supplied (members then
+record <code class="docutils literal notranslate"><span class="pre">used_astrometry</span></code> equal to <code class="docutils literal notranslate"><span class="pre">original_astrometry</span></code>), or your
+own model(s).</p></li>
 <li><p><strong>propagator</strong> (<cite>~adam_core.propagator.Propagator</cite>) – Propagator used by the backend during refinement.</p></li>
 <li><p><strong>object_id</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><em>optional</em>) – Object identifier passed to the fitter and stamped on the returned
 orbits when the backend leaves <code class="docutils literal notranslate"><span class="pre">object_id</span></code> null. If None, an opaque
@@ -613,6 +600,48 @@ populated for every member observation.</p></li>
 </dd>
 </dl>
 <p class="rubric">Notes</p>
+<p><strong>The default configuration.</strong> <code class="docutils literal notranslate"><span class="pre">models=&quot;default&quot;</span></code> together with a
+default-constructed <cite>NativeOrbitFitter</cite> is the Asteroid Institute
+configuration (decision 2026-09-23, from the 100-object walk-forward
+study). The models, in the order applied:</p>
+<ol class="arabic simple">
+<li><p><code class="docutils literal notranslate"><span class="pre">SigmaFillModel()</span></code>: a sigma where the MPC reports none, from the
+<code class="docutils literal notranslate"><span class="pre">v2_sigma_fill</span></code> station/catalog table (0.75” global fallback). Fills
+ONLY missing sigmas. Runs first so every later model sees a finite
+covariance.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">EFCC18DebiasModel()</span></code>: star-catalog debiasing from JPL’s EFCC18
+<code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> (HEALPix RING order, every tabulated catalog). The only
+default that moves positions.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">EmpiricalCovarianceModel()</span></code>: the station’s measured 2x2 residual
+covariance from the <code class="docutils literal notranslate"><span class="pre">v2_full</span></code> bias table ADDED to the reported
+covariance (<code class="docutils literal notranslate"><span class="pre">mode=&quot;add&quot;</span></code>); stations with fewer than 30 residuals
+pass through.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">NightBatchDeweightingModel()</span></code>: sigma scaled by sqrt(N/4) for
+same-station same-night batches of N &gt; 4 observations.</p></li>
+</ol>
+<p>Three of the four import data packages when constructed without a table.
+<cite>SigmaFillModel</cite> and <cite>EmpiricalCovarianceModel</cite> load <code class="docutils literal notranslate"><span class="pre">v2_sigma_fill</span></code>
+and <code class="docutils literal notranslate"><span class="pre">v2_full</span></code> from the private <code class="docutils literal notranslate"><span class="pre">adam-observatory-uncertainties</span></code>
+package (import name <code class="docutils literal notranslate"><span class="pre">observatory_uncertainties</span></code>; <cite>load_sigma_table</cite>,
+<cite>load_bias_table</cite>), and <cite>EFCC18DebiasModel</cite> locates <code class="docutils literal notranslate"><span class="pre">bias.dat</span></code> through
+the <code class="docutils literal notranslate"><span class="pre">jpl_debias_2018</span></code> package, the <code class="docutils literal notranslate"><span class="pre">ADAM_CORE_EFCC18_BIAS_DAT</span></code>
+environment variable or the EFCC18 cache. adam_core does not depend on
+these packages: the default raises an <cite>ImportError</cite> /
+<cite>FileNotFoundError</cite> naming the missing one, and <code class="docutils literal notranslate"><span class="pre">models=None</span></code> or an
+explicit model list built with your own tables needs none of them.</p>
+<p>The fitter defaults are those of <cite>NativeOrbitFitter</cite>: Carpino-Milani-
+Chesley (2003) outlier rejection with OrbFit’s constants, linear loss,
+and <cite>fit_least_squares</cite> with the analytic 2-body Jacobian and the
+weak-direction covariance probe; Gauss IOD on every observation triplet,
+accepted below reduced chi2 200, at least 6 observations over 1 day.
+Kept as options, not defaults: <code class="docutils literal notranslate"><span class="pre">loss=&quot;huber&quot;</span></code>, <cite>VeresFloorModel</cite> /
+<cite>VeresReplaceModel</cite>, <cite>SigmaFloorModel</cite>, <cite>PerformanceWeightedModel</cite>,
+<code class="docutils literal notranslate"><span class="pre">NightBatchDeweightingModel(cap=1)</span></code> and
+<code class="docutils literal notranslate"><span class="pre">outlier_rejection=&quot;worst_residual&quot;</span></code>. The models act on the fit only:
+judge a held-out observation against its nominal position and original
+sigma. The lower-level entry points (<cite>initial_orbit_determination</cite>,
+<cite>differential_correction</cite>, <cite>iterative_fit</cite>) keep
+<code class="docutils literal notranslate"><span class="pre">observatory_bias_model=None</span></code>, so they work without the data packages.</p>
 <p>Backends that perform their own observation debiasing or weighting
 internally (e.g. FindOrb) will apply them on top of the models supplied
 here; disabling such internal handling when models are supplied is the
@@ -679,7 +708,6 @@ responsibility of the backend plugin.</p>
             <ul>
 <li><a class="reference internal" href="#">adam_core.orbit_determination.od_orchestration module</a><ul>
 <li><a class="reference internal" href="#design">Design</a></li>
-<li><a class="reference internal" href="#adam_core.orbit_determination.od_orchestration.DEFAULT_MODELS"><code class="docutils literal notranslate"><span class="pre">DEFAULT_MODELS</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbit_determination.od_orchestration.apply_observation_models"><code class="docutils literal notranslate"><span class="pre">apply_observation_models()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbit_determination.od_orchestration.attach_observation_provenance"><code class="docutils literal notranslate"><span class="pre">attach_observation_provenance()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.orbit_determination.od_orchestration.run_od"><code class="docutils literal notranslate"><span class="pre">run_od()</span></code></a></li>
