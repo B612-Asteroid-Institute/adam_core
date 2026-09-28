@@ -14,12 +14,8 @@ from ..coordinates.residuals import Residuals
 from ..propagator import Propagator
 from ..time import Timestamp
 from ..utils.iter import _iterate_chunks
-from . import (
-    FittedOrbitMembers,
-    FittedOrbits,
-    OrbitDeterminationObservations,
-    drop_duplicate_orbits,
-)
+from .evaluate import OrbitDeterminationObservations
+from .fitted_orbits import FittedOrbitMembers, FittedOrbits, drop_duplicate_orbits
 from .gauss import MU, C, gaussIOD
 from .observation_uncertainty import ObservationUncertaintyModel
 from .outliers import calculate_max_outliers

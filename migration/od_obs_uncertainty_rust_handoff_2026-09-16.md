@@ -107,6 +107,17 @@ Veres models resolve its `veres2017_working` table; adam_core bundles no sigma
 table and still does not depend on the package (ImportError names it when
 missing). Flipping the fitter default is a one-line change if wanted.
 
+## 2026-09-28 follow-up: importable defaults (PR review)
+
+`adam_core.orbit_determination.defaults` makes the shipped configuration
+explicit and reproducible: `OD_DEFAULTS` (frozen dataclass with every lever
+value), `default_observation_models()` (SigmaFill `v2_sigma_fill` → EFCC18 →
+EmpiricalCovariance `v2_full` add, min_resid_cov_n 30 → NightBatch cap 4) and
+`default_orbit_fitter(propagator_class)` (CMC2003 with OrbFit constants, linear
+loss, analytic Jacobian, validated covariance). `load_bias_table` resolves the
+bias table from the data package like `load_sigma_table`. Class-level defaults
+are still not flipped (`NativeOrbitFitter()` alone = worst-residual).
+
 ## Correctness gates
 
 * **HEALPix RING order.** `efcc18::tests::ring_order_matches_jpl_tiles_dat`

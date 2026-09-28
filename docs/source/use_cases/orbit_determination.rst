@@ -122,20 +122,85 @@ observations, so the ``OrbitFitter`` interface stays flag-free.
   None of them changes a position.
 * ``CompositeModel`` (or a plain sequence) applies models left to right.
 
-Recommended defaults (Asteroid Institute 100-object walk-forward study,
-decision 2026-09-23): fill missing sigmas with ``SigmaFillModel`` first so
-every later model sees a finite covariance, debias positions with
-``EFCC18DebiasModel`` before anything reads them, add the station's empirical
-residual covariance with ``EmpiricalCovarianceModel(bias_table, mode="add")``,
-deweight same-station same-night batches with
-``NightBatchDeweightingModel(cap=4)`` (sigma scaled by sqrt(N/4) for N > 4),
-and fit with ``NativeOrbitFitter(outlier_rejection="cmc2003")``. Kept as
-options but not recommended as defaults: ``loss="huber"`` (open covariance
-pathology on short arcs), ``VeresFloorModel`` / ``VeresReplaceModel``,
-``SigmaFloorModel`` (no-op), ``PerformanceWeightedModel`` (over-inflates by
-about 1.5x) and ``NightBatchDeweightingModel(cap=1)`` (sqrt(N), about 1.9x
-inflation with no position benefit). The models act on the fit only: judge a
-held-out observation against its nominal position and original sigma.
+The shipped defaults
+~~~~~~~~~~~~~~~~~~~~
+
+``adam_core.orbit_determination.defaults`` holds every lever value of the
+shipped configuration (``OD_DEFAULTS``, the outcome of the Asteroid Institute
+100-object walk-forward study, decision 2026-09-23) and two factories that
+build it, so a downstream pipeline reproduces the defaults by construction:
+
+.. code-block:: python
+
+   from adam_core.orbit_determination import (
+       OD_DEFAULTS,
+       default_observation_models,
+       default_orbit_fitter,
+       run_od,
+   )
+
+   models = default_observation_models()          # tables from the data packages
+   fitter = default_orbit_fitter(ASSISTPropagator)
+   fitted_orbits, members = run_od(observations, fitter, models, propagator=ASSISTPropagator())
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 38 40
+
+   * - Lever
+     - Default
+     - Where it is set
+   * - Sigma where the MPC reports none
+     - ``SigmaFillModel`` with the ``v2_sigma_fill`` table, 0.75" fallback
+       (fills ONLY missing sigmas; reported sigmas are never touched)
+     - ``OD_DEFAULTS.sigma_fill_table`` / ``sigma_fill_fallback_arcsec``
+   * - Star-catalog debias (positions)
+     - ``EFCC18DebiasModel``: JPL ``bias.dat`` in HEALPix RING order, every
+       tabulated catalog corrected
+     - ``OD_DEFAULTS.efcc18_exclude_astcats == ()``
+   * - Station weighting
+     - ``EmpiricalCovarianceModel(v2_full, mode="add", min_resid_cov_n=30)``:
+       the station's measured 2x2 residual covariance is ADDED to the reported one
+     - ``OD_DEFAULTS.bias_table`` / ``empirical_covariance_mode`` / ``min_resid_cov_n``
+   * - Nightly deweighting
+     - ``NightBatchDeweightingModel(cap=4)``: sigma scaled by sqrt(N/4) for
+       same-station same-night batches with N > 4
+     - ``OD_DEFAULTS.night_batch_cap``
+   * - Model order
+     - fill -> EFCC18 -> empirical covariance -> nightly deweighting (fill first so
+       every later model sees a finite covariance; debias positions before anything reads them)
+     - ``default_observation_models``
+   * - Outlier rejection
+     - ``NativeOrbitFitter(outlier_rejection="cmc2003")`` with OrbFit's
+       ``reject.def`` constants (reject 8, recover 7, frac 0.25, 15 passes,
+       50% max rejected, 180-day apparitions, 5% eigenvalue floor)
+     - ``OD_DEFAULTS.outlier_rejection`` / ``cmc2003_*``
+   * - Differential correction
+     - ``fit_least_squares(jacobian="analytic", validate_covariance=True,
+       loss="linear")``: whitened residuals, exact 2-body Jacobian, weak-direction
+       covariance probe
+     - ``OD_DEFAULTS.jacobian`` / ``validate_covariance`` / ``loss``
+   * - IOD
+     - Gauss on every observation triplet (``"combinations"``), accepted below
+       reduced chi2 200; ``min_obs=6``, ``min_arc_length=1`` day
+     - ``OD_DEFAULTS.observation_selection_method`` / ``iod_rchi2_threshold`` / ``min_obs`` / ``min_arc_length``
+   * - Provenance
+     - ``run_od`` applies the models at fit time; ``FittedOrbitMembers`` record
+       original vs used astrometry, ``astcat`` and ``weight``. Judge a held-out
+       observation against its nominal position and original sigma.
+     - ``run_od``
+
+Kept as options but not defaults: ``loss="huber"`` (open covariance pathology
+on short arcs), ``VeresFloorModel`` / ``VeresReplaceModel``, ``SigmaFloorModel``
+(no-op on the study), ``PerformanceWeightedModel`` (over-inflates by about
+1.5x) and ``NightBatchDeweightingModel(cap=1)`` (sqrt(N), about 1.9x inflation
+with no position benefit). Note that the class-level defaults of the individual
+pieces are NOT all the shipped defaults: ``NativeOrbitFitter()`` alone still
+defaults to ``outlier_rejection="worst_residual"`` (the Python baseline's
+value); use ``default_orbit_fitter`` or pass ``outlier_rejection="cmc2003"``.
+
+The pieces, one by one
+~~~~~~~~~~~~~~~~~~~~~~
 
 .. code-block:: python
 

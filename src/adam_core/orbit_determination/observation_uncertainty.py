@@ -45,6 +45,7 @@ and are therefore only ever interpreted as covariance.
 
 from __future__ import annotations
 
+import importlib
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Iterable, Literal, Optional, Union
@@ -62,7 +63,9 @@ from ..observations.efcc18 import (
 from .evaluate import OrbitDeterminationObservations
 
 __all__ = [
+    "BIAS_TABLE_PACKAGE",
     "BIAS_TABLE_SCHEMA",
+    "V2_FULL_BIAS_TABLE",
     "ObservationUncertaintyModel",
     "IdentityModel",
     "EmpiricalCovarianceModel",
@@ -71,11 +74,25 @@ __all__ = [
     "NightBatchDeweightingModel",
     "EFCC18DebiasModel",
     "CompositeModel",
+    "load_bias_table",
     "validate_bias_table",
     "assert_positions_unchanged",
 ]
 
 ARCSEC_PER_DEG = 3600.0
+
+#: Import name of the private ``adam-observatory-uncertainties`` data package
+#: that ships the observatory bias tables. adam_core does not depend on it; it
+#: is imported on demand by `load_bias_table`.
+BIAS_TABLE_PACKAGE = "observatory_uncertainties"
+#: Package table: the v2 per-station rollup (1,123 stations) the Asteroid
+#: Institute default stack uses.
+V2_FULL_BIAS_TABLE = "v2_full"
+
+_PACKAGE_INSTALL_HINT = (
+    'pip install "git+ssh://git@github.com/B612-Asteroid-Institute/'
+    'adam-observatory-uncertainties.git@v0.3.0"'
+)
 
 # Standard observatory bias-table schema: the contract between adam_core's
 # interpreter models and any package reporting bias numbers. One row per
@@ -175,6 +192,41 @@ def validate_bias_table(table: pa.Table) -> pa.Table:
             raise ValueError(f"Bias table column '{name}' contains negative values")
 
     return table
+
+
+def load_bias_table(name: str = V2_FULL_BIAS_TABLE) -> pa.Table:
+    """
+    Load an observatory bias table from the ``adam-observatory-uncertainties``
+    data package, validated against `BIAS_TABLE_SCHEMA`.
+
+    Parameters
+    ----------
+    name : str
+        Table name in the package (default `V2_FULL_BIAS_TABLE`; the package's
+        ``list_tables`` lists the others).
+
+    Returns
+    -------
+    table : `pyarrow.Table`
+        The validated table (see `validate_bias_table`).
+
+    Raises
+    ------
+    ImportError
+        If the data package is not installed. adam_core does not depend on
+        it; install it or pass an explicit ``bias_table`` to the model.
+    """
+    try:
+        package = importlib.import_module(BIAS_TABLE_PACKAGE)
+    except ImportError as e:
+        raise ImportError(
+            f"The bias table {name!r} ships with the private "
+            f"adam-observatory-uncertainties data package "
+            f"(import name {BIAS_TABLE_PACKAGE!r}), which is not installed. "
+            f"Install it ({_PACKAGE_INSTALL_HINT}) or pass an explicit "
+            "bias_table."
+        ) from e
+    return validate_bias_table(package.load_bias_table(name).table)
 
 
 def assert_positions_unchanged(

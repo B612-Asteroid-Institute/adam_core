@@ -23,11 +23,13 @@ import pytest
 import quivr as qv
 
 from ...coordinates.covariances import CoordinateCovariances
+from ..defaults import default_observation_models, default_orbit_fitter
 from ..evaluate import OrbitDeterminationObservations
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits, ObservationAstrometry
 from ..native_orbit_fitter import NativeOrbitFitter
 from ..observation_uncertainty import (
     ARCSEC_PER_DEG,
+    BIAS_TABLE_PACKAGE,
     CompositeModel,
     EmpiricalCovarianceModel,
     IdentityModel,
@@ -696,3 +698,38 @@ def test_efcc18_composite_records_shifted_positions_and_inflated_sigma(
     npt.assert_allclose(used["sigma_lon"], expected_lon, rtol=1e-12)
     npt.assert_allclose(used["sigma_lat"], expected_lat, rtol=1e-12)
     npt.assert_allclose(used["cov_lonlat"], expected_cov, rtol=1e-12)
+
+
+def test_run_od_with_the_default_stack(
+    two_body_observations: OrbitDeterminationObservations,
+) -> None:
+    """
+    The shipped defaults (`default_observation_models` + `default_orbit_fitter`)
+    run end to end through `run_od`: EFCC18 moves the UCAC4 positions, the
+    empirical covariance and night-batch models only inflate sigmas, and the
+    members record original vs. used astrometry. Skipped without the
+    ``adam-observatory-uncertainties`` data package or JPL's ``bias.dat``.
+    """
+    pytest.importorskip(BIAS_TABLE_PACKAGE)
+    efcc18 = pytest.importorskip("adam_core.observations.efcc18")
+    try:
+        efcc18.resolve_bias_dat()
+    except FileNotFoundError:
+        pytest.skip("EFCC18 bias.dat not installed")
+    observations = with_astcat(
+        two_body_observations, ["UCAC4"] * len(two_body_observations)
+    )
+    fitted, members = run_od(
+        observations,
+        default_orbit_fitter(TwoBodyPropagator, iod_rchi2_threshold=1e6),
+        default_observation_models(),
+        propagator=TwoBodyPropagator(),
+        object_id="default-stack",
+    )
+    assert len(fitted) == 1 and fitted.success[0].as_py()
+    assert members.table["original_astrometry"].null_count == 0
+    used = members.used_astrometry
+    original = members.original_astrometry
+    # EFCC18 moved the UCAC4 positions; the empirical covariance inflated sigmas.
+    assert not np.array_equal(used.lon.to_numpy(), original.lon.to_numpy())
+    assert np.all(used.sigma_lon.to_numpy() >= original.sigma_lon.to_numpy())
