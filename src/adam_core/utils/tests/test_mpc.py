@@ -3,11 +3,13 @@ import pytest
 from astropy.time import Time
 
 from ..mpc import (
+    ADESDesignationParts,
     convert_mpc_packed_dates,
     pack_mpc_designation,
     pack_numbered_designation,
     pack_provisional_designation,
     pack_survey_designation,
+    parse_ades_designation,
     unpack_mpc_designation,
     unpack_numbered_designation,
     unpack_provisional_designation,
@@ -28,6 +30,20 @@ PROVISIONAL_DESIGNATIONS_UP2P = {
     "2099 AZ193": "K99AJ3Z",
     "2008 AA360": "K08Aa0A",
     "2007 TA418": "K07Tf8A",
+}
+EXTENDED_PROVISIONAL_DESIGNATIONS_UP2P = {
+    # MPC extended packed provisional specification examples and retained
+    # production identities.
+    "2024 AB631": "_OA004S",
+    "2015 BX634": "_FB0060",
+    "2015 BZ631": "_FB004p",
+    "2025 OY625": "_PO002O",
+    "2025 OT677": "_PO00NH",
+    "2025 DA620": "_PD0000",
+    "2026 DY620": "_QD000N",
+    "2027 DZ6190": "_RD0aEM",
+    "2028 EA339749": "_SEZZZZ",
+    "2029 FL591673": "_TFzzzz",
 }
 # Provisional Minor Planet Designations (Surveys)
 SURVEY_DESIGNATIONS_UP2P = {
@@ -50,6 +66,7 @@ NUMBERED_DESIGNATION_UP2P = {
 }
 DESIGNATIONS_UP2P = {
     **PROVISIONAL_DESIGNATIONS_UP2P,
+    **EXTENDED_PROVISIONAL_DESIGNATIONS_UP2P,
     **SURVEY_DESIGNATIONS_UP2P,
     **NUMBERED_DESIGNATION_UP2P,
 }
@@ -203,6 +220,88 @@ def test_pack_survey_designation_raises():
     for designation in PROVISIONAL_DESIGNATIONS_UP2P:
         with pytest.raises(ValueError):
             pack_survey_designation(designation)
+
+
+@pytest.mark.parametrize(
+    ("unpacked", "packed"),
+    list(EXTENDED_PROVISIONAL_DESIGNATIONS_UP2P.items())
+    + [("2025 OY619", "K25Oz9Y"), ("2025 OA620", "_PO0000")],
+)
+def test_extended_provisional_designation_round_trip(unpacked, packed):
+    assert pack_provisional_designation(unpacked) == packed
+    assert unpack_provisional_designation(packed) == unpacked
+    assert pack_mpc_designation(unpacked) == packed
+    assert unpack_mpc_designation(packed) == unpacked
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "2015 IA620",
+        "2015 ZA620",
+        "2015 BZ0620",
+        "1999 BA620",
+        "2062 BA620",
+        "2025 BA591674",
+        "_FB006!",
+        "_?B0060",
+        "_FZ0060",
+    ],
+)
+def test_provisional_designation_rejects_malformed_or_out_of_range_values(value):
+    function = (
+        unpack_provisional_designation
+        if value.startswith("_")
+        else pack_provisional_designation
+    )
+    with pytest.raises(ValueError):
+        function(value)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2015 BZ631", ADESDesignationParts(prov_id="2015 BZ631")),
+        ("2040 P-L", ADESDesignationParts(prov_id="2040 P-L")),
+        ("A904 OA", ADESDesignationParts(prov_id="A904 OA")),
+        ("C/2013 A1", ADESDesignationParts(prov_id="C/2013 A1")),
+        ("I/2017 U1", ADESDesignationParts(prov_id="I/2017 U1")),
+        ("S/2000 J 1", ADESDesignationParts(prov_id="S/2000 J 1")),
+        (
+            "17032 Edlu (1999 FM9)",
+            ADESDesignationParts(perm_id="17032", prov_id="1999 FM9"),
+        ),
+        ("1P/Halley", ADESDesignationParts(perm_id="1P")),
+        ("1I/ʻOumuamua", ADESDesignationParts(perm_id="1I")),
+        ("73P-BB/Schwassmann-Wachmann", ADESDesignationParts(perm_id="73P-BB")),
+        ("Jupiter XIII", ADESDesignationParts(perm_id="Jupiter XIII")),
+        ("(134340) I", ADESDesignationParts(perm_id="(134340) I")),
+        ("ZTF-123_", ADESDesignationParts(trk_sub="ZTF-123_")),
+    ],
+)
+def test_parse_ades_designation_official_forms(value, expected):
+    assert parse_ades_designation(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "",
+        "1991 V",
+        "2015 BZ0631",
+        "99999999",
+        "C/2013 A1-ABC",
+        "S/2000 E 1",
+        "Jupiter 13",
+        "(65803) 1",
+        "(134340) IIII",
+        "tracking-id-too-long",
+        "name with spaces",
+    ],
+)
+def test_parse_ades_designation_rejects_malformed_or_unsupported_text(value):
+    with pytest.raises(ValueError):
+        parse_ades_designation(value)
 
 
 def test_unpack_mpc_designation():
