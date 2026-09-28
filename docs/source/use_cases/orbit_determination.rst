@@ -128,9 +128,8 @@ The shipped defaults
 Calling the pieces with no arguments gives the Asteroid Institute default
 configuration (the outcome of the 100-object walk-forward study, decision
 2026-09-23). Every default is the default value of the signature that owns
-it; the observation-model stack, which no single signature can express, is
-built by ``default_observation_models`` and applied by ``run_od`` when it is
-called without ``models``:
+it, and ``run_od`` called without ``models`` applies the default model stack,
+which is written out in its body and explained in its docstring:
 
 .. code-block:: python
 
@@ -142,11 +141,16 @@ called without ``models``:
        propagator=ASSISTPropagator(),
    )
 
-The tables come from the data packages (``adam-observatory-uncertainties``
-and ``jpl_debias_2018``); without them ``run_od`` raises an ``ImportError`` /
-``FileNotFoundError`` naming the missing data. ``models=None`` fits the
-observations exactly as supplied; ``default_observation_models(bias_table=...,
-sigma_table=...)`` injects tables to pin a study.
+Some of the default models import data packages for their tables.
+``SigmaFillModel()`` and ``EmpiricalCovarianceModel()`` load
+``v2_sigma_fill`` and ``v2_full`` from the private
+``adam-observatory-uncertainties`` package, and ``EFCC18DebiasModel()``
+locates JPL's ``bias.dat`` through the ``jpl_debias_2018`` package, the
+``ADAM_CORE_EFCC18_BIAS_DAT`` environment variable or the EFCC18 cache.
+adam_core does not depend on these packages: without them ``run_od`` raises
+an ``ImportError`` / ``FileNotFoundError`` naming the missing one.
+``models=None`` fits the observations exactly as supplied, and an explicit
+model list built with your own tables needs no package.
 
 .. list-table::
    :header-rows: 1
@@ -167,31 +171,31 @@ sigma_table=...)`` injects tables to pin a study.
      - ``EmpiricalCovarianceModel``: the station's measured 2x2 residual
        covariance is ADDED to the reported one; stations with fewer than 30
        residuals pass through
-     - ``EmpiricalCovarianceModel(mode="add", min_resid_cov_n=30)`` /
-       ``load_bias_table()`` (``v2_full``)
+     - ``EmpiricalCovarianceModel()`` (``mode="add"``, ``min_resid_cov_n=30``)
+       / ``load_bias_table()`` (``v2_full``)
    * - Nightly deweighting
      - sigma scaled by sqrt(N/4) for same-station same-night batches with N > 4
-     - ``NightBatchDeweightingModel(cap=4)``
+     - ``NightBatchDeweightingModel()`` (``cap=4``)
    * - Model order
      - fill, then EFCC18, then empirical covariance, then nightly deweighting
        (fill first so every later model sees a finite covariance; debias
        positions before anything reads them)
-     - ``default_observation_models()`` / ``run_od(models="default")``
+     - ``run_od(models="default")``
    * - Outlier rejection
      - Carpino-Milani-Chesley (2003) with OrbFit's ``reject.def`` constants
        (reject 8, recover 7, frac 0.25, 15 passes, 50% max rejected, 180-day
        apparitions, 5% eigenvalue floor)
-     - ``NativeOrbitFitter(outlier_rejection="cmc2003")`` / ``cmc2003_fit()``
+     - ``NativeOrbitFitter()`` (``outlier_rejection="cmc2003"``) / ``cmc2003_fit()``
    * - Differential correction
      - whitened residuals, exact 2-body Jacobian, weak-direction covariance
        probe, linear loss
-     - ``fit_least_squares(jacobian="analytic", validate_covariance=True,
-       loss="linear")``
+     - ``fit_least_squares()`` (``jacobian="analytic"``,
+       ``validate_covariance=True``, ``loss="linear"``)
    * - IOD
      - Gauss on every observation triplet, accepted below reduced chi2 200;
        at least 6 observations over 1 day
-     - ``NativeOrbitFitter(observation_selection_method="combinations",
-       iod_rchi2_threshold=200, min_obs=6, min_arc_length=1)``
+     - ``NativeOrbitFitter()`` (``observation_selection_method="combinations"``,
+       ``iod_rchi2_threshold=200``, ``min_obs=6``, ``min_arc_length=1``)
    * - Provenance
      - ``FittedOrbitMembers`` record original vs used astrometry, ``astcat``
        and ``weight``; the models act on the fit only. Judge a held-out
@@ -206,8 +210,8 @@ with no position benefit) and ``outlier_rejection="worst_residual"`` (the
 pre-2026-09 loop). The lower-level entry points (``initial_orbit_determination``,
 ``differential_correction``, ``iterative_fit``) take an optional
 ``observatory_bias_model`` that defaults to None: they are building blocks,
-not the shipped pipeline, and work without the data packages. The full notes
-live in the ``adam_core.orbit_determination.defaults`` module docstring.
+not the shipped pipeline, and work without the data packages. The same notes
+are in the ``run_od`` docstring.
 
 The pieces, one by one
 ~~~~~~~~~~~~~~~~~~~~~~

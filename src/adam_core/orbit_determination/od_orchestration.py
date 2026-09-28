@@ -26,6 +26,9 @@ Design
 * ``model.apply(observations) -> observations`` stays the internal primitive,
   shared with the ``observatory_bias_model`` parameter of the lower-level OD
   functions. Prefer `run_od` when the provenance of the fit matters.
+* Called without ``models``, `run_od` applies the shipped default model stack,
+  written out in its body and explained in its Notes. Some of those models
+  import data packages for their tables.
 """
 
 from __future__ import annotations
@@ -38,14 +41,19 @@ import pyarrow as pa
 import pyarrow.compute as pc
 
 from ..propagator.propagator import Propagator
-from .defaults import default_observation_models
 from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, ObservationAstrometry
-from .observation_uncertainty import CompositeModel, ObservationUncertaintyModel
+from .observation_uncertainty import (
+    CompositeModel,
+    EFCC18DebiasModel,
+    EmpiricalCovarianceModel,
+    NightBatchDeweightingModel,
+    ObservationUncertaintyModel,
+)
 from .orbit_fitter import OrbitFitter
+from .veres2017 import SigmaFillModel
 
 __all__ = [
-    "DEFAULT_MODELS",
     "ObservationModels",
     "apply_observation_models",
     "attach_observation_provenance",
@@ -57,10 +65,6 @@ __all__ = [
 ObservationModels = (
     ObservationUncertaintyModel | Sequence[ObservationUncertaintyModel] | None
 )
-
-#: `run_od` default for ``models``: the shipped observation-model stack of
-#: `~adam_core.orbit_determination.defaults.default_observation_models`.
-DEFAULT_MODELS: Literal["default"] = "default"
 
 
 def _as_array(column: pa.Array | pa.ChunkedArray) -> pa.Array:
@@ -186,7 +190,7 @@ def attach_observation_provenance(
 def run_od(
     observations: OrbitDeterminationObservations,
     fitter: OrbitFitter,
-    models: ObservationModels | Literal["default"] = DEFAULT_MODELS,
+    models: ObservationModels | Literal["default"] = "default",
     *,
     propagator: Propagator,
     object_id: str | None = None,
@@ -221,15 +225,12 @@ def run_od(
         the models.
     models : `ObservationUncertaintyModel`, sequence of them, None, or "default"
         Observation model(s) to apply before fitting, in order. The default
-        ``"default"`` applies the shipped stack of
-        `~adam_core.orbit_determination.defaults.default_observation_models`
-        (sigma fill, EFCC18 debiasing, empirical station covariance, nightly
-        deweighting), resolving its tables from the data packages and raising
-        an `ImportError` / `FileNotFoundError` naming the missing data when
-        they are not installed. Pass None (or an empty sequence) to fit the
-        observations exactly as supplied (members then record
-        ``used_astrometry`` equal to ``original_astrometry``), or your own
-        model(s).
+        ``"default"`` applies the shipped stack (sigma fill, EFCC18
+        debiasing, empirical station covariance, nightly deweighting; see
+        Notes), whose tables come from data packages. Pass None (or an empty
+        sequence) to fit the observations exactly as supplied (members then
+        record ``used_astrometry`` equal to ``original_astrometry``), or your
+        own model(s).
     propagator : `~adam_core.propagator.Propagator`
         Propagator used by the backend during refinement.
     object_id : str, optional
@@ -260,6 +261,50 @@ def run_od(
 
     Notes
     -----
+    **The default configuration.** ``models="default"`` together with a
+    default-constructed `NativeOrbitFitter` is the Asteroid Institute
+    configuration (decision 2026-09-23, from the 100-object walk-forward
+    study). The models, in the order applied:
+
+    1. ``SigmaFillModel()``: a sigma where the MPC reports none, from the
+       ``v2_sigma_fill`` station/catalog table (0.75" global fallback). Fills
+       ONLY missing sigmas. Runs first so every later model sees a finite
+       covariance.
+    2. ``EFCC18DebiasModel()``: star-catalog debiasing from JPL's EFCC18
+       ``bias.dat`` (HEALPix RING order, every tabulated catalog). The only
+       default that moves positions.
+    3. ``EmpiricalCovarianceModel()``: the station's measured 2x2 residual
+       covariance from the ``v2_full`` bias table ADDED to the reported
+       covariance (``mode="add"``); stations with fewer than 30 residuals
+       pass through.
+    4. ``NightBatchDeweightingModel()``: sigma scaled by sqrt(N/4) for
+       same-station same-night batches of N > 4 observations.
+
+    Three of the four import data packages when constructed without a table.
+    `SigmaFillModel` and `EmpiricalCovarianceModel` load ``v2_sigma_fill``
+    and ``v2_full`` from the private ``adam-observatory-uncertainties``
+    package (import name ``observatory_uncertainties``; `load_sigma_table`,
+    `load_bias_table`), and `EFCC18DebiasModel` locates ``bias.dat`` through
+    the ``jpl_debias_2018`` package, the ``ADAM_CORE_EFCC18_BIAS_DAT``
+    environment variable or the EFCC18 cache. adam_core does not depend on
+    these packages: the default raises an `ImportError` /
+    `FileNotFoundError` naming the missing one, and ``models=None`` or an
+    explicit model list built with your own tables needs none of them.
+
+    The fitter defaults are those of `NativeOrbitFitter`: Carpino-Milani-
+    Chesley (2003) outlier rejection with OrbFit's constants, linear loss,
+    and `fit_least_squares` with the analytic 2-body Jacobian and the
+    weak-direction covariance probe; Gauss IOD on every observation triplet,
+    accepted below reduced chi2 200, at least 6 observations over 1 day.
+    Kept as options, not defaults: ``loss="huber"``, `VeresFloorModel` /
+    `VeresReplaceModel`, `SigmaFloorModel`, `PerformanceWeightedModel`,
+    ``NightBatchDeweightingModel(cap=1)`` and
+    ``outlier_rejection="worst_residual"``. The models act on the fit only:
+    judge a held-out observation against its nominal position and original
+    sigma. The lower-level entry points (`initial_orbit_determination`,
+    `differential_correction`, `iterative_fit`) keep
+    ``observatory_bias_model=None``, so they work without the data packages.
+
     Backends that perform their own observation debiasing or weighting
     internally (e.g. FindOrb) will apply them on top of the models supplied
     here; disabling such internal handling when models are supplied is the
@@ -273,12 +318,20 @@ def run_od(
         raise ValueError("Observation ids must be unique and non-null")
 
     if isinstance(models, str):
-        if models != DEFAULT_MODELS:
+        if models != "default":
             raise ValueError(
-                f"models must be observation models, None or {DEFAULT_MODELS!r}; "
+                "models must be observation models, None or 'default'; "
                 f"got {models!r}"
             )
-        models = default_observation_models()
+        # The shipped default stack, in application order (see Notes). Built
+        # here, not as a signature default, because the models load their
+        # tables from data packages when constructed.
+        models = [
+            SigmaFillModel(),
+            EFCC18DebiasModel(),
+            EmpiricalCovarianceModel(),
+            NightBatchDeweightingModel(),
+        ]
     used = apply_observation_models(observations, models)
 
     backend_object_id = object_id if object_id is not None else uuid.uuid4().hex

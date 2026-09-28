@@ -72,9 +72,8 @@ class NativeOrbitFitter(OrbitFitter):
           exceeds ``rchi2_threshold``, bounded by ``contamination_percentage``,
           ``min_obs`` and ``min_arc_length`` (the pre-2026-09 behaviour).
 
-        Both compose with ``loss="huber"``. See
-        `adam_core.orbit_determination.defaults` for the full default
-        configuration.
+        Both compose with ``loss="huber"``. See the Notes of `run_od` for
+        the full default configuration.
     rejection_kwargs : dict, optional
         Extra keyword arguments for the rejection function (e.g.
         ``chi2_reject``, ``chi2_recover`` for ``"cmc2003"``; ``jacobian``,

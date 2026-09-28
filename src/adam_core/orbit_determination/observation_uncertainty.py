@@ -364,6 +364,11 @@ class _BiasTableModel(ObservationUncertaintyModel):
     sample size ``resid_cov_n`` is null or below ``min_resid_cov_n``. The
     per-row arithmetic is the Rust ``bias_table_model_apply`` kernel selected
     by ``_MODEL``.
+
+    Constructed without a ``bias_table``, the model loads the ``v2_full``
+    table of the private ``adam-observatory-uncertainties`` data package
+    (`load_bias_table`), raising an `ImportError` naming the package when it
+    is not installed.
     """
 
     _MODEL: str = ""
@@ -379,7 +384,11 @@ class _BiasTableModel(ObservationUncertaintyModel):
         "chi2_per_obs",
     )
 
-    def __init__(self, bias_table: pa.Table, min_resid_cov_n: int = 30) -> None:
+    def __init__(
+        self, bias_table: Optional[pa.Table] = None, min_resid_cov_n: int = 30
+    ) -> None:
+        if bias_table is None:
+            bias_table = load_bias_table()
         self.bias_table = validate_bias_table(bias_table)
         self.min_resid_cov_n = min_resid_cov_n
         self.mode = "add"
@@ -437,13 +446,17 @@ class EmpiricalCovarianceModel(_BiasTableModel):
     missing off-diagonal terms are zero); non-finite baseline variances
     propagate as NaN. Observations whose station lacks finite residual
     covariance values, or with degenerate cos(dec), pass through unchanged.
+
+    ``EmpiricalCovarianceModel()`` (no table) is the shipped default station
+    weighting: the ``v2_full`` table of the ``adam-observatory-uncertainties``
+    data package, ``mode="add"``, ``min_resid_cov_n=30``.
     """
 
     _MODEL = "empirical_covariance"
 
     def __init__(
         self,
-        bias_table: pa.Table,
+        bias_table: Optional[pa.Table] = None,
         mode: Literal["add", "replace"] = "add",
         min_resid_cov_n: int = 30,
     ) -> None:

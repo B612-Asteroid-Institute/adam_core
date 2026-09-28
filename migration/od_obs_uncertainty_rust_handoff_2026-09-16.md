@@ -109,17 +109,18 @@ missing). (Superseded 2026-09-28: the fitter default was flipped, see below.)
 
 ## 2026-09-28 follow-up: the defaults are the signature defaults (PR review)
 
-Kathleen's decision: no configuration object. `NativeOrbitFitter()` now
+Kathleen's decision: no configuration object, no factory. `NativeOrbitFitter()`
 defaults to `outlier_rejection="cmc2003"`; `run_od()` called without `models`
-applies `default_observation_models()` (SigmaFill `v2_sigma_fill` → EFCC18 →
-EmpiricalCovariance `v2_full` add, min_resid_cov_n 30 → NightBatch cap 4),
-resolving the tables from the data packages and raising an ImportError /
-FileNotFoundError naming the missing data otherwise; `models=None` opts out.
-`load_bias_table` resolves the bias table from the data package like
-`load_sigma_table`. The lower-level entry points keep `observatory_bias_model=None`
-(identity). The full defaults summary is the module docstring of
-`adam_core.orbit_determination.defaults`, mirrored by the docs table
-"The shipped defaults".
+builds the default stack inline (`SigmaFillModel()` → `EFCC18DebiasModel()` →
+`EmpiricalCovarianceModel()` → `NightBatchDeweightingModel()`), each model's
+no-argument constructor being its default; `models=None` opts out. The
+bias-table models resolve `v2_full` from the data package when built without
+a table (`load_bias_table`, like `load_sigma_table`); adam_core does not
+depend on the package and the ImportError / FileNotFoundError names the
+missing data. The lower-level entry points keep `observatory_bias_model=None`.
+The defaults summary, including which default models import data packages,
+is the `run_od` docstring (Notes), mirrored by the docs table "The shipped
+defaults" and PR #217's "Defaults" section.
 
 ## Correctness gates
 

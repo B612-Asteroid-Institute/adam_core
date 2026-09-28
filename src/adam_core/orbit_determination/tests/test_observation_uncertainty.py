@@ -1,3 +1,4 @@
+import sys
 from typing import Callable, Optional
 
 import numpy as np
@@ -13,6 +14,7 @@ from ...time import Timestamp
 from ..evaluate import OrbitDeterminationObservations, OrbitDeterminationPhotometry
 from ..observation_uncertainty import (
     ARCSEC_PER_DEG,
+    BIAS_TABLE_PACKAGE,
     BIAS_TABLE_SCHEMA,
     CompositeModel,
     EmpiricalCovarianceModel,
@@ -22,6 +24,7 @@ from ..observation_uncertainty import (
     PerformanceWeightedModel,
     SigmaFloorModel,
     assert_positions_unchanged,
+    load_bias_table,
     validate_bias_table,
 )
 
@@ -571,3 +574,23 @@ class TestCompositeModel:
     def test_non_model_component_raises(self) -> None:
         with pytest.raises(TypeError, match="ObservationUncertaintyModel"):
             CompositeModel(IdentityModel(), "not a model")
+
+
+class TestBiasTablePackage:
+    """Bias-table models built without a table resolve ``v2_full`` from the
+    private data package, and name it when it is missing."""
+
+    def test_default_table_resolves_from_the_package(self) -> None:
+        package = pytest.importorskip(BIAS_TABLE_PACKAGE)
+        expected = package.load_bias_table("v2_full").table.num_rows
+        model = EmpiricalCovarianceModel()
+        assert model.bias_table.num_rows == expected > 0
+        assert model.mode == "add" and model.min_resid_cov_n == 30
+        assert load_bias_table().num_rows == expected
+
+    def test_missing_package_is_named(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.setitem(sys.modules, BIAS_TABLE_PACKAGE, None)
+        with pytest.raises(ImportError, match="adam-observatory-uncertainties"):
+            EmpiricalCovarianceModel()
+        with pytest.raises(ImportError, match="adam-observatory-uncertainties"):
+            load_bias_table()

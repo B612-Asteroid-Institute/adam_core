@@ -13,6 +13,7 @@ propagator. Synthetic hand-built inputs only: no real bias numbers appear.
 from __future__ import annotations
 
 import importlib
+import sys
 from importlib.resources import files
 from typing import Any, cast
 
@@ -23,7 +24,6 @@ import pytest
 import quivr as qv
 
 from ...coordinates.covariances import CoordinateCovariances
-from ..defaults import default_observation_models
 from ..evaluate import OrbitDeterminationObservations
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits, ObservationAstrometry
 from ..native_orbit_fitter import NativeOrbitFitter
@@ -31,6 +31,7 @@ from ..observation_uncertainty import (
     ARCSEC_PER_DEG,
     BIAS_TABLE_PACKAGE,
     CompositeModel,
+    EFCC18DebiasModel,
     EmpiricalCovarianceModel,
     IdentityModel,
     NightBatchDeweightingModel,
@@ -42,6 +43,7 @@ from ..od_orchestration import (
     run_od,
 )
 from ..orbit_fitter import OrbitFitter
+from ..veres2017 import SIGMA_TABLE_PACKAGE, SigmaFillModel
 from .test_differential_correction import TwoBodyPropagator
 from .test_observation_uncertainty import make_bias_table, make_observations
 from .test_observatory_bias_model_wiring import (
@@ -714,10 +716,10 @@ def test_run_od_with_the_default_stack(
 ) -> None:
     """
     `run_od` with no ``models`` argument and a plainly constructed
-    `NativeOrbitFitter` IS the shipped default configuration: the
-    `default_observation_models` stack (EFCC18 moves the UCAC4 positions, the
-    empirical covariance and night-batch models only inflate sigmas) and
-    CMC2003 rejection, with original vs. used astrometry on the members.
+    `NativeOrbitFitter` IS the shipped default configuration: the default
+    model stack (EFCC18 moves the UCAC4 positions, the empirical covariance
+    and night-batch models only inflate sigmas) and CMC2003 rejection, with
+    original vs. used astrometry on the members.
     Skipped without the ``adam-observatory-uncertainties`` data package or
     JPL's ``bias.dat``.
     """
@@ -748,7 +750,12 @@ def test_run_od_with_the_default_stack(
     explicit, _ = run_od(
         observations,
         fitter,
-        default_observation_models(),
+        [
+            SigmaFillModel(),
+            EFCC18DebiasModel(),
+            EmpiricalCovarianceModel(),
+            NightBatchDeweightingModel(),
+        ],
         propagator=TwoBodyPropagator(),
         object_id="defaults",
     )
@@ -766,3 +773,18 @@ def test_run_od_rejects_unknown_models_string() -> None:
             "defaults",  # type: ignore[arg-type]
             propagator=UNUSED_PROPAGATOR,
         )
+
+
+def test_run_od_default_models_name_the_missing_data_package(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without the data package the default stack fails before any fit,
+    naming the package; ``models=None`` needs no package."""
+    monkeypatch.setitem(sys.modules, SIGMA_TABLE_PACKAGE, None)
+    observations = make_observations(["500", "500", "500"], [0.0, 1.0, 2.0])
+    with pytest.raises(ImportError, match="adam-observatory-uncertainties"):
+        run_od(observations, RecordingFitter(), propagator=UNUSED_PROPAGATOR)
+    _, members = run_od(
+        observations, RecordingFitter(), None, propagator=UNUSED_PROPAGATOR
+    )
+    assert len(members) == 3

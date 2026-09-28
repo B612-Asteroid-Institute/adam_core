@@ -30,12 +30,14 @@ This file contains notable changes in adam-core
 - The shipped defaults are the signature defaults: `NativeOrbitFitter` now
   defaults to `outlier_rejection="cmc2003"` (was `"worst_residual"`), and
   `run_od` called without `models` applies the default observation-model
-  stack `default_observation_models()` (SigmaFill `v2_sigma_fill` -> EFCC18 ->
-  EmpiricalCovariance `v2_full` add -> NightBatch cap 4), resolving its tables
-  from the data packages; pass `models=None` to fit the observations as
-  supplied. `load_bias_table` resolves the observatory bias table from the
-  data package like `load_sigma_table`. The full defaults summary lives in the
-  `adam_core.orbit_determination.defaults` module docstring.
+  stack written out in its body (`SigmaFillModel()` -> `EFCC18DebiasModel()`
+  -> `EmpiricalCovarianceModel()` -> `NightBatchDeweightingModel()`) and
+  explained in its docstring; pass `models=None` to fit the observations as
+  supplied. `EmpiricalCovarianceModel`, `PerformanceWeightedModel` and
+  `SigmaFloorModel` built without a table load `v2_full` from the
+  `adam-observatory-uncertainties` data package (`load_bias_table`), like
+  `SigmaFillModel` loads `v2_sigma_fill`; adam_core still does not depend on
+  the package and names it in the `ImportError` when it is missing.
 - Whitened-residual differential correction: `fit_least_squares` now minimizes
   the 2N whitened (lon, lat) residual components with an exact 2-body
   Jacobian from the Rust forward-mode autodiff kernels, validates the
