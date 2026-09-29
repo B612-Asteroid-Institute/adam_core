@@ -477,6 +477,43 @@
 <span class="c1"># Gauss-Newton work units accept only these tuning parameters.</span>
 <span class="n">_NATIVE_FIT_KWARGS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"xtol"</span><span class="p">,</span> <span class="s2">"ftol"</span><span class="p">,</span> <span class="s2">"max_iterations"</span><span class="p">}</span>
 
+<span class="c1"># scipy keyword arguments a propagator's fused whitened work unit</span>
+<span class="c1"># (``fit_least_squares_whitened``) understands; any other kwarg keeps the</span>
+<span class="c1"># scipy path.</span>
+<span class="n">_FUSED_WHITENED_KWARGS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"xtol"</span><span class="p">,</span> <span class="s2">"ftol"</span><span class="p">,</span> <span class="s2">"gtol"</span><span class="p">,</span> <span class="s2">"max_nfev"</span><span class="p">}</span>
+<span class="c1"># Keyword arguments the rejection loops forward to `fit_least_squares` that</span>
+<span class="c1"># their fused work units (``iterative_fit`` / ``cmc2003_fit``) understand.</span>
+<span class="n">_FUSED_LOOP_KWARGS</span> <span class="o">=</span> <span class="n">_FUSED_WHITENED_KWARGS</span> <span class="o">|</span> <span class="p">{</span><span class="s2">"jacobian"</span><span class="p">,</span> <span class="s2">"validate_covariance"</span><span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_fit_settings</span><span class="p">(</span>
+    <span class="n">loss</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">jacobian</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">validate_covariance</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    The ``fit_settings`` dict of a propagator's fused whitened work units:</span>
+<span class="sd">    the `fit_least_squares` options plus the scipy tolerances (``max_nfev``</span>
+<span class="sd">    bounds the solver's residual evaluations).</span>
+<span class="sd">    """</span>
+    <span class="k">return</span> <span class="p">{</span>
+        <span class="s2">"loss"</span><span class="p">:</span> <span class="n">loss</span><span class="p">,</span>
+        <span class="s2">"f_scale"</span><span class="p">:</span> <span class="n">f_scale</span><span class="p">,</span>
+        <span class="s2">"jacobian"</span><span class="p">:</span> <span class="n">jacobian</span><span class="p">,</span>
+        <span class="s2">"validate_covariance"</span><span class="p">:</span> <span class="n">validate_covariance</span><span class="p">,</span>
+        <span class="s2">"xtol"</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"xtol"</span><span class="p">,</span> <span class="mf">1e-12</span><span class="p">),</span>
+        <span class="s2">"ftol"</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ftol"</span><span class="p">,</span> <span class="mf">1e-12</span><span class="p">),</span>
+        <span class="s2">"gtol"</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"gtol"</span><span class="p">,</span> <span class="mf">1e-12</span><span class="p">),</span>
+        <span class="s2">"max_iterations"</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"max_nfev"</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span>
+    <span class="p">}</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_emit_native_warnings</span><span class="p">(</span><span class="n">output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">message</span> <span class="ow">in</span> <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"warnings"</span><span class="p">,</span> <span class="p">()):</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span><span class="n">message</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="ne">RuntimeWarning</span><span class="p">)</span>
+
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_validate_loss</span><span class="p">(</span><span class="n">loss</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
@@ -955,6 +992,105 @@
     <span class="k">return</span> <span class="n">weights</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_fitted_tables_from_native_output</span><span class="p">(</span>
+    <span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+    <span class="n">weights</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">],</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Wrap the dict a propagator's fused Rust fit work unit returns (state,</span>
+<span class="sd">    covariance, solver diagnostics and the evaluation over the full</span>
+<span class="sd">    observation set) into `FittedOrbits` / `FittedOrbitMembers` without</span>
+<span class="sd">    further computation. ``weights`` are the members' effective weights in</span>
+<span class="sd">    `observations` order.</span>
+<span class="sd">    """</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"state"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">covariance_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"covariance"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">converged</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"converged"</span><span class="p">])</span>
+    <span class="n">fitted_orbit</span> <span class="o">=</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
+        <span class="n">object_id</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">object_id</span><span class="p">,</span>
+        <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">y</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">],</span>
+            <span class="n">z</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span>
+            <span class="n">vx</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">4</span><span class="p">],</span>
+            <span class="n">vy</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">4</span><span class="p">:</span><span class="mi">5</span><span class="p">],</span>
+            <span class="n">vz</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">5</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span>
+            <span class="n">time</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
+            <span class="n">covariance</span><span class="o">=</span><span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
+                <span class="n">covariance_matrix</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+            <span class="p">),</span>
+            <span class="n">origin</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
+            <span class="n">frame</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">arc_length</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"arc_length"</span><span class="p">]],</span>
+        <span class="n">num_obs</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"num_obs"</span><span class="p">]],</span>
+        <span class="n">chi2</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"chi2"</span><span class="p">]],</span>
+        <span class="n">reduced_chi2</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"reduced_chi2"</span><span class="p">]],</span>
+        <span class="n">iterations</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"iterations"</span><span class="p">]],</span>
+        <span class="n">success</span><span class="o">=</span><span class="p">[</span><span class="n">converged</span><span class="p">],</span>
+        <span class="n">status_code</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"status_code"</span><span class="p">,</span> <span class="mi">1</span> <span class="k">if</span> <span class="n">converged</span> <span class="k">else</span> <span class="mi">0</span><span class="p">))],</span>
+    <span class="p">)</span>
+    <span class="n">residuals</span> <span class="o">=</span> <span class="n">Residuals</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">values</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_values"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+        <span class="n">chi2</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_chi2"</span><span class="p">],</span>
+        <span class="n">dof</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_dof"</span><span class="p">],</span>
+        <span class="n">probability</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_probability"</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="n">outlier</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"outlier"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+    <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">orbit_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span> <span class="n">orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">"object"</span><span class="p">),</span>
+        <span class="n">obs_id</span><span class="o">=</span><span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+        <span class="n">residuals</span><span class="o">=</span><span class="n">residuals</span><span class="p">,</span>
+        <span class="n">solution</span><span class="o">=~</span><span class="n">outlier</span><span class="p">,</span>
+        <span class="n">outlier</span><span class="o">=</span><span class="n">outlier</span><span class="p">,</span>
+        <span class="n">weight</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">weights</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_fused_whitened_fit</span><span class="p">(</span>
+    <span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+    <span class="n">mask</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">pa</span><span class="o">.</span><span class="n">Array</span><span class="p">],</span>
+    <span class="n">jacobian</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">validate_covariance</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+    <span class="n">loss</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="n">kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    The complete whitened fit as one crossing of a Rust-backed propagator's</span>
+<span class="sd">    ``fit_least_squares_whitened`` work unit: solver, Jacobian (analytic /</span>
+<span class="sd">    central / 2-point), robust loss, validated covariance and the final</span>
+<span class="sd">    evaluation over the full observation set all run natively; the veneer</span>
+<span class="sd">    only marshals tables and re-emits the work unit's diagnostics as</span>
+<span class="sd">    `RuntimeWarning`s. Returns None when the propagator exposes no such work</span>
+<span class="sd">    unit.</span>
+<span class="sd">    """</span>
+    <span class="n">fused</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"fit_least_squares_whitened"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">ignore_mask</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span> <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">pc</span><span class="o">.</span><span class="n">invert</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
+    <span class="p">)</span>
+    <span class="n">output</span> <span class="o">=</span> <span class="n">fused</span><span class="p">(</span>
+        <span class="n">orbit</span><span class="p">,</span>
+        <span class="n">observations</span><span class="p">,</span>
+        <span class="n">ignore_mask</span><span class="p">,</span>
+        <span class="n">fit_settings</span><span class="o">=</span><span class="n">_fit_settings</span><span class="p">(</span>
+            <span class="n">loss</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">,</span> <span class="n">jacobian</span><span class="p">,</span> <span class="n">validate_covariance</span><span class="p">,</span> <span class="n">kwargs</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">_emit_native_warnings</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_fitted_tables_from_native_output</span><span class="p">(</span>
+        <span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"weights"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="p">)</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_native_fit_least_squares</span><span class="p">(</span>
     <span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
@@ -980,52 +1116,10 @@
             <span class="k">else</span> <span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
         <span class="p">)</span>
         <span class="n">output</span> <span class="o">=</span> <span class="n">fused_fit</span><span class="p">(</span><span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">ignore_mask</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"state"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">covariance_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"covariance"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="n">converged</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"converged"</span><span class="p">])</span>
-        <span class="n">fitted_orbit</span> <span class="o">=</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
-            <span class="n">object_id</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">object_id</span><span class="p">,</span>
-            <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-                <span class="n">x</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">],</span>
-                <span class="n">y</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">],</span>
-                <span class="n">z</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span>
-                <span class="n">vx</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">4</span><span class="p">],</span>
-                <span class="n">vy</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">4</span><span class="p">:</span><span class="mi">5</span><span class="p">],</span>
-                <span class="n">vz</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">5</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span>
-                <span class="n">time</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">,</span>
-                <span class="n">covariance</span><span class="o">=</span><span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span>
-                    <span class="n">covariance_matrix</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
-                <span class="p">),</span>
-                <span class="n">origin</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
-                <span class="n">frame</span><span class="o">=</span><span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span>
-            <span class="p">),</span>
-            <span class="n">arc_length</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"arc_length"</span><span class="p">]],</span>
-            <span class="n">num_obs</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"num_obs"</span><span class="p">]],</span>
-            <span class="n">chi2</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"chi2"</span><span class="p">]],</span>
-            <span class="n">reduced_chi2</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"reduced_chi2"</span><span class="p">]],</span>
-            <span class="n">iterations</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"iterations"</span><span class="p">]],</span>
-            <span class="n">success</span><span class="o">=</span><span class="p">[</span><span class="n">converged</span><span class="p">],</span>
-            <span class="n">status_code</span><span class="o">=</span><span class="p">[</span><span class="mi">1</span> <span class="k">if</span> <span class="n">converged</span> <span class="k">else</span> <span class="mi">0</span><span class="p">],</span>
-        <span class="p">)</span>
-        <span class="n">residuals</span> <span class="o">=</span> <span class="n">Residuals</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">values</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_values"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
-            <span class="n">chi2</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_chi2"</span><span class="p">],</span>
-            <span class="n">dof</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_dof"</span><span class="p">],</span>
-            <span class="n">probability</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_probability"</span><span class="p">],</span>
-        <span class="p">)</span>
         <span class="n">outlier</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"outlier"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-        <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
-                <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span> <span class="n">orbit</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">"object"</span>
-            <span class="p">),</span>
-            <span class="n">obs_id</span><span class="o">=</span><span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
-            <span class="n">residuals</span><span class="o">=</span><span class="n">residuals</span><span class="p">,</span>
-            <span class="n">solution</span><span class="o">=~</span><span class="n">outlier</span><span class="p">,</span>
-            <span class="n">outlier</span><span class="o">=</span><span class="n">outlier</span><span class="p">,</span>
-            <span class="n">weight</span><span class="o">=</span><span class="p">(</span><span class="o">~</span><span class="n">outlier</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="k">return</span> <span class="n">_fitted_tables_from_native_output</span><span class="p">(</span>
+            <span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="p">(</span><span class="o">~</span><span class="n">outlier</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
         <span class="p">)</span>
-        <span class="k">return</span> <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span>
 
     <span class="n">native_fit</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"fit_least_squares"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">native_fit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1237,9 +1331,28 @@
         <span class="n">mask</span> <span class="o">=</span> <span class="kc">None</span>
         <span class="n">observations_to_include</span> <span class="o">=</span> <span class="n">observations</span>
 
-    <span class="c1"># Legacy forward-difference path on a Rust-backed propagator: one native</span>
-    <span class="c1"># Gauss-Newton crossing (beads personal-cmy.7 / personal-dqk). The default</span>
-    <span class="c1"># analytic-Jacobian and robust-loss paths deliberately bypass it: the Rust</span>
+    <span class="c1"># Rust-backed propagators expose the complete whitened fit as one native</span>
+    <span class="c1"># crossing (``fit_least_squares_whitened``): every Jacobian option, both</span>
+    <span class="c1"># losses, the validated covariance and the final evaluation.</span>
+    <span class="k">if</span> <span class="nb">set</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">_FUSED_WHITENED_KWARGS</span><span class="p">:</span>
+        <span class="n">fused</span> <span class="o">=</span> <span class="n">_fused_whitened_fit</span><span class="p">(</span>
+            <span class="n">orbit</span><span class="p">,</span>
+            <span class="n">observations</span><span class="p">,</span>
+            <span class="n">propagator</span><span class="p">,</span>
+            <span class="n">mask</span><span class="p">,</span>
+            <span class="n">jacobian</span><span class="p">,</span>
+            <span class="n">validate_covariance</span><span class="p">,</span>
+            <span class="n">loss</span><span class="p">,</span>
+            <span class="n">f_scale</span><span class="p">,</span>
+            <span class="n">kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">fused</span>
+
+    <span class="c1"># Legacy forward-difference path on a Rust-backed propagator that exposes</span>
+    <span class="c1"># only the older ``fit_least_squares_evaluated`` / ``fit_least_squares``</span>
+    <span class="c1"># work units (beads personal-cmy.7 / personal-dqk). The default</span>
+    <span class="c1"># analytic-Jacobian and robust-loss paths deliberately bypass it: those</span>
     <span class="c1"># work units use the same forward-difference Jacobian whose covariance the</span>
     <span class="c1"># analytic path exists to correct.</span>
     <span class="k">if</span> <span class="n">jacobian</span> <span class="o">==</span> <span class="s2">"2-point"</span> <span class="ow">and</span> <span class="n">loss</span> <span class="o">==</span> <span class="s2">"linear"</span> <span class="ow">and</span> <span class="nb">set</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">_NATIVE_FIT_KWARGS</span><span class="p">:</span>
@@ -1513,6 +1626,30 @@
         <span class="c1"># passed to the nested fit_least_squares calls below.</span>
         <span class="n">observations</span> <span class="o">=</span> <span class="n">observatory_bias_model</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
 
+    <span class="c1"># Rust-backed propagators run the whole rejection loop in one crossing</span>
+    <span class="c1"># (``iterative_fit`` work unit); the veneer only wraps the selected pass.</span>
+    <span class="n">fused</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"iterative_fit"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">set</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">_FUSED_LOOP_KWARGS</span><span class="p">:</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="n">fused</span><span class="p">(</span>
+            <span class="n">orbit</span><span class="p">,</span>
+            <span class="n">observations</span><span class="p">,</span>
+            <span class="n">rchi2_threshold</span><span class="o">=</span><span class="n">rchi2_threshold</span><span class="p">,</span>
+            <span class="n">min_obs</span><span class="o">=</span><span class="n">min_obs</span><span class="p">,</span>
+            <span class="n">min_arc_length</span><span class="o">=</span><span class="n">min_arc_length</span><span class="p">,</span>
+            <span class="n">contamination_percentage</span><span class="o">=</span><span class="n">contamination_percentage</span><span class="p">,</span>
+            <span class="n">fit_settings</span><span class="o">=</span><span class="n">_fit_settings</span><span class="p">(</span>
+                <span class="n">loss</span><span class="p">,</span>
+                <span class="n">f_scale</span><span class="p">,</span>
+                <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"jacobian"</span><span class="p">,</span> <span class="s2">"analytic"</span><span class="p">),</span>
+                <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"validate_covariance"</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+                <span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">_emit_native_warnings</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_fitted_tables_from_native_output</span><span class="p">(</span>
+            <span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"weights"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="p">)</span>
+
     <span class="n">num_obs</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
     <span class="n">max_outliers</span> <span class="o">=</span> <span class="n">calculate_max_outliers</span><span class="p">(</span><span class="n">num_obs</span><span class="p">,</span> <span class="n">min_obs</span><span class="p">,</span> <span class="n">contamination_percentage</span><span class="p">)</span>
 
@@ -1599,7 +1736,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-28</div>
+              Last updated on 2026-09-29</div>
           </div>
           <div class="right-details">
             

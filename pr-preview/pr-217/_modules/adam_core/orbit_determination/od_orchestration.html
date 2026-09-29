@@ -474,6 +474,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 
@@ -486,6 +487,7 @@
     <span class="n">EmpiricalCovarianceModel</span><span class="p">,</span>
     <span class="n">NightBatchDeweightingModel</span><span class="p">,</span>
     <span class="n">ObservationUncertaintyModel</span><span class="p">,</span>
+    <span class="n">native_model_specs</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.orbit_fitter</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitFitter</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.veres2017</span><span class="w"> </span><span class="kn">import</span> <span class="n">SigmaFillModel</span>
@@ -628,6 +630,67 @@
         <span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"astcat"</span><span class="p">,</span> <span class="n">original_rows</span><span class="o">.</span><span class="n">astcat</span><span class="p">)</span>
     <span class="p">)</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_fused_run_od</span><span class="p">(</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">fitter</span><span class="p">:</span> <span class="n">OrbitFitter</span><span class="p">,</span>
+    <span class="n">models</span><span class="p">:</span> <span class="n">ObservationModels</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+    <span class="n">object_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    `run_od` as one crossing of a Rust-backed propagator's ``run_od`` work</span>
+<span class="sd">    unit, for a `NativeOrbitFitter` whose settings the work unit understands</span>
+<span class="sd">    and models that all provide native specs. Returns None otherwise.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.native_orbit_fitter</span><span class="w"> </span><span class="kn">import</span> <span class="n">NativeOrbitFitter</span><span class="p">,</span> <span class="n">tables_from_native_full_od</span>
+
+    <span class="n">fused</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"run_od"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fitter</span><span class="p">,</span> <span class="n">NativeOrbitFitter</span><span class="p">):</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">fitter</span><span class="o">.</span><span class="n">supports_native_full_od</span><span class="p">():</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">if</span> <span class="n">models</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">model_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ObservationUncertaintyModel</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">models</span><span class="p">,</span> <span class="n">ObservationUncertaintyModel</span><span class="p">):</span>
+        <span class="n">model_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">models</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">model_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">models</span><span class="p">)</span>
+    <span class="n">specs</span> <span class="o">=</span> <span class="n">native_model_specs</span><span class="p">(</span><span class="n">model_list</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">specs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+
+    <span class="n">iod_settings</span><span class="p">,</span> <span class="n">refinement</span><span class="p">,</span> <span class="n">fit_settings</span> <span class="o">=</span> <span class="n">fitter</span><span class="o">.</span><span class="n">native_settings</span><span class="p">()</span>
+    <span class="n">backend_object_id</span> <span class="o">=</span> <span class="n">object_id</span> <span class="k">if</span> <span class="n">object_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span>
+    <span class="n">output</span> <span class="o">=</span> <span class="n">fused</span><span class="p">(</span>
+        <span class="n">observations</span><span class="p">,</span>
+        <span class="n">models</span><span class="o">=</span><span class="n">specs</span><span class="p">,</span>
+        <span class="n">iod_settings</span><span class="o">=</span><span class="n">iod_settings</span><span class="p">,</span>
+        <span class="n">refinement</span><span class="o">=</span><span class="n">refinement</span><span class="p">,</span>
+        <span class="n">fit_settings</span><span class="o">=</span><span class="n">fit_settings</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">members</span> <span class="o">=</span> <span class="n">tables_from_native_full_od</span><span class="p">(</span>
+        <span class="n">backend_object_id</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">members</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">members</span>
+    <span class="n">snapshots</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"original_astrometry"</span><span class="p">,</span> <span class="s2">"used_astrometry"</span><span class="p">):</span>
+        <span class="n">columns</span> <span class="o">=</span> <span class="n">output</span><span class="p">[</span><span class="n">name</span><span class="p">]</span>
+        <span class="n">snapshots</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">ObservationAstrometry</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">lon</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">columns</span><span class="p">[</span><span class="s2">"lon"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="n">lat</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">columns</span><span class="p">[</span><span class="s2">"lat"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="n">sigma_lon</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">columns</span><span class="p">[</span><span class="s2">"sigma_lon"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="n">sigma_lat</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">columns</span><span class="p">[</span><span class="s2">"sigma_lat"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+            <span class="n">cov_lonlat</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">columns</span><span class="p">[</span><span class="s2">"cov_lonlat"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="n">members</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="n">members</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"original_astrometry"</span><span class="p">,</span> <span class="n">snapshots</span><span class="p">[</span><span class="s2">"original_astrometry"</span><span class="p">])</span>
+        <span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"used_astrometry"</span><span class="p">,</span> <span class="n">snapshots</span><span class="p">[</span><span class="s2">"used_astrometry"</span><span class="p">])</span>
+        <span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"astcat"</span><span class="p">,</span> <span class="n">observations</span><span class="o">.</span><span class="n">astcat</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">members</span>
 
 
 <div class="viewcode-block" id="run_od">
@@ -777,6 +840,14 @@
             <span class="n">EmpiricalCovarianceModel</span><span class="p">(),</span>
             <span class="n">NightBatchDeweightingModel</span><span class="p">(),</span>
         <span class="p">]</span>
+
+    <span class="c1"># Rust-backed propagators run the whole step in one crossing (``run_od``</span>
+    <span class="c1"># work unit): models, IOD, refinement and the provenance snapshots. The</span>
+    <span class="c1"># veneer keeps id validation, object ids and table assembly.</span>
+    <span class="n">fused</span> <span class="o">=</span> <span class="n">_fused_run_od</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">fitter</span><span class="p">,</span> <span class="n">models</span><span class="p">,</span> <span class="n">propagator</span><span class="p">,</span> <span class="n">object_id</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">fused</span>
+
     <span class="n">used</span> <span class="o">=</span> <span class="n">apply_observation_models</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">models</span><span class="p">)</span>
 
     <span class="n">backend_object_id</span> <span class="o">=</span> <span class="n">object_id</span> <span class="k">if</span> <span class="n">object_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span>
@@ -817,7 +888,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-28</div>
+              Last updated on 2026-09-29</div>
           </div>
           <div class="right-details">
             

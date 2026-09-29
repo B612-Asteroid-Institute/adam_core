@@ -485,7 +485,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">importlib</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Iterable</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
@@ -749,6 +749,27 @@
     <span class="p">)</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">native_model_specs</span><span class="p">(</span>
+    <span class="n">models</span><span class="p">:</span> <span class="s2">"Sequence[ObservationUncertaintyModel]"</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    The ``_native_spec()`` dicts of ``models`` (composites flattened, in</span>
+<span class="sd">    application order) for a Rust-backed propagator's fused ``run_od`` work</span>
+<span class="sd">    unit, or None when any model has no native spec (a user-defined Python</span>
+<span class="sd">    model), in which case the models are applied in Python.</span>
+<span class="sd">    """</span>
+    <span class="n">specs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="n">models</span><span class="p">:</span>
+        <span class="n">spec</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">"_native_specs"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">nested</span> <span class="o">=</span> <span class="n">spec</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">nested</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="n">specs</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">nested</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">specs</span>
+
+
 <div class="viewcode-block" id="ObservationUncertaintyModel">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.observation_uncertainty.html#adam_core.orbit_determination.observation_uncertainty.ObservationUncertaintyModel">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">ObservationUncertaintyModel</span><span class="p">(</span><span class="n">ABC</span><span class="p">):</span>
@@ -807,7 +828,10 @@
         <span class="bp">self</span><span class="p">,</span> <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OrbitDeterminationObservations</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">observations</span></div>
-</div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_native_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">[{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"identity"</span><span class="p">}]</span></div>
 
 
 
@@ -885,6 +909,18 @@
             <span class="n">observations</span><span class="o">.</span><span class="n">photometry</span><span class="o">.</span><span class="n">band</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">_with_covariances</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">updated</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_native_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">"model"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_MODEL</span><span class="p">,</span>
+                <span class="s2">"mode"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode</span><span class="p">,</span>
+                <span class="s2">"min_resid_cov_n"</span><span class="p">:</span> <span class="nb">float</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">min_resid_cov_n</span><span class="p">),</span>
+                <span class="s2">"table_obs_code"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_codes</span><span class="p">,</span>
+                <span class="s2">"table_band"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bands</span><span class="p">,</span>
+                <span class="o">**</span><span class="p">{</span><span class="n">name</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_columns</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ROW_COLUMNS</span><span class="p">},</span>
+            <span class="p">}</span>
+        <span class="p">]</span>
 
 
 <div class="viewcode-block" id="EmpiricalCovarianceModel">
@@ -1012,7 +1048,10 @@
             <span class="n">mjd_utc</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">_with_covariances</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">updated</span><span class="p">)</span></div>
-</div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_native_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">[{</span><span class="s2">"model"</span><span class="p">:</span> <span class="s2">"night_batch"</span><span class="p">,</span> <span class="s2">"cap"</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">cap</span><span class="p">)}]</span></div>
 
 
 
@@ -1112,7 +1151,16 @@
         <span class="p">)</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
             <span class="s2">"coordinates.lat"</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">new_lat</span><span class="p">),</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">())</span>
         <span class="p">)</span></div>
-</div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_native_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">"model"</span><span class="p">:</span> <span class="s2">"efcc18"</span><span class="p">,</span>
+                <span class="s2">"bias_table"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bias_table_f32</span><span class="p">,</span>
+                <span class="s2">"exclude_astcats"</span><span class="p">:</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">exclude_astcats</span><span class="p">),</span>
+            <span class="p">}</span>
+        <span class="p">]</span></div>
 
 
 
@@ -1147,7 +1195,10 @@
         <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">models</span><span class="p">:</span>
             <span class="n">observations</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">observations</span></div>
-</div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_native_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]:</span>
+        <span class="k">return</span> <span class="n">native_model_specs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">models</span><span class="p">)</span></div>
 
 </pre></div>
         </article>
@@ -1167,7 +1218,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-28</div>
+              Last updated on 2026-09-29</div>
           </div>
           <div class="right-details">
             

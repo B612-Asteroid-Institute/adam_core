@@ -777,6 +777,23 @@
             <span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">updated</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)),</span>
         <span class="p">)</span>
 
+    <span class="k">def</span><span class="w"> </span><span class="nf">_native_specs</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]:</span>
+        <span class="n">obs_codes</span><span class="p">,</span> <span class="n">astcats</span><span class="p">,</span> <span class="n">sigma_ra</span><span class="p">,</span> <span class="n">sigma_dec</span><span class="p">,</span> <span class="n">fallback</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">lookup</span><span class="o">.</span><span class="n">_table_arguments</span><span class="p">()</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="p">{</span>
+                <span class="s2">"model"</span><span class="p">:</span> <span class="s2">"veres"</span><span class="p">,</span>
+                <span class="s2">"kind"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">_MODEL</span><span class="p">,</span>
+                <span class="s2">"fill_missing"</span><span class="p">:</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fill_missing</span><span class="p">),</span>
+                <span class="s2">"table_obs_code"</span><span class="p">:</span> <span class="n">obs_codes</span><span class="p">,</span>
+                <span class="s2">"table_astcat"</span><span class="p">:</span> <span class="n">astcats</span><span class="p">,</span>
+                <span class="s2">"sigma_ra_arcsec"</span><span class="p">:</span> <span class="n">sigma_ra</span><span class="p">,</span>
+                <span class="s2">"sigma_dec_arcsec"</span><span class="p">:</span> <span class="n">sigma_dec</span><span class="p">,</span>
+                <span class="s2">"fallback_sigma_arcsec"</span><span class="p">:</span> <span class="n">fallback</span><span class="p">,</span>
+            <span class="p">}</span>
+        <span class="p">]</span>
+
 
 <div class="viewcode-block" id="VeresFloorModel">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.veres2017.html#adam_core.orbit_determination.veres2017.VeresFloorModel">[docs]</a>
@@ -899,7 +916,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-28</div>
+              Last updated on 2026-09-29</div>
           </div>
           <div class="right-details">
             

@@ -500,10 +500,14 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_FUSED_LOOP_KWARGS</span><span class="p">,</span>
     <span class="n">HUBER_F_SCALE_DEFAULT</span><span class="p">,</span>
     <span class="n">LossType</span><span class="p">,</span>
     <span class="n">_analytic_jacobian</span><span class="p">,</span>
     <span class="n">_analytic_jacobian_terms</span><span class="p">,</span>
+    <span class="n">_emit_native_warnings</span><span class="p">,</span>
+    <span class="n">_fit_settings</span><span class="p">,</span>
+    <span class="n">_fitted_tables_from_native_output</span><span class="p">,</span>
     <span class="n">_observation_whitening_matrices</span><span class="p">,</span>
     <span class="n">_whiten_residual_pairs</span><span class="p">,</span>
     <span class="n">fit_least_squares</span><span class="p">,</span>
@@ -764,6 +768,41 @@
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"ignore is managed by cmc2003_fit and cannot be passed"</span><span class="p">)</span>
     <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbit</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"Only one orbit can be fitted"</span>
 
+    <span class="c1"># Rust-backed propagators run the whole CMC2003 loop in one crossing</span>
+    <span class="c1"># (``cmc2003_fit`` work unit); the veneer only wraps the final pass.</span>
+    <span class="n">fused</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"cmc2003_fit"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">set</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">_FUSED_LOOP_KWARGS</span><span class="p">:</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="n">fused</span><span class="p">(</span>
+            <span class="n">orbit</span><span class="p">,</span>
+            <span class="n">observations</span><span class="p">,</span>
+            <span class="n">chi2_reject</span><span class="o">=</span><span class="n">chi2_reject</span><span class="p">,</span>
+            <span class="n">chi2_recover</span><span class="o">=</span><span class="n">chi2_recover</span><span class="p">,</span>
+            <span class="n">chi2_frac</span><span class="o">=</span><span class="n">chi2_frac</span><span class="p">,</span>
+            <span class="n">max_iterations</span><span class="o">=</span><span class="n">max_iterations</span><span class="p">,</span>
+            <span class="n">max_rejected_fraction</span><span class="o">=</span><span class="n">max_rejected_fraction</span><span class="p">,</span>
+            <span class="n">apparition_gap_days</span><span class="o">=</span><span class="n">apparition_gap_days</span><span class="p">,</span>
+            <span class="n">psd_floor_frac</span><span class="o">=</span><span class="n">psd_floor_frac</span><span class="p">,</span>
+            <span class="n">fit_settings</span><span class="o">=</span><span class="n">_fit_settings</span><span class="p">(</span>
+                <span class="n">loss</span><span class="p">,</span>
+                <span class="n">f_scale</span><span class="p">,</span>
+                <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"jacobian"</span><span class="p">,</span> <span class="s2">"analytic"</span><span class="p">),</span>
+                <span class="n">validate_covariance</span><span class="p">,</span>
+                <span class="n">kwargs</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+        <span class="n">_emit_native_warnings</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+        <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">_fitted_tables_from_native_output</span><span class="p">(</span>
+            <span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"weights"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">CMC2003Fit</span><span class="p">(</span>
+            <span class="n">fitted_orbit</span><span class="o">=</span><span class="n">fitted_orbit</span><span class="p">,</span>
+            <span class="n">fitted_orbit_members</span><span class="o">=</span><span class="n">fitted_orbit_members</span><span class="p">,</span>
+            <span class="n">n_iterations</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"n_iterations"</span><span class="p">]),</span>
+            <span class="n">n_rejected</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"n_rejected"</span><span class="p">]),</span>
+            <span class="n">n_recovered</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"n_recovered"</span><span class="p">]),</span>
+            <span class="n">flags</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"flags"</span><span class="p">])),</span>
+        <span class="p">)</span>
+
     <span class="n">ids</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">epoch_mjd_tdb</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span>
         <span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">"tdb"</span><span class="p">)</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
@@ -915,7 +954,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-28</div>
+              Last updated on 2026-09-29</div>
           </div>
           <div class="right-details">
             

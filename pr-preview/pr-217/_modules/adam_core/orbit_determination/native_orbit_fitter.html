@@ -436,14 +436,27 @@
         <article role="main" id="furo-main-content">
           <h1>Source code for adam_core.orbit_determination.native_orbit_fitter</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Type</span>
 
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="n">HUBER_F_SCALE_DEFAULT</span><span class="p">,</span> <span class="n">LossType</span><span class="p">,</span> <span class="n">iterative_fit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_FUSED_LOOP_KWARGS</span><span class="p">,</span>
+    <span class="n">HUBER_F_SCALE_DEFAULT</span><span class="p">,</span>
+    <span class="n">LossType</span><span class="p">,</span>
+    <span class="n">_emit_native_warnings</span><span class="p">,</span>
+    <span class="n">_fit_settings</span><span class="p">,</span>
+    <span class="n">_fitted_tables_from_native_output</span><span class="p">,</span>
+    <span class="n">iterative_fit</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span> <span class="n">evaluate_orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.iod</span><span class="w"> </span><span class="kn">import</span> <span class="n">iod</span>
@@ -451,6 +464,47 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">.rejection</span><span class="w"> </span><span class="kn">import</span> <span class="n">cmc2003_fit</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="tables_from_native_full_od">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.tables_from_native_full_od">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">tables_from_native_full_od</span><span class="p">(</span>
+    <span class="n">object_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">pa</span><span class="o">.</span><span class="n">LargeStringScalar</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Wrap the dict of a fused ``full_od`` work unit into `FittedOrbits` /</span>
+<span class="sd">    `FittedOrbitMembers`: empty tables when IOD found no orbit, otherwise the</span>
+<span class="sd">    refined fit with Python-owned orbit ids and the given object id.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">output</span><span class="p">[</span><span class="s2">"found"</span><span class="p">]</span> <span class="ow">or</span> <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"fit"</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">(),</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+    <span class="n">iod</span> <span class="o">=</span> <span class="n">output</span><span class="p">[</span><span class="s2">"iod"</span><span class="p">]</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">iod</span><span class="p">[</span><span class="s2">"state"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">seed</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">orbit_id</span><span class="o">=</span><span class="p">[</span><span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span><span class="p">],</span>
+        <span class="n">object_id</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">object_id</span><span class="p">)],</span>
+        <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">y</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">],</span>
+            <span class="n">z</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span>
+            <span class="n">vx</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">4</span><span class="p">],</span>
+            <span class="n">vy</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">4</span><span class="p">:</span><span class="mi">5</span><span class="p">],</span>
+            <span class="n">vz</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">5</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span>
+            <span class="n">time</span><span class="o">=</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span>
+                <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">iod</span><span class="p">[</span><span class="s2">"epoch_mjd"</span><span class="p">])],</span> <span class="n">scale</span><span class="o">=</span><span class="n">iod</span><span class="p">[</span><span class="s2">"epoch_scale"</span><span class="p">]</span>
+            <span class="p">),</span>
+            <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">"SUN"</span><span class="p">]),</span>
+            <span class="n">frame</span><span class="o">=</span><span class="s2">"ecliptic"</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+    <span class="n">fit</span> <span class="o">=</span> <span class="n">output</span><span class="p">[</span><span class="s2">"fit"</span><span class="p">]</span>
+    <span class="n">_emit_native_warnings</span><span class="p">(</span><span class="n">fit</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">_fitted_tables_from_native_output</span><span class="p">(</span>
+        <span class="n">seed</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">fit</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fit</span><span class="p">[</span><span class="s2">"weights"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="p">)</span></div>
+
 
 
 <div class="viewcode-block" id="NativeOrbitFitter">
@@ -553,6 +607,109 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">f_scale</span> <span class="o">=</span> <span class="n">f_scale</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">outlier_rejection</span> <span class="o">=</span> <span class="n">outlier_rejection</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">rejection_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">rejection_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
+
+<div class="viewcode-block" id="NativeOrbitFitter.native_settings">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.native_settings">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">native_settings</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        ``(iod_settings, refinement, fit_settings)`` dicts describing this</span>
+<span class="sd">        fitter's configuration for a Rust-backed propagator's fused</span>
+<span class="sd">        ``full_od`` / ``run_od`` work units: the IOD decision-loop settings,</span>
+<span class="sd">        the outlier-rejection loop and its constants, and the whitened-fit</span>
+<span class="sd">        options (`fit_least_squares` defaults unless overridden through</span>
+<span class="sd">        ``rejection_kwargs``).</span>
+<span class="sd">        """</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.gauss</span><span class="w"> </span><span class="kn">import</span> <span class="n">MU</span><span class="p">,</span> <span class="n">C</span>
+
+        <span class="n">iod_settings</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"min_obs"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_obs</span><span class="p">,</span>
+            <span class="s2">"min_arc_length"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_arc_length</span><span class="p">,</span>
+            <span class="s2">"contamination_percentage"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">contamination_percentage</span><span class="p">,</span>
+            <span class="s2">"rchi2_threshold"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">iod_rchi2_threshold</span><span class="p">,</span>
+            <span class="s2">"observation_selection_method"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">observation_selection_method</span><span class="p">,</span>
+            <span class="s2">"light_time"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
+            <span class="s2">"mu"</span><span class="p">:</span> <span class="n">MU</span><span class="p">,</span>
+            <span class="s2">"speed_of_light"</span><span class="p">:</span> <span class="n">C</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="n">loop_keys</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"cmc2003"</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">"chi2_reject"</span><span class="p">,</span>
+                <span class="s2">"chi2_recover"</span><span class="p">,</span>
+                <span class="s2">"chi2_frac"</span><span class="p">,</span>
+                <span class="s2">"max_iterations"</span><span class="p">,</span>
+                <span class="s2">"max_rejected_fraction"</span><span class="p">,</span>
+                <span class="s2">"apparition_gap_days"</span><span class="p">,</span>
+                <span class="s2">"psd_floor_frac"</span><span class="p">,</span>
+            <span class="p">},</span>
+            <span class="s2">"worst_residual"</span><span class="p">:</span> <span class="nb">set</span><span class="p">(),</span>
+        <span class="p">}[</span><span class="bp">self</span><span class="o">.</span><span class="n">outlier_rejection</span><span class="p">]</span>
+        <span class="n">refinement</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"method"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">outlier_rejection</span><span class="p">,</span>
+            <span class="o">**</span><span class="p">{</span><span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">rejection_kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">loop_keys</span><span class="p">},</span>
+        <span class="p">}</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">outlier_rejection</span> <span class="o">==</span> <span class="s2">"worst_residual"</span><span class="p">:</span>
+            <span class="n">refinement</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="n">rchi2_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">rchi2_threshold</span><span class="p">,</span>
+                <span class="n">min_obs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">min_obs</span><span class="p">,</span>
+                <span class="n">min_arc_length</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">min_arc_length</span><span class="p">,</span>
+                <span class="n">contamination_percentage</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">contamination_percentage</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="n">fit_kwargs</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="n">k</span><span class="p">:</span> <span class="n">v</span> <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">rejection_kwargs</span><span class="o">.</span><span class="n">items</span><span class="p">()</span> <span class="k">if</span> <span class="n">k</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">loop_keys</span>
+        <span class="p">}</span>
+        <span class="n">fit_settings</span> <span class="o">=</span> <span class="n">_fit_settings</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">loss</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">f_scale</span><span class="p">,</span>
+            <span class="n">fit_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"jacobian"</span><span class="p">,</span> <span class="s2">"analytic"</span><span class="p">),</span>
+            <span class="n">fit_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"validate_covariance"</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
+            <span class="n">fit_kwargs</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">iod_settings</span><span class="p">,</span> <span class="n">refinement</span><span class="p">,</span> <span class="n">fit_settings</span></div>
+
+
+<div class="viewcode-block" id="NativeOrbitFitter.supports_native_full_od">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.supports_native_full_od">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">supports_native_full_od</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""Whether ``rejection_kwargs`` are all understood by the fused work units."""</span>
+        <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">native_settings</span><span class="p">()</span>
+        <span class="n">loop_keys</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">"chi2_reject"</span><span class="p">,</span>
+            <span class="s2">"chi2_recover"</span><span class="p">,</span>
+            <span class="s2">"chi2_frac"</span><span class="p">,</span>
+            <span class="s2">"max_iterations"</span><span class="p">,</span>
+            <span class="s2">"max_rejected_fraction"</span><span class="p">,</span>
+            <span class="s2">"apparition_gap_days"</span><span class="p">,</span>
+            <span class="s2">"psd_floor_frac"</span><span class="p">,</span>
+        <span class="p">}</span>
+        <span class="k">return</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rejection_kwargs</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">loop_keys</span> <span class="o">|</span> <span class="n">_FUSED_LOOP_KWARGS</span></div>
+
+
+<div class="viewcode-block" id="NativeOrbitFitter.full_od">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.full_od">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">full_od</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">object_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">pa</span><span class="o">.</span><span class="n">LargeStringScalar</span><span class="p">,</span>
+        <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+        <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        IOD followed by refinement. On a Rust-backed propagator exposing the</span>
+<span class="sd">        fused ``full_od`` work unit the whole pipeline (Gauss IOD decision</span>
+<span class="sd">        loop, differential correction, outlier rejection) runs natively in</span>
+<span class="sd">        one crossing; otherwise `initial_fit` and `refine_fit` are chained.</span>
+<span class="sd">        """</span>
+        <span class="n">fused</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"full_od"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">supports_native_full_od</span><span class="p">():</span>
+            <span class="n">iod_settings</span><span class="p">,</span> <span class="n">refinement</span><span class="p">,</span> <span class="n">fit_settings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">native_settings</span><span class="p">()</span>
+            <span class="n">output</span> <span class="o">=</span> <span class="n">fused</span><span class="p">(</span>
+                <span class="n">observations</span><span class="p">,</span>
+                <span class="n">iod_settings</span><span class="o">=</span><span class="n">iod_settings</span><span class="p">,</span>
+                <span class="n">refinement</span><span class="o">=</span><span class="n">refinement</span><span class="p">,</span>
+                <span class="n">fit_settings</span><span class="o">=</span><span class="n">fit_settings</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="k">return</span> <span class="n">tables_from_native_full_od</span><span class="p">(</span><span class="n">object_id</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">full_od</span><span class="p">(</span><span class="n">object_id</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">propagator</span><span class="p">)</span></div>
+
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
@@ -691,7 +848,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-28</div>
+              Last updated on 2026-09-29</div>
           </div>
           <div class="right-details">
             

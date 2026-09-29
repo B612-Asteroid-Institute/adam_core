@@ -134,12 +134,51 @@ Current Migrated APIs
   - Error behavior: raises ``ValueError`` naming the observation whose
     (lon, lat) covariance block is non-finite or not positive definite, on shape
     mismatch, and on an unknown loss or non-positive ``f_scale``.
-  - Dispatch: ``jacobian="2-point"`` with ``loss="linear"`` and no scipy kwargs
-    routes to a propagator's fused ``fit_least_squares_evaluated`` /
-    ``fit_least_squares`` Rust work units (forward-difference Gauss-Newton).
+  - Dispatch: a Rust-backed propagator exposing ``fit_least_squares_whitened
+    (orbit, observations, ignore_mask, fit_settings=...)`` runs the complete
+    work unit natively in one crossing for every Jacobian and loss option
+    (``adam_core_rs_coords::fit_orbit_whitened_barycentric``: whitened
+    residuals through the barycentric ephemeris workflow, analytic / central /
+    2-point Jacobian, IRLS Huber, Levenberg-Marquardt with scipy's stopping
+    rules, ``inv(JᵀJ)`` with the weak-direction probe and central-difference
+    fallback, the fused final evaluation; diagnostics return as strings the
+    veneer re-emits as ``RuntimeWarning``). The in-tree implementation over the
+    two-body backend is ``adam_core._rust_native.fit_orbit_whitened_2body_ipc``.
+    Only scipy tolerances (``xtol``, ``ftol``, ``gtol``, ``max_nfev``) cross;
+    any other scipy kwarg keeps the scipy path. ``jacobian="2-point"`` with
+    ``loss="linear"`` on a propagator exposing only the older
+    ``fit_least_squares_evaluated`` / ``fit_least_squares`` work units still
+    routes there (forward-difference Gauss-Newton).
+
+- ``orbit_determination.iterative_fit`` / ``NativeOrbitFitter.full_od`` /
+  ``run_od`` (native orchestration)
+  - Boundary: nested Arrow IPC of the orbit, observed coordinates and observers
+    plus dicts of settings (``fit_settings``, ``iod_settings``, ``refinement``)
+    and, for ``run_od``, the per-observation station / band / catalog lists and
+    the models' ``_native_spec()`` dicts; outputs are dicts of scalars, lists
+    and NumPy arrays the veneer wraps into tables without further computation.
+  - Rust entrypoints (``adam_core_rs_coords::propagation``, generic over the
+    ``Propagator`` trait; two-body implementations in ``_rust_native``):
+    ``iterative_fit_barycentric`` / ``iterative_fit_2body_ipc`` (worst-residual
+    loop), ``cmc2003_fit_barycentric`` / ``cmc2003_fit_2body_ipc`` (CMC2003
+    loop), ``full_od_barycentric`` / ``full_od_2body_ipc`` (Gauss IOD decision
+    loop followed by the refinement loop) and ``run_od_barycentric`` /
+    ``run_od_2body_ipc`` (observation models in order, full OD on the used
+    observations, original / used astrometry snapshots for the members).
+  - Dispatch: ``iterative_fit`` and ``cmc2003_fit_detailed`` route to a
+    propagator's ``iterative_fit`` / ``cmc2003_fit`` methods when only fit
+    options are passed; ``NativeOrbitFitter.full_od`` routes to ``full_od``
+    when its ``rejection_kwargs`` are all fit or loop settings; ``run_od``
+    routes to ``run_od`` for a ``NativeOrbitFitter`` when every model provides
+    a native spec (a user-defined Python model keeps the Python composition).
+    Python owns ids, the ``OrbitFitter`` plugin boundary, table loading and
+    table assembly; the Python loops remain the fallback for propagators
+    without the work units.
 
 - ``orbit_determination.cmc2003_fit`` / ``cmc2003_fit_detailed``
-  - Boundary: NumPy arrays per pass; the refit loop is Python.
+  - Boundary: NumPy arrays per pass on the Python fallback loop; on a
+    Rust-backed propagator the whole loop is the ``cmc2003_fit`` work unit
+    above.
   - Rust entrypoints: ``adam_core._rust_native.cmc2003_apparitions_numpy``,
     ``cmc2003_expected_residual_chi2_numpy`` (``(N, 2)`` whitened residuals,
     ``(2N, 6)`` Jacobian, optional ``(6, 6)`` covariance, selection mask),
