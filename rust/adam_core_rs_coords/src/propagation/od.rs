@@ -1524,7 +1524,7 @@ pub(super) fn observed_covariance_flat(
         .clone())
 }
 
-fn observed_times_mjd(observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
+pub(super) fn observed_times_mjd(observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
     Ok(observed
         .times
         .as_ref()
@@ -1729,7 +1729,7 @@ fn weighted_rms(residual_cols: &[f64], weights: &[[f64; 2]], n: usize) -> f64 {
 }
 
 /// `(max - min, max, min)` of `values[mask]`.
-fn masked_arc_length(values: &[f64], mask: &[bool]) -> (f64, f64, f64) {
+pub(super) fn masked_arc_length(values: &[f64], mask: &[bool]) -> (f64, f64, f64) {
     let mut minimum = f64::INFINITY;
     let mut maximum = f64::NEG_INFINITY;
     for (value, &keep) in values.iter().zip(mask.iter()) {

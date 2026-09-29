@@ -35,6 +35,7 @@ from ..rejection import (
 )
 from .test_differential_correction import (
     TRUTH_STATE,
+    NativeTwoBodyPropagator,
     TwoBodyPropagator,
     make_initial_guess,
     make_synthetic_observations,
@@ -359,3 +360,77 @@ class TestNativeOrbitFitterDispatch:
         assert members.outlier.to_pylist().count(True) == 1
         assert members.outlier.to_pylist()[17] is True
         assert fitted.num_obs[0].as_py() == 24
+
+
+class TestFusedCmc2003Fit:
+    """The Rust one-crossing CMC2003 loop is the Python loop's twin."""
+
+    def _fits(self, observations, **kwargs):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            expected = cmc2003_fit_detailed(
+                make_initial_guess(), observations, TwoBodyPropagator(), **kwargs
+            )
+            fused = cmc2003_fit_detailed(
+                make_initial_guess(), observations, NativeTwoBodyPropagator(), **kwargs
+            )
+        return expected, fused
+
+    def test_gross_outliers_match_python_loop(self) -> None:
+        expected, fused = self._fits(with_outliers({10: 10.0, 17: 15.0}))
+        assert (
+            fused.fitted_orbit_members.outlier.to_pylist()
+            == expected.fitted_orbit_members.outlier.to_pylist()
+        )
+        assert [
+            i
+            for i, flag in enumerate(fused.fitted_orbit_members.outlier.to_pylist())
+            if flag
+        ] == [10, 17]
+        assert fused.n_rejected == expected.n_rejected == 2
+        assert fused.n_recovered == expected.n_recovered
+        assert fused.n_iterations == expected.n_iterations
+        assert fused.flags == expected.flags == ()
+        npt.assert_allclose(
+            state_of(fused.fitted_orbit),
+            state_of(expected.fitted_orbit),
+            rtol=1e-9,
+            atol=1e-13,
+        )
+        npt.assert_allclose(
+            fused.fitted_orbit.coordinates.covariance.to_matrix(),
+            expected.fitted_orbit.coordinates.covariance.to_matrix(),
+            rtol=1e-6,
+        )
+        assert (
+            fused.fitted_orbit_members.weight.to_pylist()
+            == expected.fitted_orbit_members.weight.to_pylist()
+        )
+        assert fused.fitted_orbit.success[0].as_py()
+
+    def test_clean_arc_matches_python_loop(self) -> None:
+        expected, fused = self._fits(make_synthetic_observations())
+        assert fused.n_iterations == expected.n_iterations == 1
+        assert fused.n_rejected == 0
+        assert fused.fitted_orbit_members.outlier.to_pylist() == [False] * 25
+        npt.assert_allclose(
+            state_of(fused.fitted_orbit),
+            state_of(expected.fitted_orbit),
+            rtol=1e-9,
+            atol=1e-13,
+        )
+
+    def test_huber_matches_python_loop(self) -> None:
+        expected, fused = self._fits(with_outliers({10: 10.0}), loss="huber")
+        assert (
+            fused.fitted_orbit_members.outlier.to_pylist()
+            == expected.fitted_orbit_members.outlier.to_pylist()
+        )
+        npt.assert_allclose(
+            state_of(fused.fitted_orbit), state_of(expected.fitted_orbit), rtol=1e-7
+        )
+        npt.assert_allclose(
+            fused.fitted_orbit_members.weight.to_numpy(zero_copy_only=False),
+            expected.fitted_orbit_members.weight.to_numpy(zero_copy_only=False),
+            atol=1e-5,
+        )

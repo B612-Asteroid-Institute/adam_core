@@ -964,6 +964,423 @@ where
     })
 }
 
+// ---------------------------------------------------------------------------
+// Outlier-rejection loops
+// ---------------------------------------------------------------------------
+
+/// A copy of `orbit` (one row) with its Cartesian state replaced and no
+/// covariance: the warm-start seed of the next refit pass. Physical and
+/// non-gravitational parameter tables are not carried, matching the
+/// candidate batches of the other drivers.
+fn orbit_with_state(orbit: &OrbitBatch, state: [f64; 6]) -> PropagationResultValue<OrbitBatch> {
+    let coordinates = CoordinateBatch::new(
+        crate::CoordinateValues::Cartesian(vec![state]),
+        orbit.coordinates.frame,
+        orbit.coordinates.origins.clone(),
+        orbit.coordinates.times.clone(),
+        None,
+    )?;
+    OrbitBatch::new(orbit.orbit_id.clone(), orbit.object_id.clone(), coordinates)
+        .map_err(Into::into)
+}
+
+/// `calculate_max_outliers`: `floor(num_obs * contamination / 100)` capped at
+/// `num_obs - min_obs` (never negative).
+pub fn max_outliers(num_obs: usize, min_obs: usize, contamination_percentage: f64) -> usize {
+    let allowed = num_obs as f64 * (contamination_percentage / 100.0);
+    let cap = num_obs as f64 - min_obs as f64;
+    allowed.min(cap).max(0.0) as usize
+}
+
+/// Worst-observation policy of `remove_lowest_probability_observation` over
+/// the rows in `candidates`: the lowest residual probability, ties broken by
+/// the largest NaN-ignoring squared-residual norm. A NaN probability makes
+/// the minimum undefined (the legacy error).
+fn lowest_probability_row(
+    candidates: &[usize],
+    probability: &[f64],
+    residuals: &[f64],
+) -> Result<usize, String> {
+    if candidates.is_empty() || candidates.iter().any(|&row| probability[row].is_nan()) {
+        return Err("Could not identify a lowest-probability observation.".to_string());
+    }
+    let minimum = candidates
+        .iter()
+        .map(|&row| probability[row])
+        .fold(f64::INFINITY, f64::min);
+    let mut best = None;
+    let mut best_norm = f64::NEG_INFINITY;
+    for &row in candidates {
+        if probability[row] != minimum {
+            continue;
+        }
+        let norm: f64 = residuals[row * 6..(row + 1) * 6]
+            .iter()
+            .filter(|value| !value.is_nan())
+            .map(|value| value * value)
+            .sum();
+        if best.is_none() || norm > best_norm {
+            best = Some(row);
+            best_norm = norm;
+        }
+    }
+    best.ok_or_else(|| "Could not identify a lowest-probability observation.".to_string())
+}
+
+/// Settings of the worst-residual rejection loop (`iterative_fit`).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct IterativeFitConfig {
+    pub rchi2_threshold: f64,
+    pub min_obs: usize,
+    pub min_arc_length: f64,
+    pub contamination_percentage: f64,
+    pub fit: WhitenedFitConfig,
+}
+
+impl Default for IterativeFitConfig {
+    fn default() -> Self {
+        Self {
+            rchi2_threshold: 10.0,
+            min_obs: 6,
+            min_arc_length: 1.0,
+            contamination_percentage: 20.0,
+            fit: WhitenedFitConfig::default(),
+        }
+    }
+}
+
+/// Product of the worst-residual loop: the selected pass and the number of
+/// passes run. `fit.evaluation.outlier` is the final ignore mask.
+#[derive(Debug, Clone)]
+pub struct IterativeFitOutput {
+    pub fit: WhitenedFitOutput,
+    pub passes: usize,
+}
+
+/// One-crossing `iterative_fit`: refit while the reduced chi2 exceeds
+/// `rchi2_threshold`, removing the lowest-probability solution observation
+/// each pass, bounded by `contamination_percentage`, `min_obs` and
+/// `min_arc_length`. Returns the converged pass with the lowest reduced chi2
+/// or, if no pass converged, the lowest-reduced-chi2 pass overall; the
+/// diagnostics of every pass are accumulated on the returned fit.
+#[allow(clippy::too_many_arguments)]
+pub fn iterative_fit_barycentric<P, T>(
+    propagator: &P,
+    orbit: &OrbitBatch,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &IterativeFitConfig,
+    options: &EphemerisOptions,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<IterativeFitOutput>
+where
+    P: Propagator,
+    T: OriginTranslationProvider,
+{
+    let n = observed.len();
+    if observers.len() != n {
+        return Err(PropagationError::InvalidRequest(
+            "observed and observers must have equal length".to_string(),
+        ));
+    }
+    let times_mjd = super::od::observed_times_mjd(observed)?;
+    let limit = max_outliers(n, config.min_obs, config.contamination_percentage);
+    let mut ignore = vec![false; n];
+    let mut warnings: Vec<String> = Vec::new();
+    let mut best: Option<(WhitenedFitOutput, f64)> = None;
+    let mut fallback: Option<(WhitenedFitOutput, f64)> = None;
+    let mut passes = 0_usize;
+
+    for _ in 0..=limit {
+        passes += 1;
+        let mut output = fit_orbit_whitened_barycentric(
+            propagator,
+            orbit,
+            observed,
+            observers,
+            &ignore,
+            &config.fit,
+            options,
+            provider,
+            translation_provider,
+        )?;
+        warnings.append(&mut output.warnings);
+        let rchi2 = output.evaluation.reduced_chi2;
+        let key = if rchi2.is_nan() { f64::INFINITY } else { rchi2 };
+        let converged = output.converged;
+        if fallback.as_ref().is_none_or(|(_, current)| key < *current) {
+            fallback = Some((output.clone(), key));
+        }
+        if converged && best.as_ref().is_none_or(|(_, current)| key < *current) {
+            best = Some((output.clone(), key));
+        }
+        if !rchi2.is_nan() && rchi2 <= config.rchi2_threshold {
+            break;
+        }
+        let n_ignored = ignore.iter().filter(|&&flag| flag).count();
+        if n_ignored >= limit {
+            break;
+        }
+        let solution: Vec<usize> = (0..n).filter(|&row| !ignore[row]).collect();
+        if solution.is_empty() {
+            break;
+        }
+        let worst = lowest_probability_row(
+            &solution,
+            &output.evaluation.probability,
+            &output.evaluation.residuals,
+        )
+        .map_err(PropagationError::InvalidRequest)?;
+        let remaining: Vec<bool> = (0..n).map(|row| !ignore[row] && row != worst).collect();
+        let remaining_count = remaining.iter().filter(|&&flag| flag).count();
+        let (arc_length, _, _) = super::od::masked_arc_length(&times_mjd, &remaining);
+        if remaining_count < config.min_obs || arc_length < config.min_arc_length {
+            break;
+        }
+        ignore[worst] = true;
+    }
+
+    let (mut fit, _) = match best.or(fallback) {
+        Some(selected) => selected,
+        None => {
+            return Err(PropagationError::InvalidRequest(
+                "iterative_fit ran no pass".to_string(),
+            ))
+        }
+    };
+    fit.warnings = warnings;
+    Ok(IterativeFitOutput { fit, passes })
+}
+
+/// Settings of the Carpino-Milani-Chesley (2003) rejection loop
+/// (`cmc2003_fit_detailed`); constants default to OrbFit's `reject.def`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Cmc2003FitConfig {
+    pub chi2_reject: f64,
+    pub chi2_recover: f64,
+    pub chi2_frac: f64,
+    pub max_iterations: usize,
+    pub max_rejected_fraction: f64,
+    pub apparition_gap_days: f64,
+    pub psd_floor_frac: f64,
+    pub fit: WhitenedFitConfig,
+}
+
+impl Default for Cmc2003FitConfig {
+    fn default() -> Self {
+        Self {
+            chi2_reject: crate::cmc2003::CMC2003_CHI2_REJECT,
+            chi2_recover: crate::cmc2003::CMC2003_CHI2_RECOVER,
+            chi2_frac: crate::cmc2003::CMC2003_CHI2_FRAC,
+            max_iterations: crate::cmc2003::CMC2003_MAX_ITERATIONS,
+            max_rejected_fraction: crate::cmc2003::CMC2003_MAX_REJECTED_FRACTION,
+            apparition_gap_days: crate::cmc2003::CMC2003_APPARITION_GAP_DAYS,
+            psd_floor_frac: crate::cmc2003::CMC2003_PSD_FLOOR_FRAC,
+            fit: WhitenedFitConfig::default(),
+        }
+    }
+}
+
+/// Product of the CMC2003 loop: the final fit (members flag rejected
+/// observations as outliers) and the run diagnostics of `CMC2003Fit`.
+#[derive(Debug, Clone)]
+pub struct Cmc2003FitOutput {
+    pub fit: WhitenedFitOutput,
+    pub n_iterations: usize,
+    pub n_rejected: usize,
+    pub n_recovered: usize,
+    /// Sorted legacy flag names.
+    pub flags: Vec<String>,
+}
+
+/// One-crossing `cmc2003_fit_detailed`: repeated whitened fits with the
+/// CMC2003 reject / re-include decision against the expected post-fit
+/// residual covariance (analytic 2-body Jacobian at the fitted state),
+/// warm-starting each pass from the previous solution.
+#[allow(clippy::too_many_arguments)]
+pub fn cmc2003_fit_barycentric<P, T>(
+    propagator: &P,
+    orbit: &OrbitBatch,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &Cmc2003FitConfig,
+    options: &EphemerisOptions,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<Cmc2003FitOutput>
+where
+    P: Propagator,
+    T: OriginTranslationProvider,
+{
+    use crate::cmc2003::{
+        cmc2003_apparitions, cmc2003_expected_residual_chi2, cmc2003_select, Cmc2003Flag,
+        Cmc2003SelectionOptions, CMC2003_MIN_OBS,
+    };
+    use std::collections::BTreeSet;
+
+    let n = observed.len();
+    if n == 0 {
+        return Err(PropagationError::InvalidRequest(
+            "cmc2003_fit requires at least one observation".to_string(),
+        ));
+    }
+    if observers.len() != n {
+        return Err(PropagationError::InvalidRequest(
+            "observed and observers must have equal length".to_string(),
+        ));
+    }
+    let geometry = OrbitGeometry::from_orbit(orbit)?;
+    let epoch_mjd_tdb = crate::TimeArray::new(geometry.scale, vec![geometry.epoch])?
+        .rescale_with_provider(TimeScale::Tdb, provider)?
+        .mjd_values()[0];
+    let observed_flat = spherical_flat(observed, "observed")?;
+    let observed_cov = observed_covariance_flat(observed)?;
+    let lat_deg: Vec<f64> = (0..n).map(|row| observed_flat[row * 6 + 2]).collect();
+    let whiteners = observation_whitening_matrices(&observed_cov, &lat_deg)
+        .map_err(|err| PropagationError::InvalidRequest(err.to_string()))?;
+    let terms = analytic_jacobian_terms(
+        &geometry,
+        observers,
+        &lat_deg,
+        &whiteners,
+        provider,
+        translation_provider,
+    )?;
+    let mjd_utc = observed
+        .times
+        .as_ref()
+        .ok_or_else(|| {
+            PropagationError::InvalidRequest(
+                "orbit determination requires observation times".to_string(),
+            )
+        })?
+        .rescale_with_provider(TimeScale::Utc, provider)?
+        .mjd_values();
+    let apparitions = cmc2003_apparitions(&mjd_utc, config.apparition_gap_days);
+
+    let run_fit =
+        |seed: &OrbitBatch, selected: &[bool]| -> PropagationResultValue<WhitenedFitOutput> {
+            let ignore: Vec<bool> = selected.iter().map(|&keep| !keep).collect();
+            fit_orbit_whitened_barycentric(
+                propagator,
+                seed,
+                observed,
+                observers,
+                &ignore,
+                &config.fit,
+                options,
+                provider,
+                translation_provider,
+            )
+        };
+
+    let mut selected = vec![true; n];
+    let mut flags: BTreeSet<Cmc2003Flag> = BTreeSet::new();
+    let mut n_recovered_total = 0_usize;
+    let mut stuck_passes = 0_usize;
+    let mut previous_modifications: Option<usize> = None;
+    let mut seed = orbit.clone();
+    let mut n_iterations = 0_usize;
+    let mut converged = false;
+    let mut warnings: Vec<String> = Vec::new();
+    let mut current: Option<WhitenedFitOutput> = None;
+
+    for iteration in 0..config.max_iterations {
+        n_iterations = iteration + 1;
+        let mut output = run_fit(&seed, &selected)?;
+        warnings.append(&mut output.warnings);
+        seed = orbit_with_state(orbit, output.state)?;
+
+        if n <= CMC2003_MIN_OBS {
+            flags.insert(Cmc2003Flag::TooFewObservations);
+            converged = true;
+            current = Some(output);
+            break;
+        }
+
+        let residual_pairs: Vec<f64> = (0..n)
+            .flat_map(|row| {
+                [
+                    output.evaluation.residuals[row * 6 + 1],
+                    output.evaluation.residuals[row * 6 + 2],
+                ]
+            })
+            .collect();
+        let residuals = whiten_residual_pairs(&whiteners, &residual_pairs);
+        let jacobian =
+            whitened_2body_jacobian(output.state, epoch_mjd_tdb, &terms, &config.fit.two_body)
+                .map_err(PropagationError::Backend)?;
+        let covariance = if output.covariance.iter().all(|v| v.is_finite()) {
+            Some(&output.covariance[..])
+        } else {
+            None
+        };
+        let (chi2, pass_flags) = cmc2003_expected_residual_chi2(
+            &residuals,
+            &jacobian,
+            covariance,
+            &selected,
+            config.psd_floor_frac,
+        )
+        .map_err(PropagationError::InvalidRequest)?;
+        flags.extend(pass_flags);
+
+        let n_selected = selected.iter().filter(|&&keep| keep).count();
+        let one_at_a_time = n_selected <= 6 * CMC2003_MIN_OBS || stuck_passes >= 4;
+        let selection = cmc2003_select(
+            &chi2,
+            &selected,
+            &apparitions,
+            &Cmc2003SelectionOptions {
+                chi2_reject: config.chi2_reject,
+                chi2_recover: config.chi2_recover,
+                chi2_frac: config.chi2_frac,
+                max_rejected_fraction: config.max_rejected_fraction,
+                one_at_a_time,
+                min_obs: CMC2003_MIN_OBS,
+            },
+        )
+        .map_err(PropagationError::InvalidRequest)?;
+        flags.extend(selection.flags.iter().copied());
+        let n_modifications = selection.n_rejected + selection.n_recovered;
+        n_recovered_total += selection.n_recovered;
+        stuck_passes = if previous_modifications == Some(n_modifications) && n_modifications > 0 {
+            stuck_passes + 1
+        } else {
+            0
+        };
+        previous_modifications = Some(n_modifications);
+        current = Some(output);
+        if n_modifications == 0 {
+            converged = true;
+            break;
+        }
+        selected = selection.selected;
+    }
+
+    let mut fit = if converged {
+        current.ok_or_else(|| {
+            PropagationError::InvalidRequest("cmc2003_fit ran no pass".to_string())
+        })?
+    } else {
+        // The selection changed after the last fit: refit so that the
+        // returned orbit and members describe the final selection.
+        flags.insert(Cmc2003Flag::MaxIterations);
+        let mut output = run_fit(&seed, &selected)?;
+        warnings.append(&mut output.warnings);
+        output
+    };
+    fit.warnings = warnings;
+    Ok(Cmc2003FitOutput {
+        fit,
+        n_iterations,
+        n_rejected: selected.iter().filter(|&&keep| !keep).count(),
+        n_recovered: n_recovered_total,
+        flags: flags.iter().map(|flag| flag.as_str().to_string()).collect(),
+    })
+}
+
 #[cfg(test)]
 #[allow(clippy::needless_range_loop)]
 mod tests {
@@ -1319,6 +1736,122 @@ mod tests {
         assert_eq!(warnings.len(), 1, "{warnings:?}");
         assert!(warnings[0].contains("Falling back to a central-difference Jacobian"));
         assert!(validated[0] > 1e-15, "fallback covariance was not adopted");
+    }
+
+    #[test]
+    fn iterative_fit_rejects_the_worst_observation_until_converged() {
+        let observed = synthetic_observations(Some(3));
+        let config = IterativeFitConfig {
+            rchi2_threshold: 2.0,
+            min_obs: 6,
+            min_arc_length: 1.0,
+            contamination_percentage: 20.0,
+            fit: WhitenedFitConfig::default(),
+        };
+        let output = iterative_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &config,
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert_eq!(output.passes, 2);
+        let outlier = &output.fit.evaluation.outlier;
+        assert!(outlier[3], "{outlier:?}");
+        assert_eq!(outlier.iter().filter(|&&flag| flag).count(), 1);
+        assert_eq!(output.fit.weights[3], 0.0);
+        assert!(output.fit.evaluation.reduced_chi2 <= 2.0);
+        assert!(output.fit.converged);
+        let error = max_abs_diff(&output.fit.state[..3], &TRUTH_STATE[..3]);
+        assert!(error < 5e-5, "{error}");
+        assert_eq!(max_outliers(12, 6, 20.0), 2);
+        assert_eq!(max_outliers(7, 6, 50.0), 1);
+        assert_eq!(max_outliers(5, 6, 50.0), 0);
+    }
+
+    #[test]
+    fn iterative_fit_stops_at_the_contamination_budget() {
+        let observed = synthetic_observations(Some(3));
+        let config = IterativeFitConfig {
+            rchi2_threshold: 1e-6,
+            contamination_percentage: 0.0,
+            ..IterativeFitConfig::default()
+        };
+        let output = iterative_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &config,
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert_eq!(output.passes, 1);
+        assert!(output.fit.evaluation.outlier.iter().all(|&flag| !flag));
+    }
+
+    #[test]
+    fn cmc2003_rejects_gross_outliers_and_recovers_truth() {
+        let mut observed = synthetic_observations(Some(3));
+        // A second gross outlier on another row, in longitude.
+        if let crate::CoordinateValues::Spherical(values) = &mut observed.values {
+            values[8][1] += 15.0 * SIGMA_DEG / values[8][2].to_radians().cos();
+        }
+        let output = cmc2003_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &Cmc2003FitConfig::default(),
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        let rejected: Vec<usize> = output
+            .fit
+            .evaluation
+            .outlier
+            .iter()
+            .enumerate()
+            .filter_map(|(row, &flag)| flag.then_some(row))
+            .collect();
+        assert_eq!(rejected, vec![3, 8], "flags {:?}", output.flags);
+        assert_eq!(output.n_rejected, 2);
+        assert!(output.n_iterations >= 2);
+        assert!(output.flags.is_empty(), "{:?}", output.flags);
+        assert!(output.fit.converged);
+        let error = max_abs_diff(&output.fit.state[..3], &TRUTH_STATE[..3]);
+        assert!(error < 5e-5, "{error}");
+        assert_eq!(output.fit.weights[3], 0.0);
+        assert_eq!(output.fit.weights[8], 0.0);
+        assert_eq!(output.fit.evaluation.num_obs, NUM_OBS - 2);
+    }
+
+    #[test]
+    fn cmc2003_clean_arc_converges_in_one_pass() {
+        let observed = synthetic_observations(None);
+        let output = cmc2003_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &Cmc2003FitConfig::default(),
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert_eq!(output.n_iterations, 1);
+        assert_eq!(output.n_rejected, 0);
+        assert_eq!(output.n_recovered, 0);
+        assert!(output.fit.evaluation.outlier.iter().all(|&flag| !flag));
     }
 
     #[test]

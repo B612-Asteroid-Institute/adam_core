@@ -44,6 +44,38 @@ _NATIVE_FIT_KWARGS = {"xtol", "ftol", "max_iterations"}
 # (``fit_least_squares_whitened``) understands; any other kwarg keeps the
 # scipy path.
 _FUSED_WHITENED_KWARGS = {"xtol", "ftol", "gtol", "max_nfev"}
+# Keyword arguments the rejection loops forward to `fit_least_squares` that
+# their fused work units (``iterative_fit`` / ``cmc2003_fit``) understand.
+_FUSED_LOOP_KWARGS = _FUSED_WHITENED_KWARGS | {"jacobian", "validate_covariance"}
+
+
+def _fit_settings(
+    loss: str,
+    f_scale: float,
+    jacobian: str,
+    validate_covariance: bool,
+    kwargs: dict,
+) -> dict:
+    """
+    The ``fit_settings`` dict of a propagator's fused whitened work units:
+    the `fit_least_squares` options plus the scipy tolerances (``max_nfev``
+    bounds the solver's residual evaluations).
+    """
+    return {
+        "loss": loss,
+        "f_scale": f_scale,
+        "jacobian": jacobian,
+        "validate_covariance": validate_covariance,
+        "xtol": kwargs.get("xtol", 1e-12),
+        "ftol": kwargs.get("ftol", 1e-12),
+        "gtol": kwargs.get("gtol", 1e-12),
+        "max_iterations": kwargs.get("max_nfev", 100),
+    }
+
+
+def _emit_native_warnings(output: dict) -> None:
+    for message in output.get("warnings", ()):
+        warnings.warn(message, category=RuntimeWarning)
 
 
 def _validate_loss(loss: str, f_scale: float) -> None:
@@ -609,17 +641,11 @@ def _fused_whitened_fit(
         orbit,
         observations,
         ignore_mask,
-        loss=loss,
-        f_scale=f_scale,
-        jacobian=jacobian,
-        validate_covariance=validate_covariance,
-        xtol=kwargs.get("xtol", 1e-12),
-        ftol=kwargs.get("ftol", 1e-12),
-        gtol=kwargs.get("gtol", 1e-12),
-        max_iterations=kwargs.get("max_nfev", 100),
+        fit_settings=_fit_settings(
+            loss, f_scale, jacobian, validate_covariance, kwargs
+        ),
     )
-    for message in output.get("warnings", ()):
-        warnings.warn(message, category=RuntimeWarning)
+    _emit_native_warnings(output)
     return _fitted_tables_from_native_output(
         orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
     )
@@ -1154,6 +1180,30 @@ def iterative_fit(
         # Applied once here; the inflated observations (not the model) are
         # passed to the nested fit_least_squares calls below.
         observations = observatory_bias_model.apply(observations)
+
+    # Rust-backed propagators run the whole rejection loop in one crossing
+    # (``iterative_fit`` work unit); the veneer only wraps the selected pass.
+    fused = getattr(propagator, "iterative_fit", None)
+    if fused is not None and set(kwargs) <= _FUSED_LOOP_KWARGS:
+        output = fused(
+            orbit,
+            observations,
+            rchi2_threshold=rchi2_threshold,
+            min_obs=min_obs,
+            min_arc_length=min_arc_length,
+            contamination_percentage=contamination_percentage,
+            fit_settings=_fit_settings(
+                loss,
+                f_scale,
+                kwargs.get("jacobian", "analytic"),
+                kwargs.get("validate_covariance", True),
+                kwargs,
+            ),
+        )
+        _emit_native_warnings(output)
+        return _fitted_tables_from_native_output(
+            orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
+        )
 
     num_obs = len(observations)
     max_outliers = calculate_max_outliers(num_obs, min_obs, contamination_percentage)

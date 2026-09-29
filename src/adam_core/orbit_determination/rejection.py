@@ -63,10 +63,14 @@ import numpy.typing as npt
 from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
 from .differential_correction import (
+    _FUSED_LOOP_KWARGS,
     HUBER_F_SCALE_DEFAULT,
     LossType,
     _analytic_jacobian,
     _analytic_jacobian_terms,
+    _emit_native_warnings,
+    _fit_settings,
+    _fitted_tables_from_native_output,
     _observation_whitening_matrices,
     _whiten_residual_pairs,
     fit_least_squares,
@@ -321,6 +325,41 @@ def cmc2003_fit_detailed(
     if "ignore" in kwargs:
         raise ValueError("ignore is managed by cmc2003_fit and cannot be passed")
     assert len(orbit) == 1, "Only one orbit can be fitted"
+
+    # Rust-backed propagators run the whole CMC2003 loop in one crossing
+    # (``cmc2003_fit`` work unit); the veneer only wraps the final pass.
+    fused = getattr(propagator, "cmc2003_fit", None)
+    if fused is not None and set(kwargs) <= _FUSED_LOOP_KWARGS:
+        output = fused(
+            orbit,
+            observations,
+            chi2_reject=chi2_reject,
+            chi2_recover=chi2_recover,
+            chi2_frac=chi2_frac,
+            max_iterations=max_iterations,
+            max_rejected_fraction=max_rejected_fraction,
+            apparition_gap_days=apparition_gap_days,
+            psd_floor_frac=psd_floor_frac,
+            fit_settings=_fit_settings(
+                loss,
+                f_scale,
+                kwargs.get("jacobian", "analytic"),
+                validate_covariance,
+                kwargs,
+            ),
+        )
+        _emit_native_warnings(output)
+        fitted_orbit, fitted_orbit_members = _fitted_tables_from_native_output(
+            orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
+        )
+        return CMC2003Fit(
+            fitted_orbit=fitted_orbit,
+            fitted_orbit_members=fitted_orbit_members,
+            n_iterations=int(output["n_iterations"]),
+            n_rejected=int(output["n_rejected"]),
+            n_recovered=int(output["n_recovered"]),
+            flags=tuple(sorted(output["flags"])),
+        )
 
     ids = observations.id.to_numpy(zero_copy_only=False)
     epoch_mjd_tdb = float(

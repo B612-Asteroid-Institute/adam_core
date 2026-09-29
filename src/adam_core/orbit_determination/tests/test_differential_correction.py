@@ -31,6 +31,7 @@ from ..differential_correction import (
     _validated_covariance,
     _weak_direction_delta_chi2,
     fit_least_squares,
+    iterative_fit,
     residual_function,
 )
 from ..evaluate import (
@@ -93,8 +94,8 @@ class NativeTwoBodyPropagator(TwoBodyPropagator):
     the scipy path and the fused path can be compared on identical dynamics.
     """
 
-    def fit_least_squares_whitened(self, orbit, observations, ignore_mask, **kwargs):
-        from adam_core import _rust_native
+    @staticmethod
+    def _problem(orbit, observations):
         from adam_core._rust.arrow import ensure_spice_backend
         from adam_core.orbits.arrow_bridge import (
             coordinates_to_ipc,
@@ -103,12 +104,35 @@ class NativeTwoBodyPropagator(TwoBodyPropagator):
         )
 
         ensure_spice_backend()
-        return _rust_native.fit_orbit_whitened_2body_ipc(
+        return (
             orbits_to_ipc(orbit),
             coordinates_to_ipc(observations.coordinates, "spherical"),
             observers_to_ipc(observations.observers),
+        )
+
+    def fit_least_squares_whitened(
+        self, orbit, observations, ignore_mask, *, fit_settings=None
+    ):
+        from adam_core import _rust_native
+
+        return _rust_native.fit_orbit_whitened_2body_ipc(
+            *self._problem(orbit, observations),
             list(ignore_mask),
-            **kwargs,
+            fit_settings=fit_settings,
+        )
+
+    def iterative_fit(self, orbit, observations, *, fit_settings=None, **kwargs):
+        from adam_core import _rust_native
+
+        return _rust_native.iterative_fit_2body_ipc(
+            *self._problem(orbit, observations), fit_settings=fit_settings, **kwargs
+        )
+
+    def cmc2003_fit(self, orbit, observations, *, fit_settings=None, **kwargs):
+        from adam_core import _rust_native
+
+        return _rust_native.cmc2003_fit_2body_ipc(
+            *self._problem(orbit, observations), fit_settings=fit_settings, **kwargs
         )
 
 
@@ -837,4 +861,64 @@ class TestFusedWhitenedFit:
         fit_least_squares(make_initial_guess(), observations, propagator, x_scale=1.0)
         assert calls == []
         fit_least_squares(make_initial_guess(), observations, propagator, ftol=1e-10)
-        assert len(calls) == 1 and calls[0]["ftol"] == 1e-10
+        assert len(calls) == 1 and calls[0]["fit_settings"]["ftol"] == 1e-10
+
+
+class TestFusedIterativeFit:
+    """The Rust one-crossing worst-residual loop is the Python loop's twin."""
+
+    @staticmethod
+    def _with_outlier(index: int, sigmas: float):
+        observations = make_synthetic_observations()
+        lat = observations.coordinates.lat.to_numpy(zero_copy_only=False).copy()
+        lat[index] += sigmas * SIGMA_ARCSEC / 3600.0
+        return observations.set_column("coordinates.lat", pa.array(lat))
+
+    def test_matches_python_loop(self):
+        observations = self._with_outlier(9, 12.0)
+        settings = dict(rchi2_threshold=2.0, min_obs=6, contamination_percentage=20.0)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            expected, expected_members = iterative_fit(
+                make_initial_guess(), observations, TwoBodyPropagator(), **settings
+            )
+            fused, fused_members = iterative_fit(
+                make_initial_guess(),
+                observations,
+                NativeTwoBodyPropagator(),
+                **settings,
+            )
+        assert fused_members.outlier.to_pylist() == expected_members.outlier.to_pylist()
+        assert fused_members.outlier.to_pylist()[9] is True
+        assert (
+            fused_members.solution.to_pylist() == expected_members.solution.to_pylist()
+        )
+        assert fused_members.weight.to_pylist() == expected_members.weight.to_pylist()
+        npt.assert_allclose(
+            fused.coordinates.values, expected.coordinates.values, rtol=1e-9, atol=1e-13
+        )
+        npt.assert_allclose(
+            fused.coordinates.covariance.to_matrix(),
+            expected.coordinates.covariance.to_matrix(),
+            rtol=1e-6,
+        )
+        assert fused.num_obs[0].as_py() == expected.num_obs[0].as_py() == 24
+        npt.assert_allclose(
+            fused.reduced_chi2[0].as_py(), expected.reduced_chi2[0].as_py(), rtol=1e-7
+        )
+        assert fused.success[0].as_py()
+
+    def test_scipy_only_kwargs_keep_the_python_loop(self, monkeypatch):
+        observations = self._with_outlier(9, 12.0)
+        propagator = NativeTwoBodyPropagator()
+        calls = []
+        monkeypatch.setattr(
+            propagator, "iterative_fit", lambda *a, **k: calls.append(k) or None
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            fitted, _ = iterative_fit(
+                make_initial_guess(), observations, propagator, x_scale=1.0
+            )
+        assert calls == []
+        assert fitted.success[0].as_py()
