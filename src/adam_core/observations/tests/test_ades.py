@@ -514,6 +514,41 @@ def test_ADES_to_string_round_trips_mixed_null_numeric_cells():
         assert actual[1] is None
 
 
+def test_ADES_to_string_publishes_large_schema_valid_uncertainties():
+    observations = ADESObservations.from_kwargs(
+        provID=["2024 YR4", "2024 YR4"],
+        obsSubID=["large-rms", "ordinary-rms"],
+        obsTime=Timestamp.from_mjd([60434.0, 60434.1], scale="utc"),
+        ra=[240.00, 240.05],
+        dec=[-15.00, -15.05],
+        rmsRACosDec=[584.7052976482118, 3.6],
+        rmsDec=[584.7052976482118, 7.2],
+        stn=["W84", "W84"],
+        mode=["CCD", "CCD"],
+        astCat=["Gaia2", "Gaia2"],
+    )
+
+    ades_string = ADES_to_string(observations, None, sort=False)
+    lines = ades_string.splitlines()
+    header = lines[1].split("|")
+    first = dict(zip(header, lines[2].split("|")))
+    second = dict(zip(header, lines[3].split("|")))
+
+    assert first["rmsRA"] == "584.705"
+    assert first["rmsDec"] == "584.705"
+    assert second["rmsRA"] == "3.60000"
+    assert second["rmsDec"] == "7.20000"
+    assert all(
+        len(row[column]) <= 7
+        for row in (first, second)
+        for column in ("rmsRA", "rmsDec")
+    )
+
+    _contexts, parsed = ADES_string_to_tables(ades_string)
+    assert parsed.rmsRACosDec.to_pylist() == pytest.approx([584.705, 3.6])
+    assert parsed.rmsDec.to_pylist() == pytest.approx([584.705, 7.2])
+
+
 def test_ADES_to_string_preserves_block_order_when_sort_disabled(ades_observations):
     observations = ades_observations.select("stn", "W84").take(pa.array([1, 0]))
 

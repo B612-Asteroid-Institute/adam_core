@@ -132,15 +132,17 @@ class ADESObservations(qv.Table):
     rmsTime = qv.Float64Column(nullable=True)
     ra = qv.Float64Column()
     dec = qv.Float64Column()
-    # ADES uses arcseconds for rmsRA and rmsDec
-    # rmsRA is also multiplied by cos(dec)
+    # ADES uses arcseconds for rmsRA and rmsDec; rmsRA is also multiplied
+    # by cos(dec). PSV PosDecimalTypeW7 permits at most seven decimal
+    # characters, so these bounds are the positive values the writer can
+    # represent without scientific notation after adaptive rounding.
     rmsRACosDec = qv.Float64Column(
         nullable=True,
-        validator=qv.validators.and_(qv.validators.ge(10e-8), qv.validators.lt(1e2)),
+        validator=qv.validators.and_(qv.validators.ge(1e-5), qv.validators.lt(99999.5)),
     )
     rmsDec = qv.Float64Column(
         nullable=True,
-        validator=qv.validators.and_(qv.validators.ge(10e-8), qv.validators.lt(1e2)),
+        validator=qv.validators.and_(qv.validators.ge(1e-5), qv.validators.lt(99999.5)),
     )
     rmsCorr = qv.Float64Column(nullable=True)
     mag = qv.Float64Column(nullable=True)
