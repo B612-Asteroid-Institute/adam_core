@@ -325,6 +325,23 @@ class _VeresSigmaModel(ObservationUncertaintyModel):
             CoordinateCovariances.from_matrix(np.asarray(updated, dtype=np.float64)),
         )
 
+    def _native_specs(self) -> list[dict]:
+        obs_codes, astcats, sigma_ra, sigma_dec, fallback = (
+            self.lookup._table_arguments()
+        )
+        return [
+            {
+                "model": "veres",
+                "kind": self._MODEL,
+                "fill_missing": bool(self.fill_missing),
+                "table_obs_code": obs_codes,
+                "table_astcat": astcats,
+                "sigma_ra_arcsec": sigma_ra,
+                "sigma_dec_arcsec": sigma_dec,
+                "fallback_sigma_arcsec": fallback,
+            }
+        ]
+
 
 class VeresFloorModel(_VeresSigmaModel):
     """

@@ -37,6 +37,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Literal
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 
@@ -49,6 +50,7 @@ from .observation_uncertainty import (
     EmpiricalCovarianceModel,
     NightBatchDeweightingModel,
     ObservationUncertaintyModel,
+    native_model_specs,
 )
 from .orbit_fitter import OrbitFitter
 from .veres2017 import SigmaFillModel
@@ -185,6 +187,67 @@ def attach_observation_provenance(
         )
         .set_column("astcat", original_rows.astcat)
     )
+
+
+def _fused_run_od(
+    observations: OrbitDeterminationObservations,
+    fitter: OrbitFitter,
+    models: ObservationModels,
+    propagator: Propagator,
+    object_id: str | None,
+) -> tuple[FittedOrbits, FittedOrbitMembers] | None:
+    """
+    `run_od` as one crossing of a Rust-backed propagator's ``run_od`` work
+    unit, for a `NativeOrbitFitter` whose settings the work unit understands
+    and models that all provide native specs. Returns None otherwise.
+    """
+    from .native_orbit_fitter import NativeOrbitFitter, tables_from_native_full_od
+
+    fused = getattr(propagator, "run_od", None)
+    if fused is None or not isinstance(fitter, NativeOrbitFitter):
+        return None
+    if not fitter.supports_native_full_od():
+        return None
+    if models is None:
+        model_list: list[ObservationUncertaintyModel] = []
+    elif isinstance(models, ObservationUncertaintyModel):
+        model_list = [models]
+    else:
+        model_list = list(models)
+    specs = native_model_specs(model_list)
+    if specs is None:
+        return None
+
+    iod_settings, refinement, fit_settings = fitter.native_settings()
+    backend_object_id = object_id if object_id is not None else uuid.uuid4().hex
+    output = fused(
+        observations,
+        models=specs,
+        iod_settings=iod_settings,
+        refinement=refinement,
+        fit_settings=fit_settings,
+    )
+    fitted_orbits, members = tables_from_native_full_od(
+        backend_object_id, observations, output
+    )
+    if len(members) == 0:
+        return fitted_orbits, members
+    snapshots = {}
+    for name in ("original_astrometry", "used_astrometry"):
+        columns = output[name]
+        snapshots[name] = ObservationAstrometry.from_kwargs(
+            lon=np.asarray(columns["lon"], dtype=np.float64),
+            lat=np.asarray(columns["lat"], dtype=np.float64),
+            sigma_lon=np.asarray(columns["sigma_lon"], dtype=np.float64),
+            sigma_lat=np.asarray(columns["sigma_lat"], dtype=np.float64),
+            cov_lonlat=np.asarray(columns["cov_lonlat"], dtype=np.float64),
+        )
+    members = (
+        members.set_column("original_astrometry", snapshots["original_astrometry"])
+        .set_column("used_astrometry", snapshots["used_astrometry"])
+        .set_column("astcat", observations.astcat)
+    )
+    return fitted_orbits, members
 
 
 def run_od(
@@ -332,6 +395,14 @@ def run_od(
             EmpiricalCovarianceModel(),
             NightBatchDeweightingModel(),
         ]
+
+    # Rust-backed propagators run the whole step in one crossing (``run_od``
+    # work unit): models, IOD, refinement and the provenance snapshots. The
+    # veneer keeps id validation, object ids and table assembly.
+    fused = _fused_run_od(observations, fitter, models, propagator, object_id)
+    if fused is not None:
+        return fused
+
     used = apply_observation_models(observations, models)
 
     backend_object_id = object_id if object_id is not None else uuid.uuid4().hex

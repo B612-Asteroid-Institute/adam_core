@@ -23,7 +23,7 @@ fn value_error(message: impl Into<String>) -> PyErr {
     PyValueError::new_err(message.into())
 }
 
-fn scalars(values: &PyReadonlyArray1<'_, f64>, label: &str) -> PyResult<Vec<f64>> {
+pub(crate) fn scalars(values: &PyReadonlyArray1<'_, f64>, label: &str) -> PyResult<Vec<f64>> {
     values
         .as_array()
         .as_slice()
@@ -101,7 +101,7 @@ fn astrometry(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn bias_table(
+pub(crate) fn bias_table(
     obs_code: Vec<String>,
     band: Vec<Option<String>>,
     bias_ra_arcsec: PyReadonlyArray1<'_, f64>,
@@ -249,7 +249,7 @@ fn night_batch_deweighting_model_apply_numpy<'py>(
     Ok(Some(covariance_array(py, observations.covariance, n)?))
 }
 
-fn efcc18_table(values: &PyReadonlyArray3<'_, f32>) -> PyResult<Efcc18BiasTable> {
+pub(crate) fn efcc18_table(values: &PyReadonlyArray3<'_, f32>) -> PyResult<Efcc18BiasTable> {
     let view = values.as_array();
     let shape = view.shape();
     if shape != [EFCC18_N_TILES, EFCC18_N_CATALOGS, EFCC18_N_COMPONENTS] {
@@ -409,7 +409,7 @@ fn efcc18_corrections_numpy<'py>(
         .map_err(|err| value_error(err.to_string()))
 }
 
-fn veres_lookup(
+pub(crate) fn veres_lookup(
     table_obs_code: Vec<Option<String>>,
     table_astcat: Vec<Option<String>>,
     sigma_ra_arcsec: &PyReadonlyArray1<'_, f64>,

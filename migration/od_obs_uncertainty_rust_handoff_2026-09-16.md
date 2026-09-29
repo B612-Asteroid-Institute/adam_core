@@ -122,6 +122,39 @@ The defaults summary, including which default models import data packages,
 is the `run_od` docstring (Notes), mirrored by the docs table "The shipped
 defaults" and PR #217's "Defaults" section.
 
+## 2026-09-29 follow-up: orchestration moved into Rust (Alec's review)
+
+Alec: Python should be a surface-level interface, not do orchestration or
+looping. Following main's own pattern (backend-generic drivers in
+`propagation/od.rs` generic over the Rust `Propagator` trait, exposed by
+Rust-backed propagators as one-crossing methods that the veneer dispatches
+to), `propagation/od_refine.rs` now holds:
+
+| Work unit | Rust driver | Propagator method | Two-body binding |
+|---|---|---|---|
+| `fit_least_squares` (whitened, analytic/central/2-point Jacobian, linear/Huber, validated covariance, fused evaluation) | `fit_orbit_whitened_barycentric` | `fit_least_squares_whitened(orbit, observations, ignore_mask, fit_settings=)` | `fit_orbit_whitened_2body_ipc` |
+| `iterative_fit` (worst-residual loop) | `iterative_fit_barycentric` | `iterative_fit(orbit, observations, ..., fit_settings=)` | `iterative_fit_2body_ipc` |
+| `cmc2003_fit_detailed` (CMC2003 loop) | `cmc2003_fit_barycentric` | `cmc2003_fit(orbit, observations, ..., fit_settings=)` | `cmc2003_fit_2body_ipc` |
+| `NativeOrbitFitter.full_od` (Gauss IOD decision loop → refinement) | `full_od_barycentric` | `full_od(observations, iod_settings=, refinement=, fit_settings=)` | `full_od_2body_ipc` |
+| `run_od` (models → full OD → provenance snapshots) | `run_od_barycentric` | `run_od(observations, models=[specs], ...)` | `run_od_2body_ipc` |
+
+The solver is Levenberg-Marquardt with Marquardt scaling and scipy's
+ftol/xtol/gtol rules (IRLS weights for Huber; scipy's curvature scaling only
+for the covariance): same minimum to solver tolerance, not bit-identical
+iterates. Python keeps: ids, the `OrbitFitter` plugin boundary, table
+loading (data packages), table assembly, and the fallback loops for
+propagators without the work units (a user-defined Python model keeps the
+Python model composition). adam-assist implements the five methods in a
+follow-up by calling the drivers (it already does so for
+`fit_least_squares_evaluated`, `od_fit`, `initial_orbit_determination`).
+
+Parity (Python parity tests on the two-body fixture): fused vs scipy fit
+state 1e-9 / covariance 1e-6 from a shared start; loops: identical outlier
+sets, weights and flags; composed `run_od`: state 1e-7 (different IOD seeds
+along the flat along-track valley), provenance snapshots 1e-12. Rust unit
+tests cover truth recovery, finite-difference agreement, ignore masks, Huber
+downweighting, the probe fallback, both loops, full OD and run_od.
+
 ## Correctness gates
 
 * **HEALPix RING order.** `efcc18::tests::ring_order_matches_jpl_tiles_dat`

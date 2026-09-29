@@ -34,9 +34,11 @@ pub use od::{
     INVALID_LIGHT_TIME_MESSAGE,
 };
 pub use od_refine::{
-    cmc2003_fit_barycentric, fit_orbit_whitened_barycentric, iterative_fit_barycentric,
-    max_outliers, symmetric_eigen_6x6, Cmc2003FitConfig, Cmc2003FitOutput, IterativeFitConfig,
-    IterativeFitOutput, JacobianMethod, WhitenedFitConfig, WhitenedFitOutput, DELTA_CHI2_WINDOW,
+    cmc2003_fit_barycentric, fit_orbit_whitened_barycentric, full_od_barycentric,
+    iterative_fit_barycentric, max_outliers, run_od_barycentric, symmetric_eigen_6x6,
+    AstrometrySnapshot, Cmc2003FitConfig, Cmc2003FitOutput, FullOdConfig, FullOdOutput,
+    IterativeFitConfig, IterativeFitOutput, JacobianMethod, RefinedOutput, RefinementConfig,
+    RunOdOutput, WhitenedFitConfig, WhitenedFitOutput, DELTA_CHI2_WINDOW,
 };
 pub use pipeline::{OrbitRow, PropagationResult};
 pub use request::{

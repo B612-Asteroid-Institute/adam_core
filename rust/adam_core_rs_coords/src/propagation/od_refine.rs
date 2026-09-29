@@ -32,6 +32,7 @@ use crate::differential_correction::{
     whiten_residual_pairs, whitened_2body_jacobian, LossType, TwoBodyJacobianTerms,
     TwoBodyModelConfig, HUBER_F_SCALE_DEFAULT,
 };
+use crate::observation_uncertainty::{ObservationUncertaintyModel, OrbitDeterminationAstrometry};
 use crate::orbit_least_squares::inverse_6x6;
 use crate::translation::{
     deduplicated_origin_translation_vectors, normalize_coordinates_to, OriginTranslationProvider,
@@ -1381,6 +1382,305 @@ where
     })
 }
 
+// ---------------------------------------------------------------------------
+// Full orbit determination and run_od
+// ---------------------------------------------------------------------------
+
+/// Which outlier treatment refines the IOD orbit (`NativeOrbitFitter`'s
+/// ``outlier_rejection``).
+#[derive(Debug, Clone, Copy)]
+pub enum RefinementConfig {
+    WorstResidual(IterativeFitConfig),
+    Cmc2003(Cmc2003FitConfig),
+}
+
+/// Settings of the complete native orbit determination: Gauss IOD followed
+/// by differential correction with outlier treatment.
+#[derive(Debug, Clone, Copy)]
+pub struct FullOdConfig {
+    pub iod: super::od::IodConfig,
+    pub refinement: RefinementConfig,
+}
+
+/// The refined orbit of a full OD run with the loop diagnostics
+/// (`passes` for the worst-residual loop; `n_iterations`, `n_rejected`,
+/// `n_recovered` and `flags` for CMC2003, zero / empty otherwise).
+#[derive(Debug, Clone)]
+pub struct RefinedOutput {
+    pub fit: WhitenedFitOutput,
+    pub passes: usize,
+    pub n_rejected: usize,
+    pub n_recovered: usize,
+    pub flags: Vec<String>,
+}
+
+/// Product of `full_od_barycentric`: the IOD decision (`iod.found` false
+/// when no preliminary orbit was accepted, in which case `refined` is None)
+/// and the refined orbit. Every member array keeps the input observation
+/// order.
+#[derive(Debug, Clone)]
+pub struct FullOdOutput {
+    pub iod: super::od::IodOutput,
+    /// Time scale of `iod.epoch_mjd` (that of the observation epochs).
+    pub epoch_scale: TimeScale,
+    pub refined: Option<RefinedOutput>,
+}
+
+/// One-crossing `OrbitFitter.full_od` for the native fitter: the complete
+/// Gauss IOD decision loop (`iod_fit_barycentric`) followed by the
+/// worst-residual or CMC2003 refinement of the accepted orbit against all
+/// observations.
+pub fn full_od_barycentric<P, T>(
+    propagator: &P,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &FullOdConfig,
+    options: &EphemerisOptions,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<FullOdOutput>
+where
+    P: Propagator,
+    T: OriginTranslationProvider,
+{
+    let epoch_scale = observed
+        .times
+        .as_ref()
+        .ok_or_else(|| {
+            PropagationError::InvalidRequest(
+                "orbit determination requires observation times".to_string(),
+            )
+        })?
+        .scale;
+    let iod = super::od::iod_fit_barycentric(
+        propagator,
+        observed,
+        observers,
+        &config.iod,
+        options,
+        provider,
+        translation_provider,
+    )?;
+    if !iod.found {
+        return Ok(FullOdOutput {
+            iod,
+            epoch_scale,
+            refined: None,
+        });
+    }
+    let seed_coordinates = CoordinateBatch::cartesian(
+        vec![iod.state],
+        Frame::Ecliptic,
+        OriginArray::repeat(OriginId::from_code("SUN"), 1),
+        Some(crate::TimeArray::new(
+            epoch_scale,
+            vec![super::od::mjd_epoch(iod.epoch_mjd)],
+        )?),
+        None,
+    )?;
+    let seed = OrbitBatch::new(
+        vec![crate::OrbitId("iod-orbit".to_string())],
+        vec![None],
+        seed_coordinates,
+    )?;
+    let refined = match &config.refinement {
+        RefinementConfig::WorstResidual(loop_config) => {
+            let output = iterative_fit_barycentric(
+                propagator,
+                &seed,
+                observed,
+                observers,
+                loop_config,
+                options,
+                provider,
+                translation_provider,
+            )?;
+            RefinedOutput {
+                fit: output.fit,
+                passes: output.passes,
+                n_rejected: 0,
+                n_recovered: 0,
+                flags: Vec::new(),
+            }
+        }
+        RefinementConfig::Cmc2003(loop_config) => {
+            let output = cmc2003_fit_barycentric(
+                propagator,
+                &seed,
+                observed,
+                observers,
+                loop_config,
+                options,
+                provider,
+                translation_provider,
+            )?;
+            RefinedOutput {
+                fit: output.fit,
+                passes: output.n_iterations,
+                n_rejected: output.n_rejected,
+                n_recovered: output.n_recovered,
+                flags: output.flags,
+            }
+        }
+    };
+    Ok(FullOdOutput {
+        iod,
+        epoch_scale,
+        refined: Some(refined),
+    })
+}
+
+/// `ObservationAstrometry`: position and 1-sigma uncertainty (degrees) of
+/// every observation, the provenance columns of fitted orbit members.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AstrometrySnapshot {
+    pub lon: Vec<f64>,
+    pub lat: Vec<f64>,
+    pub sigma_lon: Vec<f64>,
+    pub sigma_lat: Vec<f64>,
+    pub cov_lonlat: Vec<f64>,
+}
+
+impl AstrometrySnapshot {
+    fn from_columns(lon: &[f64], lat: &[f64], covariance: &[f64]) -> Self {
+        let sqrt_or_nan = |value: f64| if value >= 0.0 { value.sqrt() } else { f64::NAN };
+        let n = lon.len();
+        Self {
+            lon: lon.to_vec(),
+            lat: lat.to_vec(),
+            sigma_lon: (0..n)
+                .map(|row| sqrt_or_nan(covariance[row * 36 + 7]))
+                .collect(),
+            sigma_lat: (0..n)
+                .map(|row| sqrt_or_nan(covariance[row * 36 + 14]))
+                .collect(),
+            cov_lonlat: (0..n).map(|row| covariance[row * 36 + 8]).collect(),
+        }
+    }
+}
+
+/// Product of `run_od_barycentric`: the astrometry as supplied and as used by
+/// the fit, and the full OD run on the used observations.
+#[derive(Debug, Clone)]
+pub struct RunOdOutput {
+    pub original: AstrometrySnapshot,
+    pub used: AstrometrySnapshot,
+    /// Whether any model changed a value.
+    pub models_changed: bool,
+    pub full_od: FullOdOutput,
+}
+
+/// One-crossing `run_od` for the native fitter: apply the observation models
+/// to the ORIGINAL observations in order, run the full orbit determination
+/// on the transformed ("used") observations, and return both astrometry
+/// snapshots for the members' provenance columns. `obs_code`, `band` and
+/// `astcat` are the per-observation station, photometric band and star
+/// catalog the models consult.
+#[allow(clippy::too_many_arguments)]
+pub fn run_od_barycentric<P, T>(
+    propagator: &P,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    obs_code: &[String],
+    band: &[Option<String>],
+    astcat: &[Option<String>],
+    models: Vec<Box<dyn ObservationUncertaintyModel>>,
+    config: &FullOdConfig,
+    options: &EphemerisOptions,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<RunOdOutput>
+where
+    P: Propagator,
+    T: OriginTranslationProvider,
+{
+    let n = observed.len();
+    if observers.len() != n || obs_code.len() != n || band.len() != n || astcat.len() != n {
+        return Err(PropagationError::InvalidRequest(
+            "observed, observers, obs_code, band and astcat must have equal length".to_string(),
+        ));
+    }
+    let observed_flat = spherical_flat(observed, "observed")?;
+    let covariance = observed_covariance_flat(observed)?;
+    let lon: Vec<f64> = (0..n).map(|row| observed_flat[row * 6 + 1]).collect();
+    let lat: Vec<f64> = (0..n).map(|row| observed_flat[row * 6 + 2]).collect();
+    let original = AstrometrySnapshot::from_columns(&lon, &lat, &covariance);
+
+    let times = observed.times.as_ref().ok_or_else(|| {
+        PropagationError::InvalidRequest(
+            "orbit determination requires observation times".to_string(),
+        )
+    })?;
+    let mjd_utc = times
+        .rescale_with_provider(TimeScale::Utc, provider)?
+        .mjd_values();
+    let jd_tdb: Vec<f64> = times
+        .rescale_with_provider(TimeScale::Tdb, provider)?
+        .mjd_values()
+        .into_iter()
+        .map(|mjd| mjd + 2_400_000.5)
+        .collect();
+    let mut astrometry = OrbitDeterminationAstrometry {
+        lon,
+        lat,
+        covariance,
+        obs_code: obs_code.to_vec(),
+        band: band.to_vec(),
+        astcat: astcat.to_vec(),
+        mjd_utc,
+        jd_tdb,
+    };
+    let models_changed = if models.is_empty() {
+        false
+    } else {
+        crate::observation_uncertainty::CompositeModel::new(models)
+            .map_err(PropagationError::InvalidRequest)?
+            .apply(&mut astrometry)
+            .map_err(PropagationError::InvalidRequest)?
+    };
+    let used_snapshot =
+        AstrometrySnapshot::from_columns(&astrometry.lon, &astrometry.lat, &astrometry.covariance);
+
+    let used = if models_changed {
+        let mut values = observed.values.raw_values().to_vec();
+        for (row, value) in values.iter_mut().enumerate() {
+            value[1] = astrometry.lon[row];
+            value[2] = astrometry.lat[row];
+        }
+        let source = observed.covariance.as_ref().expect("checked above");
+        let mut used_covariance =
+            crate::CovarianceBatch::new(n, 6, astrometry.covariance.clone(), source.units.clone())?;
+        if let Some(validity) = &source.row_validity {
+            used_covariance = used_covariance.with_row_validity(validity.clone())?;
+        }
+        CoordinateBatch::new(
+            crate::CoordinateValues::Spherical(values),
+            observed.frame,
+            observed.origins.clone(),
+            observed.times.clone(),
+            Some(used_covariance),
+        )?
+    } else {
+        observed.clone()
+    };
+
+    let full_od = full_od_barycentric(
+        propagator,
+        &used,
+        observers,
+        config,
+        options,
+        provider,
+        translation_provider,
+    )?;
+    Ok(RunOdOutput {
+        original,
+        used: used_snapshot,
+        models_changed,
+        full_od,
+    })
+}
+
 #[cfg(test)]
 #[allow(clippy::needless_range_loop)]
 mod tests {
@@ -1453,16 +1753,23 @@ mod tests {
     }
 
     fn observers() -> ObserverBatch {
+        observers_spaced(4)
+    }
+
+    /// Observers every `spacing_days` days: 4 gives the 44-day arc of the
+    /// fit and loop tests; 1 gives an 11-day arc on which Gauss IOD seeds
+    /// the refinement accurately (the full-OD tests).
+    fn observers_spaced(spacing_days: i64) -> ObserverBatch {
         let times = TimeArray::new(
             TimeScale::Tdb,
             (0..NUM_OBS)
-                .map(|row| Epoch::new(60_002 + 4 * row as i64, 0))
+                .map(|row| Epoch::new(60_002 + spacing_days * row as i64, 0))
                 .collect(),
         )
         .unwrap();
         let states: Vec<[f64; 6]> = (0..NUM_OBS)
             .map(|row| {
-                let theta = 0.35 + 0.069 * row as f64;
+                let theta = 0.35 + 0.01725 * (spacing_days * row as i64) as f64;
                 [
                     theta.cos(),
                     theta.sin(),
@@ -1493,10 +1800,17 @@ mod tests {
     /// deterministic pseudo-random sub-sigma scatter, plus one optional
     /// gross outlier.
     fn synthetic_observations(outlier_row: Option<usize>) -> CoordinateBatch {
+        synthetic_observations_spaced(4, outlier_row)
+    }
+
+    fn synthetic_observations_spaced(
+        spacing_days: i64,
+        outlier_row: Option<usize>,
+    ) -> CoordinateBatch {
         let result = generate_ephemeris_barycentric(
             &TwoBodyPropagator::default(),
             &orbit(TRUTH_STATE),
-            &observers(),
+            &observers_spaced(spacing_days),
             &ephemeris_options(),
             &NoopProvider,
             &ZeroTranslationProvider,
@@ -1852,6 +2166,112 @@ mod tests {
         assert_eq!(output.n_rejected, 0);
         assert_eq!(output.n_recovered, 0);
         assert!(output.fit.evaluation.outlier.iter().all(|&flag| !flag));
+    }
+
+    fn full_od_config(refinement: RefinementConfig) -> FullOdConfig {
+        FullOdConfig {
+            iod: super::super::od::IodConfig {
+                min_obs: 6,
+                min_arc_length: 1.0,
+                contamination_percentage: 20.0,
+                // Gauss on the longest-arc triplets of this synthetic geometry
+                // seeds the refinement coarsely; the threshold only gates it.
+                rchi2_threshold: 1e10,
+                observation_selection_method:
+                    super::super::od::ObservationSelectionMethod::Combinations,
+                light_time: true,
+                mu: crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap(),
+                speed_of_light: 173.144_632_674_240_3,
+            },
+            refinement,
+        }
+    }
+
+    #[test]
+    fn full_od_runs_iod_then_cmc2003_refinement() {
+        let observed = synthetic_observations_spaced(1, Some(3));
+        let output = full_od_barycentric(
+            &TwoBodyPropagator::default(),
+            &observed,
+            &observers_spaced(1),
+            &full_od_config(RefinementConfig::Cmc2003(Cmc2003FitConfig::default())),
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(output.iod.found);
+        assert_eq!(output.epoch_scale, TimeScale::Tdb);
+        let refined = output.refined.expect("refined orbit");
+        assert!(refined.fit.converged);
+        assert!(refined.fit.evaluation.outlier[3]);
+        assert_eq!(refined.n_rejected, 1);
+        assert!(refined.fit.evaluation.reduced_chi2 < 2.0);
+        // The refined orbit sits at the IOD epoch: compare with the truth
+        // propagated there.
+        let mu = crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap();
+        let truth_at_epoch = crate::propagate_2body_row::<f64>(
+            TRUTH_STATE,
+            output.iod.epoch_mjd - 60_000.0,
+            mu,
+            1000,
+            1e-14,
+        );
+        // An 11-day arc constrains range loosely: check the truth lies inside
+        // the fit covariance (6-dof Mahalanobis) besides a coarse bound.
+        let error = max_abs_diff(&refined.fit.state[..3], &truth_at_epoch[..3]);
+        assert!(error < 1e-3, "{error}");
+        let inverse = inverse_6x6(&covariance_matrix(&refined.fit.covariance)).unwrap();
+        let mut mahalanobis = 0.0;
+        for i in 0..6 {
+            for j in 0..6 {
+                mahalanobis += (refined.fit.state[i] - truth_at_epoch[i])
+                    * inverse[i * 6 + j]
+                    * (refined.fit.state[j] - truth_at_epoch[j]);
+            }
+        }
+        assert!(mahalanobis < 40.0, "{mahalanobis}");
+    }
+
+    #[test]
+    fn run_od_applies_models_and_records_provenance() {
+        let observed = synthetic_observations_spaced(1, None);
+        let obs_code: Vec<String> = (0..NUM_OBS).map(|_| "T00".to_string()).collect();
+        let band = vec![None; NUM_OBS];
+        let astcat = vec![None; NUM_OBS];
+        let models: Vec<Box<dyn ObservationUncertaintyModel>> = vec![Box::new(
+            crate::observation_uncertainty::NightBatchDeweightingModel::new(2).unwrap(),
+        )];
+        let output = run_od_barycentric(
+            &TwoBodyPropagator::default(),
+            &observed,
+            &observers_spaced(1),
+            &obs_code,
+            &band,
+            &astcat,
+            models,
+            &full_od_config(RefinementConfig::WorstResidual(
+                IterativeFitConfig::default(),
+            )),
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        // Positions never move; every same-night batch here is one observation
+        // per night, so the deweighting is a no-op and the used sigmas equal
+        // the originals.
+        assert_eq!(output.original.lon, output.used.lon);
+        assert_eq!(output.original.sigma_lon.len(), NUM_OBS);
+        assert!(output
+            .original
+            .sigma_lon
+            .iter()
+            .all(|s| (s - SIGMA_DEG).abs() < 1e-15));
+        assert!(!output.models_changed);
+        let refined = output.full_od.refined.expect("refined orbit");
+        assert!(refined.fit.converged);
+        assert_eq!(refined.passes, 1);
     }
 
     #[test]

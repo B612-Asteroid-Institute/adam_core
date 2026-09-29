@@ -135,6 +135,36 @@ class NativeTwoBodyPropagator(TwoBodyPropagator):
             *self._problem(orbit, observations), fit_settings=fit_settings, **kwargs
         )
 
+    @staticmethod
+    def _observations(observations):
+        from adam_core._rust.arrow import ensure_spice_backend
+        from adam_core.orbits.arrow_bridge import coordinates_to_ipc, observers_to_ipc
+
+        ensure_spice_backend()
+        return (
+            coordinates_to_ipc(observations.coordinates, "spherical"),
+            observers_to_ipc(observations.observers),
+        )
+
+    def full_od(self, observations, **kwargs):
+        from adam_core import _rust_native
+
+        return _rust_native.full_od_2body_ipc(
+            *self._observations(observations), **kwargs
+        )
+
+    def run_od(self, observations, *, models=None, **kwargs):
+        from adam_core import _rust_native
+
+        return _rust_native.run_od_2body_ipc(
+            *self._observations(observations),
+            observations.observers.code.to_pylist(),
+            observations.photometry.band.to_pylist(),
+            observations.astcat.to_pylist(),
+            models=models,
+            **kwargs,
+        )
+
 
 def make_truth_orbit() -> Orbits:
     return Orbits.from_kwargs(

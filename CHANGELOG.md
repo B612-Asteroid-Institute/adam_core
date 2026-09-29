@@ -27,6 +27,21 @@ This file contains notable changes in adam-core
   `astcat` column and `from_ades` converter on `OrbitDeterminationObservations`;
   `OrbitFitter.refine_fit` / `full_od` and `NativeOrbitFitter`; and the
   `observatory_bias_model` parameter on every module-level OD entry point.
+- Rust orchestration of orbit determination: the whitened / robust
+  differential correction, the worst-residual and CMC2003 rejection loops,
+  the full OD (Gauss IOD decision loop followed by refinement) and `run_od`
+  (observation models, full OD, provenance snapshots) are backend-generic Rust
+  drivers over the `Propagator` trait (`adam_core_rs_coords::propagation::
+  {fit_orbit_whitened_barycentric, iterative_fit_barycentric,
+  cmc2003_fit_barycentric, full_od_barycentric, run_od_barycentric}`). A
+  Rust-backed propagator exposes them as one-crossing methods
+  (`fit_least_squares_whitened`, `iterative_fit`, `cmc2003_fit`, `full_od`,
+  `run_od`) that `fit_least_squares`, `iterative_fit`, `cmc2003_fit_detailed`,
+  `NativeOrbitFitter.full_od` and `run_od` dispatch to, wrapping the returned
+  dicts into tables; the in-tree two-body implementations are the
+  `_rust_native.*_2body_ipc` functions. The Python loops stay the fallback
+  for propagators without the work units. Observation models provide
+  `_native_specs()` so a model stack crosses once.
 - The shipped defaults are the signature defaults: `NativeOrbitFitter` now
   defaults to `outlier_rejection="cmc2003"` (was `"worst_residual"`), and
   `run_od` called without `models` applies the default observation-model

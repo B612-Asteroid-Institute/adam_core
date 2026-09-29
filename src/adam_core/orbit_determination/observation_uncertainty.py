@@ -48,7 +48,7 @@ from __future__ import annotations
 import importlib
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Iterable, Literal, Optional, Union
+from typing import Iterable, Literal, Optional, Sequence, Union
 
 import numpy as np
 import numpy.typing as npt
@@ -303,6 +303,27 @@ def _with_covariances(
     )
 
 
+def native_model_specs(
+    models: "Sequence[ObservationUncertaintyModel]",
+) -> Optional[list[dict]]:
+    """
+    The ``_native_spec()`` dicts of ``models`` (composites flattened, in
+    application order) for a Rust-backed propagator's fused ``run_od`` work
+    unit, or None when any model has no native spec (a user-defined Python
+    model), in which case the models are applied in Python.
+    """
+    specs: list[dict] = []
+    for model in models:
+        spec = getattr(model, "_native_specs", None)
+        if spec is None:
+            return None
+        nested = spec()
+        if nested is None:
+            return None
+        specs.extend(nested)
+    return specs
+
+
 class ObservationUncertaintyModel(ABC):
     """
     Abstract interface for models that transform observation uncertainties.
@@ -351,6 +372,9 @@ class IdentityModel(ObservationUncertaintyModel):
         self, observations: OrbitDeterminationObservations
     ) -> OrbitDeterminationObservations:
         return observations
+
+    def _native_specs(self) -> list[dict]:
+        return [{"model": "identity"}]
 
 
 class _BiasTableModel(ObservationUncertaintyModel):
@@ -427,6 +451,18 @@ class _BiasTableModel(ObservationUncertaintyModel):
             observations.photometry.band.to_pylist(),
         )
         return _with_covariances(observations, updated)
+
+    def _native_specs(self) -> list[dict]:
+        return [
+            {
+                "model": self._MODEL,
+                "mode": self.mode,
+                "min_resid_cov_n": float(self.min_resid_cov_n),
+                "table_obs_code": self._codes,
+                "table_band": self._bands,
+                **{name: self._columns[name] for name in self._ROW_COLUMNS},
+            }
+        ]
 
 
 class EmpiricalCovarianceModel(_BiasTableModel):
@@ -542,6 +578,9 @@ class NightBatchDeweightingModel(ObservationUncertaintyModel):
         )
         return _with_covariances(observations, updated)
 
+    def _native_specs(self) -> list[dict]:
+        return [{"model": "night_batch", "cap": int(self.cap)}]
+
 
 class EFCC18DebiasModel(ObservationUncertaintyModel):
     """
@@ -636,6 +675,15 @@ class EFCC18DebiasModel(ObservationUncertaintyModel):
             "coordinates.lat", pa.array(np.asarray(new_lat), type=pa.float64())
         )
 
+    def _native_specs(self) -> list[dict]:
+        return [
+            {
+                "model": "efcc18",
+                "bias_table": self._bias_table_f32,
+                "exclude_astcats": list(self.exclude_astcats),
+            }
+        ]
+
 
 class CompositeModel(ObservationUncertaintyModel):
     """
@@ -664,3 +712,6 @@ class CompositeModel(ObservationUncertaintyModel):
         for model in self.models:
             observations = model.apply(observations)
         return observations
+
+    def _native_specs(self) -> Optional[list[dict]]:
+        return native_model_specs(self.models)

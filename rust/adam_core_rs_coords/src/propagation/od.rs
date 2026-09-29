@@ -1377,7 +1377,7 @@ fn iod_accepted_output(
     }
 }
 
-fn mjd_epoch(mjd: f64) -> crate::Epoch {
+pub(super) fn mjd_epoch(mjd: f64) -> crate::Epoch {
     let days = mjd.floor();
     crate::Epoch::new(
         days as i64,

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import importlib
 import sys
+import warnings
 from importlib.resources import files
 from typing import Any, cast
 
@@ -44,7 +45,7 @@ from ..od_orchestration import (
 )
 from ..orbit_fitter import OrbitFitter
 from ..veres2017 import SIGMA_TABLE_PACKAGE, SigmaFillModel
-from .test_differential_correction import TwoBodyPropagator
+from .test_differential_correction import NativeTwoBodyPropagator, TwoBodyPropagator
 from .test_observation_uncertainty import make_bias_table, make_observations
 from .test_observatory_bias_model_wiring import (
     UNUSED_PROPAGATOR,
@@ -788,3 +789,159 @@ def test_run_od_default_models_name_the_missing_data_package(
         observations, RecordingFitter(), None, propagator=UNUSED_PROPAGATOR
     )
     assert len(members) == 3
+
+
+class TestFusedRunOd:
+    """
+    `run_od` on a Rust-backed propagator (``run_od`` work unit) is the Python
+    composition's twin: same models, same IOD + refinement, same provenance.
+    """
+
+    @staticmethod
+    def _models(observations):
+        efcc18 = pytest.importorskip("adam_core.observations.efcc18")
+        zero_table = np.zeros(
+            (efcc18.EFCC18_N_TILES, efcc18.EFCC18_N_CATALOGS, 4), dtype=np.float32
+        )
+        code = observations.observers.code[0].as_py()
+        return [
+            EFCC18DebiasModel(bias_table=zero_table),
+            EmpiricalCovarianceModel(
+                make_bias_table(
+                    [
+                        {
+                            "obs_code": code,
+                            "resid_var_ra": 0.04,
+                            "resid_var_dec": 0.09,
+                            "resid_cov_ra_dec": 0.01,
+                            "resid_cov_n": 100,
+                        }
+                    ]
+                )
+            ),
+            NightBatchDeweightingModel(cap=2),
+        ]
+
+    @staticmethod
+    def _fitter(**kwargs):
+        return NativeOrbitFitter(
+            propagator_class=TwoBodyPropagator, iod_rchi2_threshold=1e6, **kwargs
+        )
+
+    def _run(self, observations, models, **fitter_kwargs):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            expected = run_od(
+                observations,
+                self._fitter(**fitter_kwargs),
+                models,
+                propagator=TwoBodyPropagator(),
+                object_id="twin",
+            )
+            fused = run_od(
+                observations,
+                self._fitter(**fitter_kwargs),
+                models,
+                propagator=NativeTwoBodyPropagator(),
+                object_id="twin",
+            )
+        return expected, fused
+
+    @staticmethod
+    def _assert_twins(expected, fused):
+        (expected_orbit, expected_members), (fused_orbit, fused_members) = (
+            expected,
+            fused,
+        )
+        assert len(fused_orbit) == len(expected_orbit) == 1
+        assert fused_orbit.object_id.to_pylist() == ["twin"]
+        # The two pipelines start from different IOD seeds (Rust vs Python
+        # Gauss) and their optimizers stop at slightly different points along
+        # the flat along-track valley of a 21-day arc, so the composed result
+        # agrees to solver tolerance rather than to the 1e-9 of a shared start.
+        npt.assert_allclose(
+            fused_orbit.coordinates.values,
+            expected_orbit.coordinates.values,
+            rtol=1e-7,
+            atol=1e-12,
+        )
+        npt.assert_allclose(
+            fused_orbit.coordinates.covariance.to_matrix(),
+            expected_orbit.coordinates.covariance.to_matrix(),
+            rtol=1e-4,
+        )
+        assert fused_orbit.num_obs[0].as_py() == expected_orbit.num_obs[0].as_py()
+        assert fused_orbit.success[0].as_py()
+        assert fused_members.obs_id.to_pylist() == expected_members.obs_id.to_pylist()
+        assert fused_members.outlier.to_pylist() == expected_members.outlier.to_pylist()
+        assert (
+            fused_members.solution.to_pylist() == expected_members.solution.to_pylist()
+        )
+        assert fused_members.weight.to_pylist() == expected_members.weight.to_pylist()
+        assert fused_members.astcat.to_pylist() == expected_members.astcat.to_pylist()
+        for name in ("original_astrometry", "used_astrometry"):
+            fused_snapshot = getattr(fused_members, name)
+            expected_snapshot = getattr(expected_members, name)
+            for column in ("lon", "lat", "sigma_lon", "sigma_lat", "cov_lonlat"):
+                npt.assert_allclose(
+                    getattr(fused_snapshot, column).to_numpy(zero_copy_only=False),
+                    getattr(expected_snapshot, column).to_numpy(zero_copy_only=False),
+                    rtol=1e-12,
+                    atol=1e-15,
+                )
+
+    def test_models_and_cmc2003_refinement(self, two_body_observations) -> None:
+        models = self._models(two_body_observations)
+        expected, fused = self._run(two_body_observations, models)
+        self._assert_twins(expected, fused)
+        _, members = fused
+        # The station covariance was added: used sigmas exceed the originals.
+        assert np.all(
+            members.used_astrometry.sigma_lon.to_numpy(zero_copy_only=False)
+            > members.original_astrometry.sigma_lon.to_numpy(zero_copy_only=False)
+        )
+
+    def test_no_models_and_worst_residual_refinement(
+        self, two_body_observations
+    ) -> None:
+        expected, fused = self._run(
+            two_body_observations, None, outlier_rejection="worst_residual"
+        )
+        self._assert_twins(expected, fused)
+        _, members = fused
+        assert members.used_astrometry.lon.to_pylist() == (
+            members.original_astrometry.lon.to_pylist()
+        )
+
+    def test_python_model_keeps_the_python_composition(
+        self, two_body_observations, monkeypatch
+    ) -> None:
+        class ScaleSigmas(ObservationUncertaintyModel):
+            def apply(self, observations):
+                covariances = observations.coordinates.covariance.to_matrix() * 4.0
+                return observations.set_column(
+                    "coordinates.covariance",
+                    CoordinateCovariances.from_matrix(covariances),
+                )
+
+        propagator = NativeTwoBodyPropagator()
+        calls = []
+        original = propagator.run_od
+        monkeypatch.setattr(
+            propagator, "run_od", lambda *a, **k: calls.append(k) or original(*a, **k)
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            fitted, members = run_od(
+                two_body_observations,
+                self._fitter(),
+                [ScaleSigmas()],
+                propagator=propagator,
+                object_id="python-model",
+            )
+        assert calls == []
+        assert len(fitted) == 1
+        npt.assert_allclose(
+            members.used_astrometry.sigma_lon.to_numpy(zero_copy_only=False),
+            2.0 * members.original_astrometry.sigma_lon.to_numpy(zero_copy_only=False),
+        )
