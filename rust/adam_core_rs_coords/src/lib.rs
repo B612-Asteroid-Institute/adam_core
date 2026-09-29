@@ -119,6 +119,10 @@ pub use generic::{
 pub mod propagate;
 pub mod propagation;
 pub use propagation::{
+    fit_orbit_whitened_barycentric, symmetric_eigen_6x6, JacobianMethod, WhitenedFitConfig,
+    WhitenedFitOutput, DELTA_CHI2_WINDOW,
+};
+pub use propagation::{
     generate_ephemeris, generate_ephemeris_barycentric, generate_ephemeris_translated,
     CovariancePropagation, EphemerisDiagnostics, EphemerisFailureCode, EphemerisOptions,
     EphemerisPhotometryOptions, EphemerisResult, EphemerisRowDiagnostic, EpochOrder, EpochPolicy,

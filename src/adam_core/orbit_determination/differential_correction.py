@@ -40,6 +40,11 @@ HUBER_F_SCALE_DEFAULT = 1.345
 # Gauss-Newton work units accept only these tuning parameters.
 _NATIVE_FIT_KWARGS = {"xtol", "ftol", "max_iterations"}
 
+# scipy keyword arguments a propagator's fused whitened work unit
+# (``fit_least_squares_whitened``) understands; any other kwarg keeps the
+# scipy path.
+_FUSED_WHITENED_KWARGS = {"xtol", "ftol", "gtol", "max_nfev"}
+
 
 def _validate_loss(loss: str, f_scale: float) -> None:
     from adam_core import _rust_native
@@ -515,6 +520,111 @@ def _member_weights(
     return weights
 
 
+def _fitted_tables_from_native_output(
+    orbit: Orbits,
+    observations: OrbitDeterminationObservations,
+    output: dict,
+    weights: npt.NDArray[np.float64],
+) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    """
+    Wrap the dict a propagator's fused Rust fit work unit returns (state,
+    covariance, solver diagnostics and the evaluation over the full
+    observation set) into `FittedOrbits` / `FittedOrbitMembers` without
+    further computation. ``weights`` are the members' effective weights in
+    `observations` order.
+    """
+    state = np.asarray(output["state"], dtype=np.float64)
+    covariance_matrix = np.asarray(output["covariance"], dtype=np.float64)
+    converged = bool(output["converged"])
+    fitted_orbit = FittedOrbits.from_kwargs(
+        orbit_id=orbit.orbit_id,
+        object_id=orbit.object_id,
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=state[0:1],
+            y=state[1:2],
+            z=state[2:3],
+            vx=state[3:4],
+            vy=state[4:5],
+            vz=state[5:6],
+            time=orbit.coordinates.time,
+            covariance=CoordinateCovariances.from_matrix(
+                covariance_matrix.reshape(1, 6, 6)
+            ),
+            origin=orbit.coordinates.origin,
+            frame=orbit.coordinates.frame,
+        ),
+        arc_length=[output["arc_length"]],
+        num_obs=[output["num_obs"]],
+        chi2=[output["chi2"]],
+        reduced_chi2=[output["reduced_chi2"]],
+        iterations=[output["iterations"]],
+        success=[converged],
+        status_code=[int(output.get("status_code", 1 if converged else 0))],
+    )
+    residuals = Residuals.from_kwargs(
+        values=np.asarray(output["residual_values"], dtype=np.float64).tolist(),
+        chi2=output["residual_chi2"],
+        dof=output["residual_dof"],
+        probability=output["residual_probability"],
+    )
+    outlier = np.asarray(output["outlier"], dtype=bool)
+    fitted_orbit_members = FittedOrbitMembers.from_kwargs(
+        orbit_id=np.full(len(observations), orbit.orbit_id[0].as_py(), dtype="object"),
+        obs_id=observations.id,
+        residuals=residuals,
+        solution=~outlier,
+        outlier=outlier,
+        weight=np.asarray(weights, dtype=np.float64),
+    )
+    return fitted_orbit, fitted_orbit_members
+
+
+def _fused_whitened_fit(
+    orbit: Orbits,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    mask: Optional[pa.Array],
+    jacobian: str,
+    validate_covariance: bool,
+    loss: str,
+    f_scale: float,
+    kwargs: dict,
+) -> Optional[Tuple[FittedOrbits, FittedOrbitMembers]]:
+    """
+    The complete whitened fit as one crossing of a Rust-backed propagator's
+    ``fit_least_squares_whitened`` work unit: solver, Jacobian (analytic /
+    central / 2-point), robust loss, validated covariance and the final
+    evaluation over the full observation set all run natively; the veneer
+    only marshals tables and re-emits the work unit's diagnostics as
+    `RuntimeWarning`s. Returns None when the propagator exposes no such work
+    unit.
+    """
+    fused = getattr(propagator, "fit_least_squares_whitened", None)
+    if fused is None:
+        return None
+    ignore_mask = (
+        [False] * len(observations) if mask is None else pc.invert(mask).to_pylist()
+    )
+    output = fused(
+        orbit,
+        observations,
+        ignore_mask,
+        loss=loss,
+        f_scale=f_scale,
+        jacobian=jacobian,
+        validate_covariance=validate_covariance,
+        xtol=kwargs.get("xtol", 1e-12),
+        ftol=kwargs.get("ftol", 1e-12),
+        gtol=kwargs.get("gtol", 1e-12),
+        max_iterations=kwargs.get("max_nfev", 100),
+    )
+    for message in output.get("warnings", ()):
+        warnings.warn(message, category=RuntimeWarning)
+    return _fitted_tables_from_native_output(
+        orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
+    )
+
+
 def _native_fit_least_squares(
     orbit: Orbits,
     observations: OrbitDeterminationObservations,
@@ -540,52 +650,10 @@ def _native_fit_least_squares(
             else [False] * len(observations)
         )
         output = fused_fit(orbit, observations, ignore_mask, **kwargs)
-        state = np.asarray(output["state"], dtype=np.float64)
-        covariance_matrix = np.asarray(output["covariance"], dtype=np.float64)
-        converged = bool(output["converged"])
-        fitted_orbit = FittedOrbits.from_kwargs(
-            orbit_id=orbit.orbit_id,
-            object_id=orbit.object_id,
-            coordinates=CartesianCoordinates.from_kwargs(
-                x=state[0:1],
-                y=state[1:2],
-                z=state[2:3],
-                vx=state[3:4],
-                vy=state[4:5],
-                vz=state[5:6],
-                time=orbit.coordinates.time,
-                covariance=CoordinateCovariances.from_matrix(
-                    covariance_matrix.reshape(1, 6, 6)
-                ),
-                origin=orbit.coordinates.origin,
-                frame=orbit.coordinates.frame,
-            ),
-            arc_length=[output["arc_length"]],
-            num_obs=[output["num_obs"]],
-            chi2=[output["chi2"]],
-            reduced_chi2=[output["reduced_chi2"]],
-            iterations=[output["iterations"]],
-            success=[converged],
-            status_code=[1 if converged else 0],
-        )
-        residuals = Residuals.from_kwargs(
-            values=np.asarray(output["residual_values"], dtype=np.float64).tolist(),
-            chi2=output["residual_chi2"],
-            dof=output["residual_dof"],
-            probability=output["residual_probability"],
-        )
         outlier = np.asarray(output["outlier"], dtype=bool)
-        fitted_orbit_members = FittedOrbitMembers.from_kwargs(
-            orbit_id=np.full(
-                len(observations), orbit.orbit_id[0].as_py(), dtype="object"
-            ),
-            obs_id=observations.id,
-            residuals=residuals,
-            solution=~outlier,
-            outlier=outlier,
-            weight=(~outlier).astype(np.float64),
+        return _fitted_tables_from_native_output(
+            orbit, observations, output, (~outlier).astype(np.float64)
         )
-        return fitted_orbit, fitted_orbit_members
 
     native_fit = getattr(propagator, "fit_least_squares", None)
     if native_fit is not None:
@@ -795,9 +863,28 @@ def fit_least_squares(
         mask = None
         observations_to_include = observations
 
-    # Legacy forward-difference path on a Rust-backed propagator: one native
-    # Gauss-Newton crossing (beads personal-cmy.7 / personal-dqk). The default
-    # analytic-Jacobian and robust-loss paths deliberately bypass it: the Rust
+    # Rust-backed propagators expose the complete whitened fit as one native
+    # crossing (``fit_least_squares_whitened``): every Jacobian option, both
+    # losses, the validated covariance and the final evaluation.
+    if set(kwargs) <= _FUSED_WHITENED_KWARGS:
+        fused = _fused_whitened_fit(
+            orbit,
+            observations,
+            propagator,
+            mask,
+            jacobian,
+            validate_covariance,
+            loss,
+            f_scale,
+            kwargs,
+        )
+        if fused is not None:
+            return fused
+
+    # Legacy forward-difference path on a Rust-backed propagator that exposes
+    # only the older ``fit_least_squares_evaluated`` / ``fit_least_squares``
+    # work units (beads personal-cmy.7 / personal-dqk). The default
+    # analytic-Jacobian and robust-loss paths deliberately bypass it: those
     # work units use the same forward-difference Jacobian whose covariance the
     # analytic path exists to correct.
     if jacobian == "2-point" and loss == "linear" and set(kwargs) <= _NATIVE_FIT_KWARGS:

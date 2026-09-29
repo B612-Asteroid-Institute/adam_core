@@ -1462,16 +1462,16 @@ fn percentile_triplet(times: &[f64], percentiles: [f64; 3]) -> Option<[usize; 3]
 // ---------------------------------------------------------------------------
 
 /// Epoch/frame/origin context extracted once from the single input orbit.
-struct OrbitGeometry {
-    state: [f64; 6],
-    epoch: crate::Epoch,
-    scale: crate::TimeScale,
-    frame: Frame,
-    origin: crate::OriginId,
+pub(super) struct OrbitGeometry {
+    pub(super) state: [f64; 6],
+    pub(super) epoch: crate::Epoch,
+    pub(super) scale: crate::TimeScale,
+    pub(super) frame: Frame,
+    pub(super) origin: crate::OriginId,
 }
 
 impl OrbitGeometry {
-    fn from_orbit(orbit: &OrbitBatch) -> PropagationResultValue<Self> {
+    pub(super) fn from_orbit(orbit: &OrbitBatch) -> PropagationResultValue<Self> {
         if orbit.len() != 1 {
             return Err(PropagationError::InvalidRequest(
                 "orbit determination corrects exactly one orbit".to_string(),
@@ -1497,7 +1497,10 @@ impl OrbitGeometry {
     }
 }
 
-fn spherical_flat(batch: &CoordinateBatch, label: &str) -> PropagationResultValue<Vec<f64>> {
+pub(super) fn spherical_flat(
+    batch: &CoordinateBatch,
+    label: &str,
+) -> PropagationResultValue<Vec<f64>> {
     let values = batch.values.spherical().ok_or_else(|| {
         PropagationError::InvalidRequest(format!(
             "{label} coordinates must be spherical for orbit determination"
@@ -1506,7 +1509,9 @@ fn spherical_flat(batch: &CoordinateBatch, label: &str) -> PropagationResultValu
     Ok(values.iter().flat_map(|row| row.iter().copied()).collect())
 }
 
-fn observed_covariance_flat(observed: &CoordinateBatch) -> PropagationResultValue<Vec<f64>> {
+pub(super) fn observed_covariance_flat(
+    observed: &CoordinateBatch,
+) -> PropagationResultValue<Vec<f64>> {
     Ok(observed
         .covariance
         .as_ref()
@@ -1538,7 +1543,7 @@ fn observed_times_mjd(observed: &CoordinateBatch) -> PropagationResultValue<Vec<
 /// through the diagnostics' input orbit/observer indices. Outer `Err` is a
 /// request/setup failure; inner `Err` is a per-row numerical failure carrying
 /// the legacy light-time message.
-fn predict_spherical<P, T>(
+pub(super) fn predict_spherical<P, T>(
     propagator: &P,
     states: &[[f64; 6]],
     geometry: &OrbitGeometry,
@@ -1697,7 +1702,11 @@ fn reduced_chi2_full(
 /// RA/Dec residual columns with the legacy longitude wrap and cos(lat)
 /// convention (`_spherical_residual_columns_from_values` /
 /// `compute_residuals_ndarray(...)[:, 1:3]`). Returns `(n, 2)` row-major.
-fn residual_lon_lat_columns(observed_flat: &[f64], predicted_flat: &[f64], n: usize) -> Vec<f64> {
+pub(super) fn residual_lon_lat_columns(
+    observed_flat: &[f64],
+    predicted_flat: &[f64],
+    n: usize,
+) -> Vec<f64> {
     let mut out = vec![0.0_f64; n * 2];
     for row in 0..n {
         let obs_lon = observed_flat[row * 6 + 1];
@@ -1795,7 +1804,7 @@ fn vector_condition_number(b: &[f64; 6]) -> f64 {
     }
 }
 
-fn filter_coordinate_batch(
+pub(super) fn filter_coordinate_batch(
     batch: &CoordinateBatch,
     keep: &[bool],
 ) -> PropagationResultValue<CoordinateBatch> {
@@ -1858,7 +1867,7 @@ fn take_coordinate_batch(
     CoordinateBatch::new(values, batch.frame, origins, times, covariance).map_err(Into::into)
 }
 
-fn filter_observer_batch(
+pub(super) fn filter_observer_batch(
     observers: &ObserverBatch,
     keep: &[bool],
 ) -> PropagationResultValue<ObserverBatch> {

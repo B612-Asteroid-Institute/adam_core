@@ -16,6 +16,7 @@ mod http;
 mod native_benchmarks;
 mod obs80;
 mod observation_uncertainty;
+mod od_drivers;
 mod od_ops;
 mod orbit_determination;
 mod photometry;
@@ -38,6 +39,7 @@ fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     native_benchmarks::register(m)?;
     obs80::register(m)?;
     observation_uncertainty::register(m)?;
+    od_drivers::register(m)?;
     od_ops::register(m)?;
     photometry::register(m)?;
     query_clients::register(m)?;

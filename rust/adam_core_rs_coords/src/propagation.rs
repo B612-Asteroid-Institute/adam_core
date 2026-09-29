@@ -9,6 +9,7 @@
 mod diagnostics;
 mod ephemeris;
 mod od;
+mod od_refine;
 mod pipeline;
 mod request;
 #[cfg(test)]
@@ -31,6 +32,10 @@ pub use od::{
     EvaluatedLeastSquaresFit, FitEvaluation, IodConfig, IodOutput, ObservationSelectionMethod,
     OdConfig, OdMethod, OdOutput, ValladoConfig, ValladoIteration, ValladoResult, ValladoStatus,
     INVALID_LIGHT_TIME_MESSAGE,
+};
+pub use od_refine::{
+    fit_orbit_whitened_barycentric, symmetric_eigen_6x6, JacobianMethod, WhitenedFitConfig,
+    WhitenedFitOutput, DELTA_CHI2_WINDOW,
 };
 pub use pipeline::{OrbitRow, PropagationResult};
 pub use request::{

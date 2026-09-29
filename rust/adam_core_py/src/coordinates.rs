@@ -1634,7 +1634,7 @@ fn orbits_propagate_2body_ipc<'py>(
 /// Provider-owned time rescaling for the typed propagation adapter: delegates
 /// to the ERFA-backed `TimeArray::rescale` service (UTC/TAI/TT/TDB supported;
 /// UT1/GPS fail loudly pending provider contracts).
-struct ErfaTimeProvider;
+pub(crate) struct ErfaTimeProvider;
 
 impl TimeScaleProvider for ErfaTimeProvider {
     fn rescale(

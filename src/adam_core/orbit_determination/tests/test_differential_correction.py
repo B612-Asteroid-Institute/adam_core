@@ -83,6 +83,35 @@ class TwoBodyPropagator(Propagator):
         return qv.concatenate(blocks)
 
 
+class NativeTwoBodyPropagator(TwoBodyPropagator):
+    """
+    `TwoBodyPropagator` posing as a Rust-backed propagator: its
+    ``fit_least_squares_whitened`` work unit is adam_core's own Rust driver
+    (`fit_orbit_whitened_barycentric`) over the Rust two-body propagator, the
+    same one-crossing contract a Rust-backed plugin such as adam-assist
+    exposes. Its `generate_ephemeris` stays the Python two-body pipeline, so
+    the scipy path and the fused path can be compared on identical dynamics.
+    """
+
+    def fit_least_squares_whitened(self, orbit, observations, ignore_mask, **kwargs):
+        from adam_core import _rust_native
+        from adam_core._rust.arrow import ensure_spice_backend
+        from adam_core.orbits.arrow_bridge import (
+            coordinates_to_ipc,
+            observers_to_ipc,
+            orbits_to_ipc,
+        )
+
+        ensure_spice_backend()
+        return _rust_native.fit_orbit_whitened_2body_ipc(
+            orbits_to_ipc(orbit),
+            coordinates_to_ipc(observations.coordinates, "spherical"),
+            observers_to_ipc(observations.observers),
+            list(ignore_mask),
+            **kwargs,
+        )
+
+
 def make_truth_orbit() -> Orbits:
     return Orbits.from_kwargs(
         orbit_id=["truth"],
@@ -689,3 +718,123 @@ def test_fused_path_accepts_consistent_covariance():
             make_initial_guess(), observations, propagator, jacobian="2-point"
         )
     assert _consistency_warnings(records) == []
+
+
+class TestFusedWhitenedFit:
+    """
+    The Rust one-crossing whitened fit (`fit_least_squares_whitened`) is the
+    scipy path's twin: same minimum, covariance, statistics and members.
+    """
+
+    def _fits(self, observations, **kwargs):
+        guess = make_initial_guess()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            expected = fit_least_squares(
+                guess, observations, TwoBodyPropagator(), **kwargs
+            )
+            fused = fit_least_squares(
+                guess, observations, NativeTwoBodyPropagator(), **kwargs
+            )
+        return expected, fused
+
+    @staticmethod
+    def _assert_orbit_parity(expected, fused, state_rtol, cov_rtol):
+        npt.assert_allclose(
+            fused.coordinates.values,
+            expected.coordinates.values,
+            rtol=state_rtol,
+            atol=1e-13,
+        )
+        npt.assert_allclose(
+            fused.coordinates.covariance.to_matrix(),
+            expected.coordinates.covariance.to_matrix(),
+            rtol=cov_rtol,
+        )
+        for column in ("chi2", "reduced_chi2", "arc_length"):
+            npt.assert_allclose(
+                getattr(fused, column)[0].as_py(),
+                getattr(expected, column)[0].as_py(),
+                rtol=1e-7,
+            )
+        assert fused.num_obs[0].as_py() == expected.num_obs[0].as_py()
+        assert fused.success[0].as_py()
+
+    def test_analytic_matches_scipy(self):
+        observations = make_synthetic_observations()
+        (expected, expected_members), (fused, fused_members) = self._fits(observations)
+        self._assert_orbit_parity(expected, fused, state_rtol=1e-9, cov_rtol=1e-6)
+        npt.assert_allclose(
+            fused_members.residuals.to_array(),
+            expected_members.residuals.to_array(),
+            rtol=1e-6,
+            atol=1e-10,
+        )
+        # Per-observation chi2 of sub-sigma residuals resolves the ~3e-10 deg
+        # difference between the Python and Rust two-body ephemeris pipelines.
+        npt.assert_allclose(
+            fused_members.residuals.chi2.to_numpy(zero_copy_only=False),
+            expected_members.residuals.chi2.to_numpy(zero_copy_only=False),
+            rtol=1e-4,
+            atol=1e-6,
+        )
+        assert fused_members.weight.to_pylist() == [1.0] * len(observations)
+        assert fused_members.outlier.to_pylist() == [False] * len(observations)
+        assert fused_members.solution.to_pylist() == [True] * len(observations)
+        assert fused_members.obs_id.to_pylist() == observations.id.to_pylist()
+
+    @pytest.mark.parametrize("jacobian", ["central", "2-point"])
+    def test_finite_difference_jacobians_match_scipy(self, jacobian):
+        observations = make_synthetic_observations()
+        (expected, _), (fused, _) = self._fits(observations, jacobian=jacobian)
+        # Finite-difference noise differs between the two implementations;
+        # the minimum agrees far better than the covariance.
+        self._assert_orbit_parity(expected, fused, state_rtol=1e-7, cov_rtol=5e-3)
+
+    def test_ignore_matches_scipy(self):
+        observations = make_synthetic_observations()
+        ignore = observations.id.to_pylist()[-3:]
+        (expected, expected_members), (fused, fused_members) = self._fits(
+            observations, ignore=ignore
+        )
+        self._assert_orbit_parity(expected, fused, state_rtol=1e-9, cov_rtol=1e-6)
+        assert fused.num_obs[0].as_py() == len(observations) - 3
+        assert fused_members.outlier.to_pylist() == expected_members.outlier.to_pylist()
+        assert (
+            fused_members.solution.to_pylist() == expected_members.solution.to_pylist()
+        )
+        assert fused_members.weight.to_pylist() == expected_members.weight.to_pylist()
+
+    def test_huber_matches_scipy(self):
+        observations = make_synthetic_observations()
+        lat = observations.coordinates.lat.to_numpy(zero_copy_only=False).copy()
+        lat[7] += 12.0 * SIGMA_ARCSEC / 3600.0
+        observations = observations.set_column("coordinates.lat", pa.array(lat))
+        (expected, expected_members), (fused, fused_members) = self._fits(
+            observations, loss="huber"
+        )
+        # Different optimizers converge to the same M-estimate to solver
+        # tolerance; the covariance follows the solution.
+        self._assert_orbit_parity(expected, fused, state_rtol=1e-7, cov_rtol=1e-4)
+        npt.assert_allclose(
+            fused_members.weight.to_numpy(zero_copy_only=False),
+            expected_members.weight.to_numpy(zero_copy_only=False),
+            atol=1e-5,
+        )
+        assert fused_members.weight[7].as_py() < 0.5
+
+    def test_scipy_only_kwargs_keep_the_scipy_path(self, monkeypatch):
+        observations = make_synthetic_observations()
+        calls = []
+        propagator = NativeTwoBodyPropagator()
+        original = propagator.fit_least_squares_whitened
+
+        def spy(*args, **kwargs):
+            calls.append(kwargs)
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(propagator, "fit_least_squares_whitened", spy)
+        fit_least_squares(make_initial_guess(), observations, propagator, x_scale=1.0)
+        assert calls == []
+        fit_least_squares(make_initial_guess(), observations, propagator, ftol=1e-10)
+        assert len(calls) == 1 and calls[0]["ftol"] == 1e-10
