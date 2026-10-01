@@ -774,8 +774,9 @@ variable-length chunks.</p>
 <dd><p>Write ADES observations to a string.</p>
 <p>The observation blocks are rendered in the Rust backend (bead
 personal-cmy.20), preserving the legacy Python/pandas layout except that
-missing optional numeric values use ADES-standard empty PSV fields. The
-frozen legacy fixture in
+missing optional numeric values use ADES-standard empty PSV fields and
+rmsRA/rmsDec precision is reduced only when necessary to fit the ADES
+PosDecimalTypeW7 width. The frozen legacy fixture in
 <code class="docutils literal notranslate"><span class="pre">migration/artifacts/ades_parity_fixture_2026-07-05.json</span></code> gates all
 other writer behavior; the ObsContext headers stay Python-rendered.</p>
 <dl class="field-list simple">
@@ -789,16 +790,22 @@ If None, omit observatory context headers. Default is None.</p></li>
 <li><p><strong>columns_precision</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.14)"><em>dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><em>int</em></a><em>]</em><em>, </em><em>optional</em>) – <p>A dictionary of column names and their corresponding precision to use when writing
 the observations to the file, by default {</p>
 <blockquote>
-<div><p>”ra”: 8,
-“dec”: 8,
-“rmsRACosDec”: 4,
-“rmsDec”: 4,
-“mag”: 2,
-“rmsMag”: 2,</p>
+<div><p>”ra”: 9,
+“dec”: 9,
+“rmsRACosDec”: 5,
+“rmsDec”: 5,
+“rmsCorr”: 8,
+“mag”: 4,
+“rmsMag”: 4,
+“exp”: 2,
+“logSNR”: 2,
+“seeing”: 2,</p>
 </div></blockquote>
 <p>}
-The MPC enforces strict limits on these and submitters may need permission to send
-high-precision data.</p>
+The ADES seven-character width for rmsRA and rmsDec takes precedence over
+requested precision, which is reduced only as needed. The MPC enforces strict
+limits on these fields and submitters may need permission to send high-precision
+data.</p>
 </p></li>
 <li><p><strong>sort</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><em>bool</em></a><em>, </em><em>optional</em>) – Whether to sort rows within each observatory block by identity and observation
 time. Set to False to preserve upstream order within each block. Default is True.</p></li>
