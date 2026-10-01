@@ -501,16 +501,14 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_FUSED_LOOP_KWARGS</span><span class="p">,</span>
+    <span class="n">_NATIVE_FIT_KWARGS</span><span class="p">,</span>
     <span class="n">HUBER_F_SCALE_DEFAULT</span><span class="p">,</span>
     <span class="n">LossType</span><span class="p">,</span>
-    <span class="n">_analytic_jacobian</span><span class="p">,</span>
-    <span class="n">_analytic_jacobian_terms</span><span class="p">,</span>
     <span class="n">_emit_native_warnings</span><span class="p">,</span>
     <span class="n">_fit_settings</span><span class="p">,</span>
     <span class="n">_fitted_tables_from_native_output</span><span class="p">,</span>
-    <span class="n">_observation_whitening_matrices</span><span class="p">,</span>
+    <span class="n">_native_problem</span><span class="p">,</span>
     <span class="n">_whiten_residual_pairs</span><span class="p">,</span>
-    <span class="n">fit_least_squares</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span>
@@ -767,147 +765,56 @@
     <span class="k">if</span> <span class="s2">"ignore"</span> <span class="ow">in</span> <span class="n">kwargs</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"ignore is managed by cmc2003_fit and cannot be passed"</span><span class="p">)</span>
     <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbit</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"Only one orbit can be fitted"</span>
+    <span class="n">unsupported</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-</span> <span class="n">_FUSED_LOOP_KWARGS</span> <span class="o">-</span> <span class="n">_NATIVE_FIT_KWARGS</span>
+    <span class="k">if</span> <span class="n">unsupported</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"cmc2003_fit runs the Rust rejection loop and accepts only the fit "</span>
+            <span class="s2">"settings jacobian, xtol, ftol, gtol, max_nfev (max_iterations); got "</span>
+            <span class="o">+</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">kwargs</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="si">!r}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">unsupported</span><span class="p">))</span>
+        <span class="p">)</span>
+    <span class="n">fit_settings</span> <span class="o">=</span> <span class="n">_fit_settings</span><span class="p">(</span>
+        <span class="n">loss</span><span class="p">,</span>
+        <span class="n">f_scale</span><span class="p">,</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"jacobian"</span><span class="p">,</span> <span class="s2">"analytic"</span><span class="p">),</span>
+        <span class="n">validate_covariance</span><span class="p">,</span>
+        <span class="n">kwargs</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">loop_settings</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+        <span class="n">chi2_reject</span><span class="o">=</span><span class="n">chi2_reject</span><span class="p">,</span>
+        <span class="n">chi2_recover</span><span class="o">=</span><span class="n">chi2_recover</span><span class="p">,</span>
+        <span class="n">chi2_frac</span><span class="o">=</span><span class="n">chi2_frac</span><span class="p">,</span>
+        <span class="n">max_iterations</span><span class="o">=</span><span class="n">max_iterations</span><span class="p">,</span>
+        <span class="n">max_rejected_fraction</span><span class="o">=</span><span class="n">max_rejected_fraction</span><span class="p">,</span>
+        <span class="n">apparition_gap_days</span><span class="o">=</span><span class="n">apparition_gap_days</span><span class="p">,</span>
+        <span class="n">psd_floor_frac</span><span class="o">=</span><span class="n">psd_floor_frac</span><span class="p">,</span>
+    <span class="p">)</span>
 
     <span class="c1"># Rust-backed propagators run the whole CMC2003 loop in one crossing</span>
-    <span class="c1"># (``cmc2003_fit`` work unit); the veneer only wraps the final pass.</span>
+    <span class="c1"># (``cmc2003_fit`` work unit); every other propagator runs the same Rust</span>
+    <span class="c1"># loop through the callback route. The facade only wraps the final pass.</span>
     <span class="n">fused</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"cmc2003_fit"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="nb">set</span><span class="p">(</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">_FUSED_LOOP_KWARGS</span><span class="p">:</span>
-        <span class="n">output</span> <span class="o">=</span> <span class="n">fused</span><span class="p">(</span>
-            <span class="n">orbit</span><span class="p">,</span>
-            <span class="n">observations</span><span class="p">,</span>
-            <span class="n">chi2_reject</span><span class="o">=</span><span class="n">chi2_reject</span><span class="p">,</span>
-            <span class="n">chi2_recover</span><span class="o">=</span><span class="n">chi2_recover</span><span class="p">,</span>
-            <span class="n">chi2_frac</span><span class="o">=</span><span class="n">chi2_frac</span><span class="p">,</span>
-            <span class="n">max_iterations</span><span class="o">=</span><span class="n">max_iterations</span><span class="p">,</span>
-            <span class="n">max_rejected_fraction</span><span class="o">=</span><span class="n">max_rejected_fraction</span><span class="p">,</span>
-            <span class="n">apparition_gap_days</span><span class="o">=</span><span class="n">apparition_gap_days</span><span class="p">,</span>
-            <span class="n">psd_floor_frac</span><span class="o">=</span><span class="n">psd_floor_frac</span><span class="p">,</span>
-            <span class="n">fit_settings</span><span class="o">=</span><span class="n">_fit_settings</span><span class="p">(</span>
-                <span class="n">loss</span><span class="p">,</span>
-                <span class="n">f_scale</span><span class="p">,</span>
-                <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"jacobian"</span><span class="p">,</span> <span class="s2">"analytic"</span><span class="p">),</span>
-                <span class="n">validate_covariance</span><span class="p">,</span>
-                <span class="n">kwargs</span><span class="p">,</span>
-            <span class="p">),</span>
-        <span class="p">)</span>
-        <span class="n">_emit_native_warnings</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
-        <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">_fitted_tables_from_native_output</span><span class="p">(</span>
-            <span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"weights"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">CMC2003Fit</span><span class="p">(</span>
-            <span class="n">fitted_orbit</span><span class="o">=</span><span class="n">fitted_orbit</span><span class="p">,</span>
-            <span class="n">fitted_orbit_members</span><span class="o">=</span><span class="n">fitted_orbit_members</span><span class="p">,</span>
-            <span class="n">n_iterations</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"n_iterations"</span><span class="p">]),</span>
-            <span class="n">n_rejected</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"n_rejected"</span><span class="p">]),</span>
-            <span class="n">n_recovered</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"n_recovered"</span><span class="p">]),</span>
-            <span class="n">flags</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"flags"</span><span class="p">])),</span>
-        <span class="p">)</span>
+    <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="n">fused</span><span class="p">(</span><span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">fit_settings</span><span class="o">=</span><span class="n">fit_settings</span><span class="p">,</span> <span class="o">**</span><span class="n">loop_settings</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
 
-    <span class="n">ids</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">epoch_mjd_tdb</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span>
-        <span class="n">orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">"tdb"</span><span class="p">)</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="p">)</span>
-    <span class="n">mjd_utc</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="s2">"utc"</span><span class="p">)</span>
-        <span class="o">.</span><span class="n">mjd</span><span class="p">()</span>
-        <span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="p">)</span>
-    <span class="n">apparitions</span> <span class="o">=</span> <span class="n">_apparitions</span><span class="p">(</span><span class="n">mjd_utc</span><span class="p">,</span> <span class="n">apparition_gap_days</span><span class="p">)</span>
-    <span class="n">whiteners</span> <span class="o">=</span> <span class="n">_observation_whitening_matrices</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
-    <span class="n">jacobian_terms</span> <span class="o">=</span> <span class="n">_analytic_jacobian_terms</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
-
-    <span class="k">def</span><span class="w"> </span><span class="nf">fit</span><span class="p">(</span>
-        <span class="n">seed</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span> <span class="n">selected</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">bool_</span><span class="p">]</span>
-    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]:</span>
-        <span class="n">ignore</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">[</span><span class="o">~</span><span class="n">selected</span><span class="p">]]</span>
-        <span class="k">return</span> <span class="n">fit_least_squares</span><span class="p">(</span>
-            <span class="n">seed</span><span class="p">,</span>
-            <span class="n">observations</span><span class="p">,</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">cmc2003_fit_ipc</span><span class="p">(</span>
             <span class="n">propagator</span><span class="p">,</span>
-            <span class="n">ignore</span><span class="o">=</span><span class="n">ignore</span> <span class="k">if</span> <span class="n">ignore</span> <span class="k">else</span> <span class="kc">None</span><span class="p">,</span>
-            <span class="n">loss</span><span class="o">=</span><span class="n">loss</span><span class="p">,</span>
-            <span class="n">f_scale</span><span class="o">=</span><span class="n">f_scale</span><span class="p">,</span>
-            <span class="n">validate_covariance</span><span class="o">=</span><span class="n">validate_covariance</span><span class="p">,</span>
-            <span class="o">**</span><span class="n">kwargs</span><span class="p">,</span>
+            <span class="o">*</span><span class="n">_native_problem</span><span class="p">(</span><span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">),</span>
+            <span class="n">fit_settings</span><span class="o">=</span><span class="n">fit_settings</span><span class="p">,</span>
+            <span class="o">**</span><span class="n">loop_settings</span><span class="p">,</span>
         <span class="p">)</span>
-
-    <span class="n">selected</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
-    <span class="n">flags</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
-    <span class="n">n_recovered_total</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="n">stuck_passes</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="n">previous_modifications</span><span class="p">:</span> <span class="nb">int</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">seed</span> <span class="o">=</span> <span class="n">orbit</span>
-    <span class="n">n_iterations</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="n">converged</span> <span class="o">=</span> <span class="kc">False</span>
-
-    <span class="k">for</span> <span class="n">iteration</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_iterations</span><span class="p">):</span>
-        <span class="n">n_iterations</span> <span class="o">=</span> <span class="n">iteration</span> <span class="o">+</span> <span class="mi">1</span>
-        <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">selected</span><span class="p">)</span>
-        <span class="n">seed</span> <span class="o">=</span> <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">to_orbits</span><span class="p">()</span>
-
-        <span class="k">if</span> <span class="n">n</span> <span class="o">&lt;=</span> <span class="n">_MIN_OBS</span><span class="p">:</span>
-            <span class="n">flags</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">"too_few_observations"</span><span class="p">)</span>
-            <span class="n">converged</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="k">break</span>
-
-        <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span>
-            <span class="p">[</span><span class="n">fitted_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">r</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
-        <span class="p">)</span>
-        <span class="n">covariance</span> <span class="o">=</span> <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="n">jacobian</span> <span class="o">=</span> <span class="n">_analytic_jacobian</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">epoch_mjd_tdb</span><span class="p">,</span> <span class="n">jacobian_terms</span><span class="p">)</span>
-        <span class="n">residuals</span> <span class="o">=</span> <span class="n">_whitened_residuals</span><span class="p">(</span><span class="n">fitted_orbit_members</span><span class="p">,</span> <span class="n">whiteners</span><span class="p">)</span>
-        <span class="n">chi2</span><span class="p">,</span> <span class="n">pass_flags</span> <span class="o">=</span> <span class="n">_expected_residual_chi2</span><span class="p">(</span>
-            <span class="n">residuals</span><span class="p">,</span> <span class="n">jacobian</span><span class="p">,</span> <span class="n">covariance</span><span class="p">,</span> <span class="n">selected</span><span class="p">,</span> <span class="n">psd_floor_frac</span>
-        <span class="p">)</span>
-        <span class="n">flags</span> <span class="o">|=</span> <span class="n">pass_flags</span>
-
-        <span class="n">n_selected</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">selected</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span>
-        <span class="n">one_at_a_time</span> <span class="o">=</span> <span class="n">n_selected</span> <span class="o">&lt;=</span> <span class="mi">6</span> <span class="o">*</span> <span class="n">_MIN_OBS</span> <span class="ow">or</span> <span class="n">stuck_passes</span> <span class="o">&gt;=</span> <span class="mi">4</span>
-        <span class="n">new_selected</span><span class="p">,</span> <span class="n">n_rejected</span><span class="p">,</span> <span class="n">n_recovered</span><span class="p">,</span> <span class="n">select_flags</span> <span class="o">=</span> <span class="n">_cmc2003_select</span><span class="p">(</span>
-            <span class="n">chi2</span><span class="p">,</span>
-            <span class="n">selected</span><span class="p">,</span>
-            <span class="n">apparitions</span><span class="p">,</span>
-            <span class="n">chi2_reject</span><span class="o">=</span><span class="n">chi2_reject</span><span class="p">,</span>
-            <span class="n">chi2_recover</span><span class="o">=</span><span class="n">chi2_recover</span><span class="p">,</span>
-            <span class="n">chi2_frac</span><span class="o">=</span><span class="n">chi2_frac</span><span class="p">,</span>
-            <span class="n">max_rejected_fraction</span><span class="o">=</span><span class="n">max_rejected_fraction</span><span class="p">,</span>
-            <span class="n">one_at_a_time</span><span class="o">=</span><span class="n">one_at_a_time</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">flags</span> <span class="o">|=</span> <span class="n">select_flags</span>
-        <span class="n">n_modifications</span> <span class="o">=</span> <span class="n">n_rejected</span> <span class="o">+</span> <span class="n">n_recovered</span>
-        <span class="n">n_recovered_total</span> <span class="o">+=</span> <span class="n">n_recovered</span>
-        <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
-            <span class="s2">"CMC2003 pass </span><span class="si">%d</span><span class="s2">: </span><span class="si">%d</span><span class="s2"> selected, worst chi2 </span><span class="si">%.2f</span><span class="s2">, </span><span class="si">%d</span><span class="s2"> rejected, </span><span class="si">%d</span><span class="s2"> recovered"</span><span class="p">,</span>
-            <span class="n">n_iterations</span><span class="p">,</span>
-            <span class="n">n_selected</span><span class="p">,</span>
-            <span class="nb">float</span><span class="p">(</span><span class="n">chi2</span><span class="p">[</span><span class="n">selected</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">())</span> <span class="k">if</span> <span class="n">n_selected</span> <span class="k">else</span> <span class="mf">0.0</span><span class="p">,</span>
-            <span class="n">n_rejected</span><span class="p">,</span>
-            <span class="n">n_recovered</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="n">stuck_passes</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">stuck_passes</span> <span class="o">+</span> <span class="mi">1</span>
-            <span class="k">if</span> <span class="n">previous_modifications</span> <span class="o">==</span> <span class="n">n_modifications</span> <span class="ow">and</span> <span class="n">n_modifications</span> <span class="o">&gt;</span> <span class="mi">0</span>
-            <span class="k">else</span> <span class="mi">0</span>
-        <span class="p">)</span>
-        <span class="n">previous_modifications</span> <span class="o">=</span> <span class="n">n_modifications</span>
-        <span class="k">if</span> <span class="n">n_modifications</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">converged</span> <span class="o">=</span> <span class="kc">True</span>
-            <span class="k">break</span>
-        <span class="n">selected</span> <span class="o">=</span> <span class="n">new_selected</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">converged</span><span class="p">:</span>
-        <span class="c1"># The selection changed after the last fit: refit so that the returned</span>
-        <span class="c1"># orbit and members describe the final selection.</span>
-        <span class="n">flags</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="s2">"max_iterations"</span><span class="p">)</span>
-        <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">fit</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">selected</span><span class="p">)</span>
-
+    <span class="n">_emit_native_warnings</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
+    <span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">_fitted_tables_from_native_output</span><span class="p">(</span>
+        <span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"weights"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="p">)</span>
     <span class="k">return</span> <span class="n">CMC2003Fit</span><span class="p">(</span>
         <span class="n">fitted_orbit</span><span class="o">=</span><span class="n">fitted_orbit</span><span class="p">,</span>
         <span class="n">fitted_orbit_members</span><span class="o">=</span><span class="n">fitted_orbit_members</span><span class="p">,</span>
-        <span class="n">n_iterations</span><span class="o">=</span><span class="n">n_iterations</span><span class="p">,</span>
-        <span class="n">n_rejected</span><span class="o">=</span><span class="nb">int</span><span class="p">((</span><span class="o">~</span><span class="n">selected</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">()),</span>
-        <span class="n">n_recovered</span><span class="o">=</span><span class="n">n_recovered_total</span><span class="p">,</span>
-        <span class="n">flags</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">flags</span><span class="p">)),</span>
+        <span class="n">n_iterations</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"n_iterations"</span><span class="p">]),</span>
+        <span class="n">n_rejected</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"n_rejected"</span><span class="p">]),</span>
+        <span class="n">n_recovered</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"n_recovered"</span><span class="p">]),</span>
+        <span class="n">flags</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"flags"</span><span class="p">])),</span>
     <span class="p">)</span></div>
 
 
@@ -954,7 +861,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-29</div>
+              Last updated on 2026-10-01</div>
           </div>
           <div class="right-details">
             

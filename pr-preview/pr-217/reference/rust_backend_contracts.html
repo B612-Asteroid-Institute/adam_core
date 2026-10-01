@@ -560,10 +560,16 @@ non-positive-definite covariance input.</p></li>
 - Backend default: legacy path, with Rust path held in <code class="docutils literal notranslate"><span class="pre">dual</span></code> mode pending +20% p50/p95 perf gate.
 - Error behavior: velocity-method validation raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> for unsupported solver names.</p></li>
 <li><p><code class="docutils literal notranslate"><span class="pre">orbit_determination.fit_least_squares</span></code> (whitened residuals, analytic Jacobian, robust loss)
-- Boundary: NumPy <code class="docutils literal notranslate"><span class="pre">float64</span></code> arrays; the scipy trust-region optimizer and the</p>
+- Boundary: nested Arrow IPC of the orbit, observed coordinates and</p>
 <blockquote>
-<div><p>N-body residual evaluation through the supplied <code class="docutils literal notranslate"><span class="pre">Propagator</span></code> remain a
-Python provider boundary, while the numerics it needs run in Rust.</p>
+<div><p>observers plus a <code class="docutils literal notranslate"><span class="pre">fit_settings</span></code> dict in; a dict of scalars, lists and
+NumPy arrays out. The complete work unit (solver, Jacobian, loss,
+covariance probe, final evaluation) runs in Rust; Python converts tables
+and re-emits the driver’s diagnostics as <code class="docutils literal notranslate"><span class="pre">RuntimeWarning</span></code>. The supplied
+<code class="docutils literal notranslate"><span class="pre">Propagator</span></code> is driven from Rust: through its own fused work unit when it
+has one, otherwise through the callback route
+(<code class="docutils literal notranslate"><span class="pre">adam_core.orbit_determination._native_callback.predict_spherical</span></code>
+calling its <code class="docutils literal notranslate"><span class="pre">generate_ephemeris</span></code>).</p>
 </div></blockquote>
 <ul class="simple">
 <li><p>Rust entrypoints: <code class="docutils literal notranslate"><span class="pre">adam_core._rust_native.observation_whitening_matrices_numpy</span></code>
@@ -586,11 +592,16 @@ rules, <code class="docutils literal notranslate"><span class="pre">inv(JᵀJ)</
 fallback, the fused final evaluation; diagnostics return as strings the
 veneer re-emits as <code class="docutils literal notranslate"><span class="pre">RuntimeWarning</span></code>). The in-tree implementation over the
 two-body backend is <code class="docutils literal notranslate"><span class="pre">adam_core._rust_native.fit_orbit_whitened_2body_ipc</span></code>.
-Only scipy tolerances (<code class="docutils literal notranslate"><span class="pre">xtol</span></code>, <code class="docutils literal notranslate"><span class="pre">ftol</span></code>, <code class="docutils literal notranslate"><span class="pre">gtol</span></code>, <code class="docutils literal notranslate"><span class="pre">max_nfev</span></code>) cross;
-any other scipy kwarg keeps the scipy path. <code class="docutils literal notranslate"><span class="pre">jacobian=&quot;2-point&quot;</span></code> with
-<code class="docutils literal notranslate"><span class="pre">loss=&quot;linear&quot;</span></code> on a propagator exposing only the older
-<code class="docutils literal notranslate"><span class="pre">fit_least_squares_evaluated</span></code> / <code class="docutils literal notranslate"><span class="pre">fit_least_squares</span></code> work units still
-routes there (forward-difference Gauss-Newton).</p></li>
+Every other propagator runs the same driver through the callback route
+(<code class="docutils literal notranslate"><span class="pre">adam_core._rust_native.fit_orbit_whitened_ipc</span></code> with the propagator
+object; <code class="docutils literal notranslate"><span class="pre">propagator=None</span></code> selects the two-body backend). Only the
+solver settings <code class="docutils literal notranslate"><span class="pre">xtol</span></code>, <code class="docutils literal notranslate"><span class="pre">ftol</span></code>, <code class="docutils literal notranslate"><span class="pre">gtol</span></code> and <code class="docutils literal notranslate"><span class="pre">max_nfev</span></code> are
+accepted; any other keyword raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> (there is no scipy
+path). <code class="docutils literal notranslate"><span class="pre">jacobian=&quot;2-point&quot;</span></code> with <code class="docutils literal notranslate"><span class="pre">loss=&quot;linear&quot;</span></code> on a propagator
+exposing only the older <code class="docutils literal notranslate"><span class="pre">fit_least_squares_evaluated</span></code> /
+<code class="docutils literal notranslate"><span class="pre">fit_least_squares</span></code> work units still routes there (forward-difference
+Gauss-Newton), with its covariance probed by
+<code class="docutils literal notranslate"><span class="pre">validate_fit_covariance_ipc</span></code>.</p></li>
 </ul>
 </li>
 <li><p><code class="docutils literal notranslate"><span class="pre">orbit_determination.iterative_fit</span></code> / <code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter.full_od</span></code> /
@@ -611,22 +622,30 @@ loop), <code class="docutils literal notranslate"><span class="pre">full_od_bary
 loop followed by the refinement loop) and <code class="docutils literal notranslate"><span class="pre">run_od_barycentric</span></code> /
 <code class="docutils literal notranslate"><span class="pre">run_od_2body_ipc</span></code> (observation models in order, full OD on the used
 observations, original / used astrometry snapshots for the members).</p></li>
-<li><p>Dispatch: <code class="docutils literal notranslate"><span class="pre">iterative_fit</span></code> and <code class="docutils literal notranslate"><span class="pre">cmc2003_fit_detailed</span></code> route to a
-propagator’s <code class="docutils literal notranslate"><span class="pre">iterative_fit</span></code> / <code class="docutils literal notranslate"><span class="pre">cmc2003_fit</span></code> methods when only fit
-options are passed; <code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter.full_od</span></code> routes to <code class="docutils literal notranslate"><span class="pre">full_od</span></code>
-when its <code class="docutils literal notranslate"><span class="pre">rejection_kwargs</span></code> are all fit or loop settings; <code class="docutils literal notranslate"><span class="pre">run_od</span></code>
-routes to <code class="docutils literal notranslate"><span class="pre">run_od</span></code> for a <code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter</span></code> when every model provides
-a native spec (a user-defined Python model keeps the Python composition).
-Python owns ids, the <code class="docutils literal notranslate"><span class="pre">OrbitFitter</span></code> plugin boundary, table loading and
-table assembly; the Python loops remain the fallback for propagators
-without the work units.</p></li>
+<li><p>Dispatch: <code class="docutils literal notranslate"><span class="pre">iterative_fit</span></code>, <code class="docutils literal notranslate"><span class="pre">cmc2003_fit_detailed</span></code> and <code class="docutils literal notranslate"><span class="pre">iod</span></code> route
+to a propagator’s <code class="docutils literal notranslate"><span class="pre">iterative_fit</span></code> / <code class="docutils literal notranslate"><span class="pre">cmc2003_fit</span></code> /
+<code class="docutils literal notranslate"><span class="pre">initial_orbit_determination</span></code> work units when it has them and otherwise
+run the same Rust loop through the callback route
+(<code class="docutils literal notranslate"><span class="pre">iterative_fit_ipc</span></code> / <code class="docutils literal notranslate"><span class="pre">cmc2003_fit_ipc</span></code> / <code class="docutils literal notranslate"><span class="pre">iod_fit_ipc</span></code> with the
+propagator object); <code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter.full_od</span></code> routes to <code class="docutils literal notranslate"><span class="pre">full_od</span></code>
+when its <code class="docutils literal notranslate"><span class="pre">rejection_kwargs</span></code> are all fit or loop settings and otherwise
+chains <code class="docutils literal notranslate"><span class="pre">initial_fit</span></code> and <code class="docutils literal notranslate"><span class="pre">refine_fit</span></code> (two native crossings);
+<code class="docutils literal notranslate"><span class="pre">run_od</span></code> routes to <code class="docutils literal notranslate"><span class="pre">run_od</span></code> for a <code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter</span></code> when every
+model provides a native spec, otherwise it composes model application
+(Rust kernels), <code class="docutils literal notranslate"><span class="pre">fitter.full_od</span></code> and the provenance join. No orbit
+determination loop remains in Python: Python owns ids, the
+<code class="docutils literal notranslate"><span class="pre">OrbitFitter</span></code> plugin boundary, table loading and table assembly.
+Settings that only the scipy solver understood raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>.</p></li>
+<li><p>Error behavior: driver errors raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> for invalid inputs and
+<code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> for backend failures; an exception raised by a Python
+propagator inside the callback is re-raised unchanged.</p></li>
 </ul>
 </li>
 <li><p><code class="docutils literal notranslate"><span class="pre">orbit_determination.cmc2003_fit</span></code> / <code class="docutils literal notranslate"><span class="pre">cmc2003_fit_detailed</span></code>
-- Boundary: NumPy arrays per pass on the Python fallback loop; on a</p>
+- Boundary: the whole loop is the <code class="docutils literal notranslate"><span class="pre">cmc2003_fit</span></code> work unit above (fused</p>
 <blockquote>
-<div><p>Rust-backed propagator the whole loop is the <code class="docutils literal notranslate"><span class="pre">cmc2003_fit</span></code> work unit
-above.</p>
+<div><p>or callback route); the decision kernels below remain callable on their
+own for diagnostics.</p>
 </div></blockquote>
 <ul class="simple">
 <li><p>Rust entrypoints: <code class="docutils literal notranslate"><span class="pre">adam_core._rust_native.cmc2003_apparitions_numpy</span></code>,
@@ -758,7 +777,7 @@ are explicit compatibility/provider boundaries rather than default backends.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-29</div>
+              Last updated on 2026-10-01</div>
           </div>
           <div class="right-details">
             

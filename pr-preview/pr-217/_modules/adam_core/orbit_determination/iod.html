@@ -448,14 +448,14 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.residuals</span><span class="w"> </span><span class="kn">import</span> <span class="n">Residuals</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.iter</span><span class="w"> </span><span class="kn">import</span> <span class="n">_iterate_chunks</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">drop_duplicate_orbits</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.gauss</span><span class="w"> </span><span class="kn">import</span> <span class="n">MU</span><span class="p">,</span> <span class="n">C</span><span class="p">,</span> <span class="n">gaussIOD</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.gauss</span><span class="w"> </span><span class="kn">import</span> <span class="n">MU</span><span class="p">,</span> <span class="n">C</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.observation_uncertainty</span><span class="w"> </span><span class="kn">import</span> <span class="n">ObservationUncertaintyModel</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.outliers</span><span class="w"> </span><span class="kn">import</span> <span class="n">calculate_max_outliers</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -776,7 +776,8 @@
 <span class="sd">            'combinations' : Return the observation IDs corresponding to every possible combination of three observations with</span>
 <span class="sd">                non-coinciding observation times.</span>
 <span class="sd">    iterate : bool, optional</span>
-<span class="sd">        Iterate the preliminary orbit solution using the state transition iterator.</span>
+<span class="sd">        Accepted for compatibility; the Rust decision loop evaluates every</span>
+<span class="sd">        candidate the same way and ignores it.</span>
 <span class="sd">    light_time : bool, optional</span>
 <span class="sd">        Correct preliminary orbit for light travel time.</span>
 <span class="sd">    propagator : Type[Propagator], optional</span>
@@ -847,194 +848,102 @@
             <span class="n">chunk_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
         <span class="p">)</span>
 
-    <span class="n">processable</span> <span class="o">=</span> <span class="kc">True</span>
+    <span class="c1"># Every other propagator runs the same Rust decision loop through the</span>
+    <span class="c1"># callback route, driving its own ``generate_ephemeris``.</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="n">_native_problem</span>
+
+    <span class="n">orbit_id</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="n">processable</span> <span class="o">=</span> <span class="kc">False</span>
-
-    <span class="n">obs_ids_all</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">coords_all</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span>
-    <span class="n">observers</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">observers</span>
-
-    <span class="n">observations</span> <span class="o">=</span> <span class="n">observations</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-        <span class="p">[</span>
-            <span class="s2">"coordinates.time.days"</span><span class="p">,</span>
-            <span class="s2">"coordinates.time.nanos"</span><span class="p">,</span>
-            <span class="s2">"coordinates.origin.code"</span><span class="p">,</span>
-        <span class="p">]</span>
-    <span class="p">)</span>
-    <span class="n">observers</span> <span class="o">=</span> <span class="n">observers</span><span class="o">.</span><span class="n">sort_by</span><span class="p">(</span>
-        <span class="p">[</span><span class="s2">"coordinates.time.days"</span><span class="p">,</span> <span class="s2">"coordinates.time.nanos"</span><span class="p">,</span> <span class="s2">"coordinates.origin.code"</span><span class="p">]</span>
-    <span class="p">)</span>
-
-    <span class="n">coords_obs_all</span> <span class="o">=</span> <span class="n">observers</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">r</span>
-    <span class="n">times_all</span> <span class="o">=</span> <span class="n">coords_all</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">mjd</span><span class="p">()</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-
-    <span class="n">orbit_sol</span><span class="p">:</span> <span class="n">FittedOrbits</span> <span class="o">=</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-    <span class="n">obs_ids_sol</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">arc_length</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">outliers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-    <span class="n">converged</span> <span class="o">=</span> <span class="kc">False</span>
-    <span class="n">num_obs</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">num_obs</span> <span class="o">&lt;</span> <span class="n">min_obs</span><span class="p">:</span>
-        <span class="n">processable</span> <span class="o">=</span> <span class="kc">False</span>
-
-    <span class="n">max_outliers</span> <span class="o">=</span> <span class="n">calculate_max_outliers</span><span class="p">(</span><span class="n">num_obs</span><span class="p">,</span> <span class="n">min_obs</span><span class="p">,</span> <span class="n">contamination_percentage</span><span class="p">)</span>
-
-    <span class="c1"># Select observation IDs to use for IOD</span>
-    <span class="n">obs_ids</span> <span class="o">=</span> <span class="n">select_observations</span><span class="p">(</span>
-        <span class="n">observations</span><span class="p">,</span>
-        <span class="n">method</span><span class="o">=</span><span class="n">observation_selection_method</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">obs_ids</span> <span class="o">=</span> <span class="n">obs_ids</span><span class="p">[:</span> <span class="p">(</span><span class="mi">3</span> <span class="o">*</span> <span class="p">(</span><span class="n">max_outliers</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))]</span>
-
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">obs_ids</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="n">processable</span> <span class="o">=</span> <span class="kc">False</span>
-
-    <span class="n">j</span> <span class="o">=</span> <span class="mi">0</span>
-    <span class="k">while</span> <span class="ow">not</span> <span class="n">converged</span> <span class="ow">and</span> <span class="n">processable</span><span class="p">:</span>
-        <span class="k">if</span> <span class="n">j</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">obs_ids</span><span class="p">):</span>
-            <span class="k">break</span>
-
-        <span class="n">ids</span> <span class="o">=</span> <span class="n">obs_ids</span><span class="p">[</span><span class="n">j</span><span class="p">]</span>
-        <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">obs_ids_all</span><span class="p">,</span> <span class="n">ids</span><span class="p">)</span>
-
-        <span class="c1"># Grab sky-plane positions of the selected observations, the heliocentric ecliptic position of the observer,</span>
-        <span class="c1"># and the times at which the observations occur</span>
-        <span class="n">coords</span> <span class="o">=</span> <span class="n">coords_all</span><span class="o">.</span><span class="n">apply_mask</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
-        <span class="n">coords_obs</span> <span class="o">=</span> <span class="n">coords_obs_all</span><span class="p">[</span><span class="n">mask</span><span class="p">,</span> <span class="p">:]</span>
-        <span class="n">times</span> <span class="o">=</span> <span class="n">times_all</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
-
-        <span class="c1"># Run IOD</span>
-        <span class="n">iod_orbits</span> <span class="o">=</span> <span class="n">gaussIOD</span><span class="p">(</span>
-            <span class="n">coords</span><span class="o">.</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span>
-            <span class="n">times</span><span class="p">,</span>
-            <span class="n">coords_obs</span><span class="p">,</span>
-            <span class="n">light_time</span><span class="o">=</span><span class="n">light_time</span><span class="p">,</span>
-            <span class="n">max_iter</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
-            <span class="n">tol</span><span class="o">=</span><span class="mf">1e-15</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">iod_orbits</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-            <span class="n">j</span> <span class="o">+=</span> <span class="mi">1</span>
-            <span class="k">continue</span>
-
-        <span class="c1"># Propagate initial orbit to all observation times</span>
-        <span class="n">ephemeris</span> <span class="o">=</span> <span class="n">prop</span><span class="o">.</span><span class="n">generate_ephemeris</span><span class="p">(</span>
-            <span class="n">iod_orbits</span><span class="p">,</span> <span class="n">observers</span><span class="p">,</span> <span class="n">chunk_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">max_processes</span><span class="o">=</span><span class="mi">1</span>
-        <span class="p">)</span>
-
-        <span class="c1"># For each unique initial orbit calculate residuals and chi-squared</span>
-        <span class="c1"># Find the orbit which yields the lowest chi-squared</span>
-        <span class="n">orbit_ids</span> <span class="o">=</span> <span class="n">iod_orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">orbit_id</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">orbit_ids</span><span class="p">):</span>
-            <span class="n">ephemeris_orbit</span> <span class="o">=</span> <span class="n">ephemeris</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="s2">"orbit_id"</span><span class="p">,</span> <span class="n">orbit_id</span><span class="p">)</span>
-
-            <span class="c1"># Calculate residuals and chi2</span>
-            <span class="n">residuals</span> <span class="o">=</span> <span class="n">Residuals</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span>
-                <span class="n">coords_all</span><span class="p">,</span>
-                <span class="n">ephemeris_orbit</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-            <span class="p">)</span>
-            <span class="n">chi2</span> <span class="o">=</span> <span class="n">residuals</span><span class="o">.</span><span class="n">chi2</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">()</span>
-            <span class="n">chi2_total</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">chi2</span><span class="p">)</span>
-            <span class="n">rchi2</span> <span class="o">=</span> <span class="n">chi2_total</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">num_obs</span> <span class="o">-</span> <span class="mi">6</span><span class="p">)</span>
-
-            <span class="c1"># The reduced chi2 is above the threshold and no outliers are</span>
-            <span class="c1"># allowed, this cannot be improved by outlier rejection</span>
-            <span class="c1"># so continue to the next IOD orbit</span>
-            <span class="k">if</span> <span class="n">rchi2</span> <span class="o">&gt;</span> <span class="n">rchi2_threshold</span> <span class="ow">and</span> <span class="n">max_outliers</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="c1"># If we have iterated through all iod orbits and no outliers</span>
-                <span class="c1"># are allowed for this linkage then no other combination of</span>
-                <span class="c1"># observations will make it acceptable, so exit here.</span>
-                <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">iod_orbits</span><span class="p">):</span>
-                    <span class="n">processable</span> <span class="o">=</span> <span class="kc">False</span>
-                    <span class="k">break</span>
-
-                <span class="k">continue</span>
-
-            <span class="c1"># If the total reduced chi2 is less than the threshold accept the orbit</span>
-            <span class="k">elif</span> <span class="n">rchi2</span> <span class="o">&lt;=</span> <span class="n">rchi2_threshold</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">"Potential solution orbit has been found."</span><span class="p">)</span>
-                <span class="n">orbit_sol</span> <span class="o">=</span> <span class="n">iod_orbits</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
-                <span class="n">obs_ids_sol</span> <span class="o">=</span> <span class="n">ids</span>
-                <span class="n">chi2_total_sol</span> <span class="o">=</span> <span class="n">chi2_total</span>
-                <span class="n">rchi2_sol</span> <span class="o">=</span> <span class="n">rchi2</span>
-                <span class="n">residuals_sol</span> <span class="o">=</span> <span class="n">residuals</span>
-                <span class="n">outliers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
-                <span class="n">arc_length</span> <span class="o">=</span> <span class="n">times_all</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">-</span> <span class="n">times_all</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
-                <span class="n">converged</span> <span class="o">=</span> <span class="kc">True</span>
-                <span class="k">break</span>
-
-            <span class="c1"># Let's now test to see if we can remove some outliers, we</span>
-            <span class="c1"># anticipate that we get to this stage if the three selected observations</span>
-            <span class="c1"># belonging to one object yield a good initial orbit but the presence of outlier</span>
-            <span class="c1"># observations is skewing the sum total of the residuals and chi2</span>
-            <span class="k">elif</span> <span class="n">max_outliers</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
-                <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">"Attempting to identify possible outliers."</span><span class="p">)</span>
-                <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_outliers</span><span class="p">):</span>
-                    <span class="c1"># Select i highest observations that contribute to</span>
-                    <span class="c1"># chi2 (and thereby the residuals)</span>
-                    <span class="n">remove</span> <span class="o">=</span> <span class="n">chi2</span><span class="p">[</span><span class="o">~</span><span class="n">mask</span><span class="p">]</span><span class="o">.</span><span class="n">argsort</span><span class="p">()[</span><span class="o">-</span><span class="p">(</span><span class="n">o</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="p">:]</span>
-
-                    <span class="c1"># Grab the obs_ids for these outliers</span>
-                    <span class="n">obs_id_outlier</span> <span class="o">=</span> <span class="n">obs_ids_all</span><span class="p">[</span><span class="o">~</span><span class="n">mask</span><span class="p">][</span><span class="n">remove</span><span class="p">]</span>
-                    <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">"Possible outlier(s): </span><span class="si">{}</span><span class="s2">"</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">obs_id_outlier</span><span class="p">))</span>
-
-                    <span class="c1"># Subtract the outlier's chi2 contribution</span>
-                    <span class="c1"># from the total chi2</span>
-                    <span class="c1"># Then recalculate the reduced chi2</span>
-                    <span class="n">chi2_new</span> <span class="o">=</span> <span class="n">chi2_total</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">chi2</span><span class="p">[</span><span class="o">~</span><span class="n">mask</span><span class="p">][</span><span class="n">remove</span><span class="p">])</span>
-                    <span class="n">num_obs_new</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span> <span class="o">-</span> <span class="nb">len</span><span class="p">(</span><span class="n">remove</span><span class="p">)</span>
-                    <span class="n">rchi2_new</span> <span class="o">=</span> <span class="n">chi2_new</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">num_obs_new</span> <span class="o">-</span> <span class="mi">6</span><span class="p">)</span>
-
-                    <span class="n">ids_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">obs_ids_all</span><span class="p">,</span> <span class="n">obs_id_outlier</span><span class="p">,</span> <span class="n">invert</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-                    <span class="n">arc_length</span> <span class="o">=</span> <span class="n">times_all</span><span class="p">[</span><span class="n">ids_mask</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">-</span> <span class="n">times_all</span><span class="p">[</span><span class="n">ids_mask</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
-
-                    <span class="c1"># If the updated reduced chi2 total is lower than our desired</span>
-                    <span class="c1"># threshold, accept the soluton. If not, keep going.</span>
-                    <span class="k">if</span> <span class="n">rchi2_new</span> <span class="o">&lt;=</span> <span class="n">rchi2_threshold</span> <span class="ow">and</span> <span class="n">arc_length</span> <span class="o">&gt;=</span> <span class="n">min_arc_length</span><span class="p">:</span>
-                        <span class="n">orbit_sol</span> <span class="o">=</span> <span class="n">iod_orbits</span><span class="p">[</span><span class="n">i</span> <span class="p">:</span> <span class="n">i</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span>
-                        <span class="n">obs_ids_sol</span> <span class="o">=</span> <span class="n">ids</span>
-                        <span class="n">chi2_total_sol</span> <span class="o">=</span> <span class="n">chi2_new</span>
-                        <span class="n">rchi2_sol</span> <span class="o">=</span> <span class="n">rchi2_new</span>
-                        <span class="n">residuals_sol</span> <span class="o">=</span> <span class="n">residuals</span>
-                        <span class="n">outliers</span> <span class="o">=</span> <span class="n">obs_id_outlier</span>
-                        <span class="n">num_obs</span> <span class="o">=</span> <span class="n">num_obs_new</span>
-                        <span class="n">ids_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">obs_ids_all</span><span class="p">,</span> <span class="n">outliers</span><span class="p">,</span> <span class="n">invert</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-                        <span class="n">arc_length</span> <span class="o">=</span> <span class="p">(</span>
-                            <span class="n">times_all</span><span class="p">[</span><span class="n">ids_mask</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">-</span> <span class="n">times_all</span><span class="p">[</span><span class="n">ids_mask</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span>
-                        <span class="p">)</span>
-                        <span class="n">converged</span> <span class="o">=</span> <span class="kc">True</span>
-                        <span class="k">break</span>
-
-            <span class="k">else</span><span class="p">:</span>
-                <span class="k">continue</span>
-
-        <span class="n">j</span> <span class="o">+=</span> <span class="mi">1</span>
-
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">converged</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">processable</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">(),</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">observed_ipc</span><span class="p">,</span> <span class="n">observers_ipc</span> <span class="o">=</span> <span class="n">_native_problem</span><span class="p">(</span>
+        <span class="n">_placeholder_orbit</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span> <span class="n">observations</span>
+    <span class="p">)</span>
+    <span class="n">output</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">iod_fit_ipc</span><span class="p">(</span>
+        <span class="n">prop</span><span class="p">,</span>
+        <span class="n">observed_ipc</span><span class="p">,</span>
+        <span class="n">observers_ipc</span><span class="p">,</span>
+        <span class="n">iod_settings</span><span class="o">=</span><span class="p">{</span>
+            <span class="s2">"min_obs"</span><span class="p">:</span> <span class="n">min_obs</span><span class="p">,</span>
+            <span class="s2">"min_arc_length"</span><span class="p">:</span> <span class="n">min_arc_length</span><span class="p">,</span>
+            <span class="s2">"contamination_percentage"</span><span class="p">:</span> <span class="n">contamination_percentage</span><span class="p">,</span>
+            <span class="s2">"rchi2_threshold"</span><span class="p">:</span> <span class="n">rchi2_threshold</span><span class="p">,</span>
+            <span class="s2">"observation_selection_method"</span><span class="p">:</span> <span class="n">observation_selection_method</span><span class="p">,</span>
+            <span class="s2">"light_time"</span><span class="p">:</span> <span class="n">light_time</span><span class="p">,</span>
+            <span class="s2">"mu"</span><span class="p">:</span> <span class="n">MU</span><span class="p">,</span>
+            <span class="s2">"speed_of_light"</span><span class="p">:</span> <span class="n">C</span><span class="p">,</span>
+        <span class="p">},</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">tables_from_iod_output</span><span class="p">(</span><span class="n">orbit_id</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
 
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">orbit</span> <span class="o">=</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbit_sol</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
-            <span class="n">object_id</span><span class="o">=</span><span class="n">orbit_sol</span><span class="o">.</span><span class="n">object_id</span><span class="p">,</span>
-            <span class="n">coordinates</span><span class="o">=</span><span class="n">orbit_sol</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span>
-            <span class="n">arc_length</span><span class="o">=</span><span class="p">[</span><span class="n">arc_length</span><span class="p">],</span>
-            <span class="n">num_obs</span><span class="o">=</span><span class="p">[</span><span class="n">num_obs</span><span class="p">],</span>
-            <span class="n">chi2</span><span class="o">=</span><span class="p">[</span><span class="n">chi2_total_sol</span><span class="p">],</span>
-            <span class="n">reduced_chi2</span><span class="o">=</span><span class="p">[</span><span class="n">rchi2_sol</span><span class="p">],</span>
-        <span class="p">)</span>
 
-        <span class="n">orbit_members</span> <span class="o">=</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">(</span>
-                <span class="nb">len</span><span class="p">(</span><span class="n">obs_ids_all</span><span class="p">),</span> <span class="n">orbit_sol</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">"object"</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_placeholder_orbit</span><span class="p">(</span><span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""A one-row orbit table the IPC bridge needs (IOD takes no seed)."""</span>
+    <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">orbit_id</span><span class="o">=</span><span class="p">[</span><span class="s2">"iod"</span><span class="p">],</span>
+        <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">x</span><span class="o">=</span><span class="p">[</span><span class="mf">1.0</span><span class="p">],</span>
+            <span class="n">y</span><span class="o">=</span><span class="p">[</span><span class="mf">0.0</span><span class="p">],</span>
+            <span class="n">z</span><span class="o">=</span><span class="p">[</span><span class="mf">0.0</span><span class="p">],</span>
+            <span class="n">vx</span><span class="o">=</span><span class="p">[</span><span class="mf">0.0</span><span class="p">],</span>
+            <span class="n">vy</span><span class="o">=</span><span class="p">[</span><span class="mf">0.017</span><span class="p">],</span>
+            <span class="n">vz</span><span class="o">=</span><span class="p">[</span><span class="mf">0.0</span><span class="p">],</span>
+            <span class="n">time</span><span class="o">=</span><span class="n">observations</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">"SUN"</span><span class="p">]),</span>
+            <span class="n">frame</span><span class="o">=</span><span class="s2">"ecliptic"</span><span class="p">,</span>
+        <span class="p">),</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">tables_from_iod_output</span><span class="p">(</span>
+    <span class="n">orbit_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Wrap the dict of a Rust IOD decision (`iod_fit_ipc`, or the ``iod`` entry</span>
+<span class="sd">    of a fused ``full_od`` output) into `FittedOrbits` / `FittedOrbitMembers`</span>
+<span class="sd">    in the observations' order; empty tables when no orbit was accepted.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">output</span><span class="p">[</span><span class="s2">"found"</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">(),</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"state"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+    <span class="n">orbit</span> <span class="o">=</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">orbit_id</span><span class="o">=</span><span class="p">[</span><span class="n">orbit_id</span><span class="p">],</span>
+        <span class="n">object_id</span><span class="o">=</span><span class="p">[</span><span class="kc">None</span><span class="p">],</span>
+        <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">0</span><span class="p">:</span><span class="mi">1</span><span class="p">],</span>
+            <span class="n">y</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="mi">2</span><span class="p">],</span>
+            <span class="n">z</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">3</span><span class="p">],</span>
+            <span class="n">vx</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">4</span><span class="p">],</span>
+            <span class="n">vy</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">4</span><span class="p">:</span><span class="mi">5</span><span class="p">],</span>
+            <span class="n">vz</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">5</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span>
+            <span class="n">time</span><span class="o">=</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span>
+                <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"epoch_mjd"</span><span class="p">])],</span> <span class="n">scale</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"epoch_scale"</span><span class="p">]</span>
             <span class="p">),</span>
-            <span class="n">obs_id</span><span class="o">=</span><span class="n">obs_ids_all</span><span class="p">,</span>
-            <span class="n">residuals</span><span class="o">=</span><span class="n">residuals_sol</span><span class="p">,</span>
-            <span class="n">solution</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">obs_ids_all</span><span class="p">,</span> <span class="n">obs_ids_sol</span><span class="p">),</span>
-            <span class="n">outlier</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">obs_ids_all</span><span class="p">,</span> <span class="n">outliers</span><span class="p">),</span>
-        <span class="p">)</span>
-
-    <span class="k">return</span> <span class="n">orbit</span><span class="p">,</span> <span class="n">orbit_members</span>
+            <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">"SUN"</span><span class="p">]),</span>
+            <span class="n">frame</span><span class="o">=</span><span class="s2">"ecliptic"</span><span class="p">,</span>
+        <span class="p">),</span>
+        <span class="n">arc_length</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"arc_length"</span><span class="p">]],</span>
+        <span class="n">num_obs</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"num_obs"</span><span class="p">]],</span>
+        <span class="n">chi2</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"chi2"</span><span class="p">]],</span>
+        <span class="n">reduced_chi2</span><span class="o">=</span><span class="p">[</span><span class="n">output</span><span class="p">[</span><span class="s2">"reduced_chi2"</span><span class="p">]],</span>
+    <span class="p">)</span>
+    <span class="n">residuals</span> <span class="o">=</span> <span class="n">Residuals</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">values</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_values"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">tolist</span><span class="p">(),</span>
+        <span class="n">chi2</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_chi2"</span><span class="p">],</span>
+        <span class="n">dof</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_dof"</span><span class="p">],</span>
+        <span class="n">probability</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"residual_probability"</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="n">members</span> <span class="o">=</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+        <span class="n">orbit_id</span><span class="o">=</span><span class="p">[</span><span class="n">orbit_id</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span>
+        <span class="n">obs_id</span><span class="o">=</span><span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="p">,</span>
+        <span class="n">residuals</span><span class="o">=</span><span class="n">residuals</span><span class="p">,</span>
+        <span class="n">solution</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"solution"</span><span class="p">],</span>
+        <span class="n">outlier</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"outlier"</span><span class="p">],</span>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">orbit</span><span class="p">,</span> <span class="n">members</span>
 
 
 <div class="viewcode-block" id="initial_orbit_determination">
@@ -1195,7 +1104,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-29</div>
+              Last updated on 2026-10-01</div>
           </div>
           <div class="right-details">
             

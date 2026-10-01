@@ -553,17 +553,12 @@ reported on the members (see Notes). Requires
 components. Default <cite>HUBER_F_SCALE_DEFAULT</cite> (1.345), the classical
 constant giving 95% asymptotic efficiency for Gaussian errors.
 Ignored for <code class="docutils literal notranslate"><span class="pre">loss=&quot;linear&quot;</span></code>.</p></li>
-<li><p><strong>**kwargs</strong> – <p>Additional keyword arguments to pass to <cite>~scipy.optimize.least_squares</cite>
-(<code class="docutils literal notranslate"><span class="pre">loss</span></code> and <code class="docutils literal notranslate"><span class="pre">f_scale</span></code> are the named parameters above).
-Some of these parameters if not specified will be set to sensible defaults.</p>
-<blockquote>
-<div><p>xtol = 1e-12
-ftol = 1e-12
-gtol = 1e-12
-x_scale = “jac”
-bounds = (-np.inf, np.inf) (for each parameter)</p>
-</div></blockquote>
-</p></li>
+<li><p><strong>**kwargs</strong> – Solver settings forwarded to the Rust driver: <code class="docutils literal notranslate"><span class="pre">xtol</span></code>, <code class="docutils literal notranslate"><span class="pre">ftol</span></code>,
+<code class="docutils literal notranslate"><span class="pre">gtol</span></code> (default 1e-12 each, scipy’s stopping rules) and <code class="docutils literal notranslate"><span class="pre">max_nfev</span></code>
+(or <code class="docutils literal notranslate"><span class="pre">max_iterations</span></code>, default 100). Any other keyword raises a
+<cite>ValueError</cite>: the fit runs natively (Levenberg-Marquardt with
+Marquardt scaling) and no longer forwards arguments to
+<cite>scipy.optimize.least_squares</cite>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -625,9 +620,9 @@ at every pass, with observations still removed while the reduced chi2
 exceeds <code class="docutils literal notranslate"><span class="pre">rchi2_threshold</span></code>).</p></li>
 <li><p><strong>f_scale</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><em>float</em></a><em>, </em><em>optional</em>) – Huber transition point in units of whitened (1-sigma) residual
 components; see <cite>fit_least_squares</cite>. Ignored for <code class="docutils literal notranslate"><span class="pre">loss=&quot;linear&quot;</span></code>.</p></li>
-<li><p><strong>**kwargs</strong> – Additional keyword arguments passed to <cite>fit_least_squares</cite> (including
-<cite>jacobian</cite> and <cite>validate_covariance</cite>) and ultimately to
-<cite>~scipy.optimize.least_squares</cite>.</p></li>
+<li><p><strong>**kwargs</strong> – Fit settings forwarded to every pass: <code class="docutils literal notranslate"><span class="pre">jacobian</span></code>,
+<code class="docutils literal notranslate"><span class="pre">validate_covariance</span></code> and the solver tolerances of
+<cite>fit_least_squares</cite>. Any other keyword raises a <cite>ValueError</cite>.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>
@@ -679,7 +674,7 @@ chi2 overall (<code class="docutils literal notranslate"><span class="pre">succe
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-09-29</div>
+              Last updated on 2026-10-01</div>
           </div>
           <div class="right-details">
             
