@@ -71,7 +71,7 @@ query paths depend on them, but they are not counted as public API commitments.
 | OEM | fused Rust product writer/reader plus KVN engine | Writer and reader each satisfy one crossing (ecliptic rotation, sort, metadata, unit/covariance conversion, orbit-id and table assembly in Rust); ITRF93 pre-transform stays on the Rust `transform_coordinates` crossing; propagated writer remains a declared propagator-provider boundary |
 | OpenSpace | fused SBDB CSV and orbital/trail asset products plus Lua/initialization rendering | Public products each satisfy one crossing: Rust owns transform, epochs/periods, model graph, CSV/Lua rendering, per-orbit loops, SPICE snippets, staged writes, and atomic publication; Python retains enum/default compatibility and an uncovered-case fallback |
 | SPK | fused Rust fitting, Type 3/9 segment, multi-summary DAF, and product workflow | No-propagator products satisfy one crossing; optional propagation is the declared provider boundary followed by the same one product crossing. Rust owns transform/group/sort/IDs/windows/fits/units/segments and atomic output |
-| MPC | eight scalar pack/unpack functions and batched packed-date decode | Designation APIs and `convert_mpc_packed_dates` satisfy one Rust crossing; Astropy `Time` construction is a lazy optional compatibility boundary |
+| MPC | twenty strict scalar pack/unpack functions, ADES classification, and batched packed-date decode | Designation APIs and `convert_mpc_packed_dates` satisfy one Rust crossing; Astropy `Time` construction is a lazy optional compatibility boundary |
 | SPICE backend | kernel readers/writers and low-level backend methods | Low-level methods are thin; **gap:** high-level setup/data discovery, obscodes file read, Python cache/dedup, time/frame/unit conversion, and typed table assembly |
 | Chunk/LRU helpers | bounded public cache-policy names retained; JAX chunking helpers retired | `bounded_lru_get`/`bounded_lru_put` are the documented Python container cache-policy boundary around Rust semantic calls. Frozen-upstream-only `pad_to_fixed_size` and `process_in_chunks` are durably retired because no production caller remains and default JAX is forbidden; private OD/query iterators belong to fused workflows. |
 | Parallel/Ray | retired optional dependency | Frozen-upstream-only `initialize_use_ray` and worker helpers are durably retired; fused Rust/Rayon operations own all default workflows, so default artifacts neither install nor import Ray. |
@@ -202,16 +202,29 @@ native writer contract.
 
 ### MPC serialization utilities
 
-The scalar designation operations are direct one-call veneers over Rust:
+The scalar designation operations are direct one-call veneers over Rust. The
+focused minor-planet APIs are `pack_`/`unpack_numbered_designation`,
+`pack_`/`unpack_provisional_designation`, and
+`pack_`/`unpack_survey_designation`. Comet and interstellar coverage is exposed
+through focused numbered/provisional pairs plus
+`pack_`/`unpack_comet_designation`; natural-satellite coverage is exposed
+through focused permanent/provisional pairs plus
+`pack_`/`unpack_satellite_designation`. The strict generic dispatchers remain
+`pack_mpc_designation` and `unpack_mpc_designation`.
+`parse_ades_designation` is also one Rust crossing and returns typed
+`ADESDesignationParts` without friendly-name resolution or alias substitution.
 
-- `pack_numbered_designation`
-- `pack_provisional_designation`
-- `pack_survey_designation`
-- `pack_mpc_designation`
-- `unpack_numbered_designation`
-- `unpack_provisional_designation`
-- `unpack_survey_designation`
-- `unpack_mpc_designation`
+The codecs cover all three numbered-minor-planet ranges, ordinary and
+base-62-year underscore provisionals, MPC A-prefix and survey forms, numbered
+and provisional comets (including fragments, ancient/BCE years, asteroid-style
+comet provisionals, documented two-letter provisional-fragment passthrough, and 12-character combined identities), and provisional and
+permanent natural satellites. Permanent satellite external text uses canonical
+Roman numerals. The ADES classifier also preserves documented parenthetical
+minor-planet satellite identities such as `(134340) I` without inventing a
+planet-letter packed form. Generic dispatch is deterministic and focused functions reject
+the wrong representation. Packed identities, noncanonical leading zeros/case/
+spacing, malformed fields, and out-of-range values fail instead of degrading to
+ADES `trkSub`; canonical unambiguous tracking identifiers remain supported at the ADES eight-character bound.
 
 `convert_mpc_packed_dates` now decodes the complete input batch through
 `unpack_mpc_dates_isot` in one Rust crossing and constructs the externally owned
