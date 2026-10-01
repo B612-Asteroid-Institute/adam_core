@@ -1477,7 +1477,10 @@ pub fn parse_ades_designation(
 
     if let Ok(parsed) = parse_comet_provisional(designation) {
         if let Some(number) = parsed.number {
-            let permanent = format!("{number}{}", char::from(parsed.comet_type));
+            let fragment = parsed
+                .fragment
+                .map_or_else(String::new, |value| format!("-{value}"));
+            let permanent = format!("{number}{}{fragment}", char::from(parsed.comet_type));
             let provisional = format!(
                 "{}/{}",
                 char::from(parsed.comet_type),
@@ -1796,6 +1799,14 @@ mod tests {
         assert_eq!(
             parse_ades_designation("1P/1986 F1").unwrap(),
             (Some("1P".to_string()), Some("P/1986 F1".to_string()), None)
+        );
+        assert_eq!(
+            parse_ades_designation("73P/2006 W3-C").unwrap(),
+            (
+                Some("73P-C".to_string()),
+                Some("P/2006 W3-C".to_string()),
+                None
+            )
         );
         assert_eq!(
             parse_ades_designation("MIRA25").unwrap(),

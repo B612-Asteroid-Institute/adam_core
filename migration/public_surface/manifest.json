@@ -7233,7 +7233,7 @@
       "kind": "function",
       "domain": "observations",
       "source": "src/adam_core/observations/ades.py",
-      "line": 240,
+      "line": 249,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -7261,7 +7261,7 @@
       "kind": "function",
       "domain": "observations",
       "source": "src/adam_core/observations/ades.py",
-      "line": 159,
+      "line": 161,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

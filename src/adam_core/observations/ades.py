@@ -181,8 +181,9 @@ def ADES_to_string(
 
     The observation blocks are rendered in the Rust backend (bead
     personal-cmy.20), preserving the legacy Python/pandas layout except that
-    missing optional numeric values use ADES-standard empty PSV fields. The
-    frozen legacy fixture in
+    missing optional numeric values use ADES-standard empty PSV fields and
+    rmsRA/rmsDec precision is reduced only when necessary to fit the ADES
+    PosDecimalTypeW7 width. The frozen legacy fixture in
     ``migration/artifacts/ades_parity_fixture_2026-07-05.json`` gates all
     other writer behavior; the ObsContext headers stay Python-rendered.
 
@@ -199,15 +200,21 @@ def ADES_to_string(
     columns_precision : dict[str, int], optional
         A dictionary of column names and their corresponding precision to use when writing
         the observations to the file, by default {
-            "ra": 8,
-            "dec": 8,
-            "rmsRACosDec": 4,
-            "rmsDec": 4,
-            "mag": 2,
-            "rmsMag": 2,
+            "ra": 9,
+            "dec": 9,
+            "rmsRACosDec": 5,
+            "rmsDec": 5,
+            "rmsCorr": 8,
+            "mag": 4,
+            "rmsMag": 4,
+            "exp": 2,
+            "logSNR": 2,
+            "seeing": 2,
         }
-        The MPC enforces strict limits on these and submitters may need permission to send
-        high-precision data.
+        The ADES seven-character width for rmsRA and rmsDec takes precedence over
+        requested precision, which is reduced only as needed. The MPC enforces strict
+        limits on these fields and submitters may need permission to send high-precision
+        data.
     sort : bool, optional
         Whether to sort rows within each observatory block by identity and observation
         time. Set to False to preserve upstream order within each block. Default is True.

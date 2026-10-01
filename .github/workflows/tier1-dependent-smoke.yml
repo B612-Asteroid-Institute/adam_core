@@ -40,6 +40,11 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install dist/*.whl
+          # Keep the exact candidate core wheel while installing the dependent's
+          # direct kernel-data requirements omitted by --no-deps.
+          python -m pip install \
+            "naif-de440==2020.12.21.1" \
+            "jpl-small-bodies-de441-n16==2021.3.31.1"
           python -m pip install --no-deps -e dependent
       - name: Verify exact candidate installations
         run: |

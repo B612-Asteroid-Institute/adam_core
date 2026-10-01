@@ -269,6 +269,10 @@ def test_unpackers_reject_noncanonical_or_out_of_range_values(value):
             "1P/1986 F1",
             ADESDesignationParts(perm_id="1P", prov_id="P/1986 F1"),
         ),
+        (
+            "73P/2006 W3-C",
+            ADESDesignationParts(perm_id="73P-C", prov_id="P/2006 W3-C"),
+        ),
         ("S/2000 J 1", ADESDesignationParts(prov_id="S/2000 J 1")),
         ("S/1877 M 1", ADESDesignationParts(prov_id="S/1877 M 1")),
         ("S/2000 (65803) 1", ADESDesignationParts(prov_id="S/2000 (65803) 1")),
