@@ -26,19 +26,22 @@ pub use ephemeris::{
     EphemerisResult, EphemerisRowDiagnostic,
 };
 pub use od::{
-    evaluate_orbit_barycentric, fit_orbit_least_squares_barycentric,
-    fit_orbit_least_squares_evaluated_barycentric, iod_fit_barycentric,
-    iod_fit_linkages_barycentric, od_fit_barycentric, vallado_least_squares_barycentric,
-    EvaluatedLeastSquaresFit, FitEvaluation, IodConfig, IodOutput, ObservationSelectionMethod,
-    OdConfig, OdMethod, OdOutput, ValladoConfig, ValladoIteration, ValladoResult, ValladoStatus,
-    INVALID_LIGHT_TIME_MESSAGE,
+    candidate_orbit_batch, evaluate_orbit, evaluate_orbit_barycentric,
+    fit_orbit_least_squares_barycentric, fit_orbit_least_squares_evaluated_barycentric, iod_fit,
+    iod_fit_barycentric, iod_fit_linkages_barycentric, od_fit_barycentric,
+    vallado_least_squares_barycentric, EvaluatedLeastSquaresFit, FitEvaluation, IodConfig,
+    IodOutput, ObservationSelectionMethod, OdConfig, OdMethod, OdOutput, OrbitGeometry,
+    PropagatorPredictor, SphericalPredictor, ValladoConfig, ValladoIteration, ValladoResult,
+    ValladoStatus, INVALID_LIGHT_TIME_MESSAGE,
 };
 pub use od_refine::{
-    cmc2003_fit_barycentric, fit_orbit_whitened_barycentric, full_od_barycentric,
-    iterative_fit_barycentric, max_outliers, run_od_barycentric, symmetric_eigen_6x6,
-    AstrometrySnapshot, Cmc2003FitConfig, Cmc2003FitOutput, FullOdConfig, FullOdOutput,
-    IterativeFitConfig, IterativeFitOutput, JacobianMethod, RefinedOutput, RefinementConfig,
-    RunOdOutput, WhitenedFitConfig, WhitenedFitOutput, DELTA_CHI2_WINDOW,
+    cmc2003_fit_barycentric, cmc2003_fit_with, fit_orbit_whitened_barycentric,
+    fit_orbit_whitened_with, full_od_barycentric, full_od_with, iterative_fit_barycentric,
+    iterative_fit_with, max_outliers, run_od_barycentric, run_od_with, symmetric_eigen_6x6,
+    validate_fit_covariance_with, AstrometrySnapshot, Cmc2003FitConfig, Cmc2003FitOutput,
+    CovarianceValidation, FullOdConfig, FullOdOutput, IterativeFitConfig, IterativeFitOutput,
+    JacobianMethod, RefinedOutput, RefinementConfig, RunOdOutput, WhitenedFitConfig,
+    WhitenedFitOutput, DELTA_CHI2_WINDOW,
 };
 pub use pipeline::{OrbitRow, PropagationResult};
 pub use request::{

@@ -1,28 +1,37 @@
-//! PyO3 surface of the backend-generic Rust OD drivers over adam_core's own
-//! two-body propagator: the one-crossing work units that a Rust-backed
-//! propagator plugin (adam-assist) exposes as methods are exposed here for the
-//! built-in two-body backend, so the Python veneer's fused dispatch has an
-//! in-tree implementation and the parity suite can exercise it.
+//! PyO3 surface of the backend-generic Rust OD drivers: the one-crossing
+//! work units (`fit_least_squares`, `iterative_fit`, `cmc2003_fit`, `iod`,
+//! `full_od`, `run_od`, the covariance probe) over either
 //!
-//! Inputs cross as nested Arrow IPC (the `arrow_bridge` helpers) plus a
-//! ``fit_settings`` dict of the whitened-fit options; outputs are plain dicts
-//! of scalars, lists and NumPy arrays that the veneer wraps into
-//! `FittedOrbits` / `FittedOrbitMembers` without further computation.
+//! * a Python propagator, wrapped as a callback [`SphericalPredictor`]
+//!   (`od_callback`): the Rust loop drives the propagator's own
+//!   `generate_ephemeris`, so the Python facade needs no loop of its own; or
+//! * adam_core's Rust two-body propagator (``propagator=None``): the fused
+//!   in-tree route, the same contract a Rust-backed plugin (adam-assist)
+//!   exposes as methods.
+//!
+//! Inputs cross as nested Arrow IPC (the `arrow_bridge` helpers) plus dicts of
+//! settings (`fit_settings`, `iod_settings`, `refinement`) and the models'
+//! `_native_specs()` dicts; outputs are plain dicts of scalars, lists and
+//! NumPy arrays that the facade wraps into `FittedOrbits` /
+//! `FittedOrbitMembers` without further computation. Driver errors map to
+//! `ValueError` (invalid input) or `RuntimeError` (backend failure); an
+//! exception raised by a Python propagator is re-raised unchanged.
 
 use crate::coordinates::{read_orbit_ipc, ErfaTimeProvider};
 use crate::observation_uncertainty::{bias_table, efcc18_table, veres_lookup};
+use crate::od_callback::{od_error, LockingSpiceTranslation, PyEphemerisPredictor};
 use adam_core_rs_coords::observation_uncertainty::{
     Efcc18DebiasModel, EmpiricalCovarianceMode, EmpiricalCovarianceModel, IdentityModel,
     NightBatchDeweightingModel, ObservationUncertaintyModel, PerformanceWeightedModel,
     SigmaFloorModel,
 };
 use adam_core_rs_coords::propagation::{
-    cmc2003_fit_barycentric, fit_orbit_whitened_barycentric, full_od_barycentric,
-    iterative_fit_barycentric, run_od_barycentric, AstrometrySnapshot, Cmc2003FitConfig,
+    cmc2003_fit_with, fit_orbit_whitened_with, full_od_with, iod_fit, iterative_fit_with,
+    run_od_with, validate_fit_covariance_with, AstrometrySnapshot, Cmc2003FitConfig,
     CovariancePropagation, EphemerisOptions, EpochPolicy, FullOdConfig, FullOdOutput, IodConfig,
-    IterativeFitConfig, JacobianMethod, ObservationSelectionMethod, PropagationOptions,
-    RefinementConfig, TwoBodyPropagator, TwoBodyPropagatorConfig, WhitenedFitConfig,
-    WhitenedFitOutput,
+    IodOutput, IterativeFitConfig, JacobianMethod, ObservationSelectionMethod, PropagationOptions,
+    PropagationResultValue, PropagatorPredictor, RefinementConfig, SphericalPredictor,
+    TwoBodyPropagator, TwoBodyPropagatorConfig, WhitenedFitConfig, WhitenedFitOutput,
 };
 use adam_core_rs_coords::veres2017::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
 use adam_core_rs_coords::{
@@ -31,8 +40,7 @@ use adam_core_rs_coords::{
     CMC2003_APPARITION_GAP_DAYS, CMC2003_CHI2_FRAC, CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT,
     CMC2003_MAX_ITERATIONS, CMC2003_MAX_REJECTED_FRACTION, CMC2003_PSD_FLOOR_FRAC,
 };
-use adam_core_rs_spice::global_backend;
-use numpy::{IntoPyArray, PyReadonlyArray1, PyReadonlyArray3};
+use numpy::{IntoPyArray, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
@@ -42,20 +50,19 @@ fn value_error(message: impl Into<String>) -> PyErr {
     PyValueError::new_err(message.into())
 }
 
-struct OdProblem {
-    orbit: DataOrbitBatch,
+// ---------------------------------------------------------------------------
+// Inputs
+// ---------------------------------------------------------------------------
+
+struct OdObservations {
     observed: DataCoordinateBatch,
     observers: DataObserverBatch,
 }
 
-fn decode_problem(
-    orbit_ipc: &Bound<'_, PyBytes>,
+fn decode_observations(
     observed_ipc: &Bound<'_, PyBytes>,
     observers_ipc: &Bound<'_, PyBytes>,
-) -> PyResult<OdProblem> {
-    let orbit =
-        DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbit_ipc.as_bytes())?)
-            .map_err(|err| value_error(format!("failed to decode OrbitBatch: {err}")))?;
+) -> PyResult<OdObservations> {
     let observed = DataCoordinateBatch::try_from_nested_record_batch(&read_orbit_ipc(
         observed_ipc.as_bytes(),
     )?)
@@ -68,11 +75,15 @@ fn decode_problem(
             "observed coordinates and observers must have equal length",
         ));
     }
-    Ok(OdProblem {
-        orbit,
+    Ok(OdObservations {
         observed,
         observers,
     })
+}
+
+fn decode_orbit(orbit_ipc: &Bound<'_, PyBytes>) -> PyResult<DataOrbitBatch> {
+    DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbit_ipc.as_bytes())?)
+        .map_err(|err| value_error(format!("failed to decode OrbitBatch: {err}")))
 }
 
 /// The whitened-fit options of every work unit, read from the
@@ -153,245 +164,6 @@ fn parse_fit_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<FitSetti
         config,
         options,
         propagator,
-    })
-}
-
-/// The dict contract of a fused whitened fit: solution, covariance, solver
-/// diagnostics, weights and the evaluation over the full observation set.
-fn fit_output_dict<'py>(
-    py: Python<'py>,
-    output: WhitenedFitOutput,
-    n: usize,
-) -> PyResult<Bound<'py, PyDict>> {
-    let out = PyDict::new(py);
-    out.set_item(
-        "state",
-        ndarray::Array1::from_vec(output.state.to_vec()).into_pyarray(py),
-    )?;
-    let covariance = ndarray::Array2::from_shape_vec((6, 6), output.covariance.to_vec())
-        .map_err(|err| value_error(format!("failed to shape covariance: {err}")))?;
-    out.set_item("covariance", covariance.into_pyarray(py))?;
-    out.set_item("iterations", output.iterations)?;
-    out.set_item("converged", output.converged)?;
-    out.set_item("status_code", output.status_code)?;
-    out.set_item("cost", output.cost)?;
-    out.set_item("fit_chi2", output.fit_chi2)?;
-    out.set_item(
-        "weights",
-        ndarray::Array1::from_vec(output.weights).into_pyarray(py),
-    )?;
-    out.set_item(
-        "residuals_whitened",
-        ndarray::Array1::from_vec(output.residuals_whitened).into_pyarray(py),
-    )?;
-    let residuals = ndarray::Array2::from_shape_vec((n, 6), output.evaluation.residuals)
-        .map_err(|err| value_error(format!("failed to shape residuals: {err}")))?;
-    out.set_item("residual_values", residuals.into_pyarray(py))?;
-    out.set_item("residual_chi2", output.evaluation.chi2)?;
-    out.set_item("residual_dof", output.evaluation.dof)?;
-    out.set_item("residual_probability", output.evaluation.probability)?;
-    out.set_item("chi2", output.evaluation.orbit_chi2)?;
-    out.set_item("reduced_chi2", output.evaluation.reduced_chi2)?;
-    out.set_item("arc_length", output.evaluation.arc_length)?;
-    out.set_item("num_obs", output.evaluation.num_obs)?;
-    out.set_item("outlier", output.evaluation.outlier)?;
-    out.set_item("warnings", output.warnings)?;
-    Ok(out)
-}
-
-/// One-crossing whitened `fit_least_squares` over the two-body backend: the
-/// analytic / central / 2-point Jacobian, linear or Huber loss, the validated
-/// covariance and the fused final evaluation. Returns the dict contract of a
-/// propagator's ``fit_least_squares_whitened`` work unit.
-#[pyfunction]
-#[pyo3(signature = (orbit_ipc, observed_ipc, observers_ipc, ignore, fit_settings=None))]
-fn fit_orbit_whitened_2body_ipc<'py>(
-    py: Python<'py>,
-    orbit_ipc: &Bound<'py, PyBytes>,
-    observed_ipc: &Bound<'py, PyBytes>,
-    observers_ipc: &Bound<'py, PyBytes>,
-    ignore: Vec<bool>,
-    fit_settings: Option<&Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let problem = decode_problem(orbit_ipc, observed_ipc, observers_ipc)?;
-    let settings = parse_fit_settings(fit_settings)?;
-    let n = problem.observed.len();
-    let output = py
-        .allow_threads(|| {
-            let backend = global_backend()
-                .lock()
-                .map_err(|_| "SPICE backend lock is poisoned".to_string())?;
-            fit_orbit_whitened_barycentric(
-                &settings.propagator,
-                &problem.orbit,
-                &problem.observed,
-                &problem.observers,
-                &ignore,
-                &settings.config,
-                &settings.options,
-                &ErfaTimeProvider,
-                &*backend,
-            )
-            .map_err(|err| err.to_string())
-        })
-        .map_err(value_error)?;
-    fit_output_dict(py, output, n)
-}
-
-/// One-crossing `iterative_fit` (worst-residual rejection loop) over the
-/// two-body backend. Returns the fused fit dict of the selected pass plus
-/// ``passes``.
-#[pyfunction]
-#[pyo3(signature = (
-    orbit_ipc,
-    observed_ipc,
-    observers_ipc,
-    rchi2_threshold=10.0,
-    min_obs=6,
-    min_arc_length=1.0,
-    contamination_percentage=20.0,
-    fit_settings=None
-))]
-#[allow(clippy::too_many_arguments)]
-fn iterative_fit_2body_ipc<'py>(
-    py: Python<'py>,
-    orbit_ipc: &Bound<'py, PyBytes>,
-    observed_ipc: &Bound<'py, PyBytes>,
-    observers_ipc: &Bound<'py, PyBytes>,
-    rchi2_threshold: f64,
-    min_obs: usize,
-    min_arc_length: f64,
-    contamination_percentage: f64,
-    fit_settings: Option<&Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let problem = decode_problem(orbit_ipc, observed_ipc, observers_ipc)?;
-    let settings = parse_fit_settings(fit_settings)?;
-    let config = IterativeFitConfig {
-        rchi2_threshold,
-        min_obs,
-        min_arc_length,
-        contamination_percentage,
-        fit: settings.config,
-    };
-    let n = problem.observed.len();
-    let output = py
-        .allow_threads(|| {
-            let backend = global_backend()
-                .lock()
-                .map_err(|_| "SPICE backend lock is poisoned".to_string())?;
-            iterative_fit_barycentric(
-                &settings.propagator,
-                &problem.orbit,
-                &problem.observed,
-                &problem.observers,
-                &config,
-                &settings.options,
-                &ErfaTimeProvider,
-                &*backend,
-            )
-            .map_err(|err| err.to_string())
-        })
-        .map_err(value_error)?;
-    let out = fit_output_dict(py, output.fit, n)?;
-    out.set_item("passes", output.passes)?;
-    Ok(out)
-}
-
-/// One-crossing `cmc2003_fit_detailed` over the two-body backend. Returns the
-/// fused fit dict of the final pass plus ``n_iterations``, ``n_rejected``,
-/// ``n_recovered`` and the sorted ``flags``.
-#[pyfunction]
-#[pyo3(signature = (
-    orbit_ipc,
-    observed_ipc,
-    observers_ipc,
-    chi2_reject=CMC2003_CHI2_REJECT,
-    chi2_recover=CMC2003_CHI2_RECOVER,
-    chi2_frac=CMC2003_CHI2_FRAC,
-    max_iterations=CMC2003_MAX_ITERATIONS,
-    max_rejected_fraction=CMC2003_MAX_REJECTED_FRACTION,
-    apparition_gap_days=CMC2003_APPARITION_GAP_DAYS,
-    psd_floor_frac=CMC2003_PSD_FLOOR_FRAC,
-    fit_settings=None
-))]
-#[allow(clippy::too_many_arguments)]
-fn cmc2003_fit_2body_ipc<'py>(
-    py: Python<'py>,
-    orbit_ipc: &Bound<'py, PyBytes>,
-    observed_ipc: &Bound<'py, PyBytes>,
-    observers_ipc: &Bound<'py, PyBytes>,
-    chi2_reject: f64,
-    chi2_recover: f64,
-    chi2_frac: f64,
-    max_iterations: usize,
-    max_rejected_fraction: f64,
-    apparition_gap_days: f64,
-    psd_floor_frac: f64,
-    fit_settings: Option<&Bound<'py, PyDict>>,
-) -> PyResult<Bound<'py, PyDict>> {
-    let problem = decode_problem(orbit_ipc, observed_ipc, observers_ipc)?;
-    let settings = parse_fit_settings(fit_settings)?;
-    let config = Cmc2003FitConfig {
-        chi2_reject,
-        chi2_recover,
-        chi2_frac,
-        max_iterations,
-        max_rejected_fraction,
-        apparition_gap_days,
-        psd_floor_frac,
-        fit: settings.config,
-    };
-    let n = problem.observed.len();
-    let output = py
-        .allow_threads(|| {
-            let backend = global_backend()
-                .lock()
-                .map_err(|_| "SPICE backend lock is poisoned".to_string())?;
-            cmc2003_fit_barycentric(
-                &settings.propagator,
-                &problem.orbit,
-                &problem.observed,
-                &problem.observers,
-                &config,
-                &settings.options,
-                &ErfaTimeProvider,
-                &*backend,
-            )
-            .map_err(|err| err.to_string())
-        })
-        .map_err(value_error)?;
-    let out = fit_output_dict(py, output.fit, n)?;
-    out.set_item("n_iterations", output.n_iterations)?;
-    out.set_item("n_rejected", output.n_rejected)?;
-    out.set_item("n_recovered", output.n_recovered)?;
-    out.set_item("flags", output.flags)?;
-    Ok(out)
-}
-
-struct OdObservations {
-    observed: DataCoordinateBatch,
-    observers: DataObserverBatch,
-}
-
-fn decode_observations(
-    observed_ipc: &Bound<'_, PyBytes>,
-    observers_ipc: &Bound<'_, PyBytes>,
-) -> PyResult<OdObservations> {
-    let observed = DataCoordinateBatch::try_from_nested_record_batch(&read_orbit_ipc(
-        observed_ipc.as_bytes(),
-    )?)
-    .map_err(|err| value_error(format!("failed to decode observed coordinates: {err}")))?;
-    let observers =
-        DataObserverBatch::try_from_nested_record_batch(&read_orbit_ipc(observers_ipc.as_bytes())?)
-            .map_err(|err| value_error(format!("failed to decode ObserverBatch: {err}")))?;
-    if observers.len() != observed.len() {
-        return Err(value_error(
-            "observed coordinates and observers must have equal length",
-        ));
-    }
-    Ok(OdObservations {
-        observed,
-        observers,
     })
 }
 
@@ -559,6 +331,158 @@ fn models_from_specs(
     }
 }
 
+fn covariance_36(covariance: &PyReadonlyArray2<'_, f64>) -> PyResult<[f64; 36]> {
+    let view = covariance.as_array();
+    if view.shape() != [6, 6] {
+        return Err(value_error("covariance must have shape (6, 6)"));
+    }
+    let mut out = [0.0_f64; 36];
+    for (slot, value) in out.iter_mut().zip(view.iter()) {
+        *slot = *value;
+    }
+    Ok(out)
+}
+
+// ---------------------------------------------------------------------------
+// Running a driver over the chosen backend
+// ---------------------------------------------------------------------------
+
+/// Run `driver` with the GIL released, over a Python propagator wrapped as a
+/// callback predictor (`propagator` given) or adam_core's two-body
+/// propagator (`None`). Errors map to Python exceptions; an exception raised
+/// inside the callback is re-raised unchanged.
+fn run_with_predictor<R: Send>(
+    py: Python<'_>,
+    propagator: Option<&Bound<'_, PyAny>>,
+    settings: &FitSettings,
+    driver: impl for<'p> FnOnce(&'p dyn SphericalPredictor) -> PropagationResultValue<R> + Send,
+) -> PyResult<R> {
+    match propagator {
+        Some(object) => {
+            let predictor = PyEphemerisPredictor::new(py, object)?;
+            py.allow_threads(|| driver(&predictor))
+                .map_err(|err| od_error(err, Some(&predictor)))
+        }
+        None => py
+            .allow_threads(|| {
+                let predictor = PropagatorPredictor {
+                    propagator: &settings.propagator,
+                    options: &settings.options,
+                    provider: &ErfaTimeProvider,
+                    translation_provider: &LockingSpiceTranslation,
+                };
+                driver(&predictor)
+            })
+            .map_err(|err| od_error(err, None)),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Output dicts
+// ---------------------------------------------------------------------------
+
+/// The dict contract of a fused whitened fit: solution, covariance, solver
+/// diagnostics, weights and the evaluation over the full observation set.
+fn fit_output_dict<'py>(
+    py: Python<'py>,
+    output: WhitenedFitOutput,
+    n: usize,
+) -> PyResult<Bound<'py, PyDict>> {
+    let out = PyDict::new(py);
+    out.set_item(
+        "state",
+        ndarray::Array1::from_vec(output.state.to_vec()).into_pyarray(py),
+    )?;
+    let covariance = ndarray::Array2::from_shape_vec((6, 6), output.covariance.to_vec())
+        .map_err(|err| value_error(format!("failed to shape covariance: {err}")))?;
+    out.set_item("covariance", covariance.into_pyarray(py))?;
+    out.set_item("iterations", output.iterations)?;
+    out.set_item("converged", output.converged)?;
+    out.set_item("status_code", output.status_code)?;
+    out.set_item("cost", output.cost)?;
+    out.set_item("fit_chi2", output.fit_chi2)?;
+    out.set_item(
+        "weights",
+        ndarray::Array1::from_vec(output.weights).into_pyarray(py),
+    )?;
+    out.set_item(
+        "residuals_whitened",
+        ndarray::Array1::from_vec(output.residuals_whitened).into_pyarray(py),
+    )?;
+    let residuals = ndarray::Array2::from_shape_vec((n, 6), output.evaluation.residuals)
+        .map_err(|err| value_error(format!("failed to shape residuals: {err}")))?;
+    out.set_item("residual_values", residuals.into_pyarray(py))?;
+    out.set_item("residual_chi2", output.evaluation.chi2)?;
+    out.set_item("residual_dof", output.evaluation.dof)?;
+    out.set_item("residual_probability", output.evaluation.probability)?;
+    out.set_item("chi2", output.evaluation.orbit_chi2)?;
+    out.set_item("reduced_chi2", output.evaluation.reduced_chi2)?;
+    out.set_item("arc_length", output.evaluation.arc_length)?;
+    out.set_item("num_obs", output.evaluation.num_obs)?;
+    out.set_item("outlier", output.evaluation.outlier)?;
+    out.set_item("warnings", output.warnings)?;
+    Ok(out)
+}
+
+/// The dict contract of an IOD decision: ``found``, the accepted state and
+/// epoch, statistics, per-observation residuals and flags.
+fn iod_dict<'py>(
+    py: Python<'py>,
+    iod: IodOutput,
+    epoch_scale: TimeScale,
+    n: usize,
+) -> PyResult<Bound<'py, PyDict>> {
+    let out = PyDict::new(py);
+    out.set_item("found", iod.found)?;
+    out.set_item(
+        "state",
+        ndarray::Array1::from_vec(iod.state.to_vec()).into_pyarray(py),
+    )?;
+    out.set_item("epoch_mjd", iod.epoch_mjd)?;
+    out.set_item("epoch_scale", epoch_scale.as_str())?;
+    out.set_item("arc_length", iod.arc_length)?;
+    out.set_item("num_obs", iod.num_obs)?;
+    out.set_item("chi2", iod.chi2_total)?;
+    out.set_item("reduced_chi2", iod.reduced_chi2)?;
+    if iod.found {
+        let residuals = ndarray::Array2::from_shape_vec((n, 6), iod.residuals)
+            .map_err(|err| value_error(format!("failed to shape IOD residuals: {err}")))?;
+        out.set_item("residual_values", residuals.into_pyarray(py))?;
+    } else {
+        out.set_item("residual_values", py.None())?;
+    }
+    out.set_item("residual_chi2", iod.residual_chi2)?;
+    out.set_item("residual_dof", iod.residual_dof)?;
+    out.set_item("residual_probability", iod.residual_probability)?;
+    out.set_item("solution", iod.solution)?;
+    out.set_item("outlier", iod.outlier)?;
+    Ok(out)
+}
+
+/// The dict contract of a fused full OD: ``found``, the ``iod`` decision
+/// and, when found, the refined ``fit`` dict with the loop diagnostics.
+fn full_od_dict<'py>(
+    py: Python<'py>,
+    output: FullOdOutput,
+    n: usize,
+) -> PyResult<Bound<'py, PyDict>> {
+    let out = PyDict::new(py);
+    out.set_item("found", output.iod.found)?;
+    out.set_item("iod", iod_dict(py, output.iod, output.epoch_scale, n)?)?;
+    match output.refined {
+        Some(refined) => {
+            let fit = fit_output_dict(py, refined.fit, n)?;
+            fit.set_item("passes", refined.passes)?;
+            fit.set_item("n_rejected", refined.n_rejected)?;
+            fit.set_item("n_recovered", refined.n_recovered)?;
+            fit.set_item("flags", refined.flags)?;
+            out.set_item("fit", fit)?;
+        }
+        None => out.set_item("fit", py.None())?,
+    }
+    Ok(out)
+}
+
 fn snapshot_dict<'py>(
     py: Python<'py>,
     snapshot: AstrometrySnapshot,
@@ -587,62 +511,354 @@ fn snapshot_dict<'py>(
     Ok(out)
 }
 
-/// The dict contract of a fused full OD: ``found``, the ``iod`` decision
-/// (state, epoch, statistics, per-observation residuals and flags) and, when
-/// found, the refined ``fit`` dict with the loop diagnostics.
-fn full_od_dict<'py>(
+// ---------------------------------------------------------------------------
+// Work units
+// ---------------------------------------------------------------------------
+
+/// One-crossing whitened `fit_least_squares`: the analytic / central /
+/// 2-point Jacobian, linear or Huber loss, the validated covariance and the
+/// fused final evaluation. ``propagator`` is any Python propagator (callback
+/// route) or None for adam_core's two-body propagator.
+#[pyfunction]
+#[pyo3(signature = (propagator, orbit_ipc, observed_ipc, observers_ipc, ignore, fit_settings=None))]
+fn fit_orbit_whitened_ipc<'py>(
     py: Python<'py>,
-    output: FullOdOutput,
-    n: usize,
+    propagator: Option<&Bound<'py, PyAny>>,
+    orbit_ipc: &Bound<'py, PyBytes>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    ignore: Vec<bool>,
+    fit_settings: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
+    let orbit = decode_orbit(orbit_ipc)?;
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let settings = parse_fit_settings(fit_settings)?;
+    let n = problem.observed.len();
+    let output = run_with_predictor(py, propagator, &settings, |predictor| {
+        fit_orbit_whitened_with(
+            predictor,
+            &orbit,
+            &problem.observed,
+            &problem.observers,
+            &ignore,
+            &settings.config,
+            &ErfaTimeProvider,
+            &LockingSpiceTranslation,
+        )
+    })?;
+    fit_output_dict(py, output, n)
+}
+
+/// `fit_orbit_whitened_ipc` over adam_core's two-body propagator.
+#[pyfunction]
+#[pyo3(signature = (orbit_ipc, observed_ipc, observers_ipc, ignore, fit_settings=None))]
+fn fit_orbit_whitened_2body_ipc<'py>(
+    py: Python<'py>,
+    orbit_ipc: &Bound<'py, PyBytes>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    ignore: Vec<bool>,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    fit_orbit_whitened_ipc(
+        py,
+        None,
+        orbit_ipc,
+        observed_ipc,
+        observers_ipc,
+        ignore,
+        fit_settings,
+    )
+}
+
+/// The weak-direction consistency check of `fit_least_squares` on an
+/// externally supplied ``covariance`` of ``orbit`` (whose state is the
+/// solution): the probe measurement ``delta_cost`` and the covariance
+/// `fit_least_squares` would report for ``jacobian`` after validation.
+#[pyfunction]
+#[pyo3(signature = (propagator, orbit_ipc, observed_ipc, observers_ipc, ignore, covariance, jacobian="analytic", fit_settings=None))]
+#[allow(clippy::too_many_arguments)]
+fn validate_fit_covariance_ipc<'py>(
+    py: Python<'py>,
+    propagator: Option<&Bound<'py, PyAny>>,
+    orbit_ipc: &Bound<'py, PyBytes>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    ignore: Vec<bool>,
+    covariance: PyReadonlyArray2<'py, f64>,
+    jacobian: &str,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let orbit = decode_orbit(orbit_ipc)?;
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let settings = parse_fit_settings(fit_settings)?;
+    let covariance = covariance_36(&covariance)?;
+    let jacobian = JacobianMethod::parse(jacobian).map_err(value_error)?;
+    let output = run_with_predictor(py, propagator, &settings, |predictor| {
+        validate_fit_covariance_with(
+            predictor,
+            &orbit,
+            &problem.observed,
+            &problem.observers,
+            &ignore,
+            covariance,
+            jacobian,
+            &settings.config,
+            &ErfaTimeProvider,
+            &LockingSpiceTranslation,
+        )
+    })?;
     let out = PyDict::new(py);
-    let iod = PyDict::new(py);
-    iod.set_item("found", output.iod.found)?;
-    iod.set_item(
-        "state",
-        ndarray::Array1::from_vec(output.iod.state.to_vec()).into_pyarray(py),
-    )?;
-    iod.set_item("epoch_mjd", output.iod.epoch_mjd)?;
-    iod.set_item("epoch_scale", output.epoch_scale.as_str())?;
-    iod.set_item("arc_length", output.iod.arc_length)?;
-    iod.set_item("num_obs", output.iod.num_obs)?;
-    iod.set_item("chi2", output.iod.chi2_total)?;
-    iod.set_item("reduced_chi2", output.iod.reduced_chi2)?;
-    if output.iod.found {
-        let residuals = ndarray::Array2::from_shape_vec((n, 6), output.iod.residuals)
-            .map_err(|err| value_error(format!("failed to shape IOD residuals: {err}")))?;
-        iod.set_item("residual_values", residuals.into_pyarray(py))?;
-    } else {
-        iod.set_item("residual_values", py.None())?;
-    }
-    iod.set_item("residual_chi2", output.iod.residual_chi2)?;
-    iod.set_item("residual_dof", output.iod.residual_dof)?;
-    iod.set_item("residual_probability", output.iod.residual_probability)?;
-    iod.set_item("solution", output.iod.solution)?;
-    iod.set_item("outlier", output.iod.outlier)?;
-    out.set_item("found", output.iod.found)?;
-    out.set_item("iod", iod)?;
-    match output.refined {
-        Some(refined) => {
-            let fit = fit_output_dict(py, refined.fit, n)?;
-            fit.set_item("passes", refined.passes)?;
-            fit.set_item("n_rejected", refined.n_rejected)?;
-            fit.set_item("n_recovered", refined.n_recovered)?;
-            fit.set_item("flags", refined.flags)?;
-            out.set_item("fit", fit)?;
-        }
-        None => out.set_item("fit", py.None())?,
-    }
+    let validated = ndarray::Array2::from_shape_vec((6, 6), output.covariance.to_vec())
+        .map_err(|err| value_error(format!("failed to shape covariance: {err}")))?;
+    out.set_item("covariance", validated.into_pyarray(py))?;
+    out.set_item("delta_cost", output.delta_cost)?;
+    out.set_item("warnings", output.warnings)?;
     Ok(out)
 }
 
-/// One-crossing `NativeOrbitFitter.full_od` over the two-body backend: Gauss
-/// IOD (``iod_settings``) followed by the ``refinement`` loop with
-/// ``fit_settings``.
+/// One-crossing `iterative_fit` (worst-residual rejection loop). Returns the
+/// fused fit dict of the selected pass plus ``passes``.
 #[pyfunction]
-#[pyo3(signature = (observed_ipc, observers_ipc, iod_settings=None, refinement=None, fit_settings=None))]
-fn full_od_2body_ipc<'py>(
+#[pyo3(signature = (
+    propagator,
+    orbit_ipc,
+    observed_ipc,
+    observers_ipc,
+    rchi2_threshold=10.0,
+    min_obs=6,
+    min_arc_length=1.0,
+    contamination_percentage=20.0,
+    fit_settings=None
+))]
+#[allow(clippy::too_many_arguments)]
+fn iterative_fit_ipc<'py>(
     py: Python<'py>,
+    propagator: Option<&Bound<'py, PyAny>>,
+    orbit_ipc: &Bound<'py, PyBytes>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    rchi2_threshold: f64,
+    min_obs: usize,
+    min_arc_length: f64,
+    contamination_percentage: f64,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let orbit = decode_orbit(orbit_ipc)?;
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let settings = parse_fit_settings(fit_settings)?;
+    let config = IterativeFitConfig {
+        rchi2_threshold,
+        min_obs,
+        min_arc_length,
+        contamination_percentage,
+        fit: settings.config,
+    };
+    let n = problem.observed.len();
+    let output = run_with_predictor(py, propagator, &settings, |predictor| {
+        iterative_fit_with(
+            predictor,
+            &orbit,
+            &problem.observed,
+            &problem.observers,
+            &config,
+            &ErfaTimeProvider,
+            &LockingSpiceTranslation,
+        )
+    })?;
+    let out = fit_output_dict(py, output.fit, n)?;
+    out.set_item("passes", output.passes)?;
+    Ok(out)
+}
+
+/// `iterative_fit_ipc` over adam_core's two-body propagator.
+#[pyfunction]
+#[pyo3(signature = (
+    orbit_ipc,
+    observed_ipc,
+    observers_ipc,
+    rchi2_threshold=10.0,
+    min_obs=6,
+    min_arc_length=1.0,
+    contamination_percentage=20.0,
+    fit_settings=None
+))]
+#[allow(clippy::too_many_arguments)]
+fn iterative_fit_2body_ipc<'py>(
+    py: Python<'py>,
+    orbit_ipc: &Bound<'py, PyBytes>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    rchi2_threshold: f64,
+    min_obs: usize,
+    min_arc_length: f64,
+    contamination_percentage: f64,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    iterative_fit_ipc(
+        py,
+        None,
+        orbit_ipc,
+        observed_ipc,
+        observers_ipc,
+        rchi2_threshold,
+        min_obs,
+        min_arc_length,
+        contamination_percentage,
+        fit_settings,
+    )
+}
+
+/// One-crossing `cmc2003_fit_detailed`. Returns the fused fit dict of the
+/// final pass plus ``n_iterations``, ``n_rejected``, ``n_recovered`` and the
+/// sorted ``flags``.
+#[pyfunction]
+#[pyo3(signature = (
+    propagator,
+    orbit_ipc,
+    observed_ipc,
+    observers_ipc,
+    chi2_reject=CMC2003_CHI2_REJECT,
+    chi2_recover=CMC2003_CHI2_RECOVER,
+    chi2_frac=CMC2003_CHI2_FRAC,
+    max_iterations=CMC2003_MAX_ITERATIONS,
+    max_rejected_fraction=CMC2003_MAX_REJECTED_FRACTION,
+    apparition_gap_days=CMC2003_APPARITION_GAP_DAYS,
+    psd_floor_frac=CMC2003_PSD_FLOOR_FRAC,
+    fit_settings=None
+))]
+#[allow(clippy::too_many_arguments)]
+fn cmc2003_fit_ipc<'py>(
+    py: Python<'py>,
+    propagator: Option<&Bound<'py, PyAny>>,
+    orbit_ipc: &Bound<'py, PyBytes>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    chi2_reject: f64,
+    chi2_recover: f64,
+    chi2_frac: f64,
+    max_iterations: usize,
+    max_rejected_fraction: f64,
+    apparition_gap_days: f64,
+    psd_floor_frac: f64,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let orbit = decode_orbit(orbit_ipc)?;
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let settings = parse_fit_settings(fit_settings)?;
+    let config = Cmc2003FitConfig {
+        chi2_reject,
+        chi2_recover,
+        chi2_frac,
+        max_iterations,
+        max_rejected_fraction,
+        apparition_gap_days,
+        psd_floor_frac,
+        fit: settings.config,
+    };
+    let n = problem.observed.len();
+    let output = run_with_predictor(py, propagator, &settings, |predictor| {
+        cmc2003_fit_with(
+            predictor,
+            &orbit,
+            &problem.observed,
+            &problem.observers,
+            &config,
+            &ErfaTimeProvider,
+            &LockingSpiceTranslation,
+        )
+    })?;
+    let out = fit_output_dict(py, output.fit, n)?;
+    out.set_item("n_iterations", output.n_iterations)?;
+    out.set_item("n_rejected", output.n_rejected)?;
+    out.set_item("n_recovered", output.n_recovered)?;
+    out.set_item("flags", output.flags)?;
+    Ok(out)
+}
+
+/// `cmc2003_fit_ipc` over adam_core's two-body propagator.
+#[pyfunction]
+#[pyo3(signature = (
+    orbit_ipc,
+    observed_ipc,
+    observers_ipc,
+    chi2_reject=CMC2003_CHI2_REJECT,
+    chi2_recover=CMC2003_CHI2_RECOVER,
+    chi2_frac=CMC2003_CHI2_FRAC,
+    max_iterations=CMC2003_MAX_ITERATIONS,
+    max_rejected_fraction=CMC2003_MAX_REJECTED_FRACTION,
+    apparition_gap_days=CMC2003_APPARITION_GAP_DAYS,
+    psd_floor_frac=CMC2003_PSD_FLOOR_FRAC,
+    fit_settings=None
+))]
+#[allow(clippy::too_many_arguments)]
+fn cmc2003_fit_2body_ipc<'py>(
+    py: Python<'py>,
+    orbit_ipc: &Bound<'py, PyBytes>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    chi2_reject: f64,
+    chi2_recover: f64,
+    chi2_frac: f64,
+    max_iterations: usize,
+    max_rejected_fraction: f64,
+    apparition_gap_days: f64,
+    psd_floor_frac: f64,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    cmc2003_fit_ipc(
+        py,
+        None,
+        orbit_ipc,
+        observed_ipc,
+        observers_ipc,
+        chi2_reject,
+        chi2_recover,
+        chi2_frac,
+        max_iterations,
+        max_rejected_fraction,
+        apparition_gap_days,
+        psd_floor_frac,
+        fit_settings,
+    )
+}
+
+/// One-crossing Gauss IOD decision loop (`iod`): triplet selection, Gauss
+/// candidates, acceptance against ``rchi2_threshold`` with outlier trials.
+/// ``fit_settings`` carries only the ephemeris / two-body options here.
+#[pyfunction]
+#[pyo3(signature = (propagator, observed_ipc, observers_ipc, iod_settings=None, fit_settings=None))]
+fn iod_fit_ipc<'py>(
+    py: Python<'py>,
+    propagator: Option<&Bound<'py, PyAny>>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    iod_settings: Option<&Bound<'py, PyDict>>,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let settings = parse_fit_settings(fit_settings)?;
+    let config = parse_iod_settings(iod_settings)?;
+    let n = problem.observed.len();
+    let epoch_scale = problem
+        .observed
+        .times
+        .as_ref()
+        .map(|times| times.scale)
+        .ok_or_else(|| value_error("orbit determination requires observation times"))?;
+    let output = run_with_predictor(py, propagator, &settings, |predictor| {
+        iod_fit(predictor, &problem.observed, &problem.observers, &config)
+    })?;
+    iod_dict(py, output, epoch_scale, n)
+}
+
+/// One-crossing `NativeOrbitFitter.full_od`: Gauss IOD (``iod_settings``)
+/// followed by the ``refinement`` loop with ``fit_settings``.
+#[pyfunction]
+#[pyo3(signature = (propagator, observed_ipc, observers_ipc, iod_settings=None, refinement=None, fit_settings=None))]
+fn full_od_ipc<'py>(
+    py: Python<'py>,
+    propagator: Option<&Bound<'py, PyAny>>,
     observed_ipc: &Bound<'py, PyBytes>,
     observers_ipc: &Bound<'py, PyBytes>,
     iod_settings: Option<&Bound<'py, PyDict>>,
@@ -656,30 +872,102 @@ fn full_od_2body_ipc<'py>(
         refinement: parse_refinement(refinement, settings.config)?,
     };
     let n = problem.observed.len();
-    let output = py
-        .allow_threads(|| {
-            let backend = global_backend()
-                .lock()
-                .map_err(|_| "SPICE backend lock is poisoned".to_string())?;
-            full_od_barycentric(
-                &settings.propagator,
-                &problem.observed,
-                &problem.observers,
-                &config,
-                &settings.options,
-                &ErfaTimeProvider,
-                &*backend,
-            )
-            .map_err(|err| err.to_string())
-        })
-        .map_err(value_error)?;
+    let output = run_with_predictor(py, propagator, &settings, |predictor| {
+        full_od_with(
+            predictor,
+            &problem.observed,
+            &problem.observers,
+            &config,
+            &ErfaTimeProvider,
+            &LockingSpiceTranslation,
+        )
+    })?;
     full_od_dict(py, output, n)
 }
 
-/// One-crossing `run_od` over the two-body backend: the observation models
-/// (``models`` = list of ``_native_spec()`` dicts, applied in order) on the
-/// original observations, the full OD on the used observations, and the
-/// original / used astrometry snapshots for the members' provenance.
+/// `full_od_ipc` over adam_core's two-body propagator.
+#[pyfunction]
+#[pyo3(signature = (observed_ipc, observers_ipc, iod_settings=None, refinement=None, fit_settings=None))]
+fn full_od_2body_ipc<'py>(
+    py: Python<'py>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    iod_settings: Option<&Bound<'py, PyDict>>,
+    refinement: Option<&Bound<'py, PyDict>>,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    full_od_ipc(
+        py,
+        None,
+        observed_ipc,
+        observers_ipc,
+        iod_settings,
+        refinement,
+        fit_settings,
+    )
+}
+
+/// One-crossing `run_od`: the observation models (``models`` = list of
+/// ``_native_spec()`` dicts, applied in order) on the original observations,
+/// the full OD on the used observations, and the original / used astrometry
+/// snapshots for the members' provenance.
+#[pyfunction]
+#[pyo3(signature = (
+    propagator,
+    observed_ipc,
+    observers_ipc,
+    obs_code,
+    band,
+    astcat,
+    models=None,
+    iod_settings=None,
+    refinement=None,
+    fit_settings=None
+))]
+#[allow(clippy::too_many_arguments)]
+fn run_od_ipc<'py>(
+    py: Python<'py>,
+    propagator: Option<&Bound<'py, PyAny>>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    obs_code: Vec<String>,
+    band: Vec<Option<String>>,
+    astcat: Vec<Option<String>>,
+    models: Option<&Bound<'py, PyList>>,
+    iod_settings: Option<&Bound<'py, PyDict>>,
+    refinement: Option<&Bound<'py, PyDict>>,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let settings = parse_fit_settings(fit_settings)?;
+    let config = FullOdConfig {
+        iod: parse_iod_settings(iod_settings)?,
+        refinement: parse_refinement(refinement, settings.config)?,
+    };
+    let models = models_from_specs(models)?;
+    let n = problem.observed.len();
+    let output = run_with_predictor(py, propagator, &settings, move |predictor| {
+        run_od_with(
+            predictor,
+            &problem.observed,
+            &problem.observers,
+            &obs_code,
+            &band,
+            &astcat,
+            models,
+            &config,
+            &ErfaTimeProvider,
+            &LockingSpiceTranslation,
+        )
+    })?;
+    let out = full_od_dict(py, output.full_od, n)?;
+    out.set_item("original_astrometry", snapshot_dict(py, output.original)?)?;
+    out.set_item("used_astrometry", snapshot_dict(py, output.used)?)?;
+    out.set_item("models_changed", output.models_changed)?;
+    Ok(out)
+}
+
+/// `run_od_ipc` over adam_core's two-body propagator.
 #[pyfunction]
 #[pyo3(signature = (
     observed_ipc,
@@ -705,47 +993,33 @@ fn run_od_2body_ipc<'py>(
     refinement: Option<&Bound<'py, PyDict>>,
     fit_settings: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
-    let settings = parse_fit_settings(fit_settings)?;
-    let config = FullOdConfig {
-        iod: parse_iod_settings(iod_settings)?,
-        refinement: parse_refinement(refinement, settings.config)?,
-    };
-    let models = models_from_specs(models)?;
-    let n = problem.observed.len();
-    let output = py
-        .allow_threads(|| {
-            let backend = global_backend()
-                .lock()
-                .map_err(|_| "SPICE backend lock is poisoned".to_string())?;
-            run_od_barycentric(
-                &settings.propagator,
-                &problem.observed,
-                &problem.observers,
-                &obs_code,
-                &band,
-                &astcat,
-                models,
-                &config,
-                &settings.options,
-                &ErfaTimeProvider,
-                &*backend,
-            )
-            .map_err(|err| err.to_string())
-        })
-        .map_err(value_error)?;
-    let out = full_od_dict(py, output.full_od, n)?;
-    out.set_item("original_astrometry", snapshot_dict(py, output.original)?)?;
-    out.set_item("used_astrometry", snapshot_dict(py, output.used)?)?;
-    out.set_item("models_changed", output.models_changed)?;
-    Ok(out)
+    run_od_ipc(
+        py,
+        None,
+        observed_ipc,
+        observers_ipc,
+        obs_code,
+        band,
+        astcat,
+        models,
+        iod_settings,
+        refinement,
+        fit_settings,
+    )
 }
 
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_function(wrap_pyfunction!(full_od_2body_ipc, m)?)?;
-    m.add_function(wrap_pyfunction!(run_od_2body_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(fit_orbit_whitened_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(fit_orbit_whitened_2body_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(validate_fit_covariance_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(iterative_fit_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(iterative_fit_2body_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(cmc2003_fit_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(cmc2003_fit_2body_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(iod_fit_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(full_od_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(full_od_2body_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(run_od_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(run_od_2body_ipc, m)?)?;
     Ok(())
 }

@@ -1349,7 +1349,7 @@ pub(crate) fn read_orbit_ipc(bytes: &[u8]) -> PyResult<RecordBatch> {
     Ok(batch)
 }
 
-fn write_orbit_ipc(batch: &RecordBatch) -> PyResult<Vec<u8>> {
+pub(crate) fn write_orbit_ipc(batch: &RecordBatch) -> PyResult<Vec<u8>> {
     let mut buffer = Vec::new();
     {
         let schema = batch.schema();

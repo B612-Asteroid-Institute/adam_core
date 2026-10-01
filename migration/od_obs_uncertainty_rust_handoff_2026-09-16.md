@@ -32,9 +32,11 @@ New Rust files: `rust/adam_core_rs_coords/src/{efcc18,observation_uncertainty,ve
 
 ## Python <-> Rust boundary
 
-Rust owns every per-observation arithmetic and lookup; Python owns quivr
-tables, pyarrow schema validation, the `OrbitFitter` plugin boundary and the
-scipy optimizer driving a user-supplied `Propagator`:
+Rust owns every per-observation arithmetic and lookup and, since 2026-09-29
+/ 2026-10-01 (see the follow-ups below), the orchestration too; Python owns
+quivr tables, pyarrow schema validation, the `OrbitFitter` plugin boundary
+and table assembly. The table below is the original (2026-09-16) boundary;
+the "Stays Python" entries for the fit and the loops are superseded:
 
 | Python surface (same names as the Python branch) | Rust kernel(s) behind it | Stays Python (why) |
 |---|---|---|
@@ -155,6 +157,51 @@ along the flat along-track valley), provenance snapshots 1e-12. Rust unit
 tests cover truth recovery, finite-difference agreement, ignore masks, Huber
 downweighting, the probe fallback, both loops, full OD and run_od.
 
+## 2026-10-01 follow-up: Python is a facade (the callback route)
+
+Alec, in person: every high-level OD function must be callable from Rust
+(precovery must not go through Python), Rust first with a Python facade, and
+both should keep the right error types. The 2026-09-29 drivers covered the
+Rust-callable part for Rust propagators; this slice finishes the facade:
+
+* `SphericalPredictor` (`propagation/od.rs`): the one operation the drivers
+  need from a backend (predicted spherical coordinates for candidate states).
+  `PropagatorPredictor` implements it for any Rust `Propagator`; the drivers
+  are now `*_with(predictor, ...)` with the `*_barycentric` signatures kept as
+  wrappers. `iod_fit` and `evaluate_orbit` are predictor-based too.
+* `rust/adam_core_py/src/od_callback.rs`: `PyEphemerisPredictor` wraps any
+  Python propagator (anything with `generate_ephemeris`) as a predictor; the
+  Rust loop calls it with the GIL re-acquired per prediction (candidates and
+  observers cross as nested Arrow IPC, predictions return as an `(M·N, 6)`
+  array, `adam_core.orbit_determination._native_callback`). The SPICE backend
+  lock is taken per translation call (`LockingSpiceTranslation`), never
+  across a callback. A Python exception raised inside the callback is stored
+  and re-raised unchanged; other driver errors map to `ValueError`
+  (invalid input) / `RuntimeError` (backend failure).
+* Bindings `fit_orbit_whitened_ipc`, `iterative_fit_ipc`, `cmc2003_fit_ipc`,
+  `iod_fit_ipc`, `full_od_ipc`, `run_od_ipc`, `validate_fit_covariance_ipc`
+  take the propagator object (`None` = two-body); the `*_2body_ipc` names
+  remain as the fused in-tree route.
+* Python: `fit_least_squares` (scipy optimizer deleted; `xtol`/`ftol`/`gtol`/
+  `max_nfev` only, others `ValueError`), `iterative_fit`, `cmc2003_fit_detailed`
+  and `iod` are convert → call → convert, dispatching to the propagator's
+  fused work unit when present and to the callback route otherwise; the
+  probe helpers `_weak_direction_delta_chi2` / `_validated_covariance` keep
+  their signatures over the Rust probe. `NativeOrbitFitter.full_od` is the
+  fused `full_od` or `initial_fit` + `refine_fit` (two native crossings);
+  `run_od` is the fused `run_od` or models + `full_od` + provenance join.
+  Duck-typed test propagators that only implement `generate_ephemeris` keep
+  working (the callback calls once per candidate when a propagator cannot
+  batch).
+* Still Python, deliberately: `od.differential_correction` and the public
+  `LeastSquares` (main's legacy loops with their own fused routes), the
+  multi-linkage Ray driver `initial_orbit_determination` (it calls `iod`
+  per linkage, now native), model table loading, ids and table assembly.
+* Not yet: Rust-side defaults for `IodConfig` / `FullOdConfig` and table
+  readers for the data packages (a Rust caller reconstructs the shipped
+  configuration by hand); adam-assist's five fused methods (separate PR,
+  needs a core release that contains the drivers and a pin bump from rc.5).
+
 ## Correctness gates
 
 * **HEALPix RING order.** `efcc18::tests::ring_order_matches_jpl_tiles_dat`
@@ -186,10 +233,8 @@ downweighting, the probe fallback, both loops, full OD and run_od.
 
 ## Not ported / follow-ups
 
-* No Rust-native optimizer for the whitened / Huber fit: the grid-validated
-  scipy trust-region path is preserved for parity; a Rust IRLS Gauss-Newton on
-  `fit_orbit_least_squares_with_predictor` would let the adam-assist backend
-  fit with the analytic Jacobian in one crossing.
+* (Done 2026-09-29 / 2026-10-01.) The whitened / Huber fit, the loops and
+  the full OD are Rust drivers; the scipy path is gone.
 * No Rust-owned `bias.dat` acquisition (the kernel-data crate pattern would fit).
 * Benchmark (`benchmark_*`) twins and `_rust/status.py` registry rows were not
   added for the new kernels (they are new surface, not migrations of legacy

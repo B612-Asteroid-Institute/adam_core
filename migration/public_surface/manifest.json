@@ -12,13 +12,13 @@
     "plotting_policy": "plotting/display may remain Python; all other symbols require review"
   },
   "summary": {
-    "symbols": 719,
+    "symbols": 720,
     "by_kind": {
       "class": 102,
       "classmethod": 34,
       "constant": 106,
       "constructor": 12,
-      "function": 236,
+      "function": 237,
       "method": 162,
       "property": 67
     },
@@ -29,7 +29,7 @@
       "missions": 16,
       "observations": 62,
       "observers": 19,
-      "orbit_determination": 102,
+      "orbit_determination": 103,
       "orbits": 115,
       "photometry": 69,
       "propagator": 7,
@@ -40,7 +40,7 @@
       "compatibility_data_or_external_generic": 206,
       "mixed_rust_python_gap": 105,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 269,
+      "python_gap_or_external_boundary": 270,
       "rust_veneer_candidate_see_domain_audit": 123
     },
     "plotting_exemption_candidates": 16,
@@ -49,7 +49,7 @@
   "frozen_updated_upstream_reconciliation": {
     "commit": "757c09fca86adf9e3d5899952db3d379e09413f6",
     "upstream_symbols": 600,
-    "current_symbols": 719,
+    "current_symbols": 720,
     "upstream_only_symbols": 22,
     "all_upstream_only_symbols_classified": true,
     "disposition": "The listed upstream implementation helpers are intentionally retired; their useful public workflows are Rust-backed or are explicit provider boundaries in the referenced domain audit.",
@@ -9473,7 +9473,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/differential_correction.py",
-      "line": 37,
+      "line": 35,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -9501,7 +9501,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/differential_correction.py",
-      "line": 750,
+      "line": 685,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -9529,7 +9529,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/differential_correction.py",
-      "line": 1104,
+      "line": 894,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -9537,7 +9537,7 @@
         "rust_reference": true,
         "python_loop": true,
         "numpy_reference": true,
-        "pyarrow_reference": true,
+        "pyarrow_reference": false,
         "quivr_reference": false,
         "external_io_reference": false
       },
@@ -9557,7 +9557,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/differential_correction.py",
-      "line": 216,
+      "line": 214,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10117,7 +10117,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 603,
+      "line": 512,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10152,7 +10152,7 @@
         "plotting": false,
         "rust_reference": true,
         "python_loop": true,
-        "numpy_reference": true,
+        "numpy_reference": false,
         "pyarrow_reference": false,
         "quivr_reference": false,
         "external_io_reference": false
@@ -10246,6 +10246,34 @@
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
       "native_timing": "missing_or_partial_see_domain_audit",
+      "tracking_issue": "personal-cmy.37.3",
+      "audit_document": "migration/public_surface/dynamics_od.md"
+    },
+    {
+      "id": "adam_core.orbit_determination.iod:tables_from_iod_output",
+      "module": "adam_core.orbit_determination.iod",
+      "qualname": "tables_from_iod_output",
+      "name": "tables_from_iod_output",
+      "kind": "function",
+      "domain": "orbit_determination",
+      "source": "src/adam_core/orbit_determination/iod.py",
+      "line": 462,
+      "explicit_export": false,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": false,
+        "python_loop": false,
+        "numpy_reference": true,
+        "pyarrow_reference": false,
+        "quivr_reference": false,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "python_gap_or_external_boundary",
+      "rust_entrypoint": null,
+      "parity_coverage": "see_domain_audit",
+      "native_timing": "missing_or_not_applicable_see_domain_audit",
       "tracking_issue": "personal-cmy.37.3",
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
@@ -11629,7 +11657,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/rejection.py",
-      "line": 113,
+      "line": 111,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11657,7 +11685,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/rejection.py",
-      "line": 102,
+      "line": 100,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11685,7 +11713,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/rejection.py",
-      "line": 99,
+      "line": 97,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11713,7 +11741,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/rejection.py",
-      "line": 98,
+      "line": 96,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11741,7 +11769,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/rejection.py",
-      "line": 97,
+      "line": 95,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11769,7 +11797,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/rejection.py",
-      "line": 100,
+      "line": 98,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11797,7 +11825,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/rejection.py",
-      "line": 101,
+      "line": 99,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11825,7 +11853,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/rejection.py",
-      "line": 105,
+      "line": 103,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11853,7 +11881,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/rejection.py",
-      "line": 472,
+      "line": 379,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11881,7 +11909,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/rejection.py",
-      "line": 256,
+      "line": 254,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {

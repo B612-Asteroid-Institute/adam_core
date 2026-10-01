@@ -64,16 +64,14 @@ from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
 from .differential_correction import (
     _FUSED_LOOP_KWARGS,
+    _NATIVE_FIT_KWARGS,
     HUBER_F_SCALE_DEFAULT,
     LossType,
-    _analytic_jacobian,
-    _analytic_jacobian_terms,
     _emit_native_warnings,
     _fit_settings,
     _fitted_tables_from_native_output,
-    _observation_whitening_matrices,
+    _native_problem,
     _whiten_residual_pairs,
-    fit_least_squares,
 )
 from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
@@ -325,147 +323,56 @@ def cmc2003_fit_detailed(
     if "ignore" in kwargs:
         raise ValueError("ignore is managed by cmc2003_fit and cannot be passed")
     assert len(orbit) == 1, "Only one orbit can be fitted"
+    unsupported = set(kwargs) - _FUSED_LOOP_KWARGS - _NATIVE_FIT_KWARGS
+    if unsupported:
+        raise ValueError(
+            "cmc2003_fit runs the Rust rejection loop and accepts only the fit "
+            "settings jacobian, xtol, ftol, gtol, max_nfev (max_iterations); got "
+            + ", ".join(f"{key}={kwargs[key]!r}" for key in sorted(unsupported))
+        )
+    fit_settings = _fit_settings(
+        loss,
+        f_scale,
+        kwargs.get("jacobian", "analytic"),
+        validate_covariance,
+        kwargs,
+    )
+    loop_settings = dict(
+        chi2_reject=chi2_reject,
+        chi2_recover=chi2_recover,
+        chi2_frac=chi2_frac,
+        max_iterations=max_iterations,
+        max_rejected_fraction=max_rejected_fraction,
+        apparition_gap_days=apparition_gap_days,
+        psd_floor_frac=psd_floor_frac,
+    )
 
     # Rust-backed propagators run the whole CMC2003 loop in one crossing
-    # (``cmc2003_fit`` work unit); the veneer only wraps the final pass.
+    # (``cmc2003_fit`` work unit); every other propagator runs the same Rust
+    # loop through the callback route. The facade only wraps the final pass.
     fused = getattr(propagator, "cmc2003_fit", None)
-    if fused is not None and set(kwargs) <= _FUSED_LOOP_KWARGS:
-        output = fused(
-            orbit,
-            observations,
-            chi2_reject=chi2_reject,
-            chi2_recover=chi2_recover,
-            chi2_frac=chi2_frac,
-            max_iterations=max_iterations,
-            max_rejected_fraction=max_rejected_fraction,
-            apparition_gap_days=apparition_gap_days,
-            psd_floor_frac=psd_floor_frac,
-            fit_settings=_fit_settings(
-                loss,
-                f_scale,
-                kwargs.get("jacobian", "analytic"),
-                validate_covariance,
-                kwargs,
-            ),
-        )
-        _emit_native_warnings(output)
-        fitted_orbit, fitted_orbit_members = _fitted_tables_from_native_output(
-            orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
-        )
-        return CMC2003Fit(
-            fitted_orbit=fitted_orbit,
-            fitted_orbit_members=fitted_orbit_members,
-            n_iterations=int(output["n_iterations"]),
-            n_rejected=int(output["n_rejected"]),
-            n_recovered=int(output["n_recovered"]),
-            flags=tuple(sorted(output["flags"])),
-        )
+    if fused is not None:
+        output = fused(orbit, observations, fit_settings=fit_settings, **loop_settings)
+    else:
+        from adam_core import _rust_native
 
-    ids = observations.id.to_numpy(zero_copy_only=False)
-    epoch_mjd_tdb = float(
-        orbit.coordinates.time.rescale("tdb").mjd().to_numpy(zero_copy_only=False)[0]
-    )
-    mjd_utc = (
-        observations.coordinates.time.rescale("utc")
-        .mjd()
-        .to_numpy(zero_copy_only=False)
-    )
-    apparitions = _apparitions(mjd_utc, apparition_gap_days)
-    whiteners = _observation_whitening_matrices(observations)
-    jacobian_terms = _analytic_jacobian_terms(observations)
-
-    def fit(
-        seed: Orbits, selected: npt.NDArray[np.bool_]
-    ) -> tuple[FittedOrbits, FittedOrbitMembers]:
-        ignore = [str(i) for i in ids[~selected]]
-        return fit_least_squares(
-            seed,
-            observations,
+        output = _rust_native.cmc2003_fit_ipc(
             propagator,
-            ignore=ignore if ignore else None,
-            loss=loss,
-            f_scale=f_scale,
-            validate_covariance=validate_covariance,
-            **kwargs,
+            *_native_problem(orbit, observations),
+            fit_settings=fit_settings,
+            **loop_settings,
         )
-
-    selected = np.ones(n, dtype=bool)
-    flags: set[str] = set()
-    n_recovered_total = 0
-    stuck_passes = 0
-    previous_modifications: int | None = None
-    seed = orbit
-    n_iterations = 0
-    converged = False
-
-    for iteration in range(max_iterations):
-        n_iterations = iteration + 1
-        fitted_orbit, fitted_orbit_members = fit(seed, selected)
-        seed = fitted_orbit.to_orbits()
-
-        if n <= _MIN_OBS:
-            flags.add("too_few_observations")
-            converged = True
-            break
-
-        state = np.concatenate(
-            [fitted_orbit.coordinates.r[0], fitted_orbit.coordinates.v[0]]
-        )
-        covariance = fitted_orbit.coordinates.covariance.to_matrix()[0]
-        jacobian = _analytic_jacobian(state, epoch_mjd_tdb, jacobian_terms)
-        residuals = _whitened_residuals(fitted_orbit_members, whiteners)
-        chi2, pass_flags = _expected_residual_chi2(
-            residuals, jacobian, covariance, selected, psd_floor_frac
-        )
-        flags |= pass_flags
-
-        n_selected = int(selected.sum())
-        one_at_a_time = n_selected <= 6 * _MIN_OBS or stuck_passes >= 4
-        new_selected, n_rejected, n_recovered, select_flags = _cmc2003_select(
-            chi2,
-            selected,
-            apparitions,
-            chi2_reject=chi2_reject,
-            chi2_recover=chi2_recover,
-            chi2_frac=chi2_frac,
-            max_rejected_fraction=max_rejected_fraction,
-            one_at_a_time=one_at_a_time,
-        )
-        flags |= select_flags
-        n_modifications = n_rejected + n_recovered
-        n_recovered_total += n_recovered
-        logger.debug(
-            "CMC2003 pass %d: %d selected, worst chi2 %.2f, %d rejected, %d recovered",
-            n_iterations,
-            n_selected,
-            float(chi2[selected].max()) if n_selected else 0.0,
-            n_rejected,
-            n_recovered,
-        )
-        stuck_passes = (
-            stuck_passes + 1
-            if previous_modifications == n_modifications and n_modifications > 0
-            else 0
-        )
-        previous_modifications = n_modifications
-        if n_modifications == 0:
-            converged = True
-            break
-        selected = new_selected
-
-    if not converged:
-        # The selection changed after the last fit: refit so that the returned
-        # orbit and members describe the final selection.
-        flags.add("max_iterations")
-        fitted_orbit, fitted_orbit_members = fit(seed, selected)
-
+    _emit_native_warnings(output)
+    fitted_orbit, fitted_orbit_members = _fitted_tables_from_native_output(
+        orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
+    )
     return CMC2003Fit(
         fitted_orbit=fitted_orbit,
         fitted_orbit_members=fitted_orbit_members,
-        n_iterations=n_iterations,
-        n_rejected=int((~selected).sum()),
-        n_recovered=n_recovered_total,
-        flags=tuple(sorted(flags)),
+        n_iterations=int(output["n_iterations"]),
+        n_rejected=int(output["n_rejected"]),
+        n_recovered=int(output["n_recovered"]),
+        flags=tuple(sorted(output["flags"])),
     )
 
 

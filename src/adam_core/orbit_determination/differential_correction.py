@@ -5,7 +5,6 @@ import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 import pyarrow.compute as pc
-from scipy.optimize import least_squares
 
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import CoordinateCovariances
@@ -19,7 +18,6 @@ from ..utils.spice import get_perturber_state
 from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .observation_uncertainty import ObservationUncertaintyModel
-from .outliers import calculate_max_outliers, remove_lowest_probability_observation
 
 # Acceptance window for the weak-direction consistency check: the measured
 # delta-chi2 at a 1-sigma displacement along the covariance's widest axis
@@ -69,7 +67,7 @@ def _fit_settings(
         "xtol": kwargs.get("xtol", 1e-12),
         "ftol": kwargs.get("ftol", 1e-12),
         "gtol": kwargs.get("gtol", 1e-12),
-        "max_iterations": kwargs.get("max_nfev", 100),
+        "max_iterations": kwargs.get("max_nfev", kwargs.get("max_iterations", 100)),
     }
 
 
@@ -344,38 +342,67 @@ def _analytic_jacobian(
     )
 
 
-def _central_difference_jacobian(
+def _native_problem(
+    orbit: Orbits, observations: OrbitDeterminationObservations
+) -> tuple[bytes, bytes, bytes]:
+    """The orbit, observed coordinates and observers as the nested Arrow IPC
+    bytes the Rust OD drivers decode, with the SPICE backend ready."""
+    from .._rust.arrow import ensure_spice_backend
+    from ..orbits.arrow_bridge import (
+        coordinates_to_ipc,
+        observers_to_ipc,
+        orbits_to_ipc,
+    )
+
+    ensure_spice_backend()
+    return (
+        orbits_to_ipc(orbit),
+        coordinates_to_ipc(observations.coordinates, "spherical"),
+        observers_to_ipc(observations.observers),
+    )
+
+
+def _orbit_at(state_vector: npt.NDArray[np.float64], mjd_tdb: float) -> Orbits:
+    """A heliocentric ecliptic `Orbits` row for a state at an epoch."""
+    return Orbits.from_kwargs(
+        orbit_id=["probe"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=state_vector[0:1],
+            y=state_vector[1:2],
+            z=state_vector[2:3],
+            vx=state_vector[3:4],
+            vy=state_vector[4:5],
+            vz=state_vector[5:6],
+            time=Timestamp.from_mjd([mjd_tdb], scale="tdb"),
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+
+def _probe_covariance(
+    covariance_matrix: npt.NDArray[np.float64],
+    jacobian_method: str,
     state_vector: npt.NDArray[np.float64],
     mjd_tdb: float,
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
-    rel_step: float = 1e-6,
-    abs_step_floor: float = 1e-3,
-) -> npt.NDArray[np.float64]:
-    """
-    Central-difference Jacobian of the whitened residual vector computed
-    through the full residual pipeline (N-body propagation via `propagator`).
+    loss: str,
+    f_scale: float,
+) -> dict:
+    """Run the Rust covariance probe over ``propagator`` (its own Rust work
+    unit, or the callback route) and return its dict."""
+    from adam_core import _rust_native
 
-    Step sizes are h_k = rel_step * max(|x_k|, abs_step_floor), which produce
-    covariances stable to four decimals over rel_step in [1e-7, 1e-5] on
-    angles-only NEO arcs. This is the fallback covariance path when the
-    2-body analytic Jacobian cannot be trusted, e.g. when the arc contains a
-    planetary encounter that the 2-body state transition matrix does not
-    model.
-    """
-    n_params = len(state_vector)
-    jacobian = np.empty((2 * len(observations), n_params), dtype=np.float64)
-    for k in range(n_params):
-        step = rel_step * max(abs(state_vector[k]), abs_step_floor)
-        plus = state_vector.copy()
-        minus = state_vector.copy()
-        plus[k] += step
-        minus[k] -= step
-        jacobian[:, k] = (
-            residual_function(plus, mjd_tdb, observations, propagator)
-            - residual_function(minus, mjd_tdb, observations, propagator)
-        ) / (2.0 * step)
-    return jacobian
+    method = "2-point" if jacobian_method == "solver" else jacobian_method
+    return _rust_native.validate_fit_covariance_ipc(
+        propagator,
+        *_native_problem(_orbit_at(state_vector, mjd_tdb), observations),
+        [False] * len(observations),
+        np.ascontiguousarray(covariance_matrix, dtype=np.float64).reshape(6, 6),
+        jacobian=method,
+        fit_settings={"loss": loss, "f_scale": f_scale},
+    )
 
 
 def _weak_direction_delta_chi2(
@@ -390,32 +417,29 @@ def _weak_direction_delta_chi2(
 ) -> float:
     """
     Measure the actual change in the fit cost at a 1-sigma displacement along
-    the covariance's weakest-constrained direction.
+    the covariance's weakest-constrained direction (the Rust probe of
+    `fit_least_squares`; ``cost_solution`` is recomputed natively and kept
+    for signature compatibility).
 
-    The cost is chi2 for ``loss="linear"`` and the robust cost of
-    `_robust_cost` otherwise (``cost_solution`` must be that cost at
-    ``state_vector``). If the covariance is trustworthy and the solution sits
-    at the minimum of a locally quadratic cost surface, this is ~1 by
-    construction (delta = sigma^2 * v^T C^-1 v = 1 for the eigenpair
-    (sigma^2, v)). Values far below 1 reproduce the fabricated-confidence
-    failure mode where the cost valley is flat over many claimed sigma;
-    values far above 1 indicate the covariance overstates the uncertainty.
-    The displacement is applied symmetrically so that a residual gradient
-    (incomplete convergence) mostly cancels.
+    If the covariance is trustworthy and the solution sits at the minimum of a
+    locally quadratic cost surface, this is ~1 by construction. Values far
+    below 1 reproduce the fabricated-confidence failure mode where the cost
+    valley is flat over many claimed sigma; values far above 1 indicate the
+    covariance overstates the uncertainty. NaN when the probe could not be
+    evaluated.
     """
-    eigenvalues, eigenvectors = np.linalg.eigh(covariance_matrix)
-    sigma = float(np.sqrt(eigenvalues[-1]))
-    direction = eigenvectors[:, -1]
-
-    residuals_plus = residual_function(
-        state_vector + sigma * direction, mjd_tdb, observations, propagator
+    del cost_solution
+    output = _probe_covariance(
+        covariance_matrix,
+        "central",
+        state_vector,
+        mjd_tdb,
+        observations,
+        propagator,
+        loss,
+        f_scale,
     )
-    residuals_minus = residual_function(
-        state_vector - sigma * direction, mjd_tdb, observations, propagator
-    )
-    cost_plus = _robust_cost(residuals_plus, loss, f_scale)
-    cost_minus = _robust_cost(residuals_minus, loss, f_scale)
-    return 0.5 * (cost_plus + cost_minus) - cost_solution
+    return float(output["delta_cost"])
 
 
 def _validated_covariance(
@@ -431,111 +455,28 @@ def _validated_covariance(
     residuals_solution: npt.NDArray[np.float64] | None = None,
 ) -> npt.NDArray[np.float64]:
     """
-    Run the weak-direction consistency check on a fit covariance and, for the
-    analytic Jacobian path, fall back to the central-difference covariance
-    when the check fails (the signature of a dynamics regime — such as a
-    planetary encounter inside the arc — that the 2-body state transition
-    matrix does not capture).
-
-    ``cost_solution`` is the fit cost (chi2, or the robust cost for a robust
-    ``loss``) at ``state_vector``. For a robust loss the central-difference
-    fallback Jacobian is row-scaled with `_robust_jacobian_scale` using
-    ``residuals_solution`` (recomputed if not given).
+    The weak-direction consistency check on a fit covariance, as the Rust
+    driver of `fit_least_squares` runs it: for the analytic Jacobian a failed
+    check falls back to the central-difference covariance (the signature of
+    dynamics inside the arc, such as a planetary encounter, that the 2-body
+    state transition matrix does not capture); other Jacobians only warn. The
+    driver's diagnostics are re-emitted as `RuntimeWarning`s.
+    ``cost_solution`` and ``residuals_solution`` are recomputed natively and
+    kept for signature compatibility.
     """
-    lower, upper = _DELTA_CHI2_WINDOW
-    try:
-        delta_chi2 = _weak_direction_delta_chi2(
-            state_vector,
-            mjd_tdb,
-            observations,
-            propagator,
-            covariance_matrix,
-            cost_solution,
-            loss=loss,
-            f_scale=f_scale,
-        )
-    except Exception as e:
-        warnings.warn(
-            "The fit covariance could not be validated: evaluating residuals "
-            f"at a 1-sigma displacement along its weakest direction failed ({e}). "
-            "The covariance may be unreliable in weakly constrained directions.",
-            category=RuntimeWarning,
-        )
-        return covariance_matrix
-
-    if lower <= delta_chi2 <= upper:
-        return covariance_matrix
-
-    if jacobian_method == "analytic":
-        warnings.warn(
-            "The analytic (2-body) fit covariance failed the weak-direction "
-            f"consistency check (measured delta-chi2 = {delta_chi2:.3g} at a "
-            "1-sigma displacement along the weakest axis; expected ~1). This "
-            "typically indicates dynamics inside the arc that the 2-body "
-            "state transition matrix does not model (e.g. a planetary "
-            "encounter). Falling back to a central-difference Jacobian "
-            "computed through the full residual pipeline.",
-            category=RuntimeWarning,
-        )
-        jacobian = _central_difference_jacobian(
-            state_vector, mjd_tdb, observations, propagator
-        )
-        if loss != "linear":
-            if residuals_solution is None:
-                residuals_solution = residual_function(
-                    state_vector, mjd_tdb, observations, propagator
-                )
-            jacobian = (
-                jacobian
-                * _robust_jacobian_scale(residuals_solution, loss, f_scale)[:, None]
-            )
-        try:
-            covariance_matrix = np.asarray(
-                np.linalg.inv(jacobian.T @ jacobian), dtype=np.float64
-            )
-        except np.linalg.LinAlgError:
-            warnings.warn(
-                "The central-difference fallback covariance could not be "
-                "computed. The solution covariance may be unreliable.",
-                category=RuntimeWarning,
-            )
-            return covariance_matrix
-        return _validated_covariance(
-            covariance_matrix,
-            "central",
-            state_vector,
-            mjd_tdb,
-            observations,
-            propagator,
-            cost_solution,
-            loss=loss,
-            f_scale=f_scale,
-            residuals_solution=residuals_solution,
-        )
-
-    if jacobian_method in ("2-point", "solver"):
-        warnings.warn(
-            "The fit covariance failed the weak-direction consistency check "
-            f"(measured delta-chi2 = {delta_chi2:.3g} at a 1-sigma displacement "
-            "along the weakest axis; expected ~1). The covariance was computed "
-            "from the solver's forward-difference Jacobian, whose implied steps "
-            "can sit below the numerical noise floor of the residual pipeline; "
-            "in weakly constrained (line-of-sight) directions the resulting "
-            "confidence is fabricated by finite-difference noise. Use "
-            "jacobian='analytic' or jacobian='central' instead.",
-            category=RuntimeWarning,
-        )
-    else:
-        warnings.warn(
-            "The fit covariance failed the weak-direction consistency check "
-            f"(measured delta-chi2 = {delta_chi2:.3g} at a 1-sigma displacement "
-            "along the weakest axis; expected ~1). The covariance may be "
-            "unreliable in weakly constrained directions (the chi2 surface "
-            "disagrees with the local quadratic model, e.g. because the "
-            "solution has not fully converged along a flat valley).",
-            category=RuntimeWarning,
-        )
-    return covariance_matrix
+    del cost_solution, residuals_solution
+    output = _probe_covariance(
+        covariance_matrix,
+        jacobian_method,
+        state_vector,
+        mjd_tdb,
+        observations,
+        propagator,
+        loss,
+        f_scale,
+    )
+    _emit_native_warnings(output)
+    return np.asarray(output["covariance"], dtype=np.float64)
 
 
 def _member_weights(
@@ -715,12 +656,11 @@ def _validate_native_covariance(
     propagator: Propagator,
 ) -> None:
     """
-    Run the weak-direction consistency check of `_validated_covariance` on the
-    covariance returned by a propagator's fused Rust work unit, which is the
-    forward-difference ``inv(J^T J)`` of the Gauss-Newton fitter. The fit is
-    left unchanged: as on the scipy ``"2-point"`` path, a failed check emits a
-    `RuntimeWarning` instead of replacing the covariance. Costs three residual
-    evaluations (the cost at the solution plus the two probe displacements).
+    Run the weak-direction consistency check on the covariance returned by a
+    propagator's legacy fused ``fit_least_squares_evaluated`` work unit (the
+    forward-difference ``inv(J^T J)`` of its Gauss-Newton fitter). The fit is
+    left unchanged: a failed check emits a `RuntimeWarning` instead of
+    replacing the covariance.
     """
     covariance_matrix = fitted_orbit.coordinates.covariance.to_matrix()[0]
     if not np.all(np.isfinite(covariance_matrix)):
@@ -731,9 +671,6 @@ def _validate_native_covariance(
         .mjd()
         .to_numpy(zero_copy_only=False)[0]
     )
-    residuals_solution = residual_function(
-        state_vector, mjd_tdb, observations_to_include, propagator
-    )
     _validated_covariance(
         covariance_matrix,
         "2-point",
@@ -741,9 +678,7 @@ def _validate_native_covariance(
         mjd_tdb,
         observations_to_include,
         propagator,
-        _robust_cost(residuals_solution, "linear", 1.0),
-        loss="linear",
-        residuals_solution=residuals_solution,
+        0.0,
     )
 
 
@@ -839,14 +774,12 @@ def fit_least_squares(
         constant giving 95% asymptotic efficiency for Gaussian errors.
         Ignored for ``loss="linear"``.
     **kwargs
-        Additional keyword arguments to pass to `~scipy.optimize.least_squares`
-        (``loss`` and ``f_scale`` are the named parameters above).
-        Some of these parameters if not specified will be set to sensible defaults.
-            xtol = 1e-12
-            ftol = 1e-12
-            gtol = 1e-12
-            x_scale = "jac"
-            bounds = (-np.inf, np.inf) (for each parameter)
+        Solver settings forwarded to the Rust driver: ``xtol``, ``ftol``,
+        ``gtol`` (default 1e-12 each, scipy's stopping rules) and ``max_nfev``
+        (or ``max_iterations``, default 100). Any other keyword raises a
+        `ValueError`: the fit runs natively (Levenberg-Marquardt with
+        Marquardt scaling) and no longer forwards arguments to
+        `scipy.optimize.least_squares`.
 
     Returns
     -------
@@ -889,23 +822,30 @@ def fit_least_squares(
         mask = None
         observations_to_include = observations
 
+    unsupported = set(kwargs) - _FUSED_WHITENED_KWARGS - _NATIVE_FIT_KWARGS
+    if unsupported:
+        raise ValueError(
+            "fit_least_squares runs the Rust solver and accepts only the solver "
+            "settings xtol, ftol, gtol, max_nfev (max_iterations); got "
+            + ", ".join(f"{key}={kwargs[key]!r}" for key in sorted(unsupported))
+        )
+
     # Rust-backed propagators expose the complete whitened fit as one native
     # crossing (``fit_least_squares_whitened``): every Jacobian option, both
     # losses, the validated covariance and the final evaluation.
-    if set(kwargs) <= _FUSED_WHITENED_KWARGS:
-        fused = _fused_whitened_fit(
-            orbit,
-            observations,
-            propagator,
-            mask,
-            jacobian,
-            validate_covariance,
-            loss,
-            f_scale,
-            kwargs,
-        )
-        if fused is not None:
-            return fused
+    fused = _fused_whitened_fit(
+        orbit,
+        observations,
+        propagator,
+        mask,
+        jacobian,
+        validate_covariance,
+        loss,
+        f_scale,
+        kwargs,
+    )
+    if fused is not None:
+        return fused
 
     # Legacy forward-difference path on a Rust-backed propagator that exposes
     # only the older ``fit_least_squares_evaluated`` / ``fit_least_squares``
@@ -930,175 +870,25 @@ def fit_least_squares(
                 )
             return native
 
-    observed_values = observations_to_include.coordinates.values
-    if np.any(np.isfinite(observed_values[:, [0, 3, 4, 5]])):
-        raise ValueError(
-            "fit_least_squares only supports angular (lon, lat) observations; "
-            "found finite values in rho or velocity dimensions."
-        )
+    # Every other propagator: the same Rust driver, driving the propagator's
+    # own ``generate_ephemeris`` through the callback route.
+    from adam_core import _rust_native
 
-    parameters = 6
-    # Extract epoch and state vector from orbit
-    epoch = orbit.coordinates.time.rescale("tdb").mjd().to_numpy(zero_copy_only=False)
-    state_vector = orbit.coordinates.values[0]
-    args = (epoch[0], observations_to_include, propagator)
-
-    # Define some sensible defaults for the least squares fitting procedure
-    if "xtol" not in kwargs:
-        kwargs["xtol"] = 1e-12
-    if "ftol" not in kwargs:
-        kwargs["ftol"] = 1e-12
-    if "gtol" not in kwargs:
-        kwargs["gtol"] = 1e-12
-    if "x_scale" not in kwargs:
-        kwargs["x_scale"] = "jac"
-    if "bounds" not in kwargs:
-        kwargs["bounds"] = (
-            np.full(parameters, -np.inf),
-            np.full(parameters, np.inf),
-        )
-    if "args" in kwargs:
-        kwargs.pop("args")
-        warnings.warn(
-            "The args parameter is not supported and will be ignored.",
-            category=RuntimeWarning,
-        )
-    kwargs.pop("max_iterations", None)
-    if loss != "linear":
-        if kwargs.get("method") == "lm":
-            raise ValueError(
-                f"loss={loss!r} is not supported by method='lm'; use method='trf' "
-                "(default) or 'dogbox'."
-            )
-        kwargs["loss"] = loss
-        kwargs["f_scale"] = f_scale
-
-    jacobian_method: str = jacobian
-    if "jac" in kwargs:
-        jacobian_method = "solver"
-        warnings.warn(
-            "An explicit jac was passed to least_squares; the jacobian "
-            "parameter is ignored and the covariance is computed from the "
-            "solver-reported Jacobian.",
-            category=RuntimeWarning,
-        )
-    elif jacobian == "analytic":
-        terms = _analytic_jacobian_terms(observations_to_include)
-        epoch_mjd_tdb = epoch[0]
-
-        def jac(x: npt.NDArray[np.float64], *_args: object) -> npt.NDArray[np.float64]:
-            return _analytic_jacobian(x, epoch_mjd_tdb, terms)
-
-        kwargs["jac"] = jac
-    else:
-        kwargs["jac"] = "2-point"
-
-    # Run least squares
-    solution = least_squares(residual_function, state_vector, args=args, **kwargs)
-
-    # Extract solution state vector and covariance matrix
-    mjd_tdb = epoch[0]
-    x, y, z, vx, vy, vz = solution.x
-
-    # Whitened residual components at the solution (unscaled by the loss) and
-    # the value of the minimized objective (chi2 for the linear loss).
-    residuals_solution = np.asarray(solution.fun, dtype=np.float64)
-    cost_solution = _robust_cost(residuals_solution, loss, f_scale)
-
-    if jacobian_method == "central":
-        solution_jacobian = _central_difference_jacobian(
-            solution.x, mjd_tdb, observations_to_include, propagator
-        )
-        if loss != "linear":
-            # Match the solver's convention: the covariance is that of the
-            # robust cost, whose Gauss-Newton Jacobian is the residual
-            # Jacobian row-scaled by the loss curvature.
-            solution_jacobian = (
-                solution_jacobian
-                * _robust_jacobian_scale(residuals_solution, loss, f_scale)[:, None]
-            )
-    else:
-        # For a robust loss, scipy reports the Jacobian already scaled for
-        # the loss (J^T J approximates the Hessian of the robust cost).
-        solution_jacobian = solution.jac
-
-    try:
-        covariance_matrix = np.asarray(
-            np.linalg.inv(solution_jacobian.T @ solution_jacobian),
-            dtype=np.float64,
-        )
-    except np.linalg.LinAlgError:
-        warnings.warn(
-            "The covariance matrix could not be computed. The solution may be "
-            "unreliable.",
-            category=RuntimeWarning,
-        )
-        covariance_matrix = np.full((6, 6), np.nan)
-
-    if validate_covariance and np.all(np.isfinite(covariance_matrix)):
-        covariance_matrix = _validated_covariance(
-            covariance_matrix,
-            jacobian_method,
-            solution.x,
-            mjd_tdb,
-            observations_to_include,
-            propagator,
-            cost_solution,
-            loss=loss,
-            f_scale=f_scale,
-            residuals_solution=residuals_solution,
-        )
-
-    # Create orbit with solution state vector and use it to generate ephemeris
-    # and calculate the residuals with respect to the observations
-    orbit = Orbits.from_kwargs(
-        orbit_id=orbit.orbit_id,
-        object_id=orbit.object_id,
-        coordinates=CartesianCoordinates.from_kwargs(
-            x=[x],
-            y=[y],
-            z=[z],
-            vx=[vx],
-            vy=[vy],
-            vz=[vz],
-            time=Timestamp.from_mjd([mjd_tdb], scale="tdb"),
-            covariance=CoordinateCovariances.from_matrix(
-                covariance_matrix.reshape(1, 6, 6)
-            ),
-            origin=orbit.coordinates.origin,
-            frame=orbit.coordinates.frame,
+    ignore_mask = (
+        [False] * len(observations) if mask is None else pc.invert(mask).to_pylist()
+    )
+    output = _rust_native.fit_orbit_whitened_ipc(
+        propagator,
+        *_native_problem(orbit, observations),
+        ignore_mask,
+        fit_settings=_fit_settings(
+            loss, f_scale, jacobian, validate_covariance, kwargs
         ),
     )
-
-    # Evaluate the solution orbit and return it as a fitted orbit and fitted orbit members
-    # which contain the residuals with respect to the observations and the overall
-    # quality of the fit
-    fitted_orbit, fitted_orbit_members = evaluate_orbits(
-        orbit,
-        observations,
-        propagator,
-        parameters=parameters,
-        ignore=ignore,
+    _emit_native_warnings(output)
+    return _fitted_tables_from_native_output(
+        orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
     )
-    fitted_orbit = (
-        fitted_orbit.set_column("iterations", [solution.nfev])
-        .set_column("success", [solution.success])
-        .set_column("status_code", [solution.status])
-    )
-    fitted_orbit_members = fitted_orbit_members.set_column(
-        "solution", pc.invert(fitted_orbit_members.outlier)
-    )
-
-    # Effective weight of each observation in the solution: the smaller of its
-    # two per-component IRLS weights (all ones for the linear loss), and 0 for
-    # ignored observations. Members are in the order of `observations`.
-    component_weights = _robust_weights(residuals_solution, loss, f_scale)
-    included_weights = component_weights.reshape(-1, 2).min(axis=1)
-    fitted_orbit_members = fitted_orbit_members.set_column(
-        "weight", _member_weights(observations, mask, included_weights)
-    )
-
-    return fitted_orbit, fitted_orbit_members
 
 
 def iterative_fit(
@@ -1161,9 +951,9 @@ def iterative_fit(
         Huber transition point in units of whitened (1-sigma) residual
         components; see `fit_least_squares`. Ignored for ``loss="linear"``.
     **kwargs
-        Additional keyword arguments passed to `fit_least_squares` (including
-        `jacobian` and `validate_covariance`) and ultimately to
-        `~scipy.optimize.least_squares`.
+        Fit settings forwarded to every pass: ``jacobian``,
+        ``validate_covariance`` and the solver tolerances of
+        `fit_least_squares`. Any other keyword raises a `ValueError`.
 
     Returns
     -------
@@ -1181,94 +971,44 @@ def iterative_fit(
         # passed to the nested fit_least_squares calls below.
         observations = observatory_bias_model.apply(observations)
 
+    unsupported = set(kwargs) - _FUSED_LOOP_KWARGS - _NATIVE_FIT_KWARGS
+    if unsupported:
+        raise ValueError(
+            "iterative_fit runs the Rust rejection loop and accepts only the fit "
+            "settings jacobian, validate_covariance, xtol, ftol, gtol, max_nfev "
+            "(max_iterations); got "
+            + ", ".join(f"{key}={kwargs[key]!r}" for key in sorted(unsupported))
+        )
+    fit_settings = _fit_settings(
+        loss,
+        f_scale,
+        kwargs.get("jacobian", "analytic"),
+        kwargs.get("validate_covariance", True),
+        kwargs,
+    )
+    loop_settings = dict(
+        rchi2_threshold=rchi2_threshold,
+        min_obs=min_obs,
+        min_arc_length=min_arc_length,
+        contamination_percentage=contamination_percentage,
+    )
+
     # Rust-backed propagators run the whole rejection loop in one crossing
-    # (``iterative_fit`` work unit); the veneer only wraps the selected pass.
+    # (``iterative_fit`` work unit); every other propagator runs the same Rust
+    # loop through the callback route. The facade only wraps the selected pass.
     fused = getattr(propagator, "iterative_fit", None)
-    if fused is not None and set(kwargs) <= _FUSED_LOOP_KWARGS:
-        output = fused(
-            orbit,
-            observations,
-            rchi2_threshold=rchi2_threshold,
-            min_obs=min_obs,
-            min_arc_length=min_arc_length,
-            contamination_percentage=contamination_percentage,
-            fit_settings=_fit_settings(
-                loss,
-                f_scale,
-                kwargs.get("jacobian", "analytic"),
-                kwargs.get("validate_covariance", True),
-                kwargs,
-            ),
-        )
-        _emit_native_warnings(output)
-        return _fitted_tables_from_native_output(
-            orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
-        )
+    if fused is not None:
+        output = fused(orbit, observations, fit_settings=fit_settings, **loop_settings)
+    else:
+        from adam_core import _rust_native
 
-    num_obs = len(observations)
-    max_outliers = calculate_max_outliers(num_obs, min_obs, contamination_percentage)
-
-    ignore: List[str] = []
-    # Best fit across the passes: the lowest reduced chi2 among the successful
-    # (converged) fits or, if no pass converged, the lowest reduced chi2 overall.
-    best_fit: Optional[Tuple[FittedOrbits, FittedOrbitMembers]] = None
-    best_rchi2 = np.inf
-    fallback_fit: Optional[Tuple[FittedOrbits, FittedOrbitMembers]] = None
-    fallback_rchi2 = np.inf
-
-    for _ in range(max_outliers + 1):
-        fitted_orbit, fitted_orbit_members = fit_least_squares(
-            orbit,
-            observations,
+        output = _rust_native.iterative_fit_ipc(
             propagator,
-            ignore=ignore if ignore else None,
-            loss=loss,
-            f_scale=f_scale,
-            **kwargs,
+            *_native_problem(orbit, observations),
+            fit_settings=fit_settings,
+            **loop_settings,
         )
-
-        rchi2 = fitted_orbit.reduced_chi2[0].as_py()
-        rchi2_key = rchi2 if rchi2 is not None else np.inf
-        if fallback_fit is None or rchi2_key < fallback_rchi2:
-            fallback_fit = (fitted_orbit, fitted_orbit_members)
-            fallback_rchi2 = rchi2_key
-        if bool(fitted_orbit.success[0].as_py()) and (
-            best_fit is None or rchi2_key < best_rchi2
-        ):
-            best_fit = (fitted_orbit, fitted_orbit_members)
-            best_rchi2 = rchi2_key
-
-        # Check convergence
-        if rchi2 is not None and rchi2 <= rchi2_threshold:
-            break
-
-        # Stop if we've already used up all allowed outlier slots
-        if len(ignore) >= max_outliers:
-            break
-
-        # Identify the worst non-outlier observation among the current solution members
-        solution_members = fitted_orbit_members.apply_mask(
-            pc.equal(fitted_orbit_members.outlier, False)
-        )
-        if len(solution_members) == 0:
-            break
-
-        obs_id, remaining_observations = remove_lowest_probability_observation(
-            solution_members, observations
-        )
-
-        # Check that removing this observation still leaves enough arc length
-        arc_length = remaining_observations.coordinates.time.mjd().to_numpy()
-        if (
-            len(arc_length) < min_obs
-            or (arc_length.max() - arc_length.min()) < min_arc_length
-        ):
-            break
-
-        ignore.append(obs_id)
-
-    if best_fit is None:
-        # No pass converged; the loop ran at least once so a fallback exists.
-        assert fallback_fit is not None
-        best_fit = fallback_fit
-    return best_fit
+    _emit_native_warnings(output)
+    return _fitted_tables_from_native_output(
+        orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
+    )

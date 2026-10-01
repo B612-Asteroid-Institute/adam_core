@@ -13,7 +13,7 @@ without running real fits.
 
 import importlib
 import inspect
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -222,23 +222,21 @@ class TestIterativeFit:
     def test_applies_model_and_does_not_forward_it(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
+        """The model is applied once at entry and the INFLATED observations are
+        what reach the Rust loop (spied at the native boundary, where the
+        tables are serialized); the model itself is never forwarded."""
         observations = make_observations(["500"] * 6, [0.0] * 6)
         base_var = observations.coordinates.covariance.to_matrix()[:, 1, 1].copy()
         spy = InflatingSpy()
         captured: dict[str, Any] = {}
 
-        def fake_fit_least_squares(
-            orbit: Any,
-            observations: OrbitDeterminationObservations,
-            propagator: Any,
-            ignore: Optional[list[str]] = None,
-            **kwargs: Any,
+        def fake_native_problem(
+            orbit: Any, observations: OrbitDeterminationObservations
         ) -> Any:
             captured["var"] = observations.coordinates.covariance.to_matrix()[:, 1, 1]
-            captured["kwargs"] = kwargs
             raise _Applied()
 
-        monkeypatch.setattr(dc_module, "fit_least_squares", fake_fit_least_squares)
+        monkeypatch.setattr(dc_module, "_native_problem", fake_native_problem)
 
         orbit = make_fitted_orbit().to_orbits()
         with pytest.raises(_Applied):
@@ -250,7 +248,6 @@ class TestIterativeFit:
         np.testing.assert_allclose(
             captured["var"], INFLATION_FACTOR * base_var, rtol=1e-12
         )
-        assert "observatory_bias_model" not in captured["kwargs"]
 
 
 class TestAppliedAtEntry:

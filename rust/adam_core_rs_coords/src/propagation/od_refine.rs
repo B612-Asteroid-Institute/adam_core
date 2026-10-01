@@ -22,9 +22,9 @@
 
 use super::ephemeris::EphemerisOptions;
 use super::od::{
-    evaluate_orbit_barycentric, filter_coordinate_batch, filter_observer_batch,
-    observed_covariance_flat, predict_spherical, residual_lon_lat_columns, spherical_flat,
-    FitEvaluation, OrbitGeometry,
+    evaluate_orbit, filter_coordinate_batch, filter_observer_batch, observed_covariance_flat,
+    residual_lon_lat_columns, spherical_flat, FitEvaluation, OrbitGeometry, PropagatorPredictor,
+    SphericalPredictor,
 };
 use super::{PropagationError, PropagationResultValue, Propagator};
 use crate::differential_correction::{
@@ -172,36 +172,28 @@ pub struct WhitenedFitOutput {
 
 /// The included subset of a whitened least-squares problem together with
 /// everything needed to evaluate its residual vector and Jacobians.
-struct WhitenedProblem<'a, P, T> {
-    propagator: &'a P,
+struct WhitenedProblem<'a> {
+    predictor: &'a dyn SphericalPredictor,
     geometry: OrbitGeometry,
     epoch_mjd_tdb: f64,
     observed_flat: Vec<f64>,
     observers: ObserverBatch,
     whiteners: Vec<[f64; 4]>,
-    options: &'a EphemerisOptions,
-    provider: &'a dyn TimeScaleProvider,
-    translation_provider: &'a T,
     analytic_terms: Option<TwoBodyJacobianTerms>,
     two_body: TwoBodyModelConfig,
     m: usize,
 }
 
-impl<'a, P, T> WhitenedProblem<'a, P, T>
-where
-    P: Propagator,
-    T: OriginTranslationProvider,
-{
+impl<'a> WhitenedProblem<'a> {
     #[allow(clippy::too_many_arguments)]
-    fn new(
-        propagator: &'a P,
+    fn new<T: OriginTranslationProvider>(
+        predictor: &'a dyn SphericalPredictor,
         orbit: &OrbitBatch,
         observed: &CoordinateBatch,
         observers: &ObserverBatch,
         config: &WhitenedFitConfig,
-        options: &'a EphemerisOptions,
-        provider: &'a dyn TimeScaleProvider,
-        translation_provider: &'a T,
+        provider: &dyn TimeScaleProvider,
+        translation_provider: &T,
     ) -> PropagationResultValue<Self> {
         let m = observed.len();
         if m == 0 {
@@ -243,15 +235,12 @@ where
         };
 
         Ok(Self {
-            propagator,
+            predictor,
             geometry,
             epoch_mjd_tdb,
             observed_flat,
             observers: observers.clone(),
             whiteners,
-            options,
-            provider,
-            translation_provider,
             analytic_terms,
             two_body: config.two_body,
             m,
@@ -265,18 +254,14 @@ where
         &self,
         states: &[[f64; 6]],
     ) -> PropagationResultValue<Result<Vec<Vec<f64>>, String>> {
-        let predicted = match predict_spherical(
-            self.propagator,
-            states,
-            &self.geometry,
-            &self.observers,
-            self.options,
-            self.provider,
-            self.translation_provider,
-        )? {
-            Ok(values) => values,
-            Err(message) => return Ok(Err(message)),
-        };
+        let predicted =
+            match self
+                .predictor
+                .predict_spherical(states, &self.geometry, &self.observers)?
+            {
+                Ok(values) => values,
+                Err(message) => return Ok(Err(message)),
+            };
         let stride = self.m * 6;
         let mut out = Vec::with_capacity(states.len());
         for candidate in 0..states.len() {
@@ -596,15 +581,11 @@ struct Solution {
 }
 
 /// Levenberg-Marquardt on the robust cost with Marquardt scaling.
-fn solve<P, T>(
-    problem: &WhitenedProblem<'_, P, T>,
+fn solve(
+    problem: &WhitenedProblem<'_>,
     initial_state: [f64; 6],
     config: &WhitenedFitConfig,
-) -> PropagationResultValue<Solution>
-where
-    P: Propagator,
-    T: OriginTranslationProvider,
-{
+) -> PropagationResultValue<Solution> {
     let loss = config.loss;
     let f_scale = config.f_scale;
     let mut state = initial_state;
@@ -719,17 +700,13 @@ where
 
 /// Measured change of the fit cost at a 1-sigma displacement along the
 /// covariance's weakest-constrained direction (`_weak_direction_delta_chi2`).
-fn weak_direction_delta_cost<P, T>(
-    problem: &WhitenedProblem<'_, P, T>,
+fn weak_direction_delta_cost(
+    problem: &WhitenedProblem<'_>,
     state: &[f64; 6],
     covariance: &[f64; 36],
     cost_solution: f64,
     config: &WhitenedFitConfig,
-) -> PropagationResultValue<Result<f64, String>>
-where
-    P: Propagator,
-    T: OriginTranslationProvider,
-{
+) -> PropagationResultValue<Result<f64, String>> {
     let (eigenvalues, vectors) = symmetric_eigen_6x6(&covariance_matrix(covariance));
     let mut weakest = 0;
     for k in 1..6 {
@@ -764,8 +741,8 @@ where
 /// `_validated_covariance`: the weak-direction consistency check with the
 /// central-difference fallback for the analytic Jacobian; every diagnostic
 /// is appended to `warnings` with the Python message text.
-fn validated_covariance<P, T>(
-    problem: &WhitenedProblem<'_, P, T>,
+fn validated_covariance(
+    problem: &WhitenedProblem<'_>,
     covariance: [f64; 36],
     jacobian_method: JacobianMethod,
     state: &[f64; 6],
@@ -773,13 +750,10 @@ fn validated_covariance<P, T>(
     cost_solution: f64,
     config: &WhitenedFitConfig,
     warnings: &mut Vec<String>,
-) -> PropagationResultValue<[f64; 36]>
-where
-    P: Propagator,
-    T: OriginTranslationProvider,
-{
+) -> PropagationResultValue<[f64; 36]> {
     let (lower, upper) = DELTA_CHI2_WINDOW;
-    let delta = match weak_direction_delta_cost(problem, state, &covariance, cost_solution, config)?
+    let delta = match weak_direction_delta_cost(problem, state, &covariance, cost_solution, config)
+        .unwrap_or_else(|err| Err(err.to_string()))
     {
         Ok(delta) => delta,
         Err(message) => {
@@ -875,6 +849,36 @@ where
     P: Propagator,
     T: OriginTranslationProvider,
 {
+    let predictor = PropagatorPredictor {
+        propagator,
+        options,
+        provider,
+        translation_provider,
+    };
+    fit_orbit_whitened_with(
+        &predictor,
+        orbit,
+        observed,
+        observers,
+        ignore,
+        config,
+        provider,
+        translation_provider,
+    )
+}
+
+/// [`fit_orbit_whitened_barycentric`] over any [`SphericalPredictor`].
+#[allow(clippy::too_many_arguments)]
+pub fn fit_orbit_whitened_with<T: OriginTranslationProvider>(
+    predictor: &dyn SphericalPredictor,
+    orbit: &OrbitBatch,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    ignore: &[bool],
+    config: &WhitenedFitConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<WhitenedFitOutput> {
     config
         .validate()
         .map_err(PropagationError::InvalidRequest)?;
@@ -888,12 +892,11 @@ where
     let observed_fit = filter_coordinate_batch(observed, &keep)?;
     let observers_fit = filter_observer_batch(observers, &keep)?;
     let problem = WhitenedProblem::new(
-        propagator,
+        predictor,
         orbit,
         &observed_fit,
         &observers_fit,
         config,
-        options,
         provider,
         translation_provider,
     )?;
@@ -926,17 +929,14 @@ where
         )?;
     }
 
-    let evaluation = evaluate_orbit_barycentric(
-        propagator,
+    let evaluation = evaluate_orbit(
+        predictor,
         solution.state,
         orbit,
         observed,
         observers,
         ignore,
         6,
-        options,
-        provider,
-        translation_provider,
     )?;
 
     let component_weights = robust_weights(&solution.residuals, config.loss, config.f_scale);
@@ -961,6 +961,87 @@ where
         weights,
         residuals_whitened: solution.residuals,
         evaluation,
+        warnings,
+    })
+}
+
+/// Product of [`validate_fit_covariance_with`].
+#[derive(Debug, Clone)]
+pub struct CovarianceValidation {
+    /// The covariance after validation (the central-difference fallback for
+    /// the analytic Jacobian when the probe fails; otherwise the input).
+    pub covariance: [f64; 36],
+    /// Measured delta-cost at a 1-sigma displacement along the weakest
+    /// direction of the INPUT covariance (NaN when the probe failed).
+    pub delta_cost: f64,
+    /// Diagnostics in the Python `RuntimeWarning` wording, in order.
+    pub warnings: Vec<String>,
+}
+
+/// The weak-direction consistency check of `fit_least_squares` on an
+/// externally supplied covariance of `orbit` (its state is the solution):
+/// the probe measurement, and the covariance `fit_least_squares` would have
+/// reported for `jacobian_method` after validation.
+#[allow(clippy::too_many_arguments)]
+pub fn validate_fit_covariance_with<T: OriginTranslationProvider>(
+    predictor: &dyn SphericalPredictor,
+    orbit: &OrbitBatch,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    ignore: &[bool],
+    covariance: [f64; 36],
+    jacobian_method: JacobianMethod,
+    config: &WhitenedFitConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<CovarianceValidation> {
+    config
+        .validate()
+        .map_err(PropagationError::InvalidRequest)?;
+    let n = observed.len();
+    if observers.len() != n || ignore.len() != n {
+        return Err(PropagationError::InvalidRequest(
+            "observed, observers, and ignore must have equal length".to_string(),
+        ));
+    }
+    let keep: Vec<bool> = ignore.iter().map(|&flag| !flag).collect();
+    let observed_fit = filter_coordinate_batch(observed, &keep)?;
+    let observers_fit = filter_observer_batch(observers, &keep)?;
+    let probe_config = WhitenedFitConfig {
+        jacobian: jacobian_method,
+        ..*config
+    };
+    let problem = WhitenedProblem::new(
+        predictor,
+        orbit,
+        &observed_fit,
+        &observers_fit,
+        &probe_config,
+        provider,
+        translation_provider,
+    )?;
+    let state = problem.geometry.state;
+    let residuals = problem.residuals_one(&state)?;
+    let cost = robust_cost(&residuals, config.loss, config.f_scale);
+    let delta_cost =
+        match weak_direction_delta_cost(&problem, &state, &covariance, cost, &probe_config) {
+            Ok(Ok(delta)) => delta,
+            _ => f64::NAN,
+        };
+    let mut warnings = Vec::new();
+    let validated = validated_covariance(
+        &problem,
+        covariance,
+        jacobian_method,
+        &state,
+        &residuals,
+        cost,
+        &probe_config,
+        &mut warnings,
+    )?;
+    Ok(CovarianceValidation {
+        covariance: validated,
+        delta_cost,
         warnings,
     })
 }
@@ -1079,6 +1160,34 @@ where
     P: Propagator,
     T: OriginTranslationProvider,
 {
+    let predictor = PropagatorPredictor {
+        propagator,
+        options,
+        provider,
+        translation_provider,
+    };
+    iterative_fit_with(
+        &predictor,
+        orbit,
+        observed,
+        observers,
+        config,
+        provider,
+        translation_provider,
+    )
+}
+
+/// [`iterative_fit_barycentric`] over any [`SphericalPredictor`].
+#[allow(clippy::too_many_arguments)]
+pub fn iterative_fit_with<T: OriginTranslationProvider>(
+    predictor: &dyn SphericalPredictor,
+    orbit: &OrbitBatch,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &IterativeFitConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<IterativeFitOutput> {
     let n = observed.len();
     if observers.len() != n {
         return Err(PropagationError::InvalidRequest(
@@ -1095,14 +1204,13 @@ where
 
     for _ in 0..=limit {
         passes += 1;
-        let mut output = fit_orbit_whitened_barycentric(
-            propagator,
+        let mut output = fit_orbit_whitened_with(
+            predictor,
             orbit,
             observed,
             observers,
             &ignore,
             &config.fit,
-            options,
             provider,
             translation_provider,
         )?;
@@ -1214,6 +1322,34 @@ where
     P: Propagator,
     T: OriginTranslationProvider,
 {
+    let predictor = PropagatorPredictor {
+        propagator,
+        options,
+        provider,
+        translation_provider,
+    };
+    cmc2003_fit_with(
+        &predictor,
+        orbit,
+        observed,
+        observers,
+        config,
+        provider,
+        translation_provider,
+    )
+}
+
+/// [`cmc2003_fit_barycentric`] over any [`SphericalPredictor`].
+#[allow(clippy::too_many_arguments)]
+pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
+    predictor: &dyn SphericalPredictor,
+    orbit: &OrbitBatch,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &Cmc2003FitConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<Cmc2003FitOutput> {
     use crate::cmc2003::{
         cmc2003_apparitions, cmc2003_expected_residual_chi2, cmc2003_select, Cmc2003Flag,
         Cmc2003SelectionOptions, CMC2003_MIN_OBS,
@@ -1263,14 +1399,13 @@ where
     let run_fit =
         |seed: &OrbitBatch, selected: &[bool]| -> PropagationResultValue<WhitenedFitOutput> {
             let ignore: Vec<bool> = selected.iter().map(|&keep| !keep).collect();
-            fit_orbit_whitened_barycentric(
-                propagator,
+            fit_orbit_whitened_with(
+                predictor,
                 seed,
                 observed,
                 observers,
                 &ignore,
                 &config.fit,
-                options,
                 provider,
                 translation_provider,
             )
@@ -1443,6 +1578,32 @@ where
     P: Propagator,
     T: OriginTranslationProvider,
 {
+    let predictor = PropagatorPredictor {
+        propagator,
+        options,
+        provider,
+        translation_provider,
+    };
+    full_od_with(
+        &predictor,
+        observed,
+        observers,
+        config,
+        provider,
+        translation_provider,
+    )
+}
+
+/// [`full_od_barycentric`] over any [`SphericalPredictor`].
+#[allow(clippy::too_many_arguments)]
+pub fn full_od_with<T: OriginTranslationProvider>(
+    predictor: &dyn SphericalPredictor,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &FullOdConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<FullOdOutput> {
     let epoch_scale = observed
         .times
         .as_ref()
@@ -1452,15 +1613,7 @@ where
             )
         })?
         .scale;
-    let iod = super::od::iod_fit_barycentric(
-        propagator,
-        observed,
-        observers,
-        &config.iod,
-        options,
-        provider,
-        translation_provider,
-    )?;
+    let iod = super::od::iod_fit(predictor, observed, observers, &config.iod)?;
     if !iod.found {
         return Ok(FullOdOutput {
             iod,
@@ -1485,13 +1638,12 @@ where
     )?;
     let refined = match &config.refinement {
         RefinementConfig::WorstResidual(loop_config) => {
-            let output = iterative_fit_barycentric(
-                propagator,
+            let output = iterative_fit_with(
+                predictor,
                 &seed,
                 observed,
                 observers,
                 loop_config,
-                options,
                 provider,
                 translation_provider,
             )?;
@@ -1504,13 +1656,12 @@ where
             }
         }
         RefinementConfig::Cmc2003(loop_config) => {
-            let output = cmc2003_fit_barycentric(
-                propagator,
+            let output = cmc2003_fit_with(
+                predictor,
                 &seed,
                 observed,
                 observers,
                 loop_config,
-                options,
                 provider,
                 translation_provider,
             )?;
@@ -1594,6 +1745,40 @@ where
     P: Propagator,
     T: OriginTranslationProvider,
 {
+    let predictor = PropagatorPredictor {
+        propagator,
+        options,
+        provider,
+        translation_provider,
+    };
+    run_od_with(
+        &predictor,
+        observed,
+        observers,
+        obs_code,
+        band,
+        astcat,
+        models,
+        config,
+        provider,
+        translation_provider,
+    )
+}
+
+/// [`run_od_barycentric`] over any [`SphericalPredictor`].
+#[allow(clippy::too_many_arguments)]
+pub fn run_od_with<T: OriginTranslationProvider>(
+    predictor: &dyn SphericalPredictor,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    obs_code: &[String],
+    band: &[Option<String>],
+    astcat: &[Option<String>],
+    models: Vec<Box<dyn ObservationUncertaintyModel>>,
+    config: &FullOdConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<RunOdOutput> {
     let n = observed.len();
     if observers.len() != n || obs_code.len() != n || band.len() != n || astcat.len() != n {
         return Err(PropagationError::InvalidRequest(
@@ -1664,12 +1849,11 @@ where
         observed.clone()
     };
 
-    let full_od = full_od_barycentric(
-        propagator,
+    let full_od = full_od_with(
+        predictor,
         &used,
         observers,
         config,
-        options,
         provider,
         translation_provider,
     )?;
@@ -2019,13 +2203,18 @@ mod tests {
         let propagator = TwoBodyPropagator::default();
         let options = ephemeris_options();
         let truth = orbit(TRUTH_STATE);
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
         let problem = WhitenedProblem::new(
-            &propagator,
+            &predictor,
             &truth,
             &observed_fit,
             &observers_fit,
             &config,
-            &options,
             &NoopProvider,
             &ZeroTranslationProvider,
         )

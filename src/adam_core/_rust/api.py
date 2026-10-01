@@ -31,6 +31,18 @@ except Exception as exc:  # pragma: no cover - depends on build/install state
 
 _REQUIRED_NATIVE_SYMBOLS = (
     "AdamCoreSpiceBackend",
+    "fit_orbit_whitened_ipc",
+    "fit_orbit_whitened_2body_ipc",
+    "validate_fit_covariance_ipc",
+    "iterative_fit_ipc",
+    "iterative_fit_2body_ipc",
+    "cmc2003_fit_ipc",
+    "cmc2003_fit_2body_ipc",
+    "iod_fit_ipc",
+    "full_od_ipc",
+    "full_od_2body_ipc",
+    "run_od_ipc",
+    "run_od_2body_ipc",
     "benchmark_transform_coordinates_arrow",
     "benchmark_calc_gauss",
     "benchmark_calc_gibbs",

@@ -167,6 +167,27 @@ where
     P: Propagator,
     T: OriginTranslationProvider,
 {
+    let predictor = PropagatorPredictor {
+        propagator,
+        options,
+        provider,
+        translation_provider,
+    };
+    evaluate_orbit(
+        &predictor, state, orbit, observed, observers, ignore, parameters,
+    )
+}
+
+/// [`evaluate_orbit_barycentric`] over any [`SphericalPredictor`].
+pub fn evaluate_orbit(
+    predictor: &dyn SphericalPredictor,
+    state: [f64; 6],
+    orbit: &OrbitBatch,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    ignore: &[bool],
+    parameters: i64,
+) -> PropagationResultValue<FitEvaluation> {
     let n = observed.len();
     if ignore.len() != n || observers.len() != n {
         return Err(PropagationError::InvalidRequest(
@@ -177,16 +198,9 @@ where
     let observed_cov = observed_covariance_flat(observed)?;
     let times_mjd = observed_times_mjd(observed)?;
     let geometry = OrbitGeometry::from_orbit(orbit)?;
-    let predicted = predict_spherical(
-        propagator,
-        &[state],
-        &geometry,
-        observers,
-        options,
-        provider,
-        translation_provider,
-    )?
-    .map_err(PropagationError::Backend)?;
+    let predicted = predictor
+        .predict_spherical(&[state], &geometry, observers)?
+        .map_err(PropagationError::Backend)?;
     let residuals = full_residuals(&observed_flat, &observed_cov, &predicted, n)?;
     let included: Vec<bool> = ignore.iter().map(|&flag| !flag).collect();
     let num_included = included.iter().filter(|&&keep| keep).count();
@@ -1172,6 +1186,22 @@ where
     P: Propagator,
     T: OriginTranslationProvider,
 {
+    let predictor = PropagatorPredictor {
+        propagator,
+        options,
+        provider,
+        translation_provider,
+    };
+    iod_fit(&predictor, observed, observers, config)
+}
+
+/// [`iod_fit_barycentric`] over any [`SphericalPredictor`].
+pub fn iod_fit(
+    predictor: &dyn SphericalPredictor,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &IodConfig,
+) -> PropagationResultValue<IodOutput> {
     let n = observed.len();
     if observers.len() != n {
         return Err(PropagationError::InvalidRequest(
@@ -1192,7 +1222,10 @@ where
     let max_outliers =
         (((n as f64) * (config.contamination_percentage / 100.0)) as usize).min(n - config.min_obs);
     let mut triplets = select_observation_triplets(&times, config.observation_selection_method);
-    triplets.truncate(max_outliers + 1);
+    // The public `iod()` loop tries `3 * (max_outliers + 1)` triplets
+    // (`obs_ids[: (3 * (max_outliers + 1))]` on the (k, 3) selection), not
+    // `max_outliers + 1`: three candidate triplets per allowed outlier.
+    triplets.truncate(3 * (max_outliers + 1));
     if triplets.is_empty() {
         return Ok(IodOutput::not_found(n));
     }
@@ -1237,17 +1270,14 @@ where
                 vec![None],
                 candidate_coordinates,
             )?;
-            let evaluation = evaluate_orbit_barycentric(
-                propagator,
+            let evaluation = evaluate_orbit(
+                predictor,
                 state,
                 &orbit,
                 observed,
                 observers,
                 &vec![false; n],
                 6,
-                options,
-                provider,
-                translation_provider,
             )?;
 
             if evaluation.reduced_chi2 <= config.rchi2_threshold {
@@ -1462,16 +1492,19 @@ fn percentile_triplet(times: &[f64], percentiles: [f64; 3]) -> Option<[usize; 3]
 // ---------------------------------------------------------------------------
 
 /// Epoch/frame/origin context extracted once from the single input orbit.
-pub(super) struct OrbitGeometry {
-    pub(super) state: [f64; 6],
-    pub(super) epoch: crate::Epoch,
-    pub(super) scale: crate::TimeScale,
-    pub(super) frame: Frame,
-    pub(super) origin: crate::OriginId,
+/// Epoch, frame and origin of the single orbit being corrected: the
+/// geometry every candidate state shares.
+#[derive(Debug, Clone)]
+pub struct OrbitGeometry {
+    pub state: [f64; 6],
+    pub epoch: crate::Epoch,
+    pub scale: crate::TimeScale,
+    pub frame: Frame,
+    pub origin: crate::OriginId,
 }
 
 impl OrbitGeometry {
-    pub(super) fn from_orbit(orbit: &OrbitBatch) -> PropagationResultValue<Self> {
+    pub fn from_orbit(orbit: &OrbitBatch) -> PropagationResultValue<Self> {
         if orbit.len() != 1 {
             return Err(PropagationError::InvalidRequest(
                 "orbit determination corrects exactly one orbit".to_string(),
@@ -1556,7 +1589,7 @@ where
     P: Propagator,
     T: OriginTranslationProvider,
 {
-    let candidates = candidate_batch(states, geometry)?;
+    let candidates = candidate_orbit_batch(states, geometry)?;
     let result = generate_ephemeris_barycentric(
         propagator,
         &candidates,
@@ -1610,7 +1643,9 @@ where
     Ok(Ok(out))
 }
 
-fn candidate_batch(
+/// Candidate states as a one-epoch `OrbitBatch` sharing `geometry`, with
+/// zero-padded ids so backends sorting by id keep input order.
+pub fn candidate_orbit_batch(
     states: &[[f64; 6]],
     geometry: &OrbitGeometry,
 ) -> PropagationResultValue<OrbitBatch> {
@@ -1637,6 +1672,56 @@ fn candidate_batch(
         coordinates,
     )
     .map_err(Into::into)
+}
+
+/// Source of predicted topocentric spherical coordinates for candidate
+/// states: the one operation every orbit-determination driver needs from a
+/// backend. [`PropagatorPredictor`] implements it for any Rust
+/// [`Propagator`] through the barycentric ephemeris workflow; a Python
+/// propagator is wrapped by a callback implementation in the binding layer.
+pub trait SphericalPredictor {
+    /// Predict `(M * N, 6)` row-major spherical coordinates (candidate-major,
+    /// observer order within each candidate) for `states` at the epoch,
+    /// frame and origin of `geometry`. Outer `Err` is a request failure;
+    /// inner `Err` a per-row numerical failure (a rejected trial step).
+    fn predict_spherical(
+        &self,
+        states: &[[f64; 6]],
+        geometry: &OrbitGeometry,
+        observers: &ObserverBatch,
+    ) -> PropagationResultValue<Result<Vec<f64>, String>>;
+}
+
+/// [`SphericalPredictor`] over a Rust [`Propagator`]: one
+/// `generate_ephemeris_barycentric` crossing per prediction.
+pub struct PropagatorPredictor<'a, P, T> {
+    pub propagator: &'a P,
+    pub options: &'a EphemerisOptions,
+    pub provider: &'a dyn TimeScaleProvider,
+    pub translation_provider: &'a T,
+}
+
+impl<P, T> SphericalPredictor for PropagatorPredictor<'_, P, T>
+where
+    P: Propagator,
+    T: OriginTranslationProvider,
+{
+    fn predict_spherical(
+        &self,
+        states: &[[f64; 6]],
+        geometry: &OrbitGeometry,
+        observers: &ObserverBatch,
+    ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+        predict_spherical(
+            self.propagator,
+            states,
+            geometry,
+            observers,
+            self.options,
+            self.provider,
+            self.translation_provider,
+        )
+    }
 }
 
 #[derive(Debug, Clone)]

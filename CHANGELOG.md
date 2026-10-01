@@ -39,9 +39,18 @@ This file contains notable changes in adam-core
   `run_od`) that `fit_least_squares`, `iterative_fit`, `cmc2003_fit_detailed`,
   `NativeOrbitFitter.full_od` and `run_od` dispatch to, wrapping the returned
   dicts into tables; the in-tree two-body implementations are the
-  `_rust_native.*_2body_ipc` functions. The Python loops stay the fallback
-  for propagators without the work units. Observation models provide
-  `_native_specs()` so a model stack crosses once.
+  `_rust_native.*_2body_ipc` functions. Every other propagator (ASSIST until
+  adam-assist adds the methods, PYOORB, user classes, duck-typed test
+  doubles) runs the same Rust loops through the callback route: the driver
+  calls the propagator's own `generate_ephemeris` whenever it needs
+  predictions (`adam_core.orbit_determination._native_callback`), so no
+  orbit-determination loop remains in Python. `fit_least_squares` no longer
+  forwards keyword arguments to `scipy.optimize.least_squares` (only `xtol`,
+  `ftol`, `gtol`, `max_nfev` are accepted; others raise `ValueError`) and
+  `iod` runs the Rust decision loop for every propagator (`iterate` is
+  accepted and ignored). A Python propagator's exception is re-raised
+  unchanged; driver errors are `ValueError` / `RuntimeError`. Observation
+  models provide `_native_specs()` so a model stack crosses once.
 - The shipped defaults are the signature defaults: `NativeOrbitFitter` now
   defaults to `outlier_rejection="cmc2003"` (was `"worst_residual"`), and
   `run_od` called without `models` applies the default observation-model

@@ -119,11 +119,14 @@ pub use generic::{
 pub mod propagate;
 pub mod propagation;
 pub use propagation::{
-    cmc2003_fit_barycentric, fit_orbit_whitened_barycentric, full_od_barycentric,
-    iterative_fit_barycentric, max_outliers, run_od_barycentric, symmetric_eigen_6x6,
-    AstrometrySnapshot, Cmc2003FitConfig, Cmc2003FitOutput, FullOdConfig, FullOdOutput,
-    IterativeFitConfig, IterativeFitOutput, JacobianMethod, RefinedOutput, RefinementConfig,
-    RunOdOutput, WhitenedFitConfig, WhitenedFitOutput, DELTA_CHI2_WINDOW,
+    candidate_orbit_batch, cmc2003_fit_barycentric, cmc2003_fit_with, evaluate_orbit,
+    fit_orbit_whitened_barycentric, fit_orbit_whitened_with, full_od_barycentric, full_od_with,
+    iod_fit, iterative_fit_barycentric, iterative_fit_with, max_outliers, run_od_barycentric,
+    run_od_with, symmetric_eigen_6x6, validate_fit_covariance_with, AstrometrySnapshot,
+    Cmc2003FitConfig, Cmc2003FitOutput, CovarianceValidation, FullOdConfig, FullOdOutput,
+    IterativeFitConfig, IterativeFitOutput, JacobianMethod, OrbitGeometry, PropagatorPredictor,
+    RefinedOutput, RefinementConfig, RunOdOutput, SphericalPredictor, WhitenedFitConfig,
+    WhitenedFitOutput, DELTA_CHI2_WINDOW,
 };
 pub use propagation::{
     generate_ephemeris, generate_ephemeris_barycentric, generate_ephemeris_translated,

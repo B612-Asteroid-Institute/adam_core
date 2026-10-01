@@ -26,7 +26,6 @@ from ...time import Timestamp
 from ..differential_correction import (
     _analytic_jacobian,
     _analytic_jacobian_terms,
-    _central_difference_jacobian,
     _observation_whitening_matrices,
     _validated_covariance,
     _weak_direction_delta_chi2,
@@ -73,10 +72,15 @@ class TwoBodyPropagator(Propagator):
         orbits = orbits.sort_by(["orbit_id"]).set_column(
             "coordinates.covariance", CoordinateCovariances.nulls(len(orbits))
         )
+        # One propagation for every orbit, split per orbit with `take`: a
+        # sliced table (``orbits[i : i + 1]``) keeps an Arrow offset that the
+        # record-batch crossing ignores (see test_dynamics_table_slices.py).
+        n = len(observers)
+        propagated = propagate_2body(orbits, observers.coordinates.time)
         blocks = []
         for i in range(len(orbits)):
-            propagated = propagate_2body(orbits[i : i + 1], observers.coordinates.time)
-            blocks.append(generate_ephemeris_2body(propagated, observers))
+            block = propagated.take(list(range(i * n, (i + 1) * n)))
+            blocks.append(generate_ephemeris_2body(block, observers))
         if len(blocks) == 1:
             return blocks[0]
         import quivr as qv
@@ -164,6 +168,25 @@ class NativeTwoBodyPropagator(TwoBodyPropagator):
             models=models,
             **kwargs,
         )
+
+
+def _central_difference_jacobian(
+    state_vector, mjd_tdb, observations, propagator, rel_step=1e-6, abs_step_floor=1e-3
+):
+    """Central differences of `residual_function` (test cross-check for the
+    autodiff Jacobian; the fit itself computes this in Rust)."""
+    jacobian = np.empty((2 * len(observations), 6), dtype=np.float64)
+    for k in range(6):
+        step = rel_step * max(abs(state_vector[k]), abs_step_floor)
+        plus = state_vector.copy()
+        minus = state_vector.copy()
+        plus[k] += step
+        minus[k] -= step
+        jacobian[:, k] = (
+            residual_function(plus, mjd_tdb, observations, propagator)
+            - residual_function(minus, mjd_tdb, observations, propagator)
+        ) / (2.0 * step)
+    return jacobian
 
 
 def make_truth_orbit() -> Orbits:
@@ -776,8 +799,10 @@ def test_fused_path_accepts_consistent_covariance():
 
 class TestFusedWhitenedFit:
     """
-    The Rust one-crossing whitened fit (`fit_least_squares_whitened`) is the
-    scipy path's twin: same minimum, covariance, statistics and members.
+    The fused route (`fit_least_squares_whitened` on a Rust-backed propagator)
+    and the callback route (the same Rust driver driving a Python propagator's
+    `generate_ephemeris`) are twins: same minimum, covariance, statistics and
+    members.
     """
 
     def _fits(self, observations, **kwargs):
@@ -877,10 +902,17 @@ class TestFusedWhitenedFit:
         )
         assert fused_members.weight[7].as_py() < 0.5
 
-    def test_scipy_only_kwargs_keep_the_scipy_path(self, monkeypatch):
+    def test_unsupported_solver_kwargs_raise(self, monkeypatch):
+        """The facade accepts only the solver tolerances; a scipy-era kwarg
+        such as ``x_scale`` is a ValueError naming it, and ``ftol`` reaches
+        the propagator's fused work unit."""
         observations = make_synthetic_observations()
-        calls = []
         propagator = NativeTwoBodyPropagator()
+        with pytest.raises(ValueError, match="x_scale=1.0"):
+            fit_least_squares(
+                make_initial_guess(), observations, propagator, x_scale=1.0
+            )
+        calls = []
         original = propagator.fit_least_squares_whitened
 
         def spy(*args, **kwargs):
@@ -888,14 +920,12 @@ class TestFusedWhitenedFit:
             return original(*args, **kwargs)
 
         monkeypatch.setattr(propagator, "fit_least_squares_whitened", spy)
-        fit_least_squares(make_initial_guess(), observations, propagator, x_scale=1.0)
-        assert calls == []
         fit_least_squares(make_initial_guess(), observations, propagator, ftol=1e-10)
         assert len(calls) == 1 and calls[0]["fit_settings"]["ftol"] == 1e-10
 
 
 class TestFusedIterativeFit:
-    """The Rust one-crossing worst-residual loop is the Python loop's twin."""
+    """The fused and callback routes of the worst-residual loop are twins."""
 
     @staticmethod
     def _with_outlier(index: int, sigmas: float):
@@ -938,17 +968,23 @@ class TestFusedIterativeFit:
         )
         assert fused.success[0].as_py()
 
-    def test_scipy_only_kwargs_keep_the_python_loop(self, monkeypatch):
+    def test_unsupported_solver_kwargs_raise(self):
         observations = self._with_outlier(9, 12.0)
-        propagator = NativeTwoBodyPropagator()
-        calls = []
-        monkeypatch.setattr(
-            propagator, "iterative_fit", lambda *a, **k: calls.append(k) or None
-        )
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore", RuntimeWarning)
-            fitted, _ = iterative_fit(
-                make_initial_guess(), observations, propagator, x_scale=1.0
+        with pytest.raises(ValueError, match="x_scale=1.0"):
+            iterative_fit(
+                make_initial_guess(),
+                observations,
+                NativeTwoBodyPropagator(),
+                x_scale=1.0,
             )
-        assert calls == []
-        assert fitted.success[0].as_py()
+
+    def test_callback_route_raises_the_propagator_exception(self):
+        """An exception inside the propagator's generate_ephemeris surfaces
+        unchanged from the Rust loop."""
+
+        class Broken(TwoBodyPropagator):
+            def generate_ephemeris(self, orbits, observers, **kwargs):
+                raise KeyError("ephemeris exploded")
+
+        with pytest.raises(KeyError, match="ephemeris exploded"):
+            iterative_fit(make_initial_guess(), make_synthetic_observations(), Broken())
