@@ -78,6 +78,13 @@ fn band_map_batch() -> PyResult<RecordBatch> {
         rows.push((code.into(), "Ac".into(), "ATLAS_c".into()));
         rows.push((code.into(), "Ao".into(), "ATLAS_o".into()));
     }
+    // ATLAS-TDO (Teide, R17) reports one wide "w" band (~420-720 nm, Tonry et
+    // al. 2025, arXiv:2509.05562). No measured w transmission curve is published
+    // (SVO lists only Misc/Atlas.cyan and Misc/Atlas.orange), and that paper
+    // states w ~ V is adequate, so Bessell V stands in until a measured curve
+    // exists. This is not the Pan-STARRS w band (PS1_w, ~400-830 nm).
+    const ATLAS_TDO_W_FILTER_ID: &str = "V";
+    rows.push(("R17".into(), "w".into(), ATLAS_TDO_W_FILTER_ID.into()));
     rows.push(("V00".into(), "g".into(), "BASS_g".into()));
     rows.push(("V00".into(), "r".into(), "BASS_r".into()));
     for code in ["F51", "F52"] {

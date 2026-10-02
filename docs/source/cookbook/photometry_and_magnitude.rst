@@ -218,6 +218,10 @@ a reported band; once both source and target are canonical,
      - ``c`` → ``ATLAS_c``; ``Ac`` → ``ATLAS_c``; ``o`` → ``ATLAS_o``;
        ``Ao`` → ``ATLAS_o``
      - ATLAS
+   * - ``R17``
+     - ``w`` → ``V``
+     - ATLAS-TDO (Teide); no measured w curve is published, Bessell V
+       stands in per Tonry et al. 2025
    * - ``V00``
      - ``g`` → ``BASS_g``; ``r`` → ``BASS_r``
      - BASS/Bok 90Prime
