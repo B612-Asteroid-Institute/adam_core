@@ -1,0 +1,7 @@
+adam\_core.photometry.rotation.wrappers module
+==============================================
+
+.. automodule:: adam_core.photometry.rotation.wrappers
+   :members:
+   :show-inheritance:
+   :undoc-members:
