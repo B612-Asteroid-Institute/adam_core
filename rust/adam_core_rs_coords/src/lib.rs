@@ -17,7 +17,7 @@ pub use types::{
 };
 
 pub mod ades_io;
-pub use ades_io::{ades_string_to_observations, ades_to_string};
+pub use ades_io::{ades_angular_covariance_flat, ades_string_to_observations, ades_to_string};
 
 pub mod bandpasses;
 pub use bandpasses::{
@@ -26,6 +26,44 @@ pub use bandpasses::{
 };
 
 pub mod healpix;
+
+pub mod efcc18;
+pub use efcc18::{
+    compute_efcc18_corrections, efcc18_catalog_code, efcc18_catalog_column, efcc18_catalog_columns,
+    efcc18_debias_positions, is_efcc18_covered, ra_dec_to_healpix, read_efcc18_bias_version,
+    Efcc18BiasTable, EFCC18_ARCHIVE_URL, EFCC18_BIAS_DAT_SHA256, EFCC18_BIAS_VERSION,
+    EFCC18_CATALOG_CODES, EFCC18_JPL_UNDEBIASED_ASTCATS, EFCC18_NSIDE, EFCC18_N_CATALOGS,
+    EFCC18_N_COMPONENTS, EFCC18_N_TILES, MPC_ASTCAT_TO_EFCC18,
+};
+
+pub mod observation_uncertainty;
+pub use observation_uncertainty::{
+    assert_positions_unchanged, BiasTable, BiasTableRow, CompositeModel, Efcc18DebiasModel,
+    EmpiricalCovarianceMode, EmpiricalCovarianceModel, IdentityModel, NightBatchDeweightingModel,
+    ObservationUncertaintyModel, OrbitDeterminationAstrometry, PerformanceWeightedModel,
+    SigmaFloorModel, ARCSEC_PER_DEG,
+};
+
+pub mod veres2017;
+pub use veres2017::{
+    SigmaFillModel, VeresFloorModel, VeresReplaceModel, VeresSigmaLookup, VeresSigmaRow,
+    VERES2017_FALLBACK_SIGMA_ARCSEC,
+};
+
+pub mod cmc2003;
+pub use cmc2003::{
+    cmc2003_apparitions, cmc2003_expected_residual_chi2, cmc2003_select, Cmc2003Flag,
+    Cmc2003Selection, Cmc2003SelectionOptions, CMC2003_APPARITION_GAP_DAYS, CMC2003_CHI2_FRAC,
+    CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT, CMC2003_MAX_ITERATIONS,
+    CMC2003_MAX_REJECTED_FRACTION, CMC2003_MIN_OBS, CMC2003_PSD_FLOOR_FRAC,
+};
+
+pub mod differential_correction;
+pub use differential_correction::{
+    observation_whitening_matrices, robust_cost, robust_jacobian_scale, robust_weights,
+    validate_loss, whiten_residual_pairs, whitened_2body_jacobian, whitened_2body_model_angles,
+    LossType, TwoBodyJacobianTerms, TwoBodyModelConfig, WhiteningError, HUBER_F_SCALE_DEFAULT,
+};
 
 pub mod mpc_designations;
 pub use mpc_designations::MpcDesignationError;
@@ -80,6 +118,16 @@ pub use generic::{
 
 pub mod propagate;
 pub mod propagation;
+pub use propagation::{
+    candidate_orbit_batch, cmc2003_fit_barycentric, cmc2003_fit_with, evaluate_orbit,
+    fit_orbit_whitened_barycentric, fit_orbit_whitened_with, full_od_barycentric, full_od_with,
+    iod_fit, iterative_fit_barycentric, iterative_fit_with, max_outliers, run_od_barycentric,
+    run_od_with, symmetric_eigen_6x6, validate_fit_covariance_with, AstrometrySnapshot,
+    Cmc2003FitConfig, Cmc2003FitOutput, CovarianceValidation, FullOdConfig, FullOdOutput,
+    IterativeFitConfig, IterativeFitOutput, JacobianMethod, OrbitGeometry, PropagatorPredictor,
+    RefinedOutput, RefinementConfig, RunOdOutput, SphericalPredictor, WhitenedFitConfig,
+    WhitenedFitOutput, DELTA_CHI2_WINDOW,
+};
 pub use propagation::{
     generate_ephemeris, generate_ephemeris_barycentric, generate_ephemeris_translated,
     CovariancePropagation, EphemerisDiagnostics, EphemerisFailureCode, EphemerisOptions,

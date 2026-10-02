@@ -1,0 +1,650 @@
+//! Veres, Farnocchia & Chesley (2017) per-observation astrometric uncertainties.
+//!
+//! Rust-canonical port of `adam_core.orbit_determination.veres2017`. Veres,
+//! Farnocchia, Chesley & Chamberlin (2017, Icarus 296, 139; "VFC2017") derived
+//! station- and catalog-dependent astrometric uncertainties for MPC
+//! observations from the residual statistics of well-determined orbits.
+//! Agencies use such tables as default weights for observations that report
+//! no uncertainty, or as floors on the reported ones. This module ships the
+//! per-(station, catalog) sigma table used by the Asteroid Institute's OD
+//! experiments together with the interpreters that apply it
+//! ([`VeresFloorModel`], [`VeresReplaceModel`], [`SigmaFillModel`]).
+//!
+//! The table and [`VeresSigmaLookup`] are GENERIC: rows may be (station,
+//! catalog), station-only (`astcat` None), catalog defaults (`obs_code` None)
+//! or one global row (both None). The Asteroid Institute's production fill-in
+//! table (`v2_sigma_fill`, v2 LOOO study RMS per station x catalog for
+//! high-confidence stations) uses exactly this shape with [`SigmaFillModel`];
+//! the bundled Veres numbers are the legacy reference (decision 2026-09-23).
+//!
+//! Tables
+//! ------
+//! adam_core bundles NO sigma table. The tables (the Asteroid Institute
+//! `v2_sigma_fill` default, the legacy `veres2017_working` reference) are data
+//! shipped by the private `adam-observatory-uncertainties` package and handed
+//! in as [`VeresSigmaRow`] rows; the Python veneer resolves a default table by
+//! importing that package, the way EFCC18 resolves the `jpl_debias_2018` data
+//! package.
+//!
+//! Frames and units
+//! ----------------
+//! Sigmas are in arcseconds with the RA axis in the cos(dec)-corrected frame
+//! (MPC/ADES `rmsRACosDec` convention). `SphericalCoordinates` covariances are
+//! in degrees² with lon NOT cos(dec)-corrected, so the RA sigma is divided by
+//! cos(dec) once (in addition to the arcsec -> degree scaling) before squaring.
+
+use crate::observation_uncertainty::{
+    ObservationUncertaintyModel, OrbitDeterminationAstrometry, ARCSEC_PER_DEG,
+};
+use std::collections::HashMap;
+
+/// Global fallback when neither a (station, catalog) nor a catalog row exists.
+pub const VERES2017_FALLBACK_SIGMA_ARCSEC: f64 = 0.75;
+
+/// One row of a station/catalog sigma table: a (station, catalog) row, a
+/// station-only row (`astcat` None), a per-catalog default (`obs_code` None)
+/// or the single global row (both None).
+#[derive(Debug, Clone, PartialEq)]
+pub struct VeresSigmaRow {
+    pub obs_code: Option<String>,
+    pub astcat: Option<String>,
+    pub sigma_ra_arcsec: f64,
+    pub sigma_dec_arcsec: f64,
+}
+
+fn validate_sigma(name: &str, value: f64) -> Result<(), String> {
+    if value.is_nan() || value <= 0.0 || value == f64::INFINITY {
+        return Err(format!(
+            "Sigma table column '{name}' must contain positive finite values"
+        ));
+    }
+    Ok(())
+}
+
+/// Resolve (station, catalog) to `(sigma_ra_arcsec, sigma_dec_arcsec)`.
+///
+/// Lookup order: the (station, catalog) row, then the station row (`astcat`
+/// None), then the catalog default row (`obs_code` None), then the table's
+/// global row (both None) if present, then `fallback_sigma_arcsec` for both
+/// axes; `None` as fallback means "no sigma known" (the caller passes the
+/// observation through).
+#[derive(Debug, Clone, PartialEq)]
+pub struct VeresSigmaLookup {
+    by_station_catalog: HashMap<(String, String), (f64, f64)>,
+    by_station: HashMap<String, (f64, f64)>,
+    by_catalog: HashMap<String, (f64, f64)>,
+    global: Option<(f64, f64)>,
+    pub fallback_sigma_arcsec: Option<f64>,
+}
+
+impl VeresSigmaLookup {
+    pub fn new(rows: &[VeresSigmaRow], fallback_sigma_arcsec: Option<f64>) -> Result<Self, String> {
+        let mut by_station_catalog = HashMap::new();
+        let mut by_station = HashMap::new();
+        let mut by_catalog = HashMap::new();
+        let mut global = None;
+        for row in rows {
+            validate_sigma("sigma_ra_arcsec", row.sigma_ra_arcsec)?;
+            validate_sigma("sigma_dec_arcsec", row.sigma_dec_arcsec)?;
+            let sigmas = (row.sigma_ra_arcsec, row.sigma_dec_arcsec);
+            match (&row.obs_code, &row.astcat) {
+                (None, None) => {
+                    if global.is_some() {
+                        return Err("Duplicate global row (obs_code and astcat null)".to_string());
+                    }
+                    global = Some(sigmas);
+                }
+                (None, Some(astcat)) => {
+                    if by_catalog.insert(astcat.clone(), sigmas).is_some() {
+                        return Err(format!("Duplicate catalog default row for {astcat:?}"));
+                    }
+                }
+                (Some(code), None) => {
+                    if by_station.insert(code.clone(), sigmas).is_some() {
+                        return Err(format!("Duplicate station row for {code:?}"));
+                    }
+                }
+                (Some(code), Some(astcat)) => {
+                    let key = (code.clone(), astcat.clone());
+                    if by_station_catalog.contains_key(&key) {
+                        return Err(format!("Duplicate override row for {key:?}"));
+                    }
+                    by_station_catalog.insert(key, sigmas);
+                }
+            }
+        }
+        Ok(Self {
+            by_station_catalog,
+            by_station,
+            by_catalog,
+            global,
+            fallback_sigma_arcsec,
+        })
+    }
+
+    /// `(sigma_ra_arcsec, sigma_dec_arcsec)` for the observation, or `None`.
+    pub fn sigmas(&self, obs_code: Option<&str>, astcat: Option<&str>) -> Option<(f64, f64)> {
+        if let (Some(code), Some(astcat)) = (obs_code, astcat) {
+            if let Some(sigmas) = self
+                .by_station_catalog
+                .get(&(code.to_string(), astcat.to_string()))
+            {
+                return Some(*sigmas);
+            }
+        }
+        if let Some(code) = obs_code {
+            if let Some(sigmas) = self.by_station.get(code) {
+                return Some(*sigmas);
+            }
+        }
+        if let Some(astcat) = astcat {
+            if let Some(sigmas) = self.by_catalog.get(astcat) {
+                return Some(*sigmas);
+            }
+        }
+        if let Some(sigmas) = self.global {
+            return Some(sigmas);
+        }
+        self.fallback_sigma_arcsec.map(|sigma| (sigma, sigma))
+    }
+}
+
+const VAR_LON: usize = 7;
+const VAR_LAT: usize = 14;
+const COV_LON_LAT: usize = 8;
+const COV_LAT_LON: usize = 13;
+
+fn same_value(a: f64, b: f64) -> bool {
+    a == b || (a.is_nan() && b.is_nan())
+}
+
+/// Shared machinery for the VFC2017 station/catalog sigma interpreters:
+/// resolve each observation's (station, catalog) to per-axis sigmas and let
+/// `updated_variances` decide how they combine with the reported covariance
+/// (`(var_lon, var_lat, zero_cross_term)` or `None` to pass the row through).
+/// Positions are never modified.
+fn apply_veres_model(
+    lookup: &VeresSigmaLookup,
+    observations: &mut OrbitDeterminationAstrometry,
+    updated_variances: impl Fn(f64, f64, f64, f64) -> Option<(f64, f64, bool)>,
+) -> Result<bool, String> {
+    observations.validate()?;
+    let mut changed = false;
+    for row in 0..observations.len() {
+        let Some((sigma_ra, sigma_dec)) = lookup.sigmas(
+            Some(observations.obs_code[row].as_str()),
+            observations.astcat[row].as_deref(),
+        ) else {
+            continue;
+        };
+        let cos_dec = observations.lat[row].to_radians().cos();
+        if !cos_dec.is_finite() || cos_dec <= 0.0 {
+            continue;
+        }
+        let veres_var_lon = (sigma_ra / (ARCSEC_PER_DEG * cos_dec)).powi(2);
+        let veres_var_lat = (sigma_dec / ARCSEC_PER_DEG).powi(2);
+        let block = &mut observations.covariance[row * 36..(row + 1) * 36];
+        let Some((var_lon, var_lat, zero_cross_term)) =
+            updated_variances(block[VAR_LON], block[VAR_LAT], veres_var_lon, veres_var_lat)
+        else {
+            continue;
+        };
+        for (index, value) in [(VAR_LON, var_lon), (VAR_LAT, var_lat)] {
+            changed |= !same_value(block[index], value);
+            block[index] = value;
+        }
+        if zero_cross_term {
+            for index in [COV_LON_LAT, COV_LAT_LON] {
+                changed |= !same_value(block[index], 0.0);
+                block[index] = 0.0;
+            }
+        }
+    }
+    Ok(changed)
+}
+
+/// Floor each axis sigma at the VFC2017 station/catalog sigma:
+/// `sigma_used = max(sigma_reported, sigma_VFC2017)` per axis (agency floor
+/// practice). The RA/Dec cross-term is left unchanged. A non-finite reported
+/// variance is left as is unless `fill_missing` is set, in which case it is
+/// replaced by the VFC2017 variance.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VeresFloorModel {
+    pub lookup: VeresSigmaLookup,
+    pub fill_missing: bool,
+}
+
+impl ObservationUncertaintyModel for VeresFloorModel {
+    fn apply(&self, observations: &mut OrbitDeterminationAstrometry) -> Result<bool, String> {
+        let fill_missing = self.fill_missing;
+        apply_veres_model(
+            &self.lookup,
+            observations,
+            |var_lon, var_lat, veres_var_lon, veres_var_lat| {
+                let floored = |var: f64, floor: f64| -> f64 {
+                    if !var.is_finite() {
+                        if fill_missing {
+                            floor
+                        } else {
+                            var
+                        }
+                    } else {
+                        var.max(floor)
+                    }
+                };
+                let new_lon = floored(var_lon, veres_var_lon);
+                let new_lat = floored(var_lat, veres_var_lat);
+                if same_value(new_lon, var_lon) && same_value(new_lat, var_lat) {
+                    return None;
+                }
+                Some((new_lon, new_lat, false))
+            },
+        )
+    }
+}
+
+/// Replace each axis sigma by the VFC2017 station/catalog sigma outright
+/// (classic weighting-file practice, ignoring reported uncertainties). The
+/// RA/Dec cross-term is set to zero since the table carries no correlation.
+#[derive(Debug, Clone, PartialEq)]
+pub struct VeresReplaceModel {
+    pub lookup: VeresSigmaLookup,
+}
+
+impl ObservationUncertaintyModel for VeresReplaceModel {
+    fn apply(&self, observations: &mut OrbitDeterminationAstrometry) -> Result<bool, String> {
+        apply_veres_model(
+            &self.lookup,
+            observations,
+            |_var_lon, _var_lat, veres_var_lon, veres_var_lat| {
+                Some((veres_var_lon, veres_var_lat, true))
+            },
+        )
+    }
+}
+
+/// Fill ONLY the per-axis variances that are missing (non-finite or
+/// non-positive) from the station/catalog sigma table; every reported sigma
+/// is left exactly as reported. Where an axis is filled the RA/Dec cross-term
+/// is set to zero (the table carries no correlation and a reported
+/// correlation without a reported sigma is meaningless). Observations that
+/// resolve to no sigma pass through with their NaN variances. This is the
+/// Asteroid Institute default with the `v2_sigma_fill` table (decision
+/// 2026-09-23).
+#[derive(Debug, Clone, PartialEq)]
+pub struct SigmaFillModel {
+    pub lookup: VeresSigmaLookup,
+}
+
+impl ObservationUncertaintyModel for SigmaFillModel {
+    fn apply(&self, observations: &mut OrbitDeterminationAstrometry) -> Result<bool, String> {
+        apply_veres_model(
+            &self.lookup,
+            observations,
+            |var_lon, var_lat, fill_var_lon, fill_var_lat| {
+                let lon_missing = !(var_lon.is_finite() && var_lon > 0.0);
+                let lat_missing = !(var_lat.is_finite() && var_lat > 0.0);
+                if !(lon_missing || lat_missing) {
+                    return None;
+                }
+                Some((
+                    if lon_missing { fill_var_lon } else { var_lon },
+                    if lat_missing { fill_var_lat } else { var_lat },
+                    true,
+                ))
+            },
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(
+        obs_code: Option<&str>,
+        astcat: Option<&str>,
+        sigma_ra_arcsec: f64,
+        sigma_dec_arcsec: f64,
+    ) -> VeresSigmaRow {
+        VeresSigmaRow {
+            obs_code: obs_code.map(str::to_string),
+            astcat: astcat.map(str::to_string),
+            sigma_ra_arcsec,
+            sigma_dec_arcsec,
+        }
+    }
+
+    /// (station, catalog) + station-only + catalog default + global row.
+    fn fill_lookup(fallback: Option<f64>) -> VeresSigmaLookup {
+        let rows = vec![
+            row(Some("703"), Some("Gaia2"), 0.30, 0.31),
+            row(Some("703"), None, 0.50, 0.51),
+            row(None, Some("Gaia2"), 0.20, 0.21),
+            row(None, None, 0.40, 0.41),
+        ];
+        VeresSigmaLookup::new(&rows, fallback).unwrap()
+    }
+
+    fn small_lookup(fallback: Option<f64>) -> VeresSigmaLookup {
+        let rows = vec![
+            VeresSigmaRow {
+                obs_code: None,
+                astcat: Some("Gaia2".into()),
+                sigma_ra_arcsec: 0.20,
+                sigma_dec_arcsec: 0.20,
+            },
+            VeresSigmaRow {
+                obs_code: None,
+                astcat: Some("UCAC4".into()),
+                sigma_ra_arcsec: 0.30,
+                sigma_dec_arcsec: 0.40,
+            },
+            VeresSigmaRow {
+                obs_code: Some("703".into()),
+                astcat: Some("Gaia2".into()),
+                sigma_ra_arcsec: 0.34,
+                sigma_dec_arcsec: 0.34,
+            },
+        ];
+        VeresSigmaLookup::new(&rows, fallback).unwrap()
+    }
+
+    fn observations(
+        codes: &[&str],
+        astcats: &[Option<&str>],
+        lats: &[f64],
+    ) -> OrbitDeterminationAstrometry {
+        let n = codes.len();
+        let mut covariance = vec![f64::NAN; n * 36];
+        for block in covariance.chunks_exact_mut(36) {
+            block[VAR_LON] = 1e-10;
+            block[VAR_LAT] = 4e-10;
+        }
+        OrbitDeterminationAstrometry {
+            lon: vec![10.0; n],
+            lat: lats.to_vec(),
+            covariance,
+            obs_code: codes.iter().map(|c| c.to_string()).collect(),
+            band: vec![None; n],
+            astcat: astcats.iter().map(|a| a.map(str::to_string)).collect(),
+            mjd_utc: vec![60000.0; n],
+            jd_tdb: vec![2_460_000.5; n],
+        }
+    }
+
+    fn close(a: f64, b: f64) -> bool {
+        (a - b).abs() <= 1e-12 * b.abs().max(1e-300)
+    }
+
+    #[test]
+    fn rows_mirror_a_package_sigma_table() {
+        // The row shapes `adam-observatory-uncertainties` ships: a (station,
+        // catalog) override and a catalog default, plus the scalar fallback.
+        let rows = vec![
+            VeresSigmaRow {
+                obs_code: Some("F51".into()),
+                astcat: Some("Gaia2".into()),
+                sigma_ra_arcsec: 0.15,
+                sigma_dec_arcsec: 0.15,
+            },
+            VeresSigmaRow {
+                obs_code: None,
+                astcat: Some("Gaia2".into()),
+                sigma_ra_arcsec: 0.18,
+                sigma_dec_arcsec: 0.18,
+            },
+        ];
+        let lookup = VeresSigmaLookup::new(&rows, Some(0.75)).unwrap();
+        assert_eq!(
+            lookup.sigmas(Some("F51"), Some("Gaia2")),
+            Some((0.15, 0.15))
+        );
+        assert_eq!(
+            lookup.sigmas(Some("500"), Some("Gaia2")),
+            Some((0.18, 0.18))
+        );
+        assert_eq!(
+            lookup.sigmas(Some("500"), Some("NEWCAT")),
+            Some((0.75, 0.75))
+        );
+        assert_eq!(lookup.sigmas(None, None), Some((0.75, 0.75)));
+    }
+
+    #[test]
+    fn lookup_order_and_validation() {
+        let lookup = small_lookup(Some(0.75));
+        assert_eq!(
+            lookup.sigmas(Some("703"), Some("Gaia2")),
+            Some((0.34, 0.34))
+        );
+        assert_eq!(
+            lookup.sigmas(Some("F51"), Some("Gaia2")),
+            Some((0.20, 0.20))
+        );
+        assert_eq!(lookup.sigmas(None, Some("UCAC4")), Some((0.30, 0.40)));
+        assert_eq!(
+            lookup.sigmas(Some("703"), Some("PPMXL")),
+            Some((0.75, 0.75))
+        );
+        assert_eq!(lookup.sigmas(Some("703"), None), Some((0.75, 0.75)));
+        let strict = small_lookup(None);
+        assert_eq!(strict.sigmas(Some("703"), Some("PPMXL")), None);
+        assert_eq!(strict.sigmas(Some("703"), None), None);
+
+        let bad = vec![VeresSigmaRow {
+            obs_code: None,
+            astcat: Some("X".into()),
+            sigma_ra_arcsec: 0.0,
+            sigma_dec_arcsec: 0.1,
+        }];
+        assert!(VeresSigmaLookup::new(&bad, None)
+            .unwrap_err()
+            .contains("positive finite"));
+        let dup = vec![
+            VeresSigmaRow {
+                obs_code: None,
+                astcat: Some("X".into()),
+                sigma_ra_arcsec: 0.1,
+                sigma_dec_arcsec: 0.1,
+            },
+            VeresSigmaRow {
+                obs_code: None,
+                astcat: Some("X".into()),
+                sigma_ra_arcsec: 0.2,
+                sigma_dec_arcsec: 0.2,
+            },
+        ];
+        assert!(VeresSigmaLookup::new(&dup, None)
+            .unwrap_err()
+            .contains("Duplicate"));
+    }
+
+    #[test]
+    fn generic_rows_lookup_order_station_catalog_station_catalog_global() {
+        let lookup = fill_lookup(None);
+        assert_eq!(
+            lookup.sigmas(Some("703"), Some("Gaia2")),
+            Some((0.30, 0.31))
+        );
+        assert_eq!(
+            lookup.sigmas(Some("703"), Some("UCAC4")),
+            Some((0.50, 0.51))
+        );
+        assert_eq!(lookup.sigmas(Some("703"), None), Some((0.50, 0.51)));
+        assert_eq!(
+            lookup.sigmas(Some("G96"), Some("Gaia2")),
+            Some((0.20, 0.21))
+        );
+        assert_eq!(
+            lookup.sigmas(Some("G96"), Some("UCAC4")),
+            Some((0.40, 0.41))
+        );
+        assert_eq!(lookup.sigmas(None, None), Some((0.40, 0.41)));
+        // The global row beats the fallback.
+        assert_eq!(
+            fill_lookup(Some(9.0)).sigmas(Some("X99"), Some("ZZZ")),
+            Some((0.40, 0.41))
+        );
+
+        let dup_station = vec![
+            row(Some("703"), None, 0.4, 0.4),
+            row(Some("703"), None, 0.5, 0.5),
+        ];
+        assert!(VeresSigmaLookup::new(&dup_station, None)
+            .unwrap_err()
+            .contains("Duplicate station row"));
+        let dup_global = vec![row(None, None, 0.4, 0.4), row(None, None, 0.5, 0.5)];
+        assert!(VeresSigmaLookup::new(&dup_global, None)
+            .unwrap_err()
+            .contains("Duplicate global row"));
+    }
+
+    #[test]
+    fn fill_model_fills_only_missing_axes_and_zeroes_cross_term() {
+        let model = SigmaFillModel {
+            lookup: fill_lookup(None),
+        };
+        // Three observations: reported, missing lon only, missing both (with
+        // a stale cross-term and no sigma).
+        let mut obs = observations(
+            &["703", "703", "G96"],
+            &[Some("Gaia2"), Some("UCAC4"), Some("Gaia2")],
+            &[0.0, 30.0, -45.0],
+        );
+        obs.covariance[36 + VAR_LON] = f64::NAN;
+        obs.covariance[72 + VAR_LON] = f64::NAN;
+        obs.covariance[72 + VAR_LAT] = f64::NAN;
+        obs.covariance[72 + COV_LON_LAT] = 1e-12;
+        obs.covariance[72 + COV_LAT_LON] = 1e-12;
+        let before = obs.clone();
+        assert!(model.apply(&mut obs).unwrap());
+        assert_eq!(obs.lon, before.lon);
+        assert_eq!(obs.lat, before.lat);
+        // Reported observation untouched (NaN-aware comparison).
+        assert!(obs.covariance[..36]
+            .iter()
+            .zip(&before.covariance[..36])
+            .all(|(a, b)| same_value(*a, *b)));
+        // lon-only missing at dec=30 from the station row (0.50"), lat kept.
+        let cos30 = 30.0_f64.to_radians().cos();
+        assert!(close(
+            obs.covariance[36 + VAR_LON],
+            (0.50 / (ARCSEC_PER_DEG * cos30)).powi(2)
+        ));
+        assert_eq!(
+            obs.covariance[36 + VAR_LAT],
+            before.covariance[36 + VAR_LAT]
+        );
+        assert_eq!(obs.covariance[36 + COV_LON_LAT], 0.0);
+        assert_eq!(obs.covariance[36 + COV_LAT_LON], 0.0);
+        // Both missing at dec=-45 from the catalog default (0.20", 0.21").
+        let cos45 = (-45.0_f64).to_radians().cos();
+        assert!(close(
+            obs.covariance[72 + VAR_LON],
+            (0.20 / (ARCSEC_PER_DEG * cos45)).powi(2)
+        ));
+        assert!(close(
+            obs.covariance[72 + VAR_LAT],
+            (0.21 / ARCSEC_PER_DEG).powi(2)
+        ));
+        assert_eq!(obs.covariance[72 + COV_LON_LAT], 0.0);
+
+        // Nothing missing: unchanged.
+        let mut obs = observations(&["703"], &[Some("Gaia2")], &[10.0]);
+        assert!(!model.apply(&mut obs).unwrap());
+
+        // Unresolvable without a global row or fallback: stays NaN.
+        let strict = SigmaFillModel {
+            lookup: VeresSigmaLookup::new(&[row(Some("703"), Some("Gaia2"), 0.30, 0.31)], None)
+                .unwrap(),
+        };
+        let mut obs = observations(&["G96"], &[Some("UCAC4")], &[0.0]);
+        obs.covariance[VAR_LON] = f64::NAN;
+        assert!(!strict.apply(&mut obs).unwrap());
+        assert!(obs.covariance[VAR_LON].is_nan());
+    }
+
+    #[test]
+    fn floor_model_floors_per_axis_with_cos_dec_and_fill_missing() {
+        let model = VeresFloorModel {
+            lookup: small_lookup(Some(0.75)),
+            fill_missing: false,
+        };
+        // Reported sigmas: lon 1e-5 deg = 0.036", lat 2e-5 deg = 0.072": both
+        // below every table sigma, so both axes floor.
+        let mut obs = observations(
+            &["500", "703"],
+            &[Some("UCAC4"), Some("Gaia2")],
+            &[0.0, 60.0],
+        );
+        let before = obs.clone();
+        assert!(model.apply(&mut obs).unwrap());
+        let block0 = &obs.covariance[0..36];
+        assert!(close(block0[VAR_LON], (0.30 / ARCSEC_PER_DEG).powi(2)));
+        assert!(close(block0[VAR_LAT], (0.40 / ARCSEC_PER_DEG).powi(2)));
+        assert!(block0[COV_LON_LAT].is_nan());
+        let cos_dec = 60.0_f64.to_radians().cos();
+        let block1 = &obs.covariance[36..72];
+        assert!(close(
+            block1[VAR_LON],
+            (0.34 / (ARCSEC_PER_DEG * cos_dec)).powi(2)
+        ));
+        assert!(close(block1[VAR_LAT], (0.34 / ARCSEC_PER_DEG).powi(2)));
+        assert_eq!(obs.lon, before.lon);
+        assert_eq!(obs.lat, before.lat);
+
+        // Reported sigma above the floor is kept.
+        let mut obs = observations(&["500"], &[Some("Gaia2")], &[0.0]);
+        obs.covariance[VAR_LON] = 1e-6;
+        obs.covariance[VAR_LAT] = 1e-6;
+        assert!(!model.apply(&mut obs).unwrap());
+
+        // Missing reported variance: untouched unless fill_missing.
+        let mut obs = observations(&["500"], &[Some("Gaia2")], &[0.0]);
+        obs.covariance[VAR_LON] = f64::NAN;
+        obs.covariance[VAR_LAT] = 1e-6;
+        assert!(!model.apply(&mut obs).unwrap());
+        assert!(obs.covariance[VAR_LON].is_nan());
+        let filling = VeresFloorModel {
+            lookup: small_lookup(Some(0.75)),
+            fill_missing: true,
+        };
+        assert!(filling.apply(&mut obs).unwrap());
+        assert!(close(
+            obs.covariance[VAR_LON],
+            (0.20 / ARCSEC_PER_DEG).powi(2)
+        ));
+
+        // No fallback: unknown catalogs pass through.
+        let strict = VeresFloorModel {
+            lookup: small_lookup(None),
+            fill_missing: false,
+        };
+        let mut obs = observations(&["500"], &[Some("PPMXL")], &[0.0]);
+        assert!(!strict.apply(&mut obs).unwrap());
+    }
+
+    #[test]
+    fn replace_model_overwrites_and_zeroes_cross_term() {
+        let model = VeresReplaceModel {
+            lookup: small_lookup(Some(0.75)),
+        };
+        let mut obs = observations(&["500"], &[Some("UCAC4")], &[30.0]);
+        obs.covariance[VAR_LON] = 1e-6;
+        obs.covariance[COV_LON_LAT] = 1e-9;
+        obs.covariance[COV_LAT_LON] = 1e-9;
+        assert!(model.apply(&mut obs).unwrap());
+        let cos_dec = 30.0_f64.to_radians().cos();
+        assert!(close(
+            obs.covariance[VAR_LON],
+            (0.30 / (ARCSEC_PER_DEG * cos_dec)).powi(2)
+        ));
+        assert!(close(
+            obs.covariance[VAR_LAT],
+            (0.40 / ARCSEC_PER_DEG).powi(2)
+        ));
+        assert_eq!(obs.covariance[COV_LON_LAT], 0.0);
+        assert_eq!(obs.covariance[COV_LAT_LON], 0.0);
+    }
+}

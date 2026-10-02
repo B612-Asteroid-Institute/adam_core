@@ -120,6 +120,124 @@ Current Migrated APIs
   - Backend default: legacy path, with Rust path held in ``dual`` mode pending +20% p50/p95 perf gate.
   - Error behavior: velocity-method validation raises ``ValueError`` for unsupported solver names.
 
+- ``orbit_determination.fit_least_squares`` (whitened residuals, analytic Jacobian, robust loss)
+  - Boundary: nested Arrow IPC of the orbit, observed coordinates and
+    observers plus a ``fit_settings`` dict in; a dict of scalars, lists and
+    NumPy arrays out. The complete work unit (solver, Jacobian, loss,
+    covariance probe, final evaluation) runs in Rust; Python converts tables
+    and re-emits the driver's diagnostics as ``RuntimeWarning``. The supplied
+    ``Propagator`` is driven from Rust: through its own fused work unit when it
+    has one, otherwise through the callback route
+    (``adam_core.orbit_determination._native_callback.predict_spherical``
+    calling its ``generate_ephemeris``).
+  - Rust entrypoints: ``adam_core._rust_native.observation_whitening_matrices_numpy``
+    (``(N, 6, 6)`` covariance + ``(N,)`` latitude -> ``(N, 2, 2)`` inverse Cholesky
+    factors), ``whiten_residual_pairs_numpy``, ``whitened_2body_jacobian_numpy``
+    (``(2N, 6)`` forward-mode autodiff Jacobian of the whitened 2-body model;
+    barycentric ecliptic observer and Sun states in), ``robust_cost_numpy`` /
+    ``robust_weights_numpy`` / ``robust_jacobian_scale_numpy`` and
+    ``validate_robust_loss``.
+  - Error behavior: raises ``ValueError`` naming the observation whose
+    (lon, lat) covariance block is non-finite or not positive definite, on shape
+    mismatch, and on an unknown loss or non-positive ``f_scale``.
+  - Dispatch: a Rust-backed propagator exposing ``fit_least_squares_whitened
+    (orbit, observations, ignore_mask, fit_settings=...)`` runs the complete
+    work unit natively in one crossing for every Jacobian and loss option
+    (``adam_core_rs_coords::fit_orbit_whitened_barycentric``: whitened
+    residuals through the barycentric ephemeris workflow, analytic / central /
+    2-point Jacobian, IRLS Huber, Levenberg-Marquardt with scipy's stopping
+    rules, ``inv(JᵀJ)`` with the weak-direction probe and central-difference
+    fallback, the fused final evaluation; diagnostics return as strings the
+    veneer re-emits as ``RuntimeWarning``). The in-tree implementation over the
+    two-body backend is ``adam_core._rust_native.fit_orbit_whitened_2body_ipc``.
+    Every other propagator runs the same driver through the callback route
+    (``adam_core._rust_native.fit_orbit_whitened_ipc`` with the propagator
+    object; ``propagator=None`` selects the two-body backend). Only the
+    solver settings ``xtol``, ``ftol``, ``gtol`` and ``max_nfev`` are
+    accepted; any other keyword raises ``ValueError`` (there is no scipy
+    path). ``jacobian="2-point"`` with ``loss="linear"`` on a propagator
+    exposing only the older ``fit_least_squares_evaluated`` /
+    ``fit_least_squares`` work units still routes there (forward-difference
+    Gauss-Newton), with its covariance probed by
+    ``validate_fit_covariance_ipc``.
+
+- ``orbit_determination.iterative_fit`` / ``NativeOrbitFitter.full_od`` /
+  ``run_od`` (native orchestration)
+  - Boundary: nested Arrow IPC of the orbit, observed coordinates and observers
+    plus dicts of settings (``fit_settings``, ``iod_settings``, ``refinement``)
+    and, for ``run_od``, the per-observation station / band / catalog lists and
+    the models' ``_native_spec()`` dicts; outputs are dicts of scalars, lists
+    and NumPy arrays the veneer wraps into tables without further computation.
+  - Rust entrypoints (``adam_core_rs_coords::propagation``, generic over the
+    ``Propagator`` trait; two-body implementations in ``_rust_native``):
+    ``iterative_fit_barycentric`` / ``iterative_fit_2body_ipc`` (worst-residual
+    loop), ``cmc2003_fit_barycentric`` / ``cmc2003_fit_2body_ipc`` (CMC2003
+    loop), ``full_od_barycentric`` / ``full_od_2body_ipc`` (Gauss IOD decision
+    loop followed by the refinement loop) and ``run_od_barycentric`` /
+    ``run_od_2body_ipc`` (observation models in order, full OD on the used
+    observations, original / used astrometry snapshots for the members).
+  - Dispatch: ``iterative_fit``, ``cmc2003_fit_detailed`` and ``iod`` route
+    to a propagator's ``iterative_fit`` / ``cmc2003_fit`` /
+    ``initial_orbit_determination`` work units when it has them and otherwise
+    run the same Rust loop through the callback route
+    (``iterative_fit_ipc`` / ``cmc2003_fit_ipc`` / ``iod_fit_ipc`` with the
+    propagator object); ``NativeOrbitFitter.full_od`` routes to ``full_od``
+    when its ``rejection_kwargs`` are all fit or loop settings and otherwise
+    chains ``initial_fit`` and ``refine_fit`` (two native crossings);
+    ``run_od`` routes to ``run_od`` for a ``NativeOrbitFitter`` when every
+    model provides a native spec, otherwise it composes model application
+    (Rust kernels), ``fitter.full_od`` and the provenance join. No orbit
+    determination loop remains in Python: Python owns ids, the
+    ``OrbitFitter`` plugin boundary, table loading and table assembly.
+    Settings that only the scipy solver understood raise ``ValueError``.
+  - Error behavior: driver errors raise ``ValueError`` for invalid inputs and
+    ``RuntimeError`` for backend failures; an exception raised by a Python
+    propagator inside the callback is re-raised unchanged.
+
+- ``orbit_determination.cmc2003_fit`` / ``cmc2003_fit_detailed``
+  - Boundary: the whole loop is the ``cmc2003_fit`` work unit above (fused
+    or callback route); the decision kernels below remain callable on their
+    own for diagnostics.
+  - Rust entrypoints: ``adam_core._rust_native.cmc2003_apparitions_numpy``,
+    ``cmc2003_expected_residual_chi2_numpy`` (``(N, 2)`` whitened residuals,
+    ``(2N, 6)`` Jacobian, optional ``(6, 6)`` covariance, selection mask),
+    ``cmc2003_select_numpy``.
+  - Error behavior: raises ``ValueError`` on shape mismatch.
+
+- ``orbit_determination`` observation uncertainty models
+  - Boundary: NumPy ``(N, 6, 6)`` covariance plus Python lists of station codes,
+    bands and star catalogs; the quivr table is rebuilt in Python only when Rust
+    reports a change (``None`` return = input object returned untouched).
+  - Rust entrypoints: ``adam_core._rust_native.bias_table_model_apply_numpy``
+    (``empirical_covariance`` / ``performance_weighted`` / ``sigma_floor``),
+    ``night_batch_deweighting_model_apply_numpy``,
+    ``efcc18_debias_model_apply_numpy`` (positions), ``veres_model_apply_numpy``
+    (``floor`` / ``replace`` / ``fill``), ``veres_sigma_lookup_numpy``,
+    ``ades_angular_covariance_numpy``. No sigma table is bundled: the Python
+    veneer resolves a default table by importing the private
+    ``observatory_uncertainties`` data package (a soft import, never a
+    dependency) and raises ``ImportError`` naming it when absent.
+  - Position rule: every model except ``efcc18_debias_model_apply`` leaves the
+    lon/lat columns untouched; ``efcc18_debias_model_apply`` leaves the
+    covariance untouched.
+  - Error behavior: raises ``ValueError`` on duplicate ``(obs_code, band)`` bias
+    rows, an unknown ``mode``/``model``, a non-positive ``cap`` or sigma, and
+    on shape mismatch.
+
+- ``observations.efcc18`` (star-catalog debiasing)
+  - Boundary: NumPy ``float64`` RA/Dec/JD arrays and Python catalog lists; the
+    ``(49152, 26, 4)`` float32 table crosses as a contiguous NumPy array.
+  - Rust entrypoints: ``adam_core._rust_native.efcc18_ra_dec_to_healpix_numpy``
+    (``N_side = 64`` RING, the healpix_cxx ``ang2pix`` port),
+    ``efcc18_parse_bias_dat``, ``efcc18_read_bias_version``,
+    ``efcc18_catalog_columns_numpy``, ``efcc18_corrections_numpy``,
+    ``healpix_ang2pix_lonlat_numpy``.
+  - Contract: row ``k`` of ``bias.dat`` is HEALPix ring pixel ``k``; the Rust
+    test suite pins the 8 published ``tiles.dat`` anchors and, when
+    ``ADAM_CORE_EFCC18_TILES_DAT`` names a local copy, all 49152 tile centres.
+  - Error behavior: raises ``ValueError`` on a malformed table layout, a wrong
+    table shape, or a colatitude outside ``[0, pi]``.
+
 Fallback and Waivers
 --------------------
 

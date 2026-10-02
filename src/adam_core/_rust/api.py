@@ -31,6 +31,18 @@ except Exception as exc:  # pragma: no cover - depends on build/install state
 
 _REQUIRED_NATIVE_SYMBOLS = (
     "AdamCoreSpiceBackend",
+    "fit_orbit_whitened_ipc",
+    "fit_orbit_whitened_2body_ipc",
+    "validate_fit_covariance_ipc",
+    "iterative_fit_ipc",
+    "iterative_fit_2body_ipc",
+    "cmc2003_fit_ipc",
+    "cmc2003_fit_2body_ipc",
+    "iod_fit_ipc",
+    "full_od_ipc",
+    "full_od_2body_ipc",
+    "run_od_ipc",
+    "run_od_2body_ipc",
     "benchmark_transform_coordinates_arrow",
     "benchmark_calc_gauss",
     "benchmark_calc_gibbs",
@@ -111,6 +123,20 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "transform_coordinates_with_covariance_numpy",
     "weighted_covariance_numpy",
     "weighted_mean_numpy",
+    # Observation uncertainty models, EFCC18 debiasing, VFC2017 sigmas and the
+    # whitened-residual / CMC2003 differential-correction kernels.
+    "bias_table_model_apply_numpy",
+    "night_batch_deweighting_model_apply_numpy",
+    "efcc18_debias_model_apply_numpy",
+    "efcc18_ra_dec_to_healpix_numpy",
+    "efcc18_parse_bias_dat",
+    "efcc18_corrections_numpy",
+    "veres_model_apply_numpy",
+    "ades_angular_covariance_numpy",
+    "observation_whitening_matrices_numpy",
+    "whitened_2body_jacobian_numpy",
+    "robust_cost_numpy",
+    "cmc2003_select_numpy",
 )
 
 _missing_native_symbols = tuple(

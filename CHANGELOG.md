@@ -6,6 +6,71 @@ This file contains notable changes in adam-core
 
 ### Added
 
+- Fit-time observation handling for orbit determination, reimplemented in Rust
+  from the Python `kk/obs-uncertainty-interface` branch (`d56114ac`) on top of
+  the Rust OD core: `run_od` orchestration recording original vs. used
+  astrometry on `FittedOrbitMembers` (`ObservationAstrometry`, `weight`,
+  `astcat`); the `ObservationUncertaintyModel` interpreters
+  (`EmpiricalCovarianceModel`, `PerformanceWeightedModel`, `SigmaFloorModel`,
+  `NightBatchDeweightingModel`, `CompositeModel`, `IdentityModel`) driven by the
+  `BIAS_TABLE_SCHEMA` observatory bias table; EFCC18 star-catalog debiasing
+  (`adam_core.observations.efcc18`, `EFCC18DebiasModel`) reading JPL's
+  `bias.dat` in HEALPix RING order through the Rust `ang2pix` port; the
+  station/catalog sigma table (`VERES2017_SIGMA_TABLE_SCHEMA`, now allowing
+  station-only and global rows) with its interpreters `SigmaFillModel` (fills
+  only missing sigmas; the Asteroid Institute default with the `v2_sigma_fill`
+  table of the private data package), `VeresFloorModel` and
+  `VeresReplaceModel` (its legacy `veres2017_working` table); adam_core bundles
+  no sigma table and resolves these defaults by importing the
+  `observatory_uncertainties` data package on demand (`load_sigma_table`),
+  raising `ImportError` when it is absent; the
+  `astcat` column and `from_ades` converter on `OrbitDeterminationObservations`;
+  `OrbitFitter.refine_fit` / `full_od` and `NativeOrbitFitter`; and the
+  `observatory_bias_model` parameter on every module-level OD entry point.
+- Rust orchestration of orbit determination: the whitened / robust
+  differential correction, the worst-residual and CMC2003 rejection loops,
+  the full OD (Gauss IOD decision loop followed by refinement) and `run_od`
+  (observation models, full OD, provenance snapshots) are backend-generic Rust
+  drivers over the `Propagator` trait (`adam_core_rs_coords::propagation::
+  {fit_orbit_whitened_barycentric, iterative_fit_barycentric,
+  cmc2003_fit_barycentric, full_od_barycentric, run_od_barycentric}`). A
+  Rust-backed propagator exposes them as one-crossing methods
+  (`fit_least_squares_whitened`, `iterative_fit`, `cmc2003_fit`, `full_od`,
+  `run_od`) that `fit_least_squares`, `iterative_fit`, `cmc2003_fit_detailed`,
+  `NativeOrbitFitter.full_od` and `run_od` dispatch to, wrapping the returned
+  dicts into tables; the in-tree two-body implementations are the
+  `_rust_native.*_2body_ipc` functions. Every other propagator (ASSIST until
+  adam-assist adds the methods, PYOORB, user classes, duck-typed test
+  doubles) runs the same Rust loops through the callback route: the driver
+  calls the propagator's own `generate_ephemeris` whenever it needs
+  predictions (`adam_core.orbit_determination._native_callback`), so no
+  orbit-determination loop remains in Python. `fit_least_squares` no longer
+  forwards keyword arguments to `scipy.optimize.least_squares` (only `xtol`,
+  `ftol`, `gtol`, `max_nfev` are accepted; others raise `ValueError`) and
+  `iod` runs the Rust decision loop for every propagator (`iterate` is
+  accepted and ignored). A Python propagator's exception is re-raised
+  unchanged; driver errors are `ValueError` / `RuntimeError`. Observation
+  models provide `_native_specs()` so a model stack crosses once.
+- The shipped defaults are the signature defaults: `NativeOrbitFitter` now
+  defaults to `outlier_rejection="cmc2003"` (was `"worst_residual"`), and
+  `run_od` called without `models` applies the default observation-model
+  stack written out in its body (`SigmaFillModel()` -> `EFCC18DebiasModel()`
+  -> `EmpiricalCovarianceModel()` -> `NightBatchDeweightingModel()`) and
+  explained in its docstring; pass `models=None` to fit the observations as
+  supplied. `EmpiricalCovarianceModel`, `PerformanceWeightedModel` and
+  `SigmaFloorModel` built without a table load `v2_full` from the
+  `adam-observatory-uncertainties` data package (`load_bias_table`), like
+  `SigmaFillModel` loads `v2_sigma_fill`; adam_core still does not depend on
+  the package and names it in the `ImportError` when it is missing.
+- Whitened-residual differential correction: `fit_least_squares` now minimizes
+  the 2N whitened (lon, lat) residual components with an exact 2-body
+  Jacobian from the Rust forward-mode autodiff kernels, validates the
+  covariance along its weakest direction (falling back to central differences),
+  supports Huber's M-estimator (`loss="huber"`), and reports per-observation
+  weights; `iterative_fit` wraps it with outlier rejection. Carpino, Milani &
+  Chesley (2003) rejection with re-inclusion (`cmc2003_fit`,
+  `cmc2003_fit_detailed`) runs its decision kernels in Rust.
+
 - Native CPython 3.11-3.13 wheels for manylinux 2.17 x86-64/AArch64 and
   macOS Apple silicon/Intel, with clean-room artifact acceptance and build-once
   trusted-publishing automation. Windows is deferred while upstream ASSIST
@@ -20,6 +85,21 @@ This file contains notable changes in adam-core
 
 ### Changed
 
+- `fit_least_squares` defaults to `jacobian="analytic"`; the fused Rust
+  Gauss-Newton work units of a propagator (`fit_least_squares_evaluated` /
+  `fit_least_squares`) are reached with `jacobian="2-point"` and the linear
+  loss, matching their forward-difference covariance. The default therefore
+  runs the scipy solver with one N-body ephemeris per residual evaluation,
+  plus the two-evaluation covariance probe and, when it fails, a
+  twelve-evaluation central-difference fallback, on every rejection pass,
+  instead of a single native crossing; choose `jacobian="2-point"` where the
+  legacy covariance is acceptable and throughput matters. With
+  `validate_covariance=True` (the default) the fused path now runs the same
+  weak-direction probe on the native covariance and warns when it fails.
+- `OrbitFitter.refine_fit` joins the fitter interface with a default that
+  raises `NotImplementedError`, so fitters implementing only `initial_fit`
+  (for example `adam_fo` releases predating this method) stay instantiable and
+  usable for `initial_fit`; `full_od` and `run_od` require an override.
 - The compiled Rust extension is now required. Public Python functions remain
   compatibility veneers while numerical, table, product, query, and
   orchestration work executes in Rust.
@@ -37,6 +117,14 @@ This file contains notable changes in adam-core
 - `gaussIOD(mu=...)` now uses the supplied central-body gravitational parameter
   consistently for candidate geometry and velocity. The legacy implementation
   incorrectly reverted to the solar constant inside its velocity helpers.
+
+### Fixed
+
+- `iterative_fit` returns the lowest reduced chi2 among the passes whose fit
+  succeeded, falling back to the lowest overall only when no pass converged;
+  previously a failed first pass was kept over a later converged fit.
+- `NativeOrbitFitter` copies `propagator_kwargs` instead of sharing one
+  mutable default dictionary across instances.
 
 ### Compatibility
 

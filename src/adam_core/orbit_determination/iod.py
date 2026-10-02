@@ -11,17 +11,14 @@ import quivr as qv
 from ..coordinates import CartesianCoordinates
 from ..coordinates.origin import Origin
 from ..coordinates.residuals import Residuals
+from ..orbits.orbits import Orbits
 from ..propagator import Propagator
 from ..time import Timestamp
 from ..utils.iter import _iterate_chunks
-from . import (
-    FittedOrbitMembers,
-    FittedOrbits,
-    OrbitDeterminationObservations,
-    drop_duplicate_orbits,
-)
-from .gauss import MU, C, gaussIOD
-from .outliers import calculate_max_outliers
+from .evaluate import OrbitDeterminationObservations
+from .fitted_orbits import FittedOrbitMembers, FittedOrbits, drop_duplicate_orbits
+from .gauss import MU, C
+from .observation_uncertainty import ObservationUncertaintyModel
 
 logger = logging.getLogger(__name__)
 
@@ -314,6 +311,7 @@ def iod(
     iterate: bool = False,
     light_time: bool = True,
     propagator_kwargs: dict = {},
+    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
     Run initial orbit determination on a set of observations believed to belong to a single
@@ -341,7 +339,8 @@ def iod(
             'combinations' : Return the observation IDs corresponding to every possible combination of three observations with
                 non-coinciding observation times.
     iterate : bool, optional
-        Iterate the preliminary orbit solution using the state transition iterator.
+        Accepted for compatibility; the Rust decision loop evaluates every
+        candidate the same way and ignores it.
     light_time : bool, optional
         Correct preliminary orbit for light travel time.
     propagator : Type[Propagator], optional
@@ -349,6 +348,11 @@ def iod(
     propagator_kwargs : dict, optional
         Settings and additional parameters to pass to selected
         propagator.
+    observatory_bias_model : `~adam_core.orbit_determination.ObservationUncertaintyModel`, optional
+        Observation uncertainty model applied to the observations before fitting
+        (e.g. inflating per-station sigmas from an observatory bias table). Default
+        None leaves the observations unchanged. The model is applied once at this
+        entry point and is not forwarded to nested calls.
 
     Returns
     -------
@@ -379,6 +383,11 @@ def iod(
             "outlier" : Flag to indicate which observations are potential outliers (their chi2 is higher than
                 the chi2 threshold) [float]
     """
+    # Apply the observatory bias model (if any) before fitting: inflates the
+    # observation uncertainties once at this entry point.
+    if observatory_bias_model is not None:
+        observations = observatory_bias_model.apply(observations)
+
     # Initialize the propagator
     prop = propagator(**propagator_kwargs)
 
@@ -402,194 +411,102 @@ def iod(
             chunk_size=1,
         )
 
-    processable = True
+    # Every other propagator runs the same Rust decision loop through the
+    # callback route, driving its own ``generate_ephemeris``.
+    from adam_core import _rust_native
+
+    from .differential_correction import _native_problem
+
+    orbit_id = uuid.uuid4().hex
     if len(observations) == 0:
-        processable = False
-
-    obs_ids_all = observations.id.to_numpy(zero_copy_only=False)
-    coords_all = observations.coordinates
-    observers = observations.observers
-
-    observations = observations.sort_by(
-        [
-            "coordinates.time.days",
-            "coordinates.time.nanos",
-            "coordinates.origin.code",
-        ]
-    )
-    observers = observers.sort_by(
-        ["coordinates.time.days", "coordinates.time.nanos", "coordinates.origin.code"]
-    )
-
-    coords_obs_all = observers.coordinates.r
-    times_all = coords_all.time.mjd().to_numpy(zero_copy_only=False)
-
-    orbit_sol: FittedOrbits = FittedOrbits.empty()
-    obs_ids_sol = None
-    arc_length = None
-    outliers = np.array([])
-    converged = False
-    num_obs = len(observations)
-    if num_obs < min_obs:
-        processable = False
-
-    max_outliers = calculate_max_outliers(num_obs, min_obs, contamination_percentage)
-
-    # Select observation IDs to use for IOD
-    obs_ids = select_observations(
-        observations,
-        method=observation_selection_method,
-    )
-    obs_ids = obs_ids[: (3 * (max_outliers + 1))]
-
-    if len(obs_ids) == 0:
-        processable = False
-
-    j = 0
-    while not converged and processable:
-        if j == len(obs_ids):
-            break
-
-        ids = obs_ids[j]
-        mask = np.isin(obs_ids_all, ids)
-
-        # Grab sky-plane positions of the selected observations, the heliocentric ecliptic position of the observer,
-        # and the times at which the observations occur
-        coords = coords_all.apply_mask(mask)
-        coords_obs = coords_obs_all[mask, :]
-        times = times_all[mask]
-
-        # Run IOD
-        iod_orbits = gaussIOD(
-            coords.values[:, 1:3],
-            times,
-            coords_obs,
-            light_time=light_time,
-            max_iter=100,
-            tol=1e-15,
-        )
-        if len(iod_orbits) == 0:
-            j += 1
-            continue
-
-        # Propagate initial orbit to all observation times
-        ephemeris = prop.generate_ephemeris(
-            iod_orbits, observers, chunk_size=1, max_processes=1
-        )
-
-        # For each unique initial orbit calculate residuals and chi-squared
-        # Find the orbit which yields the lowest chi-squared
-        orbit_ids = iod_orbits.orbit_id.to_numpy(zero_copy_only=False)
-        for i, orbit_id in enumerate(orbit_ids):
-            ephemeris_orbit = ephemeris.select("orbit_id", orbit_id)
-
-            # Calculate residuals and chi2
-            residuals = Residuals.calculate(
-                coords_all,
-                ephemeris_orbit.coordinates,
-            )
-            chi2 = residuals.chi2.to_numpy()
-            chi2_total = np.sum(chi2)
-            rchi2 = chi2_total / (2 * num_obs - 6)
-
-            # The reduced chi2 is above the threshold and no outliers are
-            # allowed, this cannot be improved by outlier rejection
-            # so continue to the next IOD orbit
-            if rchi2 > rchi2_threshold and max_outliers == 0:
-                # If we have iterated through all iod orbits and no outliers
-                # are allowed for this linkage then no other combination of
-                # observations will make it acceptable, so exit here.
-                if (i + 1) == len(iod_orbits):
-                    processable = False
-                    break
-
-                continue
-
-            # If the total reduced chi2 is less than the threshold accept the orbit
-            elif rchi2 <= rchi2_threshold:
-                logger.debug("Potential solution orbit has been found.")
-                orbit_sol = iod_orbits[i : i + 1]
-                obs_ids_sol = ids
-                chi2_total_sol = chi2_total
-                rchi2_sol = rchi2
-                residuals_sol = residuals
-                outliers = np.array([])
-                arc_length = times_all.max() - times_all.min()
-                converged = True
-                break
-
-            # Let's now test to see if we can remove some outliers, we
-            # anticipate that we get to this stage if the three selected observations
-            # belonging to one object yield a good initial orbit but the presence of outlier
-            # observations is skewing the sum total of the residuals and chi2
-            elif max_outliers > 0:
-                logger.debug("Attempting to identify possible outliers.")
-                for o in range(max_outliers):
-                    # Select i highest observations that contribute to
-                    # chi2 (and thereby the residuals)
-                    remove = chi2[~mask].argsort()[-(o + 1) :]
-
-                    # Grab the obs_ids for these outliers
-                    obs_id_outlier = obs_ids_all[~mask][remove]
-                    logger.debug("Possible outlier(s): {}".format(obs_id_outlier))
-
-                    # Subtract the outlier's chi2 contribution
-                    # from the total chi2
-                    # Then recalculate the reduced chi2
-                    chi2_new = chi2_total - np.sum(chi2[~mask][remove])
-                    num_obs_new = len(observations) - len(remove)
-                    rchi2_new = chi2_new / (2 * num_obs_new - 6)
-
-                    ids_mask = np.isin(obs_ids_all, obs_id_outlier, invert=True)
-                    arc_length = times_all[ids_mask].max() - times_all[ids_mask].min()
-
-                    # If the updated reduced chi2 total is lower than our desired
-                    # threshold, accept the soluton. If not, keep going.
-                    if rchi2_new <= rchi2_threshold and arc_length >= min_arc_length:
-                        orbit_sol = iod_orbits[i : i + 1]
-                        obs_ids_sol = ids
-                        chi2_total_sol = chi2_new
-                        rchi2_sol = rchi2_new
-                        residuals_sol = residuals
-                        outliers = obs_id_outlier
-                        num_obs = num_obs_new
-                        ids_mask = np.isin(obs_ids_all, outliers, invert=True)
-                        arc_length = (
-                            times_all[ids_mask].max() - times_all[ids_mask].min()
-                        )
-                        converged = True
-                        break
-
-            else:
-                continue
-
-        j += 1
-
-    if not converged or not processable:
         return FittedOrbits.empty(), FittedOrbitMembers.empty()
+    _, observed_ipc, observers_ipc = _native_problem(
+        _placeholder_orbit(observations), observations
+    )
+    output = _rust_native.iod_fit_ipc(
+        prop,
+        observed_ipc,
+        observers_ipc,
+        iod_settings={
+            "min_obs": min_obs,
+            "min_arc_length": min_arc_length,
+            "contamination_percentage": contamination_percentage,
+            "rchi2_threshold": rchi2_threshold,
+            "observation_selection_method": observation_selection_method,
+            "light_time": light_time,
+            "mu": MU,
+            "speed_of_light": C,
+        },
+    )
+    return tables_from_iod_output(orbit_id, observations, output)
 
-    else:
-        orbit = FittedOrbits.from_kwargs(
-            orbit_id=orbit_sol.orbit_id,
-            object_id=orbit_sol.object_id,
-            coordinates=orbit_sol.coordinates,
-            arc_length=[arc_length],
-            num_obs=[num_obs],
-            chi2=[chi2_total_sol],
-            reduced_chi2=[rchi2_sol],
-        )
 
-        orbit_members = FittedOrbitMembers.from_kwargs(
-            orbit_id=np.full(
-                len(obs_ids_all), orbit_sol.orbit_id[0].as_py(), dtype="object"
+def _placeholder_orbit(observations: OrbitDeterminationObservations) -> Orbits:
+    """A one-row orbit table the IPC bridge needs (IOD takes no seed)."""
+    return Orbits.from_kwargs(
+        orbit_id=["iod"],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=[1.0],
+            y=[0.0],
+            z=[0.0],
+            vx=[0.0],
+            vy=[0.017],
+            vz=[0.0],
+            time=observations.coordinates.time[0:1],
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+    )
+
+
+def tables_from_iod_output(
+    orbit_id: str,
+    observations: OrbitDeterminationObservations,
+    output: dict,
+) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    """
+    Wrap the dict of a Rust IOD decision (`iod_fit_ipc`, or the ``iod`` entry
+    of a fused ``full_od`` output) into `FittedOrbits` / `FittedOrbitMembers`
+    in the observations' order; empty tables when no orbit was accepted.
+    """
+    if not output["found"]:
+        return FittedOrbits.empty(), FittedOrbitMembers.empty()
+    state = np.asarray(output["state"], dtype=np.float64)
+    orbit = FittedOrbits.from_kwargs(
+        orbit_id=[orbit_id],
+        object_id=[None],
+        coordinates=CartesianCoordinates.from_kwargs(
+            x=state[0:1],
+            y=state[1:2],
+            z=state[2:3],
+            vx=state[3:4],
+            vy=state[4:5],
+            vz=state[5:6],
+            time=Timestamp.from_mjd(
+                [float(output["epoch_mjd"])], scale=output["epoch_scale"]
             ),
-            obs_id=obs_ids_all,
-            residuals=residuals_sol,
-            solution=np.isin(obs_ids_all, obs_ids_sol),
-            outlier=np.isin(obs_ids_all, outliers),
-        )
-
-    return orbit, orbit_members
+            origin=Origin.from_kwargs(code=["SUN"]),
+            frame="ecliptic",
+        ),
+        arc_length=[output["arc_length"]],
+        num_obs=[output["num_obs"]],
+        chi2=[output["chi2"]],
+        reduced_chi2=[output["reduced_chi2"]],
+    )
+    residuals = Residuals.from_kwargs(
+        values=np.asarray(output["residual_values"], dtype=np.float64).tolist(),
+        chi2=output["residual_chi2"],
+        dof=output["residual_dof"],
+        probability=output["residual_probability"],
+    )
+    members = FittedOrbitMembers.from_kwargs(
+        orbit_id=[orbit_id] * len(observations),
+        obs_id=observations.id,
+        residuals=residuals,
+        solution=output["solution"],
+        outlier=output["outlier"],
+    )
+    return orbit, members
 
 
 def initial_orbit_determination(
@@ -609,12 +526,21 @@ def initial_orbit_determination(
     propagator_kwargs: dict = {},
     chunk_size: int = 1,
     max_processes: Optional[int] = 1,
+    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
     Run initial orbit determination on linkages found in observations.
+
+    If `observatory_bias_model` is provided it is applied to the observations
+    once at this entry point (e.g. inflating per-station sigmas from an
+    observatory bias table) before any orbits are fit; the default None
+    leaves the observations unchanged.
     """
     time_start = time.perf_counter()
     logger.info("Running initial orbit determination...")
+
+    if observatory_bias_model is not None:
+        observations = observatory_bias_model.apply(observations)
 
     # The supported native provider owns the entire multi-linkage workflow in
     # one crossing; chunk_size is consumed by Rust and max_processes is kept
