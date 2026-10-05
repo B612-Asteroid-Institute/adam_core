@@ -277,6 +277,26 @@ by finite differences. Pass ``jacobian="2-point"`` to reach a propagator's
 fused Rust Gauss-Newton work unit with the legacy forward-difference
 covariance.
 
+Solver budgets
+~~~~~~~~~~~~~~
+
+``fit_least_squares`` accepts two independent limits: ``max_iterations``
+(default 100) caps optimizer iterations, while ``max_nfev`` (default None)
+caps solver residual-vector evaluations. Supplying both enforces both.
+The evaluation budget includes the initial state, rejected trial steps, and
+every finite-difference candidate: a forward-difference Jacobian costs six
+evaluations and a central-difference Jacobian costs twelve, even when batched
+into one backend call. A batch is only started if it fits in the remaining
+budget. Final covariance calculation, covariance validation, and fit reporting
+are outside this solver budget.
+
+Budget exhaustion returns the current solution with ``success=False`` and
+``status_code=0`` unless convergence was established on the final permitted
+evaluation. The legacy ``FittedOrbits.iterations`` column records solver
+residual-vector evaluations, including numerical Jacobians. Each fit within
+a rejection loop gets a fresh evaluation budget; CMC2003's ``max_iterations``
+continues to control its rejection loop.
+
 When to Use This Pattern
 ------------------------
 

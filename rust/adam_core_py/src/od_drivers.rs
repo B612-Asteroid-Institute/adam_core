@@ -130,6 +130,7 @@ fn parse_fit_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<FitSetti
         ftol: setting(settings, "ftol", 1e-12)?,
         gtol: setting(settings, "gtol", 1e-12)?,
         max_iterations: setting(settings, "max_iterations", 100)?,
+        max_nfev: setting(settings, "max_nfev", None::<usize>)?,
         two_body: TwoBodyModelConfig {
             propagation_max_iter: prop_max_iter,
             propagation_tol: prop_tol,

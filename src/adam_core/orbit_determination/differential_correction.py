@@ -38,10 +38,9 @@ HUBER_F_SCALE_DEFAULT = 1.345
 # Gauss-Newton work units accept only these tuning parameters.
 _NATIVE_FIT_KWARGS = {"xtol", "ftol", "max_iterations"}
 
-# scipy keyword arguments a propagator's fused whitened work unit
-# (``fit_least_squares_whitened``) understands; any other kwarg keeps the
-# scipy path.
-_FUSED_WHITENED_KWARGS = {"xtol", "ftol", "gtol", "max_nfev"}
+# Solver settings understood by a propagator's fused whitened work unit
+# (``fit_least_squares_whitened``).
+_FUSED_WHITENED_KWARGS = {"xtol", "ftol", "gtol", "max_nfev", "max_iterations"}
 # Keyword arguments the rejection loops forward to `fit_least_squares` that
 # their fused work units (``iterative_fit`` / ``cmc2003_fit``) understand.
 _FUSED_LOOP_KWARGS = _FUSED_WHITENED_KWARGS | {"jacobian", "validate_covariance"}
@@ -56,8 +55,8 @@ def _fit_settings(
 ) -> dict:
     """
     The ``fit_settings`` dict of a propagator's fused whitened work units:
-    the `fit_least_squares` options plus the scipy tolerances (``max_nfev``
-    bounds the solver's residual evaluations).
+    the `fit_least_squares` options, tolerances, and independent iteration and
+    residual-evaluation budgets. None leaves the evaluation count uncapped.
     """
     return {
         "loss": loss,
@@ -67,7 +66,8 @@ def _fit_settings(
         "xtol": kwargs.get("xtol", 1e-12),
         "ftol": kwargs.get("ftol", 1e-12),
         "gtol": kwargs.get("gtol", 1e-12),
-        "max_iterations": kwargs.get("max_nfev", kwargs.get("max_iterations", 100)),
+        "max_iterations": kwargs.get("max_iterations", 100),
+        "max_nfev": kwargs.get("max_nfev"),
     }
 
 
@@ -775,8 +775,15 @@ def fit_least_squares(
         Ignored for ``loss="linear"``.
     **kwargs
         Solver settings forwarded to the Rust driver: ``xtol``, ``ftol``,
-        ``gtol`` (default 1e-12 each, scipy's stopping rules) and ``max_nfev``
-        (or ``max_iterations``, default 100). Any other keyword raises a
+        ``gtol`` (default 1e-12 each, scipy's stopping rules), ``max_iterations``
+        (positive integer, default 100), and ``max_nfev`` (positive integer or
+        None, default None). The limits are independent: ``max_nfev`` counts
+        the initial residual vector, each trial (including rejected trials),
+        and each finite-difference candidate during optimization. A batch of
+        six forward or twelve central differences counts as six or twelve
+        evaluations; a batch that cannot fit in the remaining budget is not
+        started. Final covariance calculation/validation and fit reporting
+        are outside this solver budget. Any other keyword raises a
         `ValueError`: the fit runs natively (Levenberg-Marquardt with
         Marquardt scaling) and no longer forwards arguments to
         `scipy.optimize.least_squares`.
@@ -793,6 +800,13 @@ def fit_least_squares(
 
     Notes
     -----
+    Exhausting either solver limit returns the current state with
+    ``success=False`` and ``status_code=0`` unless a convergence condition was
+    met on the final permitted evaluation. The legacy ``iterations`` output
+    column records solver residual-vector evaluations, including numerical
+    Jacobians, rather than optimizer iterations. Rejection loops receive a
+    fresh budget for each fit.
+
     With ``loss="huber"`` the reported ``chi2`` / ``reduced_chi2`` remain the
     plain (unweighted) chi2 of the included observations, so they stay
     comparable across losses; the minimized robust cost is not stored. The
@@ -826,7 +840,7 @@ def fit_least_squares(
     if unsupported:
         raise ValueError(
             "fit_least_squares runs the Rust solver and accepts only the solver "
-            "settings xtol, ftol, gtol, max_nfev (max_iterations); got "
+            "settings xtol, ftol, gtol, max_nfev, max_iterations; got "
             + ", ".join(f"{key}={kwargs[key]!r}" for key in sorted(unsupported))
         )
 
@@ -975,8 +989,8 @@ def iterative_fit(
     if unsupported:
         raise ValueError(
             "iterative_fit runs the Rust rejection loop and accepts only the fit "
-            "settings jacobian, validate_covariance, xtol, ftol, gtol, max_nfev "
-            "(max_iterations); got "
+            "settings jacobian, validate_covariance, xtol, ftol, gtol, max_nfev, "
+            "max_iterations; got "
             + ", ".join(f"{key}={kwargs[key]!r}" for key in sorted(unsupported))
         )
     fit_settings = _fit_settings(

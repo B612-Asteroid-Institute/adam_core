@@ -89,7 +89,12 @@ pub struct WhitenedFitConfig {
     pub xtol: f64,
     pub ftol: f64,
     pub gtol: f64,
+    /// Maximum optimizer iterations, independently of the evaluation budget.
     pub max_iterations: usize,
+    /// Optional solver residual-vector evaluation budget. Includes the initial
+    /// state, rejected trials and every finite-difference candidate (not just
+    /// batch crossings). Final covariance/probe/reporting work is separate.
+    pub max_nfev: Option<usize>,
     /// Universal-Kepler / light-time settings of the analytic 2-body model.
     pub two_body: TwoBodyModelConfig,
 }
@@ -105,6 +110,7 @@ impl Default for WhitenedFitConfig {
             ftol: 1e-12,
             gtol: 1e-12,
             max_iterations: 100,
+            max_nfev: None,
             two_body: TwoBodyModelConfig::default(),
         }
     }
@@ -130,6 +136,9 @@ impl WhitenedFitConfig {
         if self.max_iterations == 0 {
             return Err("max_iterations must be positive".to_string());
         }
+        if self.max_nfev == Some(0) {
+            return Err("max_nfev must be positive or None".to_string());
+        }
         Ok(())
     }
 }
@@ -145,11 +154,12 @@ pub struct WhitenedFitOutput {
     /// Row-major 6x6 parameter covariance of the robust cost at the solution
     /// (NaN when it could not be computed).
     pub covariance: [f64; 36],
-    /// Residual-vector evaluations spent by the solver (scipy's `nfev`).
+    /// Residual-vector evaluations spent by the solver, including numerical
+    /// Jacobians. Retains the legacy field name; excludes final diagnostics.
     pub iterations: usize,
-    /// Whether a stopping rule was met before `max_iterations`.
+    /// Whether a convergence stopping rule was met within both solver limits.
     pub converged: bool,
-    /// scipy-style status: 0 = iteration limit, 1 = gtol, 2 = ftol, 3 = xtol,
+    /// scipy-style status: 0 = iteration/evaluation limit, 1 = gtol, 2 = ftol, 3 = xtol,
     /// 4 = both ftol and xtol, -1 = step rejected (stalled).
     pub status_code: i64,
     /// Minimized objective at the solution (chi2 for the linear loss, the
@@ -594,8 +604,20 @@ fn solve(
     let mut nfev = 1_usize;
     let mut status = 0_i64;
     let mut lambda = 1e-3_f64;
+    let max_nfev = config.max_nfev.unwrap_or(usize::MAX);
+    let jacobian_nfev = match config.jacobian {
+        JacobianMethod::Analytic => 0,
+        JacobianMethod::Central => 12,
+        JacobianMethod::TwoPoint => 6,
+    };
 
-    for _iteration in 0..config.max_iterations {
+    'iterations: for _iteration in 0..config.max_iterations {
+        // Numerical Jacobians need a complete batch. Do not start one that
+        // would exceed the remaining budget, even if a few evaluations remain.
+        if nfev >= max_nfev || jacobian_nfev > max_nfev - nfev {
+            break;
+        }
+        nfev += jacobian_nfev;
         let jac = problem.jacobian(config.jacobian, &state, &residuals)?;
         let (jac_weighted, f_weighted) = irls_problem(&jac, &residuals, loss, f_scale);
         let (a, g) = normal_equations(&jac_weighted, &f_weighted);
@@ -615,6 +637,10 @@ fn solve(
         let mut accepted = false;
         let mut last_step_norm = f64::INFINITY;
         for _attempt in 0..24 {
+            if nfev >= max_nfev {
+                // Budget exhaustion is not a stalled step or xtol convergence.
+                break 'iterations;
+            }
             let mut damped = a;
             for k in 0..6 {
                 damped[k][k] += lambda * d[k] * d[k];
@@ -635,16 +661,15 @@ fn solve(
                 trial[k] += delta[k];
             }
             last_step_norm = delta.iter().map(|v| v * v).sum::<f64>().sqrt();
+            nfev += 1;
             let trial_residuals = match problem.residuals(&[trial])? {
                 Ok(mut batch) => batch.swap_remove(0),
                 Err(_) => {
                     // A failed prediction (e.g. light time) rejects the step.
-                    nfev += 1;
                     lambda *= 10.0;
                     continue;
                 }
             };
-            nfev += 1;
             let trial_cost = robust_cost(&trial_residuals, loss, f_scale);
             if trial_cost.is_finite() && trial_cost <= cost {
                 let step_norm = delta.iter().map(|v| v * v).sum::<f64>().sqrt();
@@ -669,6 +694,12 @@ fn solve(
             lambda *= 10.0;
         }
         if !accepted {
+            if nfev >= max_nfev {
+                // The final allowed trial can also be the final damping
+                // attempt; it must have the same budget status as an earlier
+                // exhausted attempt, without falling through to xtol below.
+                break;
+            }
             // No damping produced a decrease. If the last (heavily damped)
             // step was already below the xtol resolution the iterate is a
             // numerical minimum; otherwise the solver stalled.
@@ -2079,6 +2110,169 @@ mod tests {
             .zip(b)
             .map(|(x, y)| (x - y).abs())
             .fold(0.0, f64::max)
+    }
+
+    struct CountingPredictor<'a> {
+        inner: &'a dyn SphericalPredictor,
+        batches: std::cell::RefCell<Vec<usize>>,
+        reject_trials: bool,
+    }
+
+    impl SphericalPredictor for CountingPredictor<'_> {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            geometry: &OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            self.batches.borrow_mut().push(states.len());
+            if self.reject_trials && self.batches.borrow().len() > 1 {
+                return Ok(Err("rejected trial prediction".to_string()));
+            }
+            self.inner.predict_spherical(states, geometry, observers)
+        }
+    }
+
+    fn solve_counted(config: &WhitenedFitConfig, reject_trials: bool) -> (Solution, Vec<usize>) {
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let predictor = CountingPredictor {
+            inner: &inner,
+            batches: std::cell::RefCell::new(Vec::new()),
+            reject_trials,
+        };
+        let problem = WhitenedProblem::new(
+            &predictor,
+            &perturbed_start(),
+            &synthetic_observations(None),
+            &observers(),
+            config,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        let solution = solve(&problem, problem.geometry.state, config).unwrap();
+        (solution, predictor.batches.into_inner())
+    }
+
+    #[test]
+    fn evaluation_budget_counts_candidates_without_overrunning_batches() {
+        for jacobian in [
+            JacobianMethod::Analytic,
+            JacobianMethod::Central,
+            JacobianMethod::TwoPoint,
+        ] {
+            for budget in [1, 2, 6, 7, 8, 12, 13, 14, 25] {
+                let config = WhitenedFitConfig {
+                    jacobian,
+                    max_nfev: Some(budget),
+                    xtol: 0.0,
+                    ftol: 0.0,
+                    gtol: 0.0,
+                    ..WhitenedFitConfig::default()
+                };
+                let (solution, batches) = solve_counted(&config, false);
+                assert_eq!(solution.nfev, batches.iter().sum::<usize>());
+                assert!(
+                    solution.nfev <= budget,
+                    "{jacobian:?} {budget}: {batches:?}"
+                );
+                if budget == 1 {
+                    assert_eq!(batches, vec![1]);
+                    assert_eq!(solution.status, 0);
+                    assert_eq!(
+                        solution.state,
+                        OrbitGeometry::from_orbit(&perturbed_start()).unwrap().state
+                    );
+                }
+                if jacobian == JacobianMethod::Central && budget <= 12 {
+                    assert_eq!(batches, vec![1], "no room for a full central Jacobian");
+                }
+                if jacobian == JacobianMethod::TwoPoint && budget <= 6 {
+                    assert_eq!(batches, vec![1], "no room for a full forward Jacobian");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn iteration_budget_is_independent_of_evaluation_budget() {
+        for (jacobian, expected_nfev) in [
+            (JacobianMethod::Analytic, 2),
+            (JacobianMethod::Central, 14),
+            (JacobianMethod::TwoPoint, 8),
+        ] {
+            for max_nfev in [None, Some(1000)] {
+                let config = WhitenedFitConfig {
+                    jacobian,
+                    max_iterations: 1,
+                    max_nfev,
+                    xtol: 0.0,
+                    ftol: 0.0,
+                    gtol: 0.0,
+                    ..WhitenedFitConfig::default()
+                };
+                let (solution, batches) = solve_counted(&config, false);
+                assert_eq!(solution.nfev, expected_nfev, "{jacobian:?}: {batches:?}");
+                assert_eq!(solution.nfev, batches.iter().sum::<usize>());
+                assert_eq!(solution.status, 0);
+            }
+        }
+    }
+
+    #[test]
+    fn evaluation_budget_stops_rejected_trials_without_reporting_convergence() {
+        // 25 is the initial evaluation plus all 24 damping attempts.
+        for budget in [4, 25] {
+            let config = WhitenedFitConfig {
+                max_nfev: Some(budget),
+                // Even very loose xtol must not turn budget exhaustion into success.
+                xtol: 1.0,
+                ..WhitenedFitConfig::default()
+            };
+            let (solution, batches) = solve_counted(&config, true);
+            assert_eq!(batches, vec![1; budget]);
+            assert_eq!(solution.nfev, budget);
+            assert_eq!(solution.status, 0);
+        }
+    }
+
+    #[test]
+    fn convergence_on_last_permitted_evaluation_is_preserved() {
+        for (jacobian, budget) in [
+            (JacobianMethod::Analytic, 2),
+            (JacobianMethod::Central, 14),
+            (JacobianMethod::TwoPoint, 8),
+        ] {
+            let config = WhitenedFitConfig {
+                jacobian,
+                max_nfev: Some(budget),
+                xtol: 1.0,
+                ..WhitenedFitConfig::default()
+            };
+            let (solution, batches) = solve_counted(&config, false);
+            assert_eq!(solution.nfev, budget);
+            assert_eq!(solution.nfev, batches.iter().sum::<usize>());
+            assert_eq!(solution.status, 3);
+        }
+    }
+
+    #[test]
+    fn evaluation_budget_must_be_positive_when_present() {
+        assert!(WhitenedFitConfig::default().validate().is_ok());
+        assert!(WhitenedFitConfig {
+            max_nfev: Some(0),
+            ..WhitenedFitConfig::default()
+        }
+        .validate()
+        .unwrap_err()
+        .contains("max_nfev"));
     }
 
     #[test]

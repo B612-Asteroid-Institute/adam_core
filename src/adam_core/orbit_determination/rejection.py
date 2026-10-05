@@ -327,7 +327,7 @@ def cmc2003_fit_detailed(
     if unsupported:
         raise ValueError(
             "cmc2003_fit runs the Rust rejection loop and accepts only the fit "
-            "settings jacobian, xtol, ftol, gtol, max_nfev (max_iterations); got "
+            "settings jacobian, xtol, ftol, gtol, max_nfev; got "
             + ", ".join(f"{key}={kwargs[key]!r}" for key in sorted(unsupported))
         )
     fit_settings = _fit_settings(
