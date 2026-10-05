@@ -1,0 +1,7 @@
+adam\_core.dynamics.lagrange module
+===================================
+
+.. automodule:: adam_core.dynamics.lagrange
+   :members:
+   :show-inheritance:
+   :undoc-members:

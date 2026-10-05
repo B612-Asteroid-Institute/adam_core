@@ -1,0 +1,7 @@
+adam\_core.observations.associations module
+===========================================
+
+.. automodule:: adam_core.observations.associations
+   :members:
+   :show-inheritance:
+   :undoc-members:
