@@ -65,6 +65,23 @@ jobs:
           path: adam-assist
           fetch-depth: 0
 
+      - name: Verify exact ASSIST revision and patch unpublished Core crates
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git -C adam-assist rev-parse HEAD)" = "$ADAM_ASSIST_REF"
+          mkdir -p adam-assist/.cargo
+          cat > adam-assist/.cargo/config.toml <<'EOF'
+          [patch.crates-io]
+          adam_core = { path = "../rust/adam_core" }
+          adam_core_rs_autodiff = { path = "../rust/adam_core_rs_autodiff" }
+          adam_core_rs_coords = { path = "../rust/adam_core_rs_coords" }
+          adam_core_rs_kernel_data = { path = "../rust/adam_core_rs_kernel_data" }
+          adam_core_rs_orbit_determination = { path = "../rust/adam_core_rs_orbit_determination" }
+          adam_core_rs_spice = { path = "../rust/adam_core_rs_spice" }
+          EOF
+
       - name: Set up CPython
         uses: actions/setup-python@v5
         with:
@@ -87,7 +104,6 @@ jobs:
           PY
 
       - name: Write adam-core runtime version
-        if: matrix.platform.family == 'manylinux'
         run: python migration/scripts/write_maturin_version.py
 
       - name: Build adam-core manylinux wheel
@@ -110,27 +126,28 @@ jobs:
           working-directory: adam-assist
           args: --release -i python${{ matrix.python-version }} --out ../wheelhouse
 
-      - name: Run exact clean-room acceptance with prebuilt manylinux wheels
-        if: matrix.platform.family == 'manylinux'
+      - name: Build adam-core native wheel
+        if: matrix.platform.family == 'native'
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          working-directory: .
+          args: --release -i python${{ matrix.python-version }} --out wheelhouse
+
+      - name: Build adam-assist native wheel
+        if: matrix.platform.family == 'native'
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          working-directory: adam-assist
+          args: --release -i python${{ matrix.python-version }} --out ../wheelhouse
+
+      - name: Run exact clean-room acceptance with prebuilt source-pair wheels
         shell: bash
         run: |
           set -euo pipefail
           python migration/scripts/run_clean_room_artifact_acceptance.py \
             --prebuilt-wheelhouse "$GITHUB_WORKSPACE/wheelhouse" \
-            --adam-core-repo "$GITHUB_WORKSPACE" \
-            --adam-core-ref HEAD \
-            --adam-assist-repo "$GITHUB_WORKSPACE/adam-assist" \
-            --adam-assist-ref HEAD \
-            --workspace "$RUNNER_TEMP/acceptance" \
-            --report "$RUNNER_TEMP/acceptance-report.json" \
-            --python "$(command -v python)"
-
-      - name: Build and run exact clean-room acceptance on native platform
-        if: matrix.platform.family == 'native'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python migration/scripts/run_clean_room_artifact_acceptance.py \
             --adam-core-repo "$GITHUB_WORKSPACE" \
             --adam-core-ref HEAD \
             --adam-assist-repo "$GITHUB_WORKSPACE/adam-assist" \
