@@ -4514,8 +4514,8 @@ fn mpc_designation_error(err: adam_core_rs_coords::MpcDesignationError) -> PyErr
 
 macro_rules! mpc_designation_fn {
     ($name:ident) => {
-        /// MPC packed-designation helper (W11): legacy-exact Rust port of
-        /// `adam_core.utils.mpc`, including exception types and messages.
+        /// Strict MPC packed-designation helper, including the current
+        /// underscore-prefixed extended provisional format.
         #[pyfunction]
         fn $name(designation: &str) -> PyResult<String> {
             adam_core_rs_coords::mpc_designations::$name(designation).map_err(mpc_designation_error)
@@ -4526,11 +4526,32 @@ macro_rules! mpc_designation_fn {
 mpc_designation_fn!(pack_numbered_designation);
 mpc_designation_fn!(pack_provisional_designation);
 mpc_designation_fn!(pack_survey_designation);
+mpc_designation_fn!(pack_numbered_comet_designation);
+mpc_designation_fn!(pack_provisional_comet_designation);
+mpc_designation_fn!(pack_comet_designation);
+mpc_designation_fn!(pack_permanent_satellite_designation);
+mpc_designation_fn!(pack_provisional_satellite_designation);
+mpc_designation_fn!(pack_satellite_designation);
 mpc_designation_fn!(pack_mpc_designation);
 mpc_designation_fn!(unpack_numbered_designation);
 mpc_designation_fn!(unpack_provisional_designation);
 mpc_designation_fn!(unpack_survey_designation);
+mpc_designation_fn!(unpack_numbered_comet_designation);
+mpc_designation_fn!(unpack_provisional_comet_designation);
+mpc_designation_fn!(unpack_comet_designation);
+mpc_designation_fn!(unpack_permanent_satellite_designation);
+mpc_designation_fn!(unpack_provisional_satellite_designation);
+mpc_designation_fn!(unpack_satellite_designation);
 mpc_designation_fn!(unpack_mpc_designation);
+
+/// Classify a canonical unpacked MPC/ADES designation as permID, provID, or trkSub.
+#[pyfunction]
+fn parse_ades_designation(
+    designation: &str,
+) -> PyResult<(Option<String>, Option<String>, Option<String>)> {
+    adam_core_rs_coords::mpc_designations::parse_ades_designation(designation)
+        .map_err(mpc_designation_error)
+}
 
 /// W1 / OD slice 3: Rust-native OD residual evaluation over the bridge. Given
 /// orbits (already at the observation times, 1:1 with observations), the observed
@@ -7366,11 +7387,27 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pack_numbered_designation, m)?)?;
     m.add_function(wrap_pyfunction!(pack_provisional_designation, m)?)?;
     m.add_function(wrap_pyfunction!(pack_survey_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(pack_numbered_comet_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(pack_provisional_comet_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(pack_comet_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(pack_permanent_satellite_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(pack_provisional_satellite_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(pack_satellite_designation, m)?)?;
     m.add_function(wrap_pyfunction!(pack_mpc_designation, m)?)?;
     m.add_function(wrap_pyfunction!(unpack_numbered_designation, m)?)?;
     m.add_function(wrap_pyfunction!(unpack_provisional_designation, m)?)?;
     m.add_function(wrap_pyfunction!(unpack_survey_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(unpack_numbered_comet_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(unpack_provisional_comet_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(unpack_comet_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(unpack_permanent_satellite_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        unpack_provisional_satellite_designation,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(unpack_satellite_designation, m)?)?;
     m.add_function(wrap_pyfunction!(unpack_mpc_designation, m)?)?;
+    m.add_function(wrap_pyfunction!(parse_ades_designation, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_load_table, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_bandpasses_load_table, m)?)?;
     m.add_function(wrap_pyfunction!(bandpasses_filter_ids, m)?)?;
