@@ -307,15 +307,21 @@ def native_model_specs(
     models: "Sequence[ObservationUncertaintyModel]",
 ) -> Optional[list[dict]]:
     """
-    The ``_native_spec()`` dicts of ``models`` (composites flattened, in
+    The ``_native_specs()`` dicts of ``models`` (composites flattened, in
     application order) for a Rust-backed propagator's fused ``run_od`` work
     unit, or None when any model has no native spec (a user-defined Python
-    model), in which case the models are applied in Python.
+    model), in which case the models are applied in Python. A subclass that
+    overrides ``apply`` must also define ``_native_specs`` to explicitly
+    describe its new behavior; an inherited specification is insufficient.
     """
+    from ._native_dispatch import _has_compatible_native_spec
+
     specs: list[dict] = []
     for model in models:
         spec = getattr(model, "_native_specs", None)
-        if spec is None:
+        if spec is None or not _has_compatible_native_spec(
+            model, "_native_specs", ("apply",)
+        ):
             return None
         nested = spec()
         if nested is None:

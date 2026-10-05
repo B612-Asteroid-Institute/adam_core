@@ -11,6 +11,7 @@ from ..coordinates.origin import Origin
 from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
 from ..time import Timestamp
+from ._native_dispatch import _has_compatible_native_spec
 from .differential_correction import (
     _FUSED_LOOP_KWARGS,
     HUBER_F_SCALE_DEFAULT,
@@ -174,6 +175,11 @@ class NativeOrbitFitter(OrbitFitter):
         the outlier-rejection loop and its constants, and the whitened-fit
         options (`fit_least_squares` defaults unless overridden through
         ``rejection_kwargs``).
+
+        A subclass overriding ``full_od``, ``initial_fit`` or ``refine_fit``
+        uses the Python composition by default. Defining ``native_settings``
+        on that subclass explicitly opts into fusion and promises these dicts
+        describe its complete fitting behavior, including the overridden hooks.
         """
         from .gauss import MU, C
 
@@ -223,7 +229,15 @@ class NativeOrbitFitter(OrbitFitter):
         return iod_settings, refinement, fit_settings
 
     def supports_native_full_od(self) -> bool:
-        """Whether ``rejection_kwargs`` are all understood by the fused work units."""
+        """Whether the fitting hooks and settings can use the fused work units.
+
+        Inherited settings cannot represent overridden fitting hooks. Check
+        that compatibility before parsing settings for the built-in drivers.
+        """
+        if not _has_compatible_native_spec(
+            self, "native_settings", ("full_od", "initial_fit", "refine_fit")
+        ):
+            return False
         _, _, _ = self.native_settings()
         loop_keys = {
             "chi2_reject",
@@ -246,7 +260,9 @@ class NativeOrbitFitter(OrbitFitter):
         IOD followed by refinement. On a Rust-backed propagator exposing the
         fused ``full_od`` work unit the whole pipeline (Gauss IOD decision
         loop, differential correction, outlier rejection) runs natively in
-        one crossing; otherwise `initial_fit` and `refine_fit` are chained.
+        one crossing when ``supports_native_full_od`` confirms compatibility;
+        otherwise `initial_fit` and `refine_fit` are chained, honoring subclass
+        overrides.
         """
         fused = getattr(propagator, "full_od", None)
         if fused is not None and self.supports_native_full_od():

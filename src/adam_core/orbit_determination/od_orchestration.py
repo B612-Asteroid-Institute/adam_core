@@ -198,8 +198,9 @@ def _fused_run_od(
 ) -> tuple[FittedOrbits, FittedOrbitMembers] | None:
     """
     `run_od` as one crossing of a Rust-backed propagator's ``run_od`` work
-    unit, for a `NativeOrbitFitter` whose settings the work unit understands
-    and models that all provide native specs. Returns None otherwise.
+    unit, for a `NativeOrbitFitter` whose hooks and settings the work unit
+    represents and models that all provide compatible native specs. Returns
+    None otherwise, so Python overrides run through the composition.
     """
     from .native_orbit_fitter import NativeOrbitFitter, tables_from_native_full_od
 

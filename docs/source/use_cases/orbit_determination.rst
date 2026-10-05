@@ -248,6 +248,28 @@ The pieces, one by one
    # members.original_astrometry vs members.used_astrometry show what the fit saw;
    # members.weight holds per-observation weights, members.astcat the star catalog.
 
+Custom models and fitters
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+``run_od`` can combine model application and fitting into one Rust call when
+their native specifications describe the Python implementations. Subclass
+overrides are honored through the ordinary composition by default:
+
+* A model overriding ``apply`` must also define ``_native_specs`` to opt into
+  the combined call. The specification must reproduce the complete custom
+  transformation. This check also applies inside nested ``CompositeModel``
+  instances.
+* A ``NativeOrbitFitter`` overriding ``full_od``, ``initial_fit`` or
+  ``refine_fit`` must also define ``native_settings`` to opt into the combined
+  call. Those settings must fully describe the custom behavior in the Rust
+  drivers. Custom logic that cannot be expressed by those drivers should
+  leave ``native_settings`` inherited.
+
+Subclasses that inherit the fitting/model methods unchanged remain eligible
+for fusion. Further subclasses that change those methods must renew the
+explicit opt-in. The ordinary composition still uses Rust numerical drivers
+inside the built-in fitting stages.
+
 ``fit_least_squares`` itself minimizes the whitened (lon, lat) residuals with
 an exact two-body Jacobian (Rust autodiff) and validates the covariance along
 its weakest direction, so line-of-sight uncertainties are no longer fabricated
