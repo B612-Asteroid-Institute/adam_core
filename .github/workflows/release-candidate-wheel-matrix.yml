@@ -230,6 +230,14 @@ jobs:
               raise SystemExit(f"wheel tag mismatch for {pattern}: {invalid}")
           PY
 
+      - name: Preserve pairing patch evidence
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/acceptance"
+          cp adam-assist/.cargo/config.toml \
+            "$RUNNER_TEMP/acceptance/pairing-cargo-config.toml"
+
       - name: Upload wheel acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -240,7 +248,7 @@ jobs:
             ${{ runner.temp }}/acceptance/invocation/smoke-report.json
             ${{ runner.temp }}/acceptance/wheelhouse/*.whl
             ${{ runner.temp }}/acceptance/logs/*.log
-            adam-assist/.cargo/config.toml
+            ${{ runner.temp }}/acceptance/pairing-cargo-config.toml
           if-no-files-found: error
 
   extended-coverage:
