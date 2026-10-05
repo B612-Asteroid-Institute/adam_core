@@ -124,7 +124,7 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: "2_17"
           working-directory: adam-assist
-          args: --release -i python${{ matrix.python-version }} --out ../wheelhouse
+          args: --release --locked -i python${{ matrix.python-version }} --out ../wheelhouse
 
       - name: Build adam-core native wheel
         if: matrix.platform.family == 'native'
@@ -140,7 +140,7 @@ jobs:
         with:
           command: build
           working-directory: adam-assist
-          args: --release -i python${{ matrix.python-version }} --out ../wheelhouse
+          args: --release --locked -i python${{ matrix.python-version }} --out ../wheelhouse
 
       - name: Run exact clean-room acceptance with prebuilt source-pair wheels
         shell: bash
@@ -172,6 +172,7 @@ jobs:
           python - <<'PY'
           import email
           import fnmatch
+          import json
           import os
           import zipfile
           from pathlib import Path
@@ -191,6 +192,34 @@ jobs:
               raise SystemExit(
                   f"adam-core release metadata mismatch: {metadata['Name']} {metadata['Version']}"
               )
+          with zipfile.ZipFile(assist[0]) as archive:
+              metadata_paths = [n for n in archive.namelist() if n.endswith(".dist-info/METADATA")]
+              if len(metadata_paths) != 1:
+                  raise SystemExit(f"unexpected ASSIST METADATA files: {metadata_paths}")
+              assist_metadata = email.message_from_bytes(archive.read(metadata_paths[0]))
+          assist_requirements = {
+              value.replace(" ", "").lower()
+              for value in assist_metadata.get_all("Requires-Dist", [])
+          }
+          expected_core_requirement = f"adam-core=={expected_version}"
+          if expected_core_requirement not in assist_requirements:
+              raise SystemExit(
+                  "adam-assist does not require the candidate Core version: "
+                  f"{expected_core_requirement} not in {sorted(assist_requirements)}"
+              )
+          report = json.loads(
+              (Path(os.environ["RUNNER_TEMP"]) / "acceptance-report.json").read_text()
+          )
+          smoke_versions = report["runtime"]["smoke"]["stages"][
+              "imports_and_provenance"
+          ]["versions"]
+          smoke_runtime_versions = report["runtime"]["smoke"]["stages"][
+              "imports_and_provenance"
+          ]["runtime_versions"]
+          if smoke_versions["adam-core"] != expected_version:
+              raise SystemExit(f"installed adam-core mismatch: {smoke_versions}")
+          if smoke_runtime_versions["adam-core"] != expected_version:
+              raise SystemExit(f"runtime adam-core mismatch: {smoke_runtime_versions}")
           pattern = "*${{ matrix.platform.wheel_tag }}.whl"
           invalid = [
               path.name
@@ -211,6 +240,7 @@ jobs:
             ${{ runner.temp }}/acceptance/invocation/smoke-report.json
             ${{ runner.temp }}/acceptance/wheelhouse/*.whl
             ${{ runner.temp }}/acceptance/logs/*.log
+            adam-assist/.cargo/config.toml
           if-no-files-found: error
 
   extended-coverage:
@@ -226,6 +256,22 @@ jobs:
           repository: B612-Asteroid-Institute/adam-assist
           ref: ${{ env.ADAM_ASSIST_REF }}
           path: .ci/adam-assist
+      - name: Verify exact ASSIST revision and patch unpublished Core crates
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git -C .ci/adam-assist rev-parse HEAD)" = "$ADAM_ASSIST_REF"
+          mkdir -p .ci/adam-assist/.cargo
+          cat > .ci/adam-assist/.cargo/config.toml <<'EOF'
+          [patch.crates-io]
+          adam_core = { path = "../../rust/adam_core" }
+          adam_core_rs_autodiff = { path = "../../rust/adam_core_rs_autodiff" }
+          adam_core_rs_coords = { path = "../../rust/adam_core_rs_coords" }
+          adam_core_rs_kernel_data = { path = "../../rust/adam_core_rs_kernel_data" }
+          adam_core_rs_orbit_determination = { path = "../../rust/adam_core_rs_orbit_determination" }
+          adam_core_rs_spice = { path = "../../rust/adam_core_rs_spice" }
+          EOF
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
