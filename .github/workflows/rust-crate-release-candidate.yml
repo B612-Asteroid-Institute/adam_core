@@ -18,8 +18,8 @@ permissions:
   contents: read
 
 env:
-  PYTHON_PREVIEW_VERSION: "0.5.7"
-  RUST_PREVIEW_VERSION: "0.5.7"
+  PYTHON_PREVIEW_VERSION: "0.5.8"
+  RUST_PREVIEW_VERSION: "0.5.8"
 
 jobs:
   package-and-test:

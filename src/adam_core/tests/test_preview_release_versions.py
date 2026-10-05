@@ -30,6 +30,7 @@ SPEC.loader.exec_module(MODULE)
         ("0.5.6-rc.5", "0.5.6rc5"),
         ("0.5.6-rc.6", "0.5.6rc6"),
         ("0.5.7", "0.5.7"),
+        ("0.5.8", "0.5.8"),
     ],
 )
 def test_cargo_version_to_pep440(cargo: str, python: str) -> None:
@@ -46,23 +47,23 @@ def test_cargo_version_to_pep440_rejects_unsupported_forms(version: str) -> None
 
 
 def test_python_tag_validation_uses_the_python_release_line() -> None:
-    assert MODULE._python_version_tag_glob("0.5.7") == "v0.5.*"
+    assert MODULE._python_version_tag_glob("0.5.8") == "v0.5.*"
 
 
 def test_stable_release_versions_align_python_and_public_rust_crates() -> None:
-    verify_preview_versions.verify(ROOT, "0.5.7", "0.5.7", "stable")
+    verify_preview_versions.verify(ROOT, "0.5.8", "0.5.8", "stable")
     with pytest.raises(ValueError, match="not a prerelease"):
-        verify_preview_versions.verify(ROOT, "0.5.7", "0.5.7", "preview")
+        verify_preview_versions.verify(ROOT, "0.5.8", "0.5.8", "preview")
 
 
 def test_runtime_versions_must_match_distribution_metadata() -> None:
-    versions = {"adam-core": "0.5.7", "adam-assist": "0.4.0rc7"}
+    versions = {"adam-core": "0.5.8", "adam-assist": "0.4.1"}
     assert _validate_runtime_versions(versions, versions.copy()) == versions
 
     with pytest.raises(AssertionError, match="runtime package version mismatch"):
         _validate_runtime_versions(
             versions,
-            {"adam-core": "0.0.0dev0", "adam-assist": "0.4.0rc7"},
+            {"adam-core": "0.0.0dev0", "adam-assist": "0.4.1"},
         )
 
 
@@ -77,7 +78,7 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
     assert workflow.index(writer) < workflow.index(builder) < workflow.index(inspector)
     assert "adam_assist_ref:" in workflow
     assert "ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}" in workflow
-    assert 'PYTHON_PREVIEW_VERSION: "0.5.7"' in workflow
+    assert 'PYTHON_PREVIEW_VERSION: "0.5.8"' in workflow
 
 
 def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
@@ -119,8 +120,8 @@ def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
     assert "skip-existing" not in python_publisher
 
     publisher = (ROOT / ".github/workflows/publish-crates.yml").read_text()
-    assert "default: 0.5.7" in publisher
-    assert 'PYTHON_SOURCE_VERSION: "0.5.7"' in publisher
+    assert "default: 0.5.8" in publisher
+    assert 'PYTHON_SOURCE_VERSION: "0.5.8"' in publisher
     assert "environment: crates-io" in publisher
     assert "--channel stable" in publisher
     assert 'test "$GITHUB_REF" = "refs/tags/v$EXPECTED_VERSION"' in publisher
@@ -152,7 +153,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert assist_sha in tier1
     assert "python -m pip install --no-deps -e dependent" in tier1
     assert "jpl-small-bodies-de441-n16==2021.3.31.1" in tier1
-    assert 'version("adam-core") == adam_core.__version__ == "0.5.7"' in tier1
+    assert 'version("adam-core") == adam_core.__version__ == "0.5.8"' in tier1
     assert 'version("adam-assist") == assist_version == "0.4.0rc7"' in tier1
 
     for workflow in workflows.glob("*.yml"):

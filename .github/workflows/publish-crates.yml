@@ -10,7 +10,7 @@ on:
       expected_version:
         description: Exact stable version shared by all six crates
         required: true
-        default: 0.5.7
+        default: 0.5.8
         type: string
       authentication:
         description: crates.io OIDC trusted publishing (bootstrap token was revoked after rc.1)
@@ -30,7 +30,7 @@ permissions:
   id-token: write
 
 env:
-  PYTHON_SOURCE_VERSION: "0.5.7"
+  PYTHON_SOURCE_VERSION: "0.5.8"
 
 jobs:
   publish:

@@ -42,5 +42,5 @@ TEMPLATE_SPECS: Final[tuple[TemplateSpec, ...]] = (
 )
 
 
-# MPC observatory codes to treat as ATLAS in v1.
-ATLAS_MPC_CODES: Final[tuple[str, ...]] = ("T08", "T05", "M22", "W68")
+# MPC observatory codes to treat as ATLAS (R17 is ATLAS-TDO, Teide, band "w").
+ATLAS_MPC_CODES: Final[tuple[str, ...]] = ("T08", "T05", "M22", "W68", "R17")

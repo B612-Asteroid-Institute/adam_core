@@ -2,6 +2,28 @@
 
 This file contains notable changes in adam-core
 
+## [0.5.8] - 2026-10-05
+
+### Added
+
+- Standards-complete MPC minor-planet, comet, and satellite designation codecs,
+  plus strict classification into ADES `permID`, `provID`, and `trkSub` fields.
+- ATLAS Teide (`R17`) station and observatory-band mappings.
+
+### Changed
+
+- ADES `rmsRA` and `rmsDec` accept the representable positive range from
+  `0.00001` through values below `99999.5`, reducing fixed-point precision only
+  as needed to satisfy the seven-character PSV field width.
+
+### Compatibility
+
+- MPC designation codecs now require canonical, standards-defined spellings,
+  use the MPC A-prefix form for pre-1925 minor-planet provisionals, and raise
+  `ValueError` for malformed or ambiguous forms that legacy helpers accepted.
+- The minimum representable ADES `rmsRA` and `rmsDec` value is now `0.00001`;
+  smaller positive values cannot be represented in PosDecimalTypeW7.
+
 ## [0.5.7] - 2026-08-31
 
 ### Added

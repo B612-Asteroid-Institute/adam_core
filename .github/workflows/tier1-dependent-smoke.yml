@@ -43,6 +43,11 @@ jobs:
             naif-de440==2020.12.21.1 \
             jpl-small-bodies-de441-n16==2021.3.31.1
           python -m pip install dist/*.whl
+          # The dependent is installed with --no-deps so the freshly built
+          # adam_core wheel is not replaced from PyPI. Its SPICE kernel data
+          # packages have to be installed explicitly, at the versions the
+          # candidate pins, or its import fails.
+          python -m pip install "naif-de440==2020.12.21.1" "jpl-small-bodies-de441-n16==2021.3.31.1"
           python -m pip install --no-deps -e dependent
       - name: Verify exact candidate installations
         run: |
@@ -52,7 +57,7 @@ jobs:
           import adam_core
           from adam_assist.version import __version__ as assist_version
 
-          assert version("adam-core") == adam_core.__version__ == "0.5.7"
+          assert version("adam-core") == adam_core.__version__ == "0.5.8"
           assert version("adam-assist") == assist_version == "0.4.0rc7"
           PY
       - name: Run dependent import smoke

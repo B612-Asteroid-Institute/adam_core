@@ -10,7 +10,7 @@ on:
       expected_version:
         description: Exact stable PEP 440 version
         required: true
-        default: 0.5.7
+        default: 0.5.8
         type: string
       confirmation:
         description: Type "publish adam-core <version> from <sha> to pypi"
@@ -22,7 +22,7 @@ permissions:
   actions: read
 
 env:
-  RUST_PREVIEW_VERSION: "0.5.7"
+  RUST_PREVIEW_VERSION: "0.5.8"
 
 jobs:
   collect-tested-artifacts:

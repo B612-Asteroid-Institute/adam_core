@@ -18,17 +18,17 @@ def _packages(version: str) -> dict[str, dict[str, object]]:
 
 
 def test_release_package_validation_distinguishes_preview_and_stable() -> None:
-    preview = _packages("0.5.7-rc.1")
-    publish_crate_archives.validate_release_packages(preview, "0.5.7-rc.1", "preview")
+    preview = _packages("0.5.8-rc.1")
+    publish_crate_archives.validate_release_packages(preview, "0.5.8-rc.1", "preview")
     with pytest.raises(ValueError, match="stable versions"):
         publish_crate_archives.validate_release_packages(
-            preview, "0.5.7-rc.1", "stable"
+            preview, "0.5.8-rc.1", "stable"
         )
 
-    stable = _packages("0.5.7")
-    publish_crate_archives.validate_release_packages(stable, "0.5.7", "stable")
+    stable = _packages("0.5.8")
+    publish_crate_archives.validate_release_packages(stable, "0.5.8", "stable")
     with pytest.raises(ValueError, match="preview versions"):
-        publish_crate_archives.validate_release_packages(stable, "0.5.7", "preview")
+        publish_crate_archives.validate_release_packages(stable, "0.5.8", "preview")
 
 
 def test_crates_io_index_path() -> None:
@@ -40,16 +40,16 @@ def test_crates_io_index_path() -> None:
 
 def test_existing_archive_must_be_exact_and_unyanked() -> None:
     entry = {"cksum": "abc", "yanked": False}
-    publish_crate_archives.validate_existing_archive(entry, "adam_core", "0.5.7", "abc")
+    publish_crate_archives.validate_existing_archive(entry, "adam_core", "0.5.8", "abc")
 
     with pytest.raises(ValueError, match="checksum"):
         publish_crate_archives.validate_existing_archive(
-            entry, "adam_core", "0.5.7", "def"
+            entry, "adam_core", "0.5.8", "def"
         )
     with pytest.raises(ValueError, match="yanked"):
         publish_crate_archives.validate_existing_archive(
             {"cksum": "abc", "yanked": True},
             "adam_core",
-            "0.5.7",
+            "0.5.8",
             "abc",
         )

@@ -103,6 +103,19 @@ fn python_fixed(value: f64, precision: usize) -> String {
     }
 }
 
+/// Render a positive decimal with at most `max_width` characters. ADES
+/// `rmsRA` and `rmsDec` use PosDecimalTypeW7, so large but valid measured
+/// uncertainties need fewer fractional digits than the default five.
+fn python_fixed_bounded(value: f64, precision: usize, max_width: usize) -> String {
+    for bounded_precision in (0..=precision).rev() {
+        let rendered = python_fixed(value, bounded_precision);
+        if rendered.len() <= max_width {
+            return rendered;
+        }
+    }
+    python_fixed(value, 0)
+}
+
 /// pandas QUOTE_MINIMAL for `sep='|'`: quote when the field contains the
 /// separator, the quote character, or a newline; double inner quotes.
 fn csv_quote(field: &str) -> String {
@@ -151,21 +164,35 @@ impl RenderedColumn {
         }
     }
 
-    fn render_cell(&self, row: usize, precision: Option<usize>) -> String {
+    fn render_cell(
+        &self,
+        row: usize,
+        precision: Option<usize>,
+        max_width: Option<usize>,
+    ) -> String {
         match self {
             Self::Rendered(values) => values[row].clone(),
             Self::Strings(values) => values[row].clone().unwrap_or_default(),
             Self::ReqStrings(values) => values[row].clone(),
-            Self::ReqFloats(values) => match precision {
-                Some(precision) => python_fixed(values[row], precision),
-                None => python_fixed(values[row], 16),
-            },
+            Self::ReqFloats(values) => {
+                let precision = precision.unwrap_or(16);
+                max_width.map_or_else(
+                    || python_fixed(values[row], precision),
+                    |width| python_fixed_bounded(values[row], precision, width),
+                )
+            }
             Self::Floats(values) => match &values[row] {
                 // ADES PSV section 5 defines null fields as empty (consecutive
                 // delimiters) or blank-padded. Never serialize a missing value
                 // as the numeric-looking, non-standard token `nan`.
                 value if is_na(value) => String::new(),
-                Some(value) => python_fixed(*value, precision.unwrap_or(16)),
+                Some(value) => {
+                    let precision = precision.unwrap_or(16);
+                    max_width.map_or_else(
+                        || python_fixed(*value, precision),
+                        |width| python_fixed_bounded(*value, precision, width),
+                    )
+                }
                 None => unreachable!(),
             },
         }
@@ -373,7 +400,11 @@ pub fn ades_to_string(
                     let precision = columns_precision
                         .get(*name)
                         .map(|precision| *precision as usize);
-                    csv_quote(&column.render_cell(row, precision))
+                    let max_width = match *name {
+                        "rmsRACosDec" | "rmsDec" => Some(7),
+                        _ => None,
+                    };
+                    csv_quote(&column.render_cell(row, precision, max_width))
                 })
                 .collect();
             out.push_str(&cells.join("|"));
@@ -908,12 +939,19 @@ mod tests {
     fn optional_float_nulls_render_as_empty_psv_fields() {
         let values = RenderedColumn::Floats(vec![None, Some(f64::NAN), Some(1.25)]);
 
-        assert_eq!(values.render_cell(0, Some(4)), "");
-        assert_eq!(values.render_cell(1, Some(4)), "");
-        assert_eq!(values.render_cell(0, None), "");
-        assert_eq!(values.render_cell(1, None), "");
-        assert_eq!(values.render_cell(2, Some(4)), "1.2500");
-        assert_eq!(values.render_cell(2, None), "1.2500000000000000");
+        assert_eq!(values.render_cell(0, Some(4), None), "");
+        assert_eq!(values.render_cell(1, Some(4), None), "");
+        assert_eq!(values.render_cell(0, None, None), "");
+        assert_eq!(values.render_cell(1, None, None), "");
+        assert_eq!(values.render_cell(2, Some(4), None), "1.2500");
+        assert_eq!(values.render_cell(2, None, None), "1.2500000000000000");
+    }
+
+    #[test]
+    fn bounded_positive_decimal_reduces_precision_to_ades_width() {
+        assert_eq!(python_fixed_bounded(584.7052976482118, 5, 7), "584.705");
+        assert_eq!(python_fixed_bounded(3.6, 5, 7), "3.60000");
+        assert_eq!(python_fixed_bounded(9999.999, 5, 7), "10000.0");
     }
 
     #[test]

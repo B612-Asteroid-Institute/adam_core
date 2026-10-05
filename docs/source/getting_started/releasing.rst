@@ -22,14 +22,13 @@ implementation; musllinux is deliberately unsupported.
 Stable release line
 -------------------
 
-The stable migration release is ``adam-core==0.5.7`` for Python and ``0.5.7``
-for all six public Rust crates. The version advances from the ``0.5.6rc6``
-Python preview because the immutable historical Git tag ``v0.5.6`` already
-exists at older source. The tag must never be moved or reused. Aligning the
-Python and public Rust versions lets one exact ``v0.5.7`` source tag identify
-the complete Core product release.
+The current published baseline is ``adam-core==0.5.7``. The successor release
+is ``adam-core==0.5.8`` for Python and ``0.5.8`` for all six public Rust crates.
+Release ``0.5.8`` reconciles the immutable ``v0.5.7`` release lineage with the
+MPC designation, ADES RMS, and observatory updates subsequently merged to
+``main``. The ``v0.5.7`` tag must never be moved or reused.
 
-All internal public Rust dependencies use exact ``=0.5.7`` requirements.
+All internal public Rust dependencies use exact ``=0.5.8`` requirements.
 ``adam_core_py`` remains an unpublished wheel implementation crate. Rust 1.87
 is the authoritative MSRV; latest stable is compatibility-only. The Python
 wheel contains the Python veneer and compiled ``adam_core._rust_native``
@@ -65,12 +64,15 @@ Release order
 Stable promotion remains separately approval-gated and proceeds in dependency
 order:
 
-#. accept the exact Core ``0.5.7`` six-crate set and paired 12-wheel matrix;
+#. prepare an exact ``adam-assist 0.4.1`` source candidate pinned to Core
+   ``0.5.8`` for paired acceptance without publishing ASSIST;
+#. accept the exact Core ``0.5.8`` six-crate set and paired 12-wheel matrix;
 #. publish and verify the six Core crates in dependency order;
 #. publish and verify the exact Core Python wheel set;
-#. update ASSIST Python/Rust exact pins and frozen lock to public Core ``0.5.7``;
-#. accept, publish, and verify ``adam_assist 0.4.0`` and the exact
-   ``adam-assist==0.4.0`` wheel set; and
+#. finalize the ASSIST Python/Rust exact pins and frozen lock against public
+   Core ``0.5.8``;
+#. accept, publish, and verify ``adam_assist 0.4.1`` and the exact
+   ``adam-assist==0.4.1`` wheel set; and
 #. run clean no-lock Cargo 1.87/latest-stable and clean pip/current-uv
    propagation smoke tests from registry-only environments.
 
