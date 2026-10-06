@@ -68,6 +68,61 @@ Generate OEM from a Seed Orbit (Propagation Included)
        originator="ADAM CORE USER",
    )
 
+OEM with Explicit CCSDS Metadata
+--------------------------------
+
+``orbit_to_oem`` writes one fixed shape of file: OEM version 2.0 with
+``REF_FRAME = EME2000``. When a consumer specifies the labels, build an
+:class:`~adam_core.orbits.oem.OrbitEphemerisMessage` instead. Its metadata is
+explicit, it writes OEM 3.0, and it reads any header and metadata keyword back.
+
+The input is the same multi-epoch ``Orbits`` table ``propagate_orbits`` returns.
+adam_core's ``"equatorial"`` frame is the J2000 frame SPICE and DE440 deliver,
+which NAIF aligns with the ICRF, so the default label for it is ``ICRF``.
+``EME2000`` is available as an override. Epochs are written with three decimal
+places of seconds, and an epoch that is not on a millisecond boundary raises
+unless ``allow_epoch_rounding=True`` is passed.
+
+.. code-block:: python
+
+   from adam_core.orbits import OrbitEphemerisMessage
+
+   # propagated: Orbits with one object_id, N epochs, frame "equatorial",
+   # origin SUN, time scale "tdb", from propagate_orbits(..., covariance=True).
+   message: OrbitEphemerisMessage = OrbitEphemerisMessage.from_orbits(
+       propagated,
+       originator="B612 ASTEROID INSTITUTE",
+       object_name="99942 Apophis (2004 MN4)",
+       object_id="99942",
+       ref_frame="ICRF",        # default for equatorial states
+       time_system="TDB",       # default is the Timestamp scale
+   )
+   message.write("nominal_states.oem")   # states only, CENTER_NAME = SUN
+
+   # Read it back. Every segment is kept, states are in AU and AU/day.
+   loaded = OrbitEphemerisMessage.from_kvn("nominal_states.oem")
+   print(loaded.segments[0].metadata)
+   states = loaded.to_orbits()
+
+A covariance block is written only on request. ``covariance_frame`` names the
+frame of the block.
+
+.. code-block:: python
+
+   # State covariance in the OEM reference frame. Conformant.
+   message.write("nominal_states_icrf_cov.oem", covariance_frame="ICRF")
+
+   # Covariance rotated into a local orbital frame at every epoch. The OEM
+   # standard lists RSW, RTN and TNW for COV_REF_FRAME.
+   message.write("nominal_states_tnw_cov.oem", covariance_frame="TNW")
+
+   # VNC_ROTATING is a registered SANA frame outside that OEM list. The
+   # writer records that with a COMMENT line. Pass strict=True to refuse it.
+   message.write("nominal_states_vnc_cov.oem", covariance_frame="VNC_ROTATING")
+
+The separate covariance product for local orbital frames is described in
+:doc:`local_orbital_frames`.
+
 Read OEM Back into ``Orbits``
 -----------------------------
 

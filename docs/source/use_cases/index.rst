@@ -13,6 +13,7 @@ mission-analysis details.
    ../cookbook/coordinates_classes
    ../cookbook/coordinate_covariances
    ../cookbook/coordinate_transforms
+   ../cookbook/local_orbital_frames
    ../cookbook/observations_and_observers
    ../cookbook/propagation_and_ephemeris
    ../cookbook/residuals
