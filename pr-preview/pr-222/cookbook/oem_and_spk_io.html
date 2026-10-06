@@ -512,7 +512,8 @@ table into <code class="docutils literal notranslate"><span class="pre">Orbits</
 <a class="reference internal" href="../reference/api/adam_core.orbits.oem.html#adam_core.orbits.oem.OrbitEphemerisMessage" title="adam_core.orbits.oem.OrbitEphemerisMessage"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrbitEphemerisMessage</span></code></a> built from the same
 <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> table writes OEM 3.0 with <code class="docutils literal notranslate"><span class="pre">REF_FRAME</span> <span class="pre">=</span> <span class="pre">ICRF</span></code> for equatorial
 states, <code class="docutils literal notranslate"><span class="pre">CENTER_NAME</span></code> from the origin and <code class="docutils literal notranslate"><span class="pre">TIME_SYSTEM</span></code> from the Timestamp
-scale. Epochs must fall on millisecond boundaries.</p>
+scale. Epochs off the renderer’s millisecond grid are moved onto it with a
+warning.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitEphemerisMessage</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalFrameCovariances</span>
 

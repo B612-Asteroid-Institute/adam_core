@@ -449,6 +449,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Union</span>
@@ -468,8 +469,6 @@
 
 <span class="n">_REF_FRAME</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"equatorial"</span><span class="p">:</span> <span class="s2">"ICRF"</span><span class="p">,</span> <span class="s2">"itrf93"</span><span class="p">:</span> <span class="s2">"ITRF-93"</span><span class="p">}</span>
 <span class="n">_OEM_COVARIANCE_FRAMES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"RSW"</span><span class="p">,</span> <span class="s2">"RTN"</span><span class="p">,</span> <span class="s2">"TNW"</span><span class="p">)</span>
-<span class="c1"># The KVN renderer writes epochs with three decimal places of seconds.</span>
-<span class="n">_MILLISECOND</span> <span class="o">=</span> <span class="mi">1_000_000</span>
 
 
 <div class="viewcode-block" id="OrbitEphemerisMessage">
@@ -479,8 +478,9 @@
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    One object's state history (an Orbits table in adam_core units) and the</span>
 <span class="sd">    CCSDS labels it is written under, for example ``center_name="SUN"``,</span>
-<span class="sd">    ``ref_frame="ICRF"``, ``time_system="TDB"``. ``creation_date`` is UTC and</span>
-<span class="sd">    defaults to the write time. ``comments`` follow META_START.</span>
+<span class="sd">    ``ref_frame="ICRF"``, ``time_system="TDB"``. Epochs sit on the millisecond</span>
+<span class="sd">    grid the renderer writes. ``creation_date`` is UTC and defaults to the write</span>
+<span class="sd">    time. ``comments`` follow META_START.</span>
 <span class="sd">    """</span>
 
     <span class="n">states</span><span class="p">:</span> <span class="n">Orbits</span>
@@ -514,7 +514,7 @@
 <span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">_adam_to_oem_center</span>
 
-        <span class="n">states</span> <span class="o">=</span> <span class="n">_single_object_sorted</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
+        <span class="n">states</span> <span class="o">=</span> <span class="n">_single_object_sorted</span><span class="p">(</span><span class="n">_on_millisecond_grid</span><span class="p">(</span><span class="n">orbits</span><span class="p">))</span>
         <span class="n">coords</span> <span class="o">=</span> <span class="n">states</span><span class="o">.</span><span class="n">coordinates</span>
         <span class="k">if</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_REF_FRAME</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
@@ -553,13 +553,6 @@
         <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
         <span class="n">coords</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="o">.</span><span class="n">coordinates</span>
-        <span class="n">days</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="n">nanos</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-        <span class="k">if</span> <span class="p">(</span><span class="n">nanos</span> <span class="o">%</span> <span class="n">_MILLISECOND</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">"OEM epochs are written with three decimal places of seconds, so "</span>
-                <span class="s2">"every epoch must fall on a millisecond boundary."</span>
-            <span class="p">)</span>
         <span class="n">epochs</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_iso8601</span><span class="p">()</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
         <span class="n">comments</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">comments</span><span class="p">)</span>
         <span class="n">records</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
@@ -588,8 +581,8 @@
             <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">header</span><span class="p">),</span>
             <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">metadata</span><span class="p">),</span>
             <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">days</span><span class="p">),</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">nanos</span><span class="p">),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)),</span>
             <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
                 <span class="n">convert_cartesian_values_au_to_km</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">values</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
             <span class="p">),</span>
@@ -633,6 +626,25 @@
             <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">matrices_km</span><span class="p">[</span><span class="n">i</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
         <span class="p">],</span> <span class="n">note</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_on_millisecond_grid</span><span class="p">(</span><span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Move epochs onto the renderer's millisecond grid, warning when any move."""</span>
+    <span class="n">time</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span>
+    <span class="n">rounded</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">rounded</span><span class="p">(</span><span class="s2">"ms"</span><span class="p">)</span>
+    <span class="n">shift</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span>
+        <span class="n">rounded</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="o">-</span> <span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="p">)</span>
+    <span class="k">if</span> <span class="n">shift</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">int</span><span class="p">((</span><span class="n">shift</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">time</span><span class="p">)</span><span class="si">}</span><span class="s2"> epochs were not on the "</span>
+            <span class="s2">"millisecond grid OEM epochs are written with and were moved onto it, "</span>
+            <span class="sa">f</span><span class="s2">"the largest by </span><span class="si">{</span><span class="n">shift</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1e3</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> microseconds."</span><span class="p">,</span>
+            <span class="ne">UserWarning</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">orbits</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"coordinates.time"</span><span class="p">,</span> <span class="n">rounded</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">orbits</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_single_object_sorted</span><span class="p">(</span><span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
