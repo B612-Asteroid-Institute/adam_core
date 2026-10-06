@@ -106,23 +106,27 @@ pub enum MarsdenLawEncoding {
 /// Assessment of one orbit row's non-gravitational parameters.
 #[derive(Clone, Debug, PartialEq)]
 pub struct NonGravitationalAssessment {
-    /// Effective A1/A2/A3 values; null inputs are represented as zero.
-    pub effective_acceleration: [f64; 3],
-    /// Whether every effective A coefficient is finite.
-    pub coefficients_finite: bool,
-    /// Whether at least one nominal A coefficient is nonzero, or `None` when
-    /// non-finite coefficients make nominal activity indeterminate.
-    pub nominal_active: Option<bool>,
-    /// Whether a semantic 9D covariance can produce nonzero A members.
-    pub covariance_may_activate: bool,
-    /// Whether nominal or covariance support requires a usable force law, or
-    /// `None` when nominal activity is indeterminate and covariance does not
-    /// independently require the law.
-    pub law_required: Option<bool>,
+    /// Canonical A1/A2/A3 coefficient values after representing null as zero.
+    pub a_coefficients_with_null_as_zero: [f64; 3],
+    /// Whether every canonical A1/A2/A3 coefficient is finite.
+    pub a_coefficients_finite: bool,
+    /// Whether at least one central A1/A2/A3 coefficient is nonzero, or `None`
+    /// when non-finite coefficients prevent evaluation.
+    pub nominal_a_coefficients_nonzero: Option<bool>,
+    /// Whether the supplied covariance's semantic parameterization includes
+    /// A1/A2/A3 in addition to Cartesian state. This does not assert that the
+    /// covariance is numerically usable.
+    pub covariance_includes_a1_a2_a3: bool,
+    /// Whether the central A1/A2/A3 coefficients require a usable Marsden law,
+    /// or `None` when non-finite coefficients prevent evaluation.
+    pub nominal_requires_marsden_law: Option<bool>,
+    /// Whether constructing uncertainty members from the supplied covariance
+    /// parameterization requires a usable Marsden law.
+    pub covariance_parameterization_requires_marsden_law: bool,
     /// Canonical shape of the supplied Marsden scalar-law fields.
-    pub law_encoding: MarsdenLawEncoding,
-    /// Whether the encoded law has scientifically valid numerical values.
-    pub law_values_valid: bool,
+    pub marsden_law_encoding: MarsdenLawEncoding,
+    /// Whether the encoded Marsden law has scientifically valid values.
+    pub marsden_law_values_valid: bool,
     /// Independent issues observed for this row, in deterministic check order.
     pub issues: Vec<NonGravitationalIssue>,
 }
@@ -141,7 +145,8 @@ pub enum NonGravitationalIssue {
     NonPositiveMarsdenAlpha,
     /// R0 is finite but not strictly positive.
     NonPositiveMarsdenScale,
-    /// The represented nominal/covariance support needs a law that is invalid.
+    /// The central coefficients or covariance parameterization require a law
+    /// whose encoded values are invalid.
     RequiredMarsdenLawInvalid,
 }
 
@@ -320,7 +325,7 @@ fn assess_non_gravitational(
     row: Option<NonGravitationalParametersRow>,
     covariance_dimension: Option<usize>,
 ) -> NonGravitationalAssessment {
-    let effective_acceleration = row
+    let a_coefficients_with_null_as_zero = row
         .map(|row| {
             [
                 row.a1.unwrap_or(0.0),
@@ -329,31 +334,33 @@ fn assess_non_gravitational(
             ]
         })
         .unwrap_or([0.0; 3]);
-    let coefficients_finite = effective_acceleration.iter().all(|value| value.is_finite());
-    let nominal_active =
-        coefficients_finite.then(|| effective_acceleration.iter().any(|value| *value != 0.0));
-    let covariance_may_activate = covariance_dimension == Some(9);
-    let law_required = if covariance_may_activate {
-        Some(true)
-    } else {
-        nominal_active
-    };
+    let a_coefficients_finite = a_coefficients_with_null_as_zero
+        .iter()
+        .all(|value| value.is_finite());
+    let nominal_a_coefficients_nonzero = a_coefficients_finite.then(|| {
+        a_coefficients_with_null_as_zero
+            .iter()
+            .any(|value| *value != 0.0)
+    });
+    let covariance_includes_a1_a2_a3 = covariance_dimension == Some(9);
+    let nominal_requires_marsden_law = nominal_a_coefficients_nonzero;
+    let covariance_parameterization_requires_marsden_law = covariance_includes_a1_a2_a3;
 
     let constants = row
         .map(|row| [row.aln, row.nk, row.nm, row.nn, row.r0])
         .unwrap_or([None; 5]);
     let supplied_constant_count = constants.iter().filter(|value| value.is_some()).count();
-    let law_encoding = match supplied_constant_count {
+    let marsden_law_encoding = match supplied_constant_count {
         0 => MarsdenLawEncoding::InverseSquare,
         5 => MarsdenLawEncoding::Complete,
         _ => MarsdenLawEncoding::Partial,
     };
 
     let mut issues = Vec::new();
-    if !coefficients_finite {
+    if !a_coefficients_finite {
         issues.push(NonGravitationalIssue::NonFiniteAccelerationCoefficient);
     }
-    let law_values_valid = match law_encoding {
+    let marsden_law_values_valid = match marsden_law_encoding {
         MarsdenLawEncoding::InverseSquare => true,
         MarsdenLawEncoding::Partial => {
             issues.push(NonGravitationalIssue::PartiallySpecifiedMarsdenLaw);
@@ -376,18 +383,21 @@ fn assess_non_gravitational(
             finite && alpha_positive && scale_positive
         }
     };
-    if law_required == Some(true) && !law_values_valid {
+    let marsden_law_required = covariance_parameterization_requires_marsden_law
+        || nominal_requires_marsden_law == Some(true);
+    if marsden_law_required && !marsden_law_values_valid {
         issues.push(NonGravitationalIssue::RequiredMarsdenLawInvalid);
     }
 
     NonGravitationalAssessment {
-        effective_acceleration,
-        coefficients_finite,
-        nominal_active,
-        covariance_may_activate,
-        law_required,
-        law_encoding,
-        law_values_valid,
+        a_coefficients_with_null_as_zero,
+        a_coefficients_finite,
+        nominal_a_coefficients_nonzero,
+        covariance_includes_a1_a2_a3,
+        nominal_requires_marsden_law,
+        covariance_parameterization_requires_marsden_law,
+        marsden_law_encoding,
+        marsden_law_values_valid,
         issues,
     }
 }
@@ -489,7 +499,7 @@ mod tests {
     fn absent_covariance_is_explicit() {
         let assessment = assess_orbit_batch(&orbit(None, None)).unwrap();
         assert_eq!(assessment[0].covariance, OrbitCovarianceAssessment::Absent);
-        assert!(!assessment[0].non_gravitational.covariance_may_activate);
+        assert!(!assessment[0].non_gravitational.covariance_includes_a1_a2_a3);
     }
 
     #[test]
@@ -524,7 +534,7 @@ mod tests {
         let covariance = present(&assessment[0]);
         assert_eq!(covariance.semantic_dimension, 6);
         assert_eq!(covariance.strictly_positive_definite, Some(true));
-        assert!(!assessment[0].non_gravitational.covariance_may_activate);
+        assert!(!assessment[0].non_gravitational.covariance_includes_a1_a2_a3);
     }
 
     #[test]
@@ -610,23 +620,31 @@ mod tests {
         let parameters = nongrav(None, None, None, None, None, None, None, None);
         let assessment = assess_orbit_batch(&orbit(None, Some(parameters))).unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert_eq!(non_grav.effective_acceleration, [0.0; 3]);
-        assert_eq!(non_grav.nominal_active, Some(false));
-        assert!(!non_grav.covariance_may_activate);
-        assert_eq!(non_grav.law_required, Some(false));
-        assert_eq!(non_grav.law_encoding, MarsdenLawEncoding::InverseSquare);
-        assert!(non_grav.law_values_valid);
+        assert_eq!(non_grav.a_coefficients_with_null_as_zero, [0.0; 3]);
+        assert_eq!(non_grav.nominal_a_coefficients_nonzero, Some(false));
+        assert!(!non_grav.covariance_includes_a1_a2_a3);
+        assert_eq!(non_grav.nominal_requires_marsden_law, Some(false));
+        assert!(!non_grav.covariance_parameterization_requires_marsden_law);
+        assert_eq!(
+            non_grav.marsden_law_encoding,
+            MarsdenLawEncoding::InverseSquare
+        );
+        assert!(non_grav.marsden_law_values_valid);
         assert!(non_grav.issues.is_empty());
     }
 
     #[test]
-    fn fixed_active_inverse_square_and_complete_custom_laws_are_valid() {
+    fn nonzero_fixed_coefficients_with_inverse_square_and_custom_laws_are_valid() {
         let inverse_square = nongrav(Some(1.0e-9), None, None, None, None, None, None, None);
         let assessment = assess_orbit_batch(&orbit(None, Some(inverse_square))).unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert_eq!(non_grav.nominal_active, Some(true));
-        assert_eq!(non_grav.law_required, Some(true));
-        assert_eq!(non_grav.law_encoding, MarsdenLawEncoding::InverseSquare);
+        assert_eq!(non_grav.nominal_a_coefficients_nonzero, Some(true));
+        assert_eq!(non_grav.nominal_requires_marsden_law, Some(true));
+        assert!(!non_grav.covariance_parameterization_requires_marsden_law);
+        assert_eq!(
+            non_grav.marsden_law_encoding,
+            MarsdenLawEncoding::InverseSquare
+        );
         assert!(non_grav.issues.is_empty());
 
         let custom = nongrav(
@@ -641,18 +659,19 @@ mod tests {
         );
         let assessment = assess_orbit_batch(&orbit(None, Some(custom))).unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert_eq!(non_grav.law_encoding, MarsdenLawEncoding::Complete);
-        assert!(non_grav.law_values_valid);
+        assert_eq!(non_grav.marsden_law_encoding, MarsdenLawEncoding::Complete);
+        assert!(non_grav.marsden_law_values_valid);
         assert!(non_grav.issues.is_empty());
     }
 
     #[test]
-    fn partial_marsden_law_is_reported_even_when_inactive() {
+    fn partial_marsden_law_is_reported_with_zero_central_coefficients() {
         let parameters = nongrav(None, None, None, Some(1.0), None, None, None, None);
         let assessment = assess_orbit_batch(&orbit(None, Some(parameters))).unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert_eq!(non_grav.law_required, Some(false));
-        assert_eq!(non_grav.law_encoding, MarsdenLawEncoding::Partial);
+        assert_eq!(non_grav.nominal_requires_marsden_law, Some(false));
+        assert!(!non_grav.covariance_parameterization_requires_marsden_law);
+        assert_eq!(non_grav.marsden_law_encoding, MarsdenLawEncoding::Partial);
         assert_eq!(
             non_grav.issues,
             vec![NonGravitationalIssue::PartiallySpecifiedMarsdenLaw]
@@ -660,11 +679,12 @@ mod tests {
     }
 
     #[test]
-    fn active_partial_marsden_law_is_required_and_invalid() {
+    fn nonzero_coefficients_with_partial_marsden_law_are_reported() {
         let parameters = nongrav(Some(1.0e-9), None, None, Some(1.0), None, None, None, None);
         let assessment = assess_orbit_batch(&orbit(None, Some(parameters))).unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert_eq!(non_grav.law_required, Some(true));
+        assert_eq!(non_grav.nominal_requires_marsden_law, Some(true));
+        assert!(!non_grav.covariance_parameterization_requires_marsden_law);
         assert_eq!(
             non_grav.issues,
             vec![
@@ -688,8 +708,9 @@ mod tests {
         );
         let assessment = assess_orbit_batch(&orbit(None, Some(parameters))).unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert_eq!(non_grav.law_required, Some(true));
-        assert!(!non_grav.law_values_valid);
+        assert_eq!(non_grav.nominal_requires_marsden_law, Some(true));
+        assert!(!non_grav.covariance_parameterization_requires_marsden_law);
+        assert!(!non_grav.marsden_law_values_valid);
         assert_eq!(
             non_grav.issues,
             vec![
@@ -701,13 +722,14 @@ mod tests {
     }
 
     #[test]
-    fn nonfinite_acceleration_is_reported_without_gravity_fallback() {
+    fn nonfinite_a_coefficient_is_reported_without_gravity_fallback() {
         let parameters = nongrav(Some(f64::NAN), None, None, None, None, None, None, None);
         let assessment = assess_orbit_batch(&orbit(None, Some(parameters))).unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert!(!non_grav.coefficients_finite);
-        assert_eq!(non_grav.nominal_active, None);
-        assert_eq!(non_grav.law_required, None);
+        assert!(!non_grav.a_coefficients_finite);
+        assert_eq!(non_grav.nominal_a_coefficients_nonzero, None);
+        assert_eq!(non_grav.nominal_requires_marsden_law, None);
+        assert!(!non_grav.covariance_parameterization_requires_marsden_law);
         assert_eq!(
             non_grav.issues,
             vec![NonGravitationalIssue::NonFiniteAccelerationCoefficient]
@@ -715,7 +737,7 @@ mod tests {
     }
 
     #[test]
-    fn zero_nominal_with_nine_dimensional_covariance_requires_force_law() {
+    fn zero_central_coefficients_with_nine_dimensional_covariance_require_law() {
         let parameters = nongrav(
             Some(0.0),
             Some(0.0),
@@ -732,10 +754,11 @@ mod tests {
         ))
         .unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert_eq!(non_grav.nominal_active, Some(false));
-        assert!(non_grav.covariance_may_activate);
-        assert_eq!(non_grav.law_required, Some(true));
-        assert!(non_grav.law_values_valid);
+        assert_eq!(non_grav.nominal_a_coefficients_nonzero, Some(false));
+        assert!(non_grav.covariance_includes_a1_a2_a3);
+        assert_eq!(non_grav.nominal_requires_marsden_law, Some(false));
+        assert!(non_grav.covariance_parameterization_requires_marsden_law);
+        assert!(non_grav.marsden_law_values_valid);
         assert!(non_grav.issues.is_empty());
     }
 
@@ -751,12 +774,19 @@ mod tests {
             nn: None,
             r0: None,
         }));
-        assert_eq!(assessment.effective_acceleration, [1.0e-9, 0.0, 0.0]);
-        assert_eq!(assessment.nominal_active, Some(true));
-        assert!(!assessment.covariance_may_activate);
-        assert_eq!(assessment.law_required, Some(true));
-        assert_eq!(assessment.law_encoding, MarsdenLawEncoding::InverseSquare);
-        assert!(assessment.law_values_valid);
+        assert_eq!(
+            assessment.a_coefficients_with_null_as_zero,
+            [1.0e-9, 0.0, 0.0]
+        );
+        assert_eq!(assessment.nominal_a_coefficients_nonzero, Some(true));
+        assert!(!assessment.covariance_includes_a1_a2_a3);
+        assert_eq!(assessment.nominal_requires_marsden_law, Some(true));
+        assert!(!assessment.covariance_parameterization_requires_marsden_law);
+        assert_eq!(
+            assessment.marsden_law_encoding,
+            MarsdenLawEncoding::InverseSquare
+        );
+        assert!(assessment.marsden_law_values_valid);
         assert!(assessment.issues.is_empty());
     }
 
@@ -768,11 +798,16 @@ mod tests {
         ))
         .unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert_eq!(non_grav.effective_acceleration, [0.0; 3]);
-        assert!(non_grav.covariance_may_activate);
-        assert_eq!(non_grav.law_required, Some(true));
-        assert_eq!(non_grav.law_encoding, MarsdenLawEncoding::InverseSquare);
-        assert!(non_grav.law_values_valid);
+        assert_eq!(non_grav.a_coefficients_with_null_as_zero, [0.0; 3]);
+        assert_eq!(non_grav.nominal_a_coefficients_nonzero, Some(false));
+        assert!(non_grav.covariance_includes_a1_a2_a3);
+        assert_eq!(non_grav.nominal_requires_marsden_law, Some(false));
+        assert!(non_grav.covariance_parameterization_requires_marsden_law);
+        assert_eq!(
+            non_grav.marsden_law_encoding,
+            MarsdenLawEncoding::InverseSquare
+        );
+        assert!(non_grav.marsden_law_values_valid);
         assert!(non_grav.issues.is_empty());
     }
 }

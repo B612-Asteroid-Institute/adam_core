@@ -25,6 +25,9 @@ This file contains notable changes in adam-core
 
 ### Changed
 
+- Non-gravitational assessment now reports explicit A-coefficient and covariance
+  parameterization facts, with separate nominal and covariance reasons for
+  requiring a Marsden law, instead of ambiguous force-activation terminology.
 - The compiled Rust extension is now required. Public Python functions remain
   compatibility veneers while numerical, table, product, query, and
   orchestration work executes in Rust.
