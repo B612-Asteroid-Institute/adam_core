@@ -1,0 +1,7 @@
+adam\_core.coordinates.local\_orbital\_frames module
+====================================================
+
+.. automodule:: adam_core.coordinates.local_orbital_frames
+   :members:
+   :show-inheritance:
+   :undoc-members:
