@@ -212,7 +212,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinates_classes.html">Coordinate Classes Guide</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinate_covariances.html">Coordinate Covariances</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/coordinate_transforms.html">Coordinate Transforms</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../../cookbook/local_orbital_frames.html">Local Orbital Frames: Covariance in VNC, TNW and RSW</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/observations_and_observers.html">Observations and Observers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../../cookbook/residuals.html">Residuals and Fit Quality</a></li>
@@ -623,6 +622,9 @@
 <span class="sd">    """</span>
     <span class="n">frame_map</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">"EME2000"</span><span class="p">:</span> <span class="s2">"equatorial"</span><span class="p">,</span>  <span class="c1"># Earth Mean Equator and Equinox of J2000</span>
+        <span class="s2">"ICRF"</span><span class="p">:</span> <span class="s2">"equatorial"</span><span class="p">,</span>  <span class="c1"># the J2000 axes within the frame bias adam_core ignores</span>
+        <span class="s2">"J2000"</span><span class="p">:</span> <span class="s2">"equatorial"</span><span class="p">,</span>
+        <span class="s2">"GCRF"</span><span class="p">:</span> <span class="s2">"equatorial"</span><span class="p">,</span>
         <span class="s2">"ITRF-93"</span><span class="p">:</span> <span class="s2">"itrf93"</span><span class="p">,</span>  <span class="c1"># International Terrestrial Reference Frame</span>
     <span class="p">}</span>
 
@@ -742,9 +744,6 @@
 <span class="sd">    Convert Orbit object to an OEM file.</span>
 
 <span class="sd">    This function converts the state vectors and epoch from an Orbit object into the OEM format.</span>
-<span class="sd">    It writes OEM version 2.0 with REF_FRAME EME2000. For explicit CCSDS labels</span>
-<span class="sd">    (REF_FRAME ICRF, OEM 3.0, a covariance block in a local orbital frame) use</span>
-<span class="sd">    :class:`adam_core.orbits.oem.OrbitEphemerisMessage`.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
@@ -890,41 +889,17 @@
     <span class="k">try</span><span class="p">:</span>
         <span class="n">raw</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">oem_read_orbits_ipc</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">input_file</span><span class="p">))</span>
     <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-        <span class="k">if</span> <span class="s2">"mixed reference frames or time systems"</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">):</span>
+        <span class="c1"># The fused reader maps EME2000 and ITRF-93 only. The Python</span>
+        <span class="c1"># composer also reads the ICRF labels OrbitEphemerisMessage writes.</span>
+        <span class="k">if</span> <span class="s2">"mixed reference frames or time systems"</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
+            <span class="s2">"Unsupported OEM frame"</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span>
+        <span class="p">):</span>
             <span class="k">return</span> <span class="n">_orbit_from_oem_legacy</span><span class="p">(</span><span class="n">input_file</span><span class="p">)</span>
-        <span class="k">if</span> <span class="s2">"Unsupported OEM frame"</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">):</span>
-            <span class="c1"># The fused reader maps EME2000 and ITRF-93 only. The typed reader</span>
-            <span class="c1"># in oem.py also accepts ICRF, J2000 and GCRF as the equatorial</span>
-            <span class="c1"># frame, so route such files through it and rebuild the legacy</span>
-            <span class="c1"># per-state orbit ids so callers see one contract.</span>
-            <span class="k">return</span> <span class="n">_orbit_from_oem_typed</span><span class="p">(</span><span class="n">input_file</span><span class="p">)</span>
         <span class="k">raise</span>
     <span class="k">if</span> <span class="n">raw</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
     <span class="k">return</span> <span class="n">orbits_from_ipc</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span></div>
 
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_orbit_from_oem_typed</span><span class="p">(</span><span class="n">input_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Read through the typed OEM reader with legacy per-state orbit ids."""</span>
-    <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
-
-    <span class="kn">from</span><span class="w"> </span><span class="nn">.oem</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitEphemerisMessage</span>
-
-    <span class="n">message</span> <span class="o">=</span> <span class="n">OrbitEphemerisMessage</span><span class="o">.</span><span class="n">from_kvn</span><span class="p">(</span><span class="n">input_file</span><span class="p">)</span>
-    <span class="n">parts</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">Orbits</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">segment</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">message</span><span class="o">.</span><span class="n">segments</span><span class="p">):</span>
-        <span class="n">states</span> <span class="o">=</span> <span class="n">segment</span><span class="o">.</span><span class="n">states</span>
-        <span class="n">epochs</span> <span class="o">=</span> <span class="n">states</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_iso8601</span><span class="p">()</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
-        <span class="n">orbit_ids</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">segment</span><span class="o">.</span><span class="n">metadata</span><span class="o">.</span><span class="n">object_id</span><span class="si">}</span><span class="s2">_seg_</span><span class="si">{</span><span class="n">index</span><span class="si">}</span><span class="s2">_</span><span class="si">{</span><span class="n">epoch</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="n">epochs</span>
-        <span class="p">]</span>
-        <span class="n">parts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="n">states</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"orbit_id"</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">orbit_ids</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">large_string</span><span class="p">()))</span>
-        <span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">parts</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">parts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_orbit_from_oem_legacy</span><span class="p">(</span>

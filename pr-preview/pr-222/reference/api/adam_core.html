@@ -213,7 +213,6 @@
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/coordinates_classes.html">Coordinate Classes Guide</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/coordinate_covariances.html">Coordinate Covariances</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/coordinate_transforms.html">Coordinate Transforms</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../../cookbook/local_orbital_frames.html">Local Orbital Frames: Covariance in VNC, TNW and RSW</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/observations_and_observers.html">Observations and Observers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
 <li class="toctree-l2"><a class="reference internal" href="../../cookbook/residuals.html">Residuals and Fit Quality</a></li>
@@ -480,12 +479,8 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LOCAL_ORBITAL_FRAMES"><code class="docutils literal notranslate"><span class="pre">LOCAL_ORBITAL_FRAMES</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.local_frame_angular_velocity"><code class="docutils literal notranslate"><span class="pre">local_frame_angular_velocity()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.local_frame_jacobians"><code class="docutils literal notranslate"><span class="pre">local_frame_jacobians()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.local_frame_rotation_matrices"><code class="docutils literal notranslate"><span class="pre">local_frame_rotation_matrices()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.resolve_local_orbital_frame"><code class="docutils literal notranslate"><span class="pre">resolve_local_orbital_frame()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a><ul>
@@ -934,13 +929,18 @@
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage</span></code></a><ul>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.from_kvn"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.from_kvn()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.ccsds_oem_vers"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.ccsds_oem_vers</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.comments"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.comments</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.creation_date"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.creation_date</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.from_orbits"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.from_orbits()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.to_kvn"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.to_kvn()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.to_orbits"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.to_orbits()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.write"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.write()</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.header"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.header</span></code></a></li>
-<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.segments"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.segments</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.states"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.states</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.originator"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.originator</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.object_name"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.object_name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.object_id"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.object_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.center_name"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.center_name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.ref_frame"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.ref_frame</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.OrbitEphemerisMessage.time_system"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage.time_system</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbits.html#adam_core.orbits.Orbits"><code class="docutils literal notranslate"><span class="pre">Orbits</span></code></a><ul>
@@ -1060,12 +1060,6 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbits.oem.html">adam_core.orbits.oem module</a><ul>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.oem.html#adam_core.orbits.oem.OEM_COVARIANCE_FRAMES"><code class="docutils literal notranslate"><span class="pre">OEM_COVARIANCE_FRAMES</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.oem.html#adam_core.orbits.oem.OEM_REF_FRAME_LABELS"><code class="docutils literal notranslate"><span class="pre">OEM_REF_FRAME_LABELS</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.oem.html#adam_core.orbits.oem.OEM_TIME_SYSTEMS"><code class="docutils literal notranslate"><span class="pre">OEM_TIME_SYSTEMS</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.oem.html#adam_core.orbits.oem.OemHeader"><code class="docutils literal notranslate"><span class="pre">OemHeader</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.oem.html#adam_core.orbits.oem.OemSegment"><code class="docutils literal notranslate"><span class="pre">OemSegment</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.oem.html#adam_core.orbits.oem.OemSegmentMetadata"><code class="docutils literal notranslate"><span class="pre">OemSegmentMetadata</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbits.oem.html#adam_core.orbits.oem.OrbitEphemerisMessage"><code class="docutils literal notranslate"><span class="pre">OrbitEphemerisMessage</span></code></a></li>
 </ul>
 </li>

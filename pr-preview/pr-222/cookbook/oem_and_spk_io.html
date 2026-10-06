@@ -213,7 +213,6 @@
 <li class="toctree-l2"><a class="reference internal" href="coordinates_classes.html">Coordinate Classes Guide</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coordinate_covariances.html">Coordinate Covariances</a></li>
 <li class="toctree-l2"><a class="reference internal" href="coordinate_transforms.html">Coordinate Transforms</a></li>
-<li class="toctree-l2"><a class="reference internal" href="local_orbital_frames.html">Local Orbital Frames: Covariance in VNC, TNW and RSW</a></li>
 <li class="toctree-l2"><a class="reference internal" href="observations_and_observers.html">Observations and Observers</a></li>
 <li class="toctree-l2"><a class="reference internal" href="propagation_and_ephemeris.html">Propagation and Ephemeris</a></li>
 <li class="toctree-l2"><a class="reference internal" href="residuals.html">Residuals and Fit Quality</a></li>
@@ -507,54 +506,36 @@ table into <code class="docutils literal notranslate"><span class="pre">Orbits</
 </pre></div>
 </div>
 </section>
-<section id="oem-with-explicit-ccsds-metadata">
-<h2>OEM with Explicit CCSDS Metadata<a class="headerlink" href="#oem-with-explicit-ccsds-metadata" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">orbit_to_oem</span></code> writes one fixed shape of file: OEM version 2.0 with
-<code class="docutils literal notranslate"><span class="pre">REF_FRAME</span> <span class="pre">=</span> <span class="pre">EME2000</span></code>. When a consumer specifies the labels, build an
-<a class="reference internal" href="../reference/api/adam_core.orbits.oem.html#adam_core.orbits.oem.OrbitEphemerisMessage" title="adam_core.orbits.oem.OrbitEphemerisMessage"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrbitEphemerisMessage</span></code></a> instead. Its metadata is
-explicit, it writes OEM 3.0, and it reads any header and metadata keyword back.</p>
-<p>The input is the same multi-epoch <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> table <code class="docutils literal notranslate"><span class="pre">propagate_orbits</span></code> returns.
-adam_core’s <code class="docutils literal notranslate"><span class="pre">&quot;equatorial&quot;</span></code> frame is the J2000 frame SPICE and DE440 deliver,
-which NAIF aligns with the ICRF, so the default label for it is <code class="docutils literal notranslate"><span class="pre">ICRF</span></code>.
-<code class="docutils literal notranslate"><span class="pre">EME2000</span></code> is available as an override. Epochs are written with three decimal
-places of seconds, and an epoch that is not on a millisecond boundary raises
-unless <code class="docutils literal notranslate"><span class="pre">allow_epoch_rounding=True</span></code> is passed.</p>
+<section id="oem-3-0-with-explicit-labels-and-local-frame-covariances">
+<h2>OEM 3.0 with Explicit Labels and Local Frame Covariances<a class="headerlink" href="#oem-3-0-with-explicit-labels-and-local-frame-covariances" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">orbit_to_oem</span></code> writes OEM 2.0 with <code class="docutils literal notranslate"><span class="pre">REF_FRAME</span> <span class="pre">=</span> <span class="pre">EME2000</span></code>. An
+<a class="reference internal" href="../reference/api/adam_core.orbits.oem.html#adam_core.orbits.oem.OrbitEphemerisMessage" title="adam_core.orbits.oem.OrbitEphemerisMessage"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrbitEphemerisMessage</span></code></a> built from the same
+<code class="docutils literal notranslate"><span class="pre">Orbits</span></code> table writes OEM 3.0 with <code class="docutils literal notranslate"><span class="pre">REF_FRAME</span> <span class="pre">=</span> <span class="pre">ICRF</span></code> for equatorial
+states, <code class="docutils literal notranslate"><span class="pre">CENTER_NAME</span></code> from the origin and <code class="docutils literal notranslate"><span class="pre">TIME_SYSTEM</span></code> from the Timestamp
+scale. Epochs must fall on millisecond boundaries.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitEphemerisMessage</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalFrameCovariances</span>
 
 <span class="c1"># propagated: Orbits with one object_id, N epochs, frame "equatorial",</span>
-<span class="c1"># origin SUN, time scale "tdb", from propagate_orbits(..., covariance=True).</span>
-<span class="n">message</span><span class="p">:</span> <span class="n">OrbitEphemerisMessage</span> <span class="o">=</span> <span class="n">OrbitEphemerisMessage</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span>
-    <span class="n">propagated</span><span class="p">,</span>
-    <span class="n">originator</span><span class="o">=</span><span class="s2">"B612 ASTEROID INSTITUTE"</span><span class="p">,</span>
-    <span class="n">object_name</span><span class="o">=</span><span class="s2">"99942 Apophis (2004 MN4)"</span><span class="p">,</span>
-    <span class="n">object_id</span><span class="o">=</span><span class="s2">"99942"</span><span class="p">,</span>
-    <span class="n">ref_frame</span><span class="o">=</span><span class="s2">"ICRF"</span><span class="p">,</span>        <span class="c1"># default for equatorial states</span>
-    <span class="n">time_system</span><span class="o">=</span><span class="s2">"TDB"</span><span class="p">,</span>       <span class="c1"># default is the Timestamp scale</span>
+<span class="c1"># origin SUN, time scale "tdb", covariance from propagate_orbits(..., covariance=True)</span>
+<span class="n">message</span> <span class="o">=</span> <span class="n">OrbitEphemerisMessage</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span>
+    <span class="n">propagated</span><span class="p">,</span> <span class="n">originator</span><span class="o">=</span><span class="s2">"B612 ASTEROID INSTITUTE"</span><span class="p">,</span> <span class="n">object_name</span><span class="o">=</span><span class="s2">"99942 Apophis"</span>
 <span class="p">)</span>
-<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"nominal_states.oem"</span><span class="p">)</span>   <span class="c1"># states only, CENTER_NAME = SUN</span>
+<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states.oem"</span><span class="p">)</span>                               <span class="c1"># states only</span>
+<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states_icrf_cov.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"ICRF"</span><span class="p">)</span>
 
-<span class="c1"># Read it back. Every segment is kept, states are in AU and AU/day.</span>
-<span class="n">loaded</span> <span class="o">=</span> <span class="n">OrbitEphemerisMessage</span><span class="o">.</span><span class="n">from_kvn</span><span class="p">(</span><span class="s2">"nominal_states.oem"</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">loaded</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">metadata</span><span class="p">)</span>
-<span class="n">states</span> <span class="o">=</span> <span class="n">loaded</span><span class="o">.</span><span class="n">to_orbits</span><span class="p">()</span>
+<span class="c1"># Covariance in a local orbital frame as a separate product. VNC_ROTATING</span>
+<span class="c1"># follows the SANA registry, VNC_INERTIAL is the pure rotation, and TNW</span>
+<span class="c1"># and RSW (RTN, RIC) are available the same way.</span>
+<span class="n">vnc</span> <span class="o">=</span> <span class="n">LocalFrameCovariances</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span><span class="n">propagated</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span>
+<span class="n">vnc</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">"covariance_vnc_rotating.parquet"</span><span class="p">)</span>
+
+<span class="c1"># The OEM standard lists RSW, RTN and TNW for COV_REF_FRAME. Other labels</span>
+<span class="c1"># are written with a COMMENT line, or refused with strict=True.</span>
+<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states_tnw_cov.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"TNW"</span><span class="p">)</span>
+<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states_vnc_cov.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span>
 </pre></div>
 </div>
-<p>A covariance block is written only on request. <code class="docutils literal notranslate"><span class="pre">covariance_frame</span></code> names the
-frame of the block.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="c1"># State covariance in the OEM reference frame. Conformant.</span>
-<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"nominal_states_icrf_cov.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"ICRF"</span><span class="p">)</span>
-
-<span class="c1"># Covariance rotated into a local orbital frame at every epoch. The OEM</span>
-<span class="c1"># standard lists RSW, RTN and TNW for COV_REF_FRAME.</span>
-<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"nominal_states_tnw_cov.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"TNW"</span><span class="p">)</span>
-
-<span class="c1"># VNC_ROTATING is a registered SANA frame outside that OEM list. The</span>
-<span class="c1"># writer records that with a COMMENT line. Pass strict=True to refuse it.</span>
-<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"nominal_states_vnc_cov.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span>
-</pre></div>
-</div>
-<p>The separate covariance product for local orbital frames is described in
-<a class="reference internal" href="local_orbital_frames.html"><span class="doc">Local Orbital Frames: Covariance in VNC, TNW and RSW</span></a>.</p>
 </section>
 <section id="read-oem-back-into-orbits">
 <h2>Read OEM Back into <code class="docutils literal notranslate"><span class="pre">Orbits</span></code><a class="headerlink" href="#read-oem-back-into-orbits" title="Link to this heading">¶</a></h2>
@@ -724,7 +705,7 @@ propagator backend and force model choices.</p></li>
 <li><a class="reference internal" href="#input-model-orbit-seed-vs-ephemeris-state-history">Input Model: Orbit Seed vs Ephemeris State History</a></li>
 <li><a class="reference internal" href="#generate-oem-from-a-pre-propagated-state-history">Generate OEM from a Pre-Propagated State History</a></li>
 <li><a class="reference internal" href="#generate-oem-from-a-seed-orbit-propagation-included">Generate OEM from a Seed Orbit (Propagation Included)</a></li>
-<li><a class="reference internal" href="#oem-with-explicit-ccsds-metadata">OEM with Explicit CCSDS Metadata</a></li>
+<li><a class="reference internal" href="#oem-3-0-with-explicit-labels-and-local-frame-covariances">OEM 3.0 with Explicit Labels and Local Frame Covariances</a></li>
 <li><a class="reference internal" href="#read-oem-back-into-orbits">Read OEM Back into <code class="docutils literal notranslate"><span class="pre">Orbits</span></code></a></li>
 <li><a class="reference internal" href="#generate-spk-from-orbits">Generate SPK from <code class="docutils literal notranslate"><span class="pre">Orbits</span></code></a></li>
 <li><a class="reference internal" href="#from-ephemeris-like-state-tables-to-oem-spk">From Ephemeris-Like State Tables to OEM/SPK</a></li>
