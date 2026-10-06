@@ -61,59 +61,40 @@ def _canonical(frame: str) -> str:
     return label
 
 
-def _vectors(coords: CartesianCoordinates) -> tuple[np.ndarray, ...]:
-    """Validated r, v and r x v."""
+def _unit_vectors(coords: CartesianCoordinates) -> tuple[np.ndarray, ...]:
+    """Validated r_hat, v_hat and the unit orbit normal."""
     if coords.frame not in ("equatorial", "ecliptic"):
         raise ValueError(
             f"Local orbital frames need states in an inertial frame, got {coords.frame!r}."
         )
-    r, v = coords.r, coords.v
-    h = np.cross(r, v)
-    degenerate = np.linalg.norm(h, axis=1) < SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE
+    h_mag = coords.h_mag
+    degenerate = h_mag < SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE
     if degenerate.any():
         raise ValueError(
             f"State at row {int(np.flatnonzero(degenerate)[0])} has no orbit plane."
         )
-    return r, v, h
+    return coords.r_hat, coords.v_hat, coords.h / h_mag[:, None]
 
 
-def _unit(vectors: np.ndarray) -> np.ndarray:
-    return vectors / np.linalg.norm(vectors, axis=1)[:, None]
-
-
-def _unit_rate(vectors: np.ndarray, rates: np.ndarray) -> np.ndarray:
-    # d(u/|u|)/dt = (du - (du . u_hat) u_hat) / |u|
-    norms = np.linalg.norm(vectors, axis=1)[:, None]
-    unit = vectors / norms
-    return (rates - np.einsum("ij,ij->i", rates, unit)[:, None] * unit) / norms
-
-
-def _axes(family: str, r_hat, v_hat, w_hat) -> np.ndarray:
+def _rotation_matrices(coords: CartesianCoordinates, frame: str) -> np.ndarray:
+    family = _canonical(frame).split("_")[0]
+    r_hat, v_hat, w_hat = _unit_vectors(coords)
     if family == "RSW":
-        return np.stack([r_hat, np.cross(w_hat, r_hat), w_hat], axis=1)
+        return coords.ric3_matrix
     if family == "TNW":
         return np.stack([v_hat, np.cross(w_hat, v_hat), w_hat], axis=1)
     return np.stack([v_hat, w_hat, np.cross(v_hat, w_hat)], axis=1)
 
 
-def _axis_rates(family: str, w_hat, dr_hat, dv_hat) -> np.ndarray:
-    # Under two-body motion the orbit normal is fixed.
-    fixed = np.zeros_like(w_hat)
-    if family == "RSW":
-        return np.stack([dr_hat, np.cross(w_hat, dr_hat), fixed], axis=1)
-    if family == "TNW":
-        return np.stack([dv_hat, np.cross(w_hat, dv_hat), fixed], axis=1)
-    return np.stack([dv_hat, fixed, np.cross(dv_hat, w_hat)], axis=1)
+def _unit_rate(vectors: np.ndarray, rates: np.ndarray, norms: np.ndarray) -> np.ndarray:
+    # d(u/|u|)/dt = (du - (du . u_hat) u_hat) / |u|
+    unit = vectors / norms[:, None]
+    return (rates - np.einsum("ij,ij->i", rates, unit)[:, None] * unit) / norms[:, None]
 
 
-def _rotation_matrices(coords: CartesianCoordinates, frame: str) -> np.ndarray:
-    family = _canonical(frame).split("_")[0]
-    r, v, h = _vectors(coords)
-    return _axes(family, _unit(r), _unit(v), _unit(h))
-
-
-def _angular_velocity(coords: CartesianCoordinates, family: str, mu: _Mu) -> np.ndarray:
-    r, v, h = _vectors(coords)
+def _angular_velocity(coords: CartesianCoordinates, frame: str, mu: _Mu) -> np.ndarray:
+    family = frame.split("_")[0]
+    _, _, w_hat = _unit_vectors(coords)
     if mu is None:
         try:
             mu = coords.origin.mu()
@@ -124,12 +105,19 @@ def _angular_velocity(coords: CartesianCoordinates, family: str, mu: _Mu) -> np.
                 "in AU^3/day^2 or use the _INERTIAL variant."
             ) from exc
     mu = np.broadcast_to(np.asarray(mu, dtype=np.float64), (len(coords),))
-    acceleration = -mu[:, None] * r / np.linalg.norm(r, axis=1)[:, None] ** 3
-    w_hat = _unit(h)
-    axes = _axes(family, _unit(r), _unit(v), w_hat)
-    rates = _axis_rates(family, w_hat, _unit_rate(r, v), _unit_rate(v, acceleration))
+    acceleration = -mu[:, None] * coords.r / coords.r_mag[:, None] ** 3
+    dr_hat = _unit_rate(coords.r, coords.v, coords.r_mag)
+    dv_hat = _unit_rate(coords.v, acceleration, coords.v_mag)
+    # Under two-body motion the orbit normal is fixed, so only r_hat and v_hat turn.
+    fixed = np.zeros_like(w_hat)
+    if family == "RSW":
+        rates = np.stack([dr_hat, np.cross(w_hat, dr_hat), fixed], axis=1)
+    elif family == "TNW":
+        rates = np.stack([dv_hat, np.cross(w_hat, dv_hat), fixed], axis=1)
+    else:
+        rates = np.stack([dv_hat, fixed, np.cross(dv_hat, w_hat)], axis=1)
     # For an orthonormal triad with de_i = omega x e_i, sum_i e_i x de_i = 2 omega.
-    return 0.5 * np.cross(axes, rates, axis=2).sum(axis=1)
+    return 0.5 * np.cross(_rotation_matrices(coords, frame), rates, axis=2).sum(axis=1)
 
 
 def local_frame_jacobians(
@@ -147,7 +135,7 @@ def local_frame_jacobians(
     jacobians[:, :3, :3] = rotation
     jacobians[:, 3:, 3:] = rotation
     if canonical.endswith("_ROTATING"):
-        omega = _angular_velocity(coords, canonical.split("_")[0], mu)
+        omega = _angular_velocity(coords, canonical, mu)
         jacobians[:, 3:, :3] = np.cross(omega[:, None, :], rotation)
     return jacobians
 

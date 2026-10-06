@@ -75,7 +75,8 @@ OEM 3.0 with Explicit Labels and Local Frame Covariances
 :class:`~adam_core.orbits.oem.OrbitEphemerisMessage` built from the same
 ``Orbits`` table writes OEM 3.0 with ``REF_FRAME = ICRF`` for equatorial
 states, ``CENTER_NAME`` from the origin and ``TIME_SYSTEM`` from the Timestamp
-scale. Epochs must fall on millisecond boundaries.
+scale. Epochs off the renderer's millisecond grid are moved onto it with a
+warning.
 
 .. code-block:: python
 

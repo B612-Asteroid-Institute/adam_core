@@ -168,7 +168,7 @@ def test_input_rules(history, tmp_path):
         history.take(pa.array([5, 4, 3, 2, 1, 0])), ORIGINATOR
     ).states
     assert states.coordinates.time.days.equals(history.coordinates.time.days)
-    # Epochs off the millisecond grid are refused rather than rounded.
+    # Epochs off the millisecond grid are moved onto it with a warning.
     time = history.coordinates.time
     nanos = time.nanos.to_numpy(zero_copy_only=False).copy()
     nanos[1] += 123_456
@@ -176,8 +176,9 @@ def test_input_rules(history, tmp_path):
         "coordinates.time",
         Timestamp.from_kwargs(days=time.days, nanos=nanos, scale="tdb"),
     )
-    with pytest.raises(ValueError, match="millisecond boundary"):
-        OrbitEphemerisMessage.from_orbits(shifted, ORIGINATOR).write(tmp_path / "x.oem")
+    with pytest.warns(UserWarning, match="1 of 6 epochs .* 123.5 microseconds"):
+        message = OrbitEphemerisMessage.from_orbits(shifted, ORIGINATOR)
+    assert message.states.coordinates.time.nanos.equals(time.nanos)
 
 
 def test_matches_legacy_writer_formatting(history, tmp_path):

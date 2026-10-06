@@ -16,6 +16,7 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Sequence, Union
@@ -35,8 +36,6 @@ __all__ = ["OrbitEphemerisMessage"]
 
 _REF_FRAME = {"equatorial": "ICRF", "itrf93": "ITRF-93"}
 _OEM_COVARIANCE_FRAMES = ("RSW", "RTN", "TNW")
-# The KVN renderer writes epochs with three decimal places of seconds.
-_MILLISECOND = 1_000_000
 
 
 @dataclass(frozen=True, eq=False)
@@ -44,8 +43,9 @@ class OrbitEphemerisMessage:
     """
     One object's state history (an Orbits table in adam_core units) and the
     CCSDS labels it is written under, for example ``center_name="SUN"``,
-    ``ref_frame="ICRF"``, ``time_system="TDB"``. ``creation_date`` is UTC and
-    defaults to the write time. ``comments`` follow META_START.
+    ``ref_frame="ICRF"``, ``time_system="TDB"``. Epochs sit on the millisecond
+    grid the renderer writes. ``creation_date`` is UTC and defaults to the write
+    time. ``comments`` follow META_START.
     """
 
     states: Orbits
@@ -77,7 +77,7 @@ class OrbitEphemerisMessage:
         """
         from .oem_io import _adam_to_oem_center
 
-        states = _single_object_sorted(orbits)
+        states = _single_object_sorted(_on_millisecond_grid(orbits))
         coords = states.coordinates
         if coords.frame not in _REF_FRAME:
             raise ValueError(
@@ -113,13 +113,6 @@ class OrbitEphemerisMessage:
         from adam_core import _rust_native as _rn
 
         coords = self.states.coordinates
-        days = coords.time.days.to_numpy(zero_copy_only=False)
-        nanos = coords.time.nanos.to_numpy(zero_copy_only=False)
-        if (nanos % _MILLISECOND).any():
-            raise ValueError(
-                "OEM epochs are written with three decimal places of seconds, so "
-                "every epoch must fall on a millisecond boundary."
-            )
         epochs = coords.time.to_iso8601().to_pylist()
         comments = list(self.comments)
         records: list = []
@@ -148,8 +141,8 @@ class OrbitEphemerisMessage:
             json.dumps(header),
             json.dumps(metadata),
             coords.time.scale,
-            np.ascontiguousarray(days),
-            np.ascontiguousarray(nanos),
+            np.ascontiguousarray(coords.time.days.to_numpy(zero_copy_only=False)),
+            np.ascontiguousarray(coords.time.nanos.to_numpy(zero_copy_only=False)),
             np.ascontiguousarray(
                 convert_cartesian_values_au_to_km(coords.values).ravel()
             ),
@@ -191,6 +184,25 @@ class OrbitEphemerisMessage:
             for i in range(len(days))
             if not np.isnan(matrices_km[i]).all()
         ], note
+
+
+def _on_millisecond_grid(orbits: Orbits) -> Orbits:
+    """Move epochs onto the renderer's millisecond grid, warning when any move."""
+    time = orbits.coordinates.time
+    rounded = time.rounded("ms")
+    shift = np.abs(
+        rounded.nanos.to_numpy(zero_copy_only=False)
+        - time.nanos.to_numpy(zero_copy_only=False)
+    )
+    if shift.any():
+        warnings.warn(
+            f"{int((shift > 0).sum())} of {len(time)} epochs were not on the "
+            "millisecond grid OEM epochs are written with and were moved onto it, "
+            f"the largest by {shift.max() / 1e3:.1f} microseconds.",
+            UserWarning,
+        )
+        return orbits.set_column("coordinates.time", rounded)
+    return orbits
 
 
 def _single_object_sorted(orbits: Orbits) -> Orbits:
