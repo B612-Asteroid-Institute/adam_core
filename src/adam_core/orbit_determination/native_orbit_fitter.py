@@ -116,7 +116,9 @@ class NativeOrbitFitter(OrbitFitter):
         - ``"cmc2003"`` (default): `cmc2003_fit`, Carpino-Milani-Chesley
           (2003) rejection with re-inclusion against the expected post-fit
           residual covariance, with OrbFit's ``reject.def`` constants.
-          ``rchi2_threshold``, ``min_obs``, ``min_arc_length`` and
+          Covariance and rejection share central differences through the full
+          predictor; ``jacobian`` in ``rejection_kwargs`` controls optimizer
+          steps only. ``rchi2_threshold``, ``min_obs``, ``min_arc_length`` and
           ``contamination_percentage`` then apply to IOD only; tune the
           scheme through ``rejection_kwargs``.
         - ``"worst_residual"``: `iterative_fit`, which removes the
@@ -124,8 +126,9 @@ class NativeOrbitFitter(OrbitFitter):
           exceeds ``rchi2_threshold``, bounded by ``contamination_percentage``,
           ``min_obs`` and ``min_arc_length`` (the pre-2026-09 behaviour).
 
-        Both compose with ``loss="huber"``. See the Notes of `run_od` for
-        the full default configuration.
+        Both accept ``loss="huber"``; its combination with CMC2003 is
+        heuristic, without calibrated rejection statistics. See the Notes
+        of `run_od` for the full default configuration.
     rejection_kwargs : dict, optional
         Extra keyword arguments for the rejection function (e.g.
         ``chi2_reject``, ``chi2_recover`` for ``"cmc2003"``; ``jacobian``,

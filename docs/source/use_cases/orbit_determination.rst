@@ -184,7 +184,9 @@ model list built with your own tables needs no package.
    * - Outlier rejection
      - Carpino-Milani-Chesley (2003) with OrbFit's ``reject.def`` constants
        (reject 8, recover 7, frac 0.25, 15 passes, 50% max rejected, 180-day
-       apparitions, 5% eigenvalue floor)
+       apparitions, 5% eigenvalue floor). Each refit shares a full-predictor
+       central-difference Jacobian between covariance and rejection, even
+       when optimizer steps use the analytic 2-body Jacobian.
      - ``NativeOrbitFitter()`` (``outlier_rejection="cmc2003"``) / ``cmc2003_fit()``
    * - Differential correction
      - whitened residuals, exact 2-body Jacobian, weak-direction covariance

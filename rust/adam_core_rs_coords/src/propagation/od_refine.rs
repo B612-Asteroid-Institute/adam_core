@@ -910,6 +910,36 @@ pub fn fit_orbit_whitened_with<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<WhitenedFitOutput> {
+    fit_orbit_whitened_impl(
+        predictor,
+        orbit,
+        observed,
+        observers,
+        ignore,
+        config,
+        provider,
+        translation_provider,
+        None,
+    )
+    .map(|(fit, _)| fit)
+}
+
+/// With a full observation problem, finalize covariance and rejection from
+/// one central-difference Jacobian at the fitted state. Only selected rows
+/// enter the normal matrix, but excluded rows remain available for recovery.
+/// Without it, preserve the standalone fitter's Jacobian/validation policy.
+#[allow(clippy::too_many_arguments)]
+fn fit_orbit_whitened_impl<T: OriginTranslationProvider>(
+    predictor: &dyn SphericalPredictor,
+    orbit: &OrbitBatch,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    ignore: &[bool],
+    config: &WhitenedFitConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+    covariance_problem: Option<&WhitenedProblem<'_>>,
+) -> PropagationResultValue<(WhitenedFitOutput, Option<Vec<f64>>)> {
     config
         .validate()
         .map_err(PropagationError::InvalidRequest)?;
@@ -935,7 +965,24 @@ pub fn fit_orbit_whitened_with<T: OriginTranslationProvider>(
     let solution = solve(&problem, problem.geometry.state, config)?;
     let mut warnings = Vec::new();
 
-    let jac = problem.jacobian(config.jacobian, &solution.state, &solution.residuals)?;
+    let rejection_jacobian = covariance_problem
+        .map(|full| full.jacobian(JacobianMethod::Central, &solution.state, &[]))
+        .transpose()?;
+    let (jac, covariance_method) = match &rejection_jacobian {
+        Some(full_jac) => {
+            let selected_jac = full_jac
+                .chunks_exact(12)
+                .zip(&keep)
+                .filter(|(_, selected)| **selected)
+                .flat_map(|(rows, _)| rows.iter().copied())
+                .collect::<Vec<_>>();
+            (selected_jac, JacobianMethod::Central)
+        }
+        None => (
+            problem.jacobian(config.jacobian, &solution.state, &solution.residuals)?,
+            config.jacobian,
+        ),
+    };
     let mut covariance =
         match covariance_from_jacobian(&jac, &solution.residuals, config.loss, config.f_scale) {
             Some(covariance) => covariance,
@@ -951,7 +998,7 @@ pub fn fit_orbit_whitened_with<T: OriginTranslationProvider>(
         covariance = validated_covariance(
             &problem,
             covariance,
-            config.jacobian,
+            covariance_method,
             &solution.state,
             &solution.residuals,
             solution.cost,
@@ -981,19 +1028,22 @@ pub fn fit_orbit_whitened_with<T: OriginTranslationProvider>(
     }
     let fit_chi2 = solution.residuals.iter().map(|r| r * r).sum();
 
-    Ok(WhitenedFitOutput {
-        state: solution.state,
-        covariance,
-        iterations: solution.nfev,
-        converged: solution.status > 0,
-        status_code: solution.status,
-        cost: solution.cost,
-        fit_chi2,
-        weights,
-        residuals_whitened: solution.residuals,
-        evaluation,
-        warnings,
-    })
+    Ok((
+        WhitenedFitOutput {
+            state: solution.state,
+            covariance,
+            iterations: solution.nfev,
+            converged: solution.status > 0,
+            status_code: solution.status,
+            cost: solution.cost,
+            fit_chi2,
+            weights,
+            residuals_whitened: solution.residuals,
+            evaluation,
+            warnings,
+        },
+        rejection_jacobian,
+    ))
 }
 
 /// Product of [`validate_fit_covariance_with`].
@@ -1336,8 +1386,9 @@ pub struct Cmc2003FitOutput {
 
 /// One-crossing `cmc2003_fit_detailed`: repeated whitened fits with the
 /// CMC2003 reject / re-include decision against the expected post-fit
-/// residual covariance (analytic 2-body Jacobian at the fitted state),
-/// warm-starting each pass from the previous solution.
+/// residual covariance. Covariance and scoring share central differences
+/// through the full predictor at the fitted state, independent of the solver
+/// Jacobian. Each pass warm-starts from the previous solution.
 #[allow(clippy::too_many_arguments)]
 pub fn cmc2003_fit_barycentric<P, T>(
     propagator: &P,
@@ -1398,20 +1449,17 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
             "observed and observers must have equal length".to_string(),
         ));
     }
-    let geometry = OrbitGeometry::from_orbit(orbit)?;
-    let epoch_mjd_tdb = crate::TimeArray::new(geometry.scale, vec![geometry.epoch])?
-        .rescale_with_provider(TimeScale::Tdb, provider)?
-        .mjd_values()[0];
-    let observed_flat = spherical_flat(observed, "observed")?;
-    let observed_cov = observed_covariance_flat(observed)?;
-    let lat_deg: Vec<f64> = (0..n).map(|row| observed_flat[row * 6 + 2]).collect();
-    let whiteners = observation_whitening_matrices(&observed_cov, &lat_deg)
-        .map_err(|err| PropagationError::InvalidRequest(err.to_string()))?;
-    let terms = analytic_jacobian_terms(
-        &geometry,
+    // Prepare all observations once, including rows later excluded from the
+    // fit. Numerical finalization does not need any two-body model terms.
+    let full_problem = WhitenedProblem::new(
+        predictor,
+        orbit,
+        observed,
         observers,
-        &lat_deg,
-        &whiteners,
+        &WhitenedFitConfig {
+            jacobian: JacobianMethod::Central,
+            ..config.fit
+        },
         provider,
         translation_provider,
     )?;
@@ -1427,20 +1475,20 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
         .mjd_values();
     let apparitions = cmc2003_apparitions(&mjd_utc, config.apparition_gap_days);
 
-    let run_fit =
-        |seed: &OrbitBatch, selected: &[bool]| -> PropagationResultValue<WhitenedFitOutput> {
-            let ignore: Vec<bool> = selected.iter().map(|&keep| !keep).collect();
-            fit_orbit_whitened_with(
-                predictor,
-                seed,
-                observed,
-                observers,
-                &ignore,
-                &config.fit,
-                provider,
-                translation_provider,
-            )
-        };
+    let run_fit = |seed: &OrbitBatch, selected: &[bool]| {
+        let ignore: Vec<bool> = selected.iter().map(|&keep| !keep).collect();
+        fit_orbit_whitened_impl(
+            predictor,
+            seed,
+            observed,
+            observers,
+            &ignore,
+            &config.fit,
+            provider,
+            translation_provider,
+            Some(&full_problem),
+        )
+    };
 
     let mut selected = vec![true; n];
     let mut flags: BTreeSet<Cmc2003Flag> = BTreeSet::new();
@@ -1455,7 +1503,7 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
 
     for iteration in 0..config.max_iterations {
         n_iterations = iteration + 1;
-        let mut output = run_fit(&seed, &selected)?;
+        let (mut output, rejection_jacobian) = run_fit(&seed, &selected)?;
         warnings.append(&mut output.warnings);
         seed = orbit_with_state(orbit, output.state)?;
 
@@ -1474,10 +1522,8 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
                 ]
             })
             .collect();
-        let residuals = whiten_residual_pairs(&whiteners, &residual_pairs);
-        let jacobian =
-            whitened_2body_jacobian(output.state, epoch_mjd_tdb, &terms, &config.fit.two_body)
-                .map_err(PropagationError::Backend)?;
+        let residuals = whiten_residual_pairs(&full_problem.whiteners, &residual_pairs);
+        let jacobian = rejection_jacobian.expect("full covariance problem supplies the Jacobian");
         let covariance = if output.covariance.iter().all(|v| v.is_finite()) {
             Some(&output.covariance[..])
         } else {
@@ -1534,7 +1580,7 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
         // The selection changed after the last fit: refit so that the
         // returned orbit and members describe the final selection.
         flags.insert(Cmc2003Flag::MaxIterations);
-        let mut output = run_fit(&seed, &selected)?;
+        let (mut output, _) = run_fit(&seed, &selected)?;
         warnings.append(&mut output.warnings);
         output
     };
@@ -2549,6 +2595,61 @@ mod tests {
         assert_eq!(output.n_rejected, 0);
         assert_eq!(output.n_recovered, 0);
         assert!(output.fit.evaluation.outlier.iter().all(|&flag| !flag));
+    }
+
+    #[test]
+    fn cmc2003_finalization_uses_one_full_predictor_jacobian_outside_solver_budget() {
+        let observed = synthetic_observations(None);
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        for jacobian in [
+            JacobianMethod::Analytic,
+            JacobianMethod::Central,
+            JacobianMethod::TwoPoint,
+        ] {
+            for validate_covariance in [false, true] {
+                let counting = CountingPredictor {
+                    inner: &predictor,
+                    batches: std::cell::RefCell::new(Vec::new()),
+                    reject_trials: false,
+                };
+                let output = cmc2003_fit_with(
+                    &counting,
+                    &orbit(TRUTH_STATE),
+                    &observed,
+                    &observers(),
+                    &Cmc2003FitConfig {
+                        fit: WhitenedFitConfig {
+                            jacobian,
+                            validate_covariance,
+                            max_nfev: Some(1),
+                            ..WhitenedFitConfig::default()
+                        },
+                        ..Cmc2003FitConfig::default()
+                    },
+                    &NoopProvider,
+                    &ZeroTranslationProvider,
+                )
+                .unwrap();
+                assert_eq!(output.n_iterations, 1);
+                assert_eq!(output.fit.iterations, 1);
+                assert!(!output.fit.converged);
+                assert_eq!(
+                    *counting.batches.borrow(),
+                    if validate_covariance {
+                        vec![1, 12, 2, 1]
+                    } else {
+                        vec![1, 12, 1]
+                    }
+                );
+            }
+        }
     }
 
     fn full_od_config(refinement: RefinementConfig) -> FullOdConfig {

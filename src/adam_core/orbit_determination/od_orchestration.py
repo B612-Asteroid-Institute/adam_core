@@ -357,8 +357,10 @@ def run_od(
 
     The fitter defaults are those of `NativeOrbitFitter`: Carpino-Milani-
     Chesley (2003) outlier rejection with OrbFit's constants, linear loss,
-    and `fit_least_squares` with the analytic 2-body Jacobian and the
-    weak-direction covariance probe; Gauss IOD on every observation triplet,
+    and analytic 2-body optimizer steps. Every CMC2003 refit computes its
+    covariance and rejection scores from one central-difference Jacobian
+    through the full predictor, with the weak-direction covariance probe
+    enabled; Gauss IOD on every observation triplet,
     accepted below reduced chi2 200, at least 6 observations over 1 day.
     Kept as options, not defaults: ``loss="huber"``, `VeresFloorModel` /
     `VeresReplaceModel`, `SigmaFloorModel`, `PerformanceWeightedModel`,

@@ -22,7 +22,10 @@ Algorithm (one pass; passes repeat until no observation changes state)
    observation INSIDE the fit (the fit absorbs part of its error) and
    ``I + P_i`` for one OUTSIDE it; ``chi2_i = r_i^T (I -/+ P_i)^-1 r_i``.
    The projection is OrbFit's linear ``A Gamma A^T`` in whitened units,
-   evaluated with the analytic 2-body Jacobian of `fit_least_squares`.
+   evaluated with central differences through the full propagator at the
+   fitted state. The selected rows of this same whitened Jacobian determine
+   ``C``; all rows are retained for rejection and recovery. ``jacobian``
+   controls optimizer steps only in this rejection loop.
 3. Re-include an excluded observation when ``chi2_i <= chi2_recover +
    0.75 * fudge``; reject a selected one when ``chi2_i >= threshold`` and
    ``chi2_i > chi2_reject + fudge``, where ``threshold`` is ``chi2_frac`` times
@@ -43,7 +46,7 @@ cascade across calls.
 
 The per-pass decision kernels (apparitions, expected residual covariance
 chi2, reject / re-include selection) run in the Rust backend
-(``adam_core_rs_coords::cmc2003``); this module drives the refits.
+(``adam_core_rs_coords::cmc2003``); the refit loop also runs in Rust.
 
 Constants are OrbFit's ``reject.def`` defaults: chi2_reject 8, chi2_recover 7,
 chi2_frac 0.25, at most 15 passes, at most 50% rejected, 180-day apparition
@@ -298,14 +301,22 @@ def cmc2003_fit_detailed(
         Eigenvalue floor on the expected residual covariance in whitened
         units (0.05).
     loss, f_scale : see `fit_least_squares`
-        Loss used by every fit pass; ``"huber"`` composes robust fitting with
-        rejection.
+        Loss used by every fit pass. The default ``"linear"`` gives the
+        weighted least-squares covariance assumed by CMC2003. ``"huber"``
+        remains available as a heuristic combination: its robust-cost
+        covariance does not establish calibrated CMC rejection statistics.
     validate_covariance : bool
-        Forwarded to `fit_least_squares` for every pass.
+        Check the full-predictor covariance against a 1-sigma weak-direction
+        displacement on every pass; warn if it disagrees. Disabling this
+        diagnostic does not change the central-difference finalization.
     **kwargs
-        Further keyword arguments for `fit_least_squares` (e.g. ``jacobian``,
-        ``max_nfev``). ``ignore`` is managed by this function and must not be
-        passed.
+        Solver settings for `fit_least_squares` (e.g. ``jacobian``,
+        ``max_nfev``). ``jacobian`` controls optimizer steps; covariance and
+        rejection always share a central-difference Jacobian through the
+        full predictor, including light-time handling. This finalization
+        costs twelve candidate predictions per pass, batched where supported,
+        outside the solver evaluation budget. ``ignore`` is managed by this
+        function and must not be passed.
 
     Returns
     -------

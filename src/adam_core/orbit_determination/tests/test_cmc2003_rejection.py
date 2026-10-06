@@ -16,7 +16,9 @@ import numpy as np
 import numpy.testing as npt
 import pyarrow as pa
 import pytest
+import quivr as qv
 
+from ...coordinates.covariances import CoordinateCovariances
 from .. import native_orbit_fitter as native_module
 from ..differential_correction import fit_least_squares
 from ..fitted_orbits import FittedOrbitMembers, FittedOrbits
@@ -34,11 +36,16 @@ from ..rejection import (
     cmc2003_fit_detailed,
 )
 from .test_differential_correction import (
+    EPOCH_MJD_TDB,
     TRUTH_STATE,
+    LinearPropagator,
     NativeTwoBodyPropagator,
     TwoBodyPropagator,
+    _central_difference_jacobian,
     make_initial_guess,
+    make_linear_problem,
     make_synthetic_observations,
+    make_truth_orbit,
 )
 
 
@@ -434,3 +441,148 @@ class TestFusedCmc2003Fit:
             expected.fitted_orbit_members.weight.to_numpy(zero_copy_only=False),
             atol=1e-5,
         )
+
+
+class SubsetLinearPropagator(LinearPropagator):
+    """Known non-Keplerian sensitivities, supporting refit subsets/batches."""
+
+    def generate_ephemeris(self, orbits, observers, max_processes=1):
+        all_times = self.times.mjd().to_pylist()
+        indices = [
+            all_times.index(t) for t in observers.coordinates.time.mjd().to_pylist()
+        ]
+        predict = super().generate_ephemeris
+        return qv.concatenate(
+            [
+                predict(orbits.take([i]), observers).take(indices)
+                for i in range(len(orbits))
+            ]
+        )
+
+
+def correlated_linear_problem():
+    observations, linear, _, _ = make_linear_problem()
+    cov = observations.coordinates.covariance.to_matrix().copy()
+    cov[:, 1, 2] = cov[:, 2, 1] = 0.4 * np.sqrt(cov[:, 1, 1] * cov[:, 2, 2])
+    observations = observations.set_column(
+        "coordinates.covariance", CoordinateCovariances.from_matrix(cov)
+    )
+    predictor = SubsetLinearPropagator(observations, linear.design_matrix, TRUTH_STATE)
+    # Independent weighted normal equations in raw angular units. This also
+    # checks that covariance and scoring apply RA/Dec correlation consistently.
+    a = linear.design_matrix.reshape(-1, 2, 6)
+    r = cov[:, 1:3, 1:3]
+    normals = np.array([ai.T @ np.linalg.solve(ri, ai) for ai, ri in zip(a, r)])
+    return observations, predictor, a, r, normals
+
+
+class TestFullPredictionFinalization:
+    @pytest.mark.parametrize("jacobian", ["analytic", "central", "2-point"])
+    @pytest.mark.parametrize("validate_covariance", [False, True])
+    def test_covariance_uses_full_predictor_independently_of_solver(
+        self, jacobian, validate_covariance
+    ):
+        observations, predictor, _, _, normals = correlated_linear_problem()
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", RuntimeWarning)
+            result = cmc2003_fit_detailed(
+                make_truth_orbit(),
+                observations,
+                predictor,
+                jacobian=jacobian,
+                validate_covariance=validate_covariance,
+                # Keep the state fixed: this test isolates finalization from
+                # optimizer convergence with deliberately wrong 2-body partials.
+                max_nfev=1,
+            )
+        npt.assert_allclose(
+            result.fitted_orbit.coordinates.covariance.to_matrix()[0],
+            np.linalg.inv(normals.sum(axis=0)),
+            rtol=2e-6,
+            atol=1e-23,
+        )
+        assert result.n_rejected == 0
+        assert result.flags == ()
+
+    @pytest.mark.parametrize("jacobian", ["analytic", "central", "2-point"])
+    @pytest.mark.parametrize("raw_chi2,max_passes", [(6.0, 1), (10.0, 2)])
+    def test_near_threshold_selection_and_final_refit_use_consistent_derivatives(
+        self, jacobian, raw_chi2, max_passes
+    ):
+        observations, predictor, a, r, normals = correlated_linear_problem()
+        covariance = np.linalg.inv(normals.sum(axis=0))
+        # Choose a direction strongly constrained by this very observation.
+        # Raw chi2=6 is below rejection; the correct I-P score exceeds 8.
+        # Raw chi2=10 needs the excluded row's J C J^T to recover on pass 2:
+        # after excluding that row, its expected chi2 is 10 * (1-leverage).
+        candidates = []
+        for i, (ai, ri) in enumerate(zip(a, r)):
+            l_inv = np.linalg.inv(np.linalg.cholesky(ri))
+            values, vectors = np.linalg.eigh(l_inv @ ai @ covariance @ ai.T @ l_inv.T)
+            candidates.append((values[-1], i, vectors[:, -1]))
+        leverage, index, direction = max(candidates, key=lambda c: c[0])
+        assert raw_chi2 / (1.0 - leverage) > 9.0
+        assert raw_chi2 * (1.0 - leverage) < 7.0
+        offset = np.linalg.cholesky(r[index]) @ (np.sqrt(raw_chi2) * direction)
+        for component, delta in zip(("lon", "lat"), offset):
+            values = getattr(observations.coordinates, component).to_numpy().copy()
+            values[index] += delta
+            observations = observations.set_column(
+                f"coordinates.{component}", pa.array(values)
+            )
+        result = cmc2003_fit_detailed(
+            make_truth_orbit(),
+            observations,
+            predictor,
+            jacobian=jacobian,
+            max_nfev=1,
+            max_iterations=max_passes,
+            validate_covariance=False,
+        )
+        expected_mask = (np.arange(len(observations)) == index) & (max_passes == 1)
+        assert result.n_recovered == max_passes - 1
+        npt.assert_array_equal(
+            result.fitted_orbit_members.outlier.to_pylist(), expected_mask
+        )
+        assert result.flags == ("max_iterations",)
+        # Final covariance must match the final mask: excluded after pass 1,
+        # recovered after pass 2, even with the optimizer budget exhausted.
+        npt.assert_allclose(
+            result.fitted_orbit.coordinates.covariance.to_matrix()[0],
+            np.linalg.inv(normals[~expected_mask].sum(axis=0)),
+            rtol=2e-6,
+            atol=1e-23,
+        )
+
+    def test_full_model_fit_rejects_outlier_and_recovers_known_state(self):
+        observations, predictor, _, r, normals = correlated_linear_problem()
+        lat = observations.coordinates.lat.to_numpy().copy()
+        lat[6] += 40.0 * np.sqrt(r[6, 1, 1])
+        observations = observations.set_column("coordinates.lat", pa.array(lat))
+        result = cmc2003_fit_detailed(
+            make_initial_guess(), observations, predictor, jacobian="central"
+        )
+        assert result.fitted_orbit.success[0].as_py()
+        assert result.n_rejected == 1
+        assert result.fitted_orbit_members.outlier.to_pylist()[6]
+        assert result.flags == ()
+        npt.assert_allclose(
+            state_of(result.fitted_orbit), TRUTH_STATE, atol=1e-11, rtol=0
+        )
+        npt.assert_allclose(
+            result.fitted_orbit.coordinates.covariance.to_matrix()[0],
+            np.linalg.inv(np.delete(normals, 6, axis=0).sum(axis=0)),
+            rtol=2e-6,
+            atol=1e-23,
+        )
+
+    def test_central_step_size_stability_against_closed_form_covariance(self):
+        observations, predictor, _, _, normals = correlated_linear_problem()
+        expected = np.linalg.inv(normals.sum(axis=0))
+        for step in (0.5e-6, 1e-6, 2e-6):
+            jac = _central_difference_jacobian(
+                TRUTH_STATE, EPOCH_MJD_TDB, observations, predictor, rel_step=step
+            )
+            npt.assert_allclose(
+                np.linalg.inv(jac.T @ jac), expected, rtol=2e-6, atol=1e-23
+            )
