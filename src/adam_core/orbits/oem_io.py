@@ -189,6 +189,9 @@ def _oem_to_adam_frame(frame: str) -> str:
     """
     frame_map = {
         "EME2000": "equatorial",  # Earth Mean Equator and Equinox of J2000
+        "ICRF": "equatorial",  # the J2000 axes within the frame bias adam_core ignores
+        "J2000": "equatorial",
+        "GCRF": "equatorial",
         "ITRF-93": "itrf93",  # International Terrestrial Reference Frame
     }
 
@@ -306,9 +309,6 @@ def orbit_to_oem(
     Convert Orbit object to an OEM file.
 
     This function converts the state vectors and epoch from an Orbit object into the OEM format.
-    It writes OEM version 2.0 with REF_FRAME EME2000. For explicit CCSDS labels
-    (REF_FRAME ICRF, OEM 3.0, a covariance block in a local orbital frame) use
-    :class:`adam_core.orbits.oem.OrbitEphemerisMessage`.
 
     Parameters
     ----------
@@ -448,40 +448,16 @@ def orbit_from_oem(
     try:
         raw = _rn.oem_read_orbits_ipc(str(input_file))
     except ValueError as exc:
-        if "mixed reference frames or time systems" in str(exc):
+        # The fused reader maps EME2000 and ITRF-93 only. The Python
+        # composer also reads the ICRF labels OrbitEphemerisMessage writes.
+        if "mixed reference frames or time systems" in str(exc) or (
+            "Unsupported OEM frame" in str(exc)
+        ):
             return _orbit_from_oem_legacy(input_file)
-        if "Unsupported OEM frame" in str(exc):
-            # The fused reader maps EME2000 and ITRF-93 only. The typed reader
-            # in oem.py also accepts ICRF, J2000 and GCRF as the equatorial
-            # frame, so route such files through it and rebuild the legacy
-            # per-state orbit ids so callers see one contract.
-            return _orbit_from_oem_typed(input_file)
         raise
     if raw is None:
         return Orbits.empty()
     return orbits_from_ipc(raw)
-
-
-def _orbit_from_oem_typed(input_file: str) -> Orbits:
-    """Read through the typed OEM reader with legacy per-state orbit ids."""
-    import pyarrow as pa
-
-    from .oem import OrbitEphemerisMessage
-
-    message = OrbitEphemerisMessage.from_kvn(input_file)
-    parts: list[Orbits] = []
-    for index, segment in enumerate(message.segments):
-        states = segment.states
-        epochs = states.coordinates.time.to_iso8601().to_pylist()
-        orbit_ids = [
-            f"{segment.metadata.object_id}_seg_{index}_{epoch}" for epoch in epochs
-        ]
-        parts.append(
-            states.set_column("orbit_id", pa.array(orbit_ids, type=pa.large_string()))
-        )
-    if not parts:
-        return Orbits.empty()
-    return qv.concatenate(parts) if len(parts) > 1 else parts[0]
 
 
 def _orbit_from_oem_legacy(

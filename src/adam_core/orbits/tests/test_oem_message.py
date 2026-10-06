@@ -1,21 +1,23 @@
+import json
 import re
 
 import numpy as np
 import pyarrow as pa
 import pytest
 
+from adam_core import _rust_native
+
 from ...coordinates import (
-    CartesianCoordinates,
     CoordinateCovariances,
     LocalFrameCovariances,
     Origin,
     transform_coordinates,
 )
+from ...coordinates.units import convert_cartesian_covariance_au_to_km
 from ...dynamics.propagation import propagate_2body
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
 from .. import OrbitEphemerisMessage, Orbits
-from ..oem import OemHeader, OemSegment, OemSegmentMetadata
 from ..oem_io import orbit_from_oem, orbit_to_oem
 
 ORIGINATOR = "TEST ORIGINATOR"
@@ -30,7 +32,7 @@ EPOCHS = [
 
 
 @pytest.fixture
-def heliocentric_history() -> Orbits:
+def history() -> Orbits:
     """One object, six heliocentric equatorial TDB epochs with covariances."""
     seed = make_real_orbits(1)
     seed = seed.set_column(
@@ -40,349 +42,157 @@ def heliocentric_history() -> Orbits:
         "object_id", pa.array(["TEST OBJECT"], type=pa.large_string())
     )
     propagated = propagate_2body(seed, Timestamp.from_iso8601(EPOCHS, scale="tdb"))
-    rng = np.random.default_rng(1)
-    scales = np.array([1e-7, 1e-7, 1e-7, 1e-9, 1e-9, 1e-9])
-    factors = rng.normal(size=(len(propagated), 6, 6)) * scales[None, None, :]
-    covariances = np.einsum("nij,nkj->nik", factors, factors)
+    factors = np.random.default_rng(1).normal(size=(6, 6, 6)) * 1e-7
+    factors[:, :, 3:] *= 1e-2
     return propagated.set_column(
-        "coordinates.covariance", CoordinateCovariances.from_matrix(covariances)
+        "coordinates.covariance",
+        CoordinateCovariances.from_matrix(np.einsum("nij,nkj->nik", factors, factors)),
     )
 
 
-def _with_metadata(message: OrbitEphemerisMessage, **changes) -> OrbitEphemerisMessage:
-    segment = message.segments[0]
-    metadata = OemSegmentMetadata(**{**segment.metadata.__dict__, **changes})
-    return OrbitEphemerisMessage(
-        message.header, (OemSegment(metadata, segment.states),)
+def test_round_trip_heliocentric_icrf(history, tmp_path):
+    message = OrbitEphemerisMessage.from_orbits(
+        history, ORIGINATOR, creation_date="2026-10-06T00:00:00", comments=["a comment"]
+    )
+    assert (message.object_name, message.object_id) == ("TEST OBJECT", "TEST OBJECT")
+    assert (message.center_name, message.ref_frame, message.time_system) == (
+        "SUN",
+        "ICRF",
+        "TDB",
     )
 
-
-def _assert_states_equal(actual: Orbits, expected: Orbits, rtol: float = 1e-12):
-    assert actual.coordinates.frame == expected.coordinates.frame
-    assert actual.coordinates.time.scale == expected.coordinates.time.scale
-    assert actual.coordinates.time.days.equals(expected.coordinates.time.days)
-    assert actual.coordinates.time.nanos.equals(expected.coordinates.time.nanos)
-    assert (
-        actual.coordinates.origin.code.to_pylist()
-        == expected.coordinates.origin.code.to_pylist()
-    )
-    np.testing.assert_allclose(
-        actual.coordinates.values, expected.coordinates.values, rtol=rtol
-    )
-
-
-def test_round_trip_heliocentric_icrf(heliocentric_history, tmp_path):
-    message = _with_metadata(
-        OrbitEphemerisMessage.from_orbits(
-            heliocentric_history,
-            ORIGINATOR,
-            creation_date="2026-10-06T00:00:00",
-            message_id="MSG-1",
-            metadata_comments=["metadata comment"],
-        ),
-        interpolation="LAGRANGE",
-        interpolation_degree=7,
-    )
-    metadata = message.segments[0].metadata
-    assert metadata == OemSegmentMetadata(
-        object_name="TEST OBJECT",
-        object_id="TEST OBJECT",
-        center_name="SUN",
-        ref_frame="ICRF",
-        time_system="TDB",
-        start_time="2027-03-01T00:00:00.000",
-        stop_time="2028-04-01T00:00:00.000",
-        interpolation="LAGRANGE",
-        interpolation_degree=7,
-        comments=("metadata comment",),
-    )
-
-    path = message.write(tmp_path / "heliocentric.oem")
-    text = (tmp_path / "heliocentric.oem").read_text()
-    lines = text.split("\n")
-    assert lines[:4] == [
+    path = message.write(tmp_path / "states.oem")
+    lines = open(path).read().split("\n")
+    assert lines[:3] == [
         "CCSDS_OEM_VERS = 3.0",
         "CREATION_DATE = 2026-10-06T00:00:00",
         f"ORIGINATOR = {ORIGINATOR}",
-        "MESSAGE_ID = MSG-1",
     ]
     for line in (
-        "COMMENT metadata comment",
+        "COMMENT a comment",
         "CENTER_NAME = SUN",
         "REF_FRAME = ICRF",
         "TIME_SYSTEM = TDB",
         "START_TIME = 2027-03-01T00:00:00.000",
         "STOP_TIME = 2028-04-01T00:00:00.000",
-        "INTERPOLATION_DEGREE = 7",
     ):
         assert line in lines
-    assert len([line for line in lines if re.match(r"^\d{4}-\d{2}-\d{2}T", line)]) == 6
-    assert "COVARIANCE_START" not in text
+    assert len([line for line in lines if re.match(r"^\d{4}-", line)]) == 6
+    assert "COVARIANCE_START" not in lines
 
-    loaded = OrbitEphemerisMessage.from_kvn(path)
-    assert loaded.header == OemHeader(
-        originator=ORIGINATOR,
-        creation_date="2026-10-06T00:00:00",
-        ccsds_oem_vers="3.0",
-        message_id="MSG-1",
-    )
-    segment = loaded.segments[0]
-    # The parser drops COMMENT lines, everything else survives.
-    assert segment.metadata == OemSegmentMetadata(
-        **{**metadata.__dict__, "comments": ()}
-    )
-    _assert_states_equal(segment.states, heliocentric_history)
-    assert segment.states.orbit_id.to_pylist() == ["TEST OBJECT"] * 6
-    assert segment.states.coordinates.covariance.is_all_nan()
-    assert segment.local_covariances is None
-    _assert_states_equal(loaded.to_orbits(), heliocentric_history)
-
-
-def test_covariance_blocks(heliocentric_history, tmp_path):
-    message = OrbitEphemerisMessage.from_orbits(
-        heliocentric_history, ORIGINATOR, creation_date="2026-10-06T00:00:00"
-    )
-    expected = heliocentric_history.coordinates.covariance.to_matrix()
-
-    # In REF_FRAME the label is omitted and the block attaches to the states.
-    icrf = message.to_kvn(covariance_frame="ICRF")
-    assert "COVARIANCE_START" in icrf and "COV_REF_FRAME" not in icrf
-    path = tmp_path / "icrf.oem"
-    path.write_text(icrf)
-    segment = OrbitEphemerisMessage.from_kvn(path).segments[0]
+    loaded = orbit_from_oem(message.write(path, covariance_frame="ICRF"))
+    assert loaded.coordinates.frame == "equatorial"
+    assert loaded.coordinates.time.scale == "tdb"
+    assert loaded.coordinates.origin.code.to_pylist() == ["SUN"] * 6
+    assert loaded.coordinates.time.days.equals(history.coordinates.time.days)
+    assert loaded.coordinates.time.nanos.equals(history.coordinates.time.nanos)
     np.testing.assert_allclose(
-        segment.states.coordinates.covariance.to_matrix(), expected, rtol=1e-12
+        loaded.coordinates.values, history.coordinates.values, rtol=1e-12
     )
-    assert segment.local_covariances is None
+    np.testing.assert_allclose(
+        loaded.coordinates.covariance.to_matrix(),
+        history.coordinates.covariance.to_matrix(),
+        rtol=1e-12,
+    )
 
+
+def test_local_frame_covariance_blocks(history, tmp_path):
+    message = OrbitEphemerisMessage.from_orbits(history, ORIGINATOR)
     # TNW is in the OEM covariance frame set, VNC is not.
-    tnw = message.to_kvn(covariance_frame="TNW", strict=True)
+    tnw = open(
+        message.write(tmp_path / "tnw.oem", covariance_frame="TNW", strict=True)
+    ).read()
     assert tnw.count("COV_REF_FRAME = TNW") == 6 and "SANA" not in tnw
     with pytest.raises(ValueError, match="outside the OEM covariance frame set"):
-        message.to_kvn(covariance_frame="VNC_ROTATING", strict=True)
-    vnc = message.to_kvn(covariance_frame="VNC_ROTATING")
-    assert vnc.count("COV_REF_FRAME = VNC_ROTATING") == 6
-    assert "COMMENT COV_REF_FRAME VNC_ROTATING is a SANA orbit-relative" in vnc
-    with pytest.raises(ValueError, match="Unknown local orbital frame"):
-        message.to_kvn(covariance_frame="LVLH")
+        message.write(tmp_path / "x.oem", covariance_frame="VNC_ROTATING", strict=True)
+    path = message.write(tmp_path / "vnc.oem", covariance_frame="VNC_ROTATING")
+    text = open(path).read()
+    assert text.count("COV_REF_FRAME = VNC_ROTATING") == 6
+    assert "COMMENT COV_REF_FRAME VNC_ROTATING is a SANA orbit-relative" in text
 
-    # A local frame block reads back as a product, not as a state covariance,
-    # and is written back unchanged under the same label.
-    path.write_text(vnc)
-    segment = OrbitEphemerisMessage.from_kvn(path).segments[0]
-    assert segment.states.coordinates.covariance.is_all_nan()
-    product = segment.local_covariances
-    assert product.frame == "VNC_ROTATING"
-    assert product.reference_frame == "equatorial"
-    assert product.origin.code.to_pylist() == ["SUN"] * 6
+    # The block holds the separate product's matrices in km, and the legacy
+    # reader ignores a block that is not in REF_FRAME.
+    records = json.loads(_rust_native.oem_parse_kvn(path))["segments"][0]["covariances"]
+    written = np.array([record["matrix"] for record in records]).reshape(6, 6, 6)
+    product = LocalFrameCovariances.from_orbits(history, "VNC_ROTATING")
     np.testing.assert_allclose(
-        product.covariance.to_matrix(),
-        LocalFrameCovariances.from_orbits(
-            heliocentric_history, "VNC_ROTATING"
-        ).covariance.to_matrix(),
+        written,
+        convert_cartesian_covariance_au_to_km(product.covariance.to_matrix()),
         rtol=1e-12,
     )
-    loaded = OrbitEphemerisMessage.from_kvn(path)
-    assert loaded.to_kvn(covariance_frame="VNC_ROTATING") == vnc
-    with pytest.raises(ValueError, match="carry no covariance"):
-        loaded.to_kvn(covariance_frame="TNW")
+    assert orbit_from_oem(path).coordinates.covariance.is_all_nan()
 
-
-def test_label_validation(heliocentric_history, tmp_path):
-    ecliptic = heliocentric_history.set_column(
-        "coordinates",
-        transform_coordinates(heliocentric_history.coordinates, frame_out="ecliptic"),
-    )
-    with pytest.raises(ValueError, match="Transform to the equatorial frame first"):
-        OrbitEphemerisMessage.from_orbits(ecliptic, ORIGINATOR)
-    with pytest.raises(ValueError, match="does not name the axes"):
-        OrbitEphemerisMessage.from_orbits(
-            heliocentric_history, ORIGINATOR, ref_frame="ITRF-93"
+    with pytest.raises(ValueError, match="Unknown local orbital frame"):
+        message.write(tmp_path / "x.oem", covariance_frame="LVLH")
+    nulls = history.set_column("coordinates.covariance", CoordinateCovariances.nulls(6))
+    with pytest.raises(ValueError, match="no covariance"):
+        OrbitEphemerisMessage.from_orbits(nulls, ORIGINATOR).write(
+            tmp_path / "x.oem", covariance_frame="ICRF"
         )
-    with pytest.raises(ValueError, match="Unsupported OEM TIME_SYSTEM"):
-        OrbitEphemerisMessage.from_orbits(
-            heliocentric_history, ORIGINATOR, time_system="GPS"
-        )
-    mixed = heliocentric_history.set_column(
-        "coordinates.origin",
-        Origin.from_kwargs(
-            code=["SUN", "SUN", "SUN", "SOLAR_SYSTEM_BARYCENTER", "SUN", "SUN"]
-        ),
-    )
-    with pytest.raises(ValueError, match="same origin"):
-        OrbitEphemerisMessage.from_orbits(mixed, ORIGINATOR)
-
-    # Metadata edited after construction is checked against the states.
-    message = OrbitEphemerisMessage.from_orbits(heliocentric_history, ORIGINATOR)
-    with pytest.raises(ValueError, match="REF_FRAME"):
-        _with_metadata(message, ref_frame="ITRF-93").to_kvn()
-    with pytest.raises(ValueError, match="TIME_SYSTEM"):
-        _with_metadata(message, time_system="UTC").to_kvn()
-    with pytest.raises(ValueError, match="CENTER_NAME"):
-        _with_metadata(message, center_name="SOLAR SYSTEM BARYCENTER").to_kvn()
-
-    # Read side: EME2000 maps to equatorial, unmapped labels raise.
-    text = OrbitEphemerisMessage.from_orbits(
-        heliocentric_history, ORIGINATOR, ref_frame="eme2000"
-    ).to_kvn()
-    path = tmp_path / "labels.oem"
-    path.write_text(text)
-    loaded = OrbitEphemerisMessage.from_kvn(path).segments[0]
-    assert loaded.metadata.ref_frame == "EME2000"
-    assert loaded.states.coordinates.frame == "equatorial"
-    path.write_text(text.replace("REF_FRAME = EME2000", "REF_FRAME = TEME"))
-    with pytest.raises(ValueError, match="Unsupported OEM REF_FRAME"):
-        OrbitEphemerisMessage.from_kvn(path)
-    path.write_text(text.replace("TIME_SYSTEM = TDB", "TIME_SYSTEM = GPS"))
-    with pytest.raises(ValueError, match="Unsupported OEM TIME_SYSTEM"):
-        OrbitEphemerisMessage.from_kvn(path)
 
 
-def test_time_system_utc(heliocentric_history, tmp_path):
-    # TDB epochs on whole seconds do not land on UTC millisecond boundaries.
-    message = OrbitEphemerisMessage.from_orbits(
-        heliocentric_history, ORIGINATOR, time_system="UTC"
-    )
-    assert message.segments[0].metadata.time_system == "UTC"
-    assert message.segments[0].states.coordinates.time.scale == "utc"
-    with pytest.raises(ValueError, match="millisecond boundary"):
-        message.to_kvn()
-
-    # States given in UTC on whole seconds write and read as UTC.
-    coords = heliocentric_history.coordinates
-    utc_history = heliocentric_history.set_column(
-        "coordinates",
-        CartesianCoordinates.from_kwargs(
-            x=coords.x,
-            y=coords.y,
-            z=coords.z,
-            vx=coords.vx,
-            vy=coords.vy,
-            vz=coords.vz,
-            time=Timestamp.from_iso8601(EPOCHS, scale="utc"),
-            covariance=coords.covariance,
-            origin=coords.origin,
-            frame=coords.frame,
-        ),
-    )
-    path = OrbitEphemerisMessage.from_orbits(utc_history, ORIGINATOR).write(
-        tmp_path / "utc.oem"
-    )
-    assert "TIME_SYSTEM = UTC" in (tmp_path / "utc.oem").read_text()
-    _assert_states_equal(OrbitEphemerisMessage.from_kvn(path).to_orbits(), utc_history)
-
-
-def test_state_table_rules(heliocentric_history):
-    with pytest.raises(ValueError, match="one object per file"):
-        OrbitEphemerisMessage.from_orbits(
-            heliocentric_history.set_column(
-                "object_id",
-                pa.array(["A", "A", "A", "B", "B", "B"], type=pa.large_string()),
+def test_input_rules(history, tmp_path):
+    bad = [
+        (
+            "Transform to equatorial first",
+            history.set_column(
+                "coordinates",
+                transform_coordinates(history.coordinates, frame_out="ecliptic"),
             ),
-            ORIGINATOR,
-        )
-    with pytest.raises(ValueError, match="needs an object_id"):
-        OrbitEphemerisMessage.from_orbits(
-            heliocentric_history.set_column(
-                "object_id", pa.nulls(6, type=pa.large_string())
+        ),
+        (
+            "one object about one center",
+            history.set_column(
+                "object_id", pa.array(["A"] * 3 + ["B"] * 3, type=pa.large_string())
             ),
-            ORIGINATOR,
-        )
-    with pytest.raises(ValueError, match="at least one state"):
-        OrbitEphemerisMessage.from_orbits(Orbits.empty(), ORIGINATOR)
-
-    reversed_history = heliocentric_history.take(pa.array(list(range(5, -1, -1))))
-    message = OrbitEphemerisMessage.from_orbits(reversed_history, ORIGINATOR)
-    _assert_states_equal(message.segments[0].states, heliocentric_history)
-    with pytest.raises(ValueError, match="unique"):
-        OrbitEphemerisMessage.from_orbits(
-            heliocentric_history.take(pa.array([0, 0, 1, 2, 3, 4])), ORIGINATOR
-        )
-
-    # Epochs off the millisecond grid raise unless rounding is allowed, and
-    # rounding may not merge two epochs.
-    time = heliocentric_history.coordinates.time
-    days = time.days.to_numpy(zero_copy_only=False).copy()
+        ),
+        (
+            "one object about one center",
+            history.set_column(
+                "coordinates.origin",
+                Origin.from_kwargs(code=["SUN"] * 5 + ["SOLAR_SYSTEM_BARYCENTER"]),
+            ),
+        ),
+        (
+            "needs an object_id",
+            history.set_column("object_id", pa.nulls(6, pa.large_string())),
+        ),
+        ("at least one state", Orbits.empty()),
+        ("unique", history.take(pa.array([0, 0, 1, 2, 3, 4]))),
+    ]
+    for match, orbits in bad:
+        with pytest.raises(ValueError, match=match):
+            OrbitEphemerisMessage.from_orbits(orbits, ORIGINATOR)
+    # Unsorted input is sorted by time.
+    states = OrbitEphemerisMessage.from_orbits(
+        history.take(pa.array([5, 4, 3, 2, 1, 0])), ORIGINATOR
+    ).states
+    assert states.coordinates.time.days.equals(history.coordinates.time.days)
+    # Epochs off the millisecond grid are refused rather than rounded.
+    time = history.coordinates.time
     nanos = time.nanos.to_numpy(zero_copy_only=False).copy()
     nanos[1] += 123_456
-    shifted = heliocentric_history.set_column(
-        "coordinates.time", Timestamp.from_kwargs(days=days, nanos=nanos, scale="tdb")
+    shifted = history.set_column(
+        "coordinates.time",
+        Timestamp.from_kwargs(days=time.days, nanos=nanos, scale="tdb"),
     )
-    message = OrbitEphemerisMessage.from_orbits(shifted, ORIGINATOR)
     with pytest.raises(ValueError, match="millisecond boundary"):
-        message.to_kvn()
-    assert "2027-03-15T12:00:00.000" in message.to_kvn(allow_epoch_rounding=True)
-    days[1] = days[0]
-    nanos[1] = nanos[0] + 400_000
-    colliding = heliocentric_history.set_column(
-        "coordinates.time", Timestamp.from_kwargs(days=days, nanos=nanos, scale="tdb")
-    )
-    with pytest.raises(ValueError, match="same millisecond"):
-        OrbitEphemerisMessage.from_orbits(colliding, ORIGINATOR).to_kvn(
-            allow_epoch_rounding=True
-        )
+        OrbitEphemerisMessage.from_orbits(shifted, ORIGINATOR).write(tmp_path / "x.oem")
 
 
-def test_matches_legacy_writer_byte_for_byte(heliocentric_history, tmp_path):
+def test_matches_legacy_writer_formatting(history, tmp_path):
     legacy_path = str(tmp_path / "legacy.oem")
-    orbit_to_oem(heliocentric_history, legacy_path, originator=ORIGINATOR)
-    legacy_text = open(legacy_path).read()
-    creation_date = re.search(r"^CREATION_DATE = (.*)$", legacy_text, re.M).group(1)
+    orbit_to_oem(history, legacy_path, originator=ORIGINATOR)
+    legacy = open(legacy_path).read()
+    creation_date = re.search(r"^CREATION_DATE = (.*)$", legacy, re.M).group(1)
     message = OrbitEphemerisMessage.from_orbits(
-        heliocentric_history,
-        ORIGINATOR,
-        ref_frame="EME2000",
-        ccsds_oem_vers="2.0",
-        creation_date=creation_date,
+        history, ORIGINATOR, creation_date=creation_date
     )
-    assert message.to_kvn(covariance_frame="EME2000") == legacy_text
-
-
-def test_legacy_reader_fallback_for_icrf_files(heliocentric_history, tmp_path):
-    path = OrbitEphemerisMessage.from_orbits(heliocentric_history, ORIGINATOR).write(
-        tmp_path / "icrf.oem", covariance_frame="ICRF"
+    # Only the version and frame labels differ from the legacy writer.
+    expected = legacy.replace("CCSDS_OEM_VERS = 2.0", "CCSDS_OEM_VERS = 3.0").replace(
+        "REF_FRAME = EME2000", "REF_FRAME = ICRF"
     )
-    orbits = orbit_from_oem(path)
-    _assert_states_equal(orbits, heliocentric_history)
-    np.testing.assert_allclose(
-        orbits.coordinates.covariance.to_matrix(),
-        heliocentric_history.coordinates.covariance.to_matrix(),
-        rtol=1e-12,
+    assert (
+        open(message.write(tmp_path / "new.oem", covariance_frame="ICRF")).read()
+        == expected
     )
-    ids = orbits.orbit_id.to_pylist()
-    assert len(set(ids)) == 6
-    assert ids[0] == "TEST OBJECT_seg_0_2027-03-01T00:00:00.000"
-
-
-def test_from_kvn_keeps_unknown_metadata_and_multiple_segments(
-    heliocentric_history, tmp_path
-):
-    first = OrbitEphemerisMessage.from_orbits(
-        heliocentric_history[:3], ORIGINATOR, creation_date="2026-10-06T00:00:00"
-    ).to_kvn()
-    second = OrbitEphemerisMessage.from_orbits(
-        heliocentric_history[3:], ORIGINATOR
-    ).to_kvn()
-    second_segment = (
-        second[second.index("META_START") :]
-        .replace(
-            "TIME_SYSTEM = TDB\n",
-            "TIME_SYSTEM = TDB\nUSEABLE_START_TIME = 2028-03-01T00:00:00.000\n",
-        )
-        .replace(
-            "STOP_TIME = 2028-04-01T00:00:00.000\n",
-            "STOP_TIME = 2028-04-01T00:00:00.000\nUSER_KEY = user value\n",
-        )
-    )
-    path = tmp_path / "two_segments.oem"
-    path.write_text(first + second_segment)
-
-    loaded = OrbitEphemerisMessage.from_kvn(path)
-    assert len(loaded.segments) == 2
-    metadata = loaded.segments[1].metadata
-    assert metadata.useable_start_time == "2028-03-01T00:00:00.000"
-    assert metadata.extra == (("USER_KEY", "user value"),)
-    assert metadata.as_ordered_items()[-1] == ("USER_KEY", "user value")
-    _assert_states_equal(loaded.to_orbits(), heliocentric_history)
-    with pytest.raises(NotImplementedError, match="exactly one segment"):
-        loaded.to_kvn()
