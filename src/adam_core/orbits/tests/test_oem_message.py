@@ -14,7 +14,8 @@ from ...coordinates import (
 from ...dynamics.propagation import propagate_2body
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
-from .. import OemHeader, OemSegment, OemSegmentMetadata, OrbitEphemerisMessage, Orbits
+from .. import OrbitEphemerisMessage, Orbits
+from ..oem import OemHeader, OemSegment, OemSegmentMetadata
 from ..oem_io import orbit_from_oem, orbit_to_oem
 
 ORIGINATOR = "TEST ORIGINATOR"
@@ -71,13 +72,14 @@ def _assert_states_equal(actual: Orbits, expected: Orbits, rtol: float = 1e-12):
 
 
 def test_round_trip_heliocentric_icrf(heliocentric_history, tmp_path):
-    message = OrbitEphemerisMessage.from_orbits(
-        heliocentric_history,
-        ORIGINATOR,
-        creation_date="2026-10-06T00:00:00",
-        message_id="MSG-1",
-        comments=["header comment"],
-        metadata_comments=["metadata comment"],
+    message = _with_metadata(
+        OrbitEphemerisMessage.from_orbits(
+            heliocentric_history,
+            ORIGINATOR,
+            creation_date="2026-10-06T00:00:00",
+            message_id="MSG-1",
+            metadata_comments=["metadata comment"],
+        ),
         interpolation="LAGRANGE",
         interpolation_degree=7,
     )
@@ -98,9 +100,8 @@ def test_round_trip_heliocentric_icrf(heliocentric_history, tmp_path):
     path = message.write(tmp_path / "heliocentric.oem")
     text = (tmp_path / "heliocentric.oem").read_text()
     lines = text.split("\n")
-    assert lines[:5] == [
+    assert lines[:4] == [
         "CCSDS_OEM_VERS = 3.0",
-        "COMMENT header comment",
         "CREATION_DATE = 2026-10-06T00:00:00",
         f"ORIGINATOR = {ORIGINATOR}",
         "MESSAGE_ID = MSG-1",
@@ -175,10 +176,10 @@ def test_covariance_blocks(heliocentric_history, tmp_path):
     assert product.reference_frame == "equatorial"
     assert product.origin.code.to_pylist() == ["SUN"] * 6
     np.testing.assert_allclose(
-        product.to_matrix(),
+        product.covariance.to_matrix(),
         LocalFrameCovariances.from_orbits(
             heliocentric_history, "VNC_ROTATING"
-        ).to_matrix(),
+        ).covariance.to_matrix(),
         rtol=1e-12,
     )
     loaded = OrbitEphemerisMessage.from_kvn(path)

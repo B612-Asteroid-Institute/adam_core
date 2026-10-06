@@ -9,7 +9,6 @@ from ...utils.helpers.orbits import make_real_orbits
 from .. import CartesianCoordinates, CoordinateCovariances, Origin
 from ..local_orbital_frames import (
     LocalFrameCovariances,
-    _basis_and_rates,
     local_frame_angular_velocity,
     local_frame_jacobians,
     local_frame_rotation_matrices,
@@ -105,7 +104,7 @@ def test_circular_orbit_rate_and_corotating_velocity():
     np.testing.assert_allclose(local_state, [a, 0.0, 0.0, 0.0, 0.0, 0.0], atol=1e-15)
 
 
-def test_basis_rates_match_finite_differences(heliocentric_orbits):
+def test_frame_rates_match_finite_differences(heliocentric_orbits):
     orbits = heliocentric_orbits[:2]
     t0 = orbits.coordinates.time[0].rescale("tdb").mjd().to_numpy(False)[0]
     dt = 1e-3  # days
@@ -122,20 +121,19 @@ def test_basis_rates_match_finite_differences(heliocentric_orbits):
             ]
         )
         for frame in ("RSW_ROTATING", "TNW_ROTATING", "VNC_ROTATING"):
-            basis, rates = _basis_and_rates(rows.coordinates, frame)
-            np.testing.assert_allclose(
-                rates[1], (basis[2] - basis[0]) / (2 * dt), atol=1e-8
-            )
-            # The rates are the rotation of the triad: de_i = omega x e_i.
+            # The triad rotates with the frame rate: de_i/dt = omega x e_i.
+            basis = local_frame_rotation_matrices(rows.coordinates, frame)
             omega = local_frame_angular_velocity(rows.coordinates, frame)[1]
-            np.testing.assert_allclose(rates[1], np.cross(omega, basis[1]), atol=1e-14)
+            np.testing.assert_allclose(
+                np.cross(omega, basis[1]), (basis[2] - basis[0]) / (2 * dt), atol=1e-8
+            )
 
 
 def test_inertial_rotation_preserves_covariance(heliocentric_orbits):
     source = heliocentric_orbits.coordinates.covariance.to_matrix()
     rotated = LocalFrameCovariances.from_orbits(
         heliocentric_orbits, "VNC_INERTIAL"
-    ).to_matrix()
+    ).covariance.to_matrix()
     np.testing.assert_allclose(
         np.trace(rotated[:, :3, :3], axis1=1, axis2=2),
         np.trace(source[:, :3, :3], axis1=1, axis2=2),
@@ -162,10 +160,11 @@ def test_from_orbits_product_contract(heliocentric_orbits):
     assert product.time.days.equals(orbits.coordinates.time.days)
     assert product.origin.code.to_pylist() == ["SUN"] * len(product)
     # Rows stay aligned with the input, missing covariances stay NaN.
-    assert np.isnan(product.to_matrix()[2]).all()
-    assert not np.isnan(product.to_matrix()[[0, 1, 3, 4]]).any()
+    rotated = product.covariance.to_matrix()
+    assert np.isnan(rotated[2]).all()
+    assert not np.isnan(rotated[[0, 1, 3, 4]]).any()
     np.testing.assert_allclose(
-        product.to_matrix_km()[:, :3, :3], product.to_matrix()[:, :3, :3] * KM_P_AU**2
+        product.to_matrix_km()[:, :3, :3], rotated[:, :3, :3] * KM_P_AU**2
     )
     assert LocalFrameCovariances.from_orbits(orbits, "VNC").frame == "VNC_INERTIAL"
 
