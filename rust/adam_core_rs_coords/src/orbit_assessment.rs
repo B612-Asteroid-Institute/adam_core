@@ -305,6 +305,17 @@ fn strict_cholesky(values: &[f64; MAX_COVARIANCE_ELEMENTS], dimension: usize) ->
     Ok(())
 }
 
+/// Assess one non-gravitational parameter row without covariance support.
+///
+/// This is the canonical adam-core interpretation used by propagation
+/// backends for a fixed supplied row.  Batch assessment additionally accounts
+/// for semantic 9D covariance support through [`assess_orbit_batch`].
+pub fn assess_non_gravitational_parameters(
+    row: Option<NonGravitationalParametersRow>,
+) -> NonGravitationalAssessment {
+    assess_non_gravitational(row, None)
+}
+
 fn assess_non_gravitational(
     row: Option<NonGravitationalParametersRow>,
     covariance_dimension: Option<usize>,
@@ -726,6 +737,27 @@ mod tests {
         assert_eq!(non_grav.law_required, Some(true));
         assert!(non_grav.law_values_valid);
         assert!(non_grav.issues.is_empty());
+    }
+
+    #[test]
+    fn direct_nongrav_assessment_uses_adam_core_semantics() {
+        let assessment = assess_non_gravitational_parameters(Some(NonGravitationalParametersRow {
+            a1: Some(1.0e-9),
+            a2: None,
+            a3: None,
+            aln: None,
+            nk: None,
+            nm: None,
+            nn: None,
+            r0: None,
+        }));
+        assert_eq!(assessment.effective_acceleration, [1.0e-9, 0.0, 0.0]);
+        assert_eq!(assessment.nominal_active, Some(true));
+        assert!(!assessment.covariance_may_activate);
+        assert_eq!(assessment.law_required, Some(true));
+        assert_eq!(assessment.law_encoding, MarsdenLawEncoding::InverseSquare);
+        assert!(assessment.law_values_valid);
+        assert!(assessment.issues.is_empty());
     }
 
     #[test]
