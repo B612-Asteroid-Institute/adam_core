@@ -496,13 +496,14 @@ complete release matches the accepted bytes.</p>
 <p>Stable promotion remains separately approval-gated and proceeds in dependency
 order:</p>
 <ol class="arabic simple">
-<li><p>prepare an exact <code class="docutils literal notranslate"><span class="pre">adam-assist</span> <span class="pre">0.4.1</span></code> source candidate pinned to Core
-<code class="docutils literal notranslate"><span class="pre">0.5.8</span></code> for paired acceptance without publishing ASSIST;</p></li>
+<li><p>prepare an <code class="docutils literal notranslate"><span class="pre">adam-assist</span> <span class="pre">0.4.1</span></code> source candidate declaring compatibility
+with Core <code class="docutils literal notranslate"><span class="pre">&gt;=0.5.7,&lt;0.6</span></code> and selecting Core <code class="docutils literal notranslate"><span class="pre">0.5.8</span></code> in its preliminary
+locks for paired acceptance without publishing ASSIST;</p></li>
 <li><p>accept the exact Core <code class="docutils literal notranslate"><span class="pre">0.5.8</span></code> six-crate set and paired 12-wheel matrix;</p></li>
 <li><p>publish and verify the six Core crates in dependency order;</p></li>
 <li><p>publish and verify the exact Core Python wheel set;</p></li>
-<li><p>finalize the ASSIST Python/Rust exact pins and frozen lock against public
-Core <code class="docutils literal notranslate"><span class="pre">0.5.8</span></code>;</p></li>
+<li><p>finalize the ASSIST Python/Rust compatibility requirements and frozen
+registry locks selected at public Core <code class="docutils literal notranslate"><span class="pre">0.5.8</span></code>;</p></li>
 <li><p>accept, publish, and verify <code class="docutils literal notranslate"><span class="pre">adam_assist</span> <span class="pre">0.4.1</span></code> and the exact
 <code class="docutils literal notranslate"><span class="pre">adam-assist==0.4.1</span></code> wheel set; and</p></li>
 <li><p>run clean no-lock Cargo 1.87/latest-stable and clean pip/current-uv
@@ -550,7 +551,7 @@ approval boundary and is never performed as part of source preparation.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-05</div>
+              Last updated on 2026-10-06</div>
           </div>
           <div class="right-details">
             
