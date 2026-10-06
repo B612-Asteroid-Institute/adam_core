@@ -38,8 +38,8 @@ pub use openspace::{openspace_create_initialization, openspace_lua_to_string};
 
 pub mod orbit_assessment;
 pub use orbit_assessment::{
-    assess_orbit_batch, MarsdenLawEncoding, NonGravitationalAssessment,
-    NonGravitationalIssue, OrbitAssessment, OrbitCovarianceAssessment, OrbitCovarianceIssue,
+    assess_orbit_batch, MarsdenLawEncoding, NonGravitationalAssessment, NonGravitationalIssue,
+    OrbitAssessment, OrbitCovarianceAssessment, OrbitCovarianceIssue,
     PresentOrbitCovarianceAssessment, ORBIT_COVARIANCE_CORRELATION_SYMMETRY_TOLERANCE,
 };
 

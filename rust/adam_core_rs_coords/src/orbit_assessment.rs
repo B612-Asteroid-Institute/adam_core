@@ -6,13 +6,12 @@
 //! mutating, repairing, or otherwise normalizing the supplied values.
 
 use crate::{
-    CoordinateRepresentation, CovarianceBatch, CovarianceUnits, NonGravitationalParametersRow,
-    OrbitBatch, SchemaResult,
+    types::SchemaResult, CoordinateRepresentation, CovarianceBatch, CovarianceUnits,
+    NonGravitationalParametersRow, OrbitBatch,
 };
 
 const MAX_COVARIANCE_DIMENSION: usize = 9;
-const MAX_COVARIANCE_ELEMENTS: usize =
-    MAX_COVARIANCE_DIMENSION * MAX_COVARIANCE_DIMENSION;
+const MAX_COVARIANCE_ELEMENTS: usize = MAX_COVARIANCE_DIMENSION * MAX_COVARIANCE_DIMENSION;
 
 /// Maximum permitted absolute asymmetry after converting a covariance to
 /// dimensionless correlation space.
@@ -62,10 +61,12 @@ pub struct PresentOrbitCovarianceAssessment {
     pub values_finite: bool,
     /// Whether every consumed diagonal variance is strictly positive.
     pub positive_diagonal: bool,
-    /// Whether correlation-space asymmetry is within the strict tolerance.
-    pub sufficiently_symmetric: bool,
-    /// Whether strict scaled Cholesky factorization succeeds unchanged.
-    pub strictly_positive_definite: bool,
+    /// Whether correlation-space asymmetry is within the strict tolerance, or
+    /// `None` when prerequisite numerical checks prevented evaluation.
+    pub sufficiently_symmetric: Option<bool>,
+    /// Whether strict scaled Cholesky factorization succeeds unchanged, or
+    /// `None` when symmetry or an earlier prerequisite prevented evaluation.
+    pub strictly_positive_definite: Option<bool>,
     /// Maximum absolute correlation-space asymmetry, when computable.
     pub maximum_correlation_asymmetry: Option<f64>,
     /// Independent issues observed for this row, in deterministic check order.
@@ -109,12 +110,15 @@ pub struct NonGravitationalAssessment {
     pub effective_acceleration: [f64; 3],
     /// Whether every effective A coefficient is finite.
     pub coefficients_finite: bool,
-    /// Whether at least one finite nominal A coefficient is nonzero.
-    pub nominal_active: bool,
+    /// Whether at least one nominal A coefficient is nonzero, or `None` when
+    /// non-finite coefficients make nominal activity indeterminate.
+    pub nominal_active: Option<bool>,
     /// Whether a semantic 9D covariance can produce nonzero A members.
     pub covariance_may_activate: bool,
-    /// Whether nominal or covariance support requires a usable force law.
-    pub law_required: bool,
+    /// Whether nominal or covariance support requires a usable force law, or
+    /// `None` when nominal activity is indeterminate and covariance does not
+    /// independently require the law.
+    pub law_required: Option<bool>,
     /// Canonical shape of the supplied Marsden scalar-law fields.
     pub law_encoding: MarsdenLawEncoding,
     /// Whether the encoded law has scientifically valid numerical values.
@@ -204,8 +208,8 @@ fn assess_covariance(
     }
 
     let mut values_finite = raw_values_finite;
-    let mut sufficiently_symmetric = false;
-    let mut strictly_positive_definite = false;
+    let mut sufficiently_symmetric = None;
+    let mut strictly_positive_definite = None;
     let mut maximum_correlation_asymmetry = None;
     if raw_values_finite && positive_diagonal {
         let mut scales = [0.0; MAX_COVARIANCE_DIMENSION];
@@ -215,8 +219,8 @@ fn assess_covariance(
         let mut correlation = [0.0; MAX_COVARIANCE_ELEMENTS];
         for r in 0..semantic_dimension {
             for c in 0..semantic_dimension {
-                correlation[r * semantic_dimension + c] = values[r * semantic_dimension + c]
-                    / (scales[r] * scales[c]);
+                correlation[r * semantic_dimension + c] =
+                    values[r * semantic_dimension + c] / (scales[r] * scales[c]);
             }
         }
         if correlation[..semantic_dimension * semantic_dimension]
@@ -225,12 +229,12 @@ fn assess_covariance(
         {
             let maximum_asymmetry = maximum_asymmetry(&correlation, semantic_dimension);
             maximum_correlation_asymmetry = Some(maximum_asymmetry);
-            sufficiently_symmetric =
-                maximum_asymmetry <= ORBIT_COVARIANCE_CORRELATION_SYMMETRY_TOLERANCE;
-            if sufficiently_symmetric {
-                strictly_positive_definite =
-                    strict_cholesky(&correlation, semantic_dimension).is_ok();
-                if !strictly_positive_definite {
+            let symmetric = maximum_asymmetry <= ORBIT_COVARIANCE_CORRELATION_SYMMETRY_TOLERANCE;
+            sufficiently_symmetric = Some(symmetric);
+            if symmetric {
+                let positive_definite = strict_cholesky(&correlation, semantic_dimension).is_ok();
+                strictly_positive_definite = Some(positive_definite);
+                if !positive_definite {
                     issues.push(OrbitCovarianceIssue::NotPositiveDefinite);
                 }
             } else {
@@ -274,18 +278,13 @@ fn maximum_asymmetry(values: &[f64; MAX_COVARIANCE_ELEMENTS], dimension: usize) 
     let mut maximum = 0.0_f64;
     for r in 0..dimension {
         for c in (r + 1)..dimension {
-            maximum = maximum.max(
-                (values[r * dimension + c] - values[c * dimension + r]).abs(),
-            );
+            maximum = maximum.max((values[r * dimension + c] - values[c * dimension + r]).abs());
         }
     }
     maximum
 }
 
-fn strict_cholesky(
-    values: &[f64; MAX_COVARIANCE_ELEMENTS],
-    dimension: usize,
-) -> Result<(), ()> {
+fn strict_cholesky(values: &[f64; MAX_COVARIANCE_ELEMENTS], dimension: usize) -> Result<(), ()> {
     let mut lower = [0.0; MAX_COVARIANCE_ELEMENTS];
     for row in 0..dimension {
         for column in 0..=row {
@@ -320,11 +319,14 @@ fn assess_non_gravitational(
         })
         .unwrap_or([0.0; 3]);
     let coefficients_finite = effective_acceleration.iter().all(|value| value.is_finite());
-    let nominal_active = effective_acceleration
-        .iter()
-        .any(|value| value.is_finite() && *value != 0.0);
+    let nominal_active =
+        coefficients_finite.then(|| effective_acceleration.iter().any(|value| *value != 0.0));
     let covariance_may_activate = covariance_dimension == Some(9);
-    let law_required = nominal_active || covariance_may_activate;
+    let law_required = if covariance_may_activate {
+        Some(true)
+    } else {
+        nominal_active
+    };
 
     let constants = row
         .map(|row| [row.aln, row.nk, row.nm, row.nn, row.r0])
@@ -363,7 +365,7 @@ fn assess_non_gravitational(
             finite && alpha_positive && scale_positive
         }
     };
-    if law_required && !law_values_valid {
+    if law_required == Some(true) && !law_values_valid {
         issues.push(NonGravitationalIssue::RequiredMarsdenLawInvalid);
     }
 
@@ -423,8 +425,8 @@ mod tests {
             covariance,
         )
         .unwrap();
-        let orbit = OrbitBatch::new(vec![OrbitId("test".to_string())], vec![None], coordinates)
-            .unwrap();
+        let orbit =
+            OrbitBatch::new(vec![OrbitId("test".to_string())], vec![None], coordinates).unwrap();
         match non_gravitational_parameters {
             Some(parameters) => orbit.with_non_gravitational_parameters(parameters).unwrap(),
             None => orbit,
@@ -494,8 +496,8 @@ mod tests {
             assert_eq!(covariance.semantic_dimension, dimension);
             assert!(covariance.values_finite);
             assert!(covariance.positive_diagonal);
-            assert!(covariance.sufficiently_symmetric);
-            assert!(covariance.strictly_positive_definite);
+            assert_eq!(covariance.sufficiently_symmetric, Some(true));
+            assert_eq!(covariance.strictly_positive_definite, Some(true));
             assert_eq!(covariance.maximum_correlation_asymmetry, Some(0.0));
             assert!(covariance.issues.is_empty());
         }
@@ -510,7 +512,7 @@ mod tests {
         .unwrap();
         let covariance = present(&assessment[0]);
         assert_eq!(covariance.semantic_dimension, 6);
-        assert!(covariance.strictly_positive_definite);
+        assert_eq!(covariance.strictly_positive_definite, Some(true));
         assert!(!assessment[0].non_gravitational.covariance_may_activate);
     }
 
@@ -521,7 +523,7 @@ mod tests {
             .unwrap();
         let assessment = assess_orbit_batch(&orbit(Some(invalid), None)).unwrap();
         let covariance = present(&assessment[0]);
-        assert!(covariance.strictly_positive_definite);
+        assert_eq!(covariance.strictly_positive_definite, Some(true));
         assert_eq!(covariance.issues, vec![OrbitCovarianceIssue::InvalidRow]);
 
         let unsupported = CovarianceBatch::new(
@@ -533,58 +535,61 @@ mod tests {
         .unwrap();
         let assessment = assess_orbit_batch(&orbit(Some(unsupported), None)).unwrap();
         let covariance = present(&assessment[0]);
-        assert!(covariance.strictly_positive_definite);
-        assert_eq!(covariance.issues, vec![OrbitCovarianceIssue::UnsupportedUnits]);
+        assert_eq!(covariance.strictly_positive_definite, Some(true));
+        assert_eq!(
+            covariance.issues,
+            vec![OrbitCovarianceIssue::UnsupportedUnits]
+        );
     }
 
     #[test]
     fn covariance_numerical_failures_are_distinguished() {
         let mut nonfinite = diagonal_covariance(6);
         nonfinite[1] = f64::INFINITY;
-        let assessment = assess_orbit_batch(&orbit(
-            Some(cartesian_covariance(6, nonfinite)),
-            None,
-        ))
-        .unwrap();
+        let assessment =
+            assess_orbit_batch(&orbit(Some(cartesian_covariance(6, nonfinite)), None)).unwrap();
+        let covariance = present(&assessment[0]);
+        assert_eq!(covariance.sufficiently_symmetric, None);
+        assert_eq!(covariance.strictly_positive_definite, None);
         assert_eq!(
-            present(&assessment[0]).issues,
+            covariance.issues,
             vec![OrbitCovarianceIssue::NonFiniteValue]
         );
 
         let mut nonpositive = diagonal_covariance(6);
         nonpositive[0] = 0.0;
-        let assessment = assess_orbit_batch(&orbit(
-            Some(cartesian_covariance(6, nonpositive)),
-            None,
-        ))
-        .unwrap();
+        let assessment =
+            assess_orbit_batch(&orbit(Some(cartesian_covariance(6, nonpositive)), None)).unwrap();
+        let covariance = present(&assessment[0]);
+        assert_eq!(covariance.sufficiently_symmetric, None);
+        assert_eq!(covariance.strictly_positive_definite, None);
         assert_eq!(
-            present(&assessment[0]).issues,
+            covariance.issues,
             vec![OrbitCovarianceIssue::NonPositiveDiagonal]
         );
 
         let mut asymmetric = diagonal_covariance(6);
         asymmetric[1] = 2.0e-10;
-        let assessment = assess_orbit_batch(&orbit(
-            Some(cartesian_covariance(6, asymmetric)),
-            None,
-        ))
-        .unwrap();
+        let assessment =
+            assess_orbit_batch(&orbit(Some(cartesian_covariance(6, asymmetric)), None)).unwrap();
+        let covariance = present(&assessment[0]);
+        assert_eq!(covariance.sufficiently_symmetric, Some(false));
+        assert_eq!(covariance.strictly_positive_definite, None);
         assert_eq!(
-            present(&assessment[0]).issues,
+            covariance.issues,
             vec![OrbitCovarianceIssue::ExcessiveAsymmetry]
         );
 
         let mut indefinite = diagonal_covariance(6);
         indefinite[1] = 2.0;
         indefinite[6] = 2.0;
-        let assessment = assess_orbit_batch(&orbit(
-            Some(cartesian_covariance(6, indefinite)),
-            None,
-        ))
-        .unwrap();
+        let assessment =
+            assess_orbit_batch(&orbit(Some(cartesian_covariance(6, indefinite)), None)).unwrap();
+        let covariance = present(&assessment[0]);
+        assert_eq!(covariance.sufficiently_symmetric, Some(true));
+        assert_eq!(covariance.strictly_positive_definite, Some(false));
         assert_eq!(
-            present(&assessment[0]).issues,
+            covariance.issues,
             vec![OrbitCovarianceIssue::NotPositiveDefinite]
         );
     }
@@ -595,9 +600,9 @@ mod tests {
         let assessment = assess_orbit_batch(&orbit(None, Some(parameters))).unwrap();
         let non_grav = &assessment[0].non_gravitational;
         assert_eq!(non_grav.effective_acceleration, [0.0; 3]);
-        assert!(!non_grav.nominal_active);
+        assert_eq!(non_grav.nominal_active, Some(false));
         assert!(!non_grav.covariance_may_activate);
-        assert!(!non_grav.law_required);
+        assert_eq!(non_grav.law_required, Some(false));
         assert_eq!(non_grav.law_encoding, MarsdenLawEncoding::InverseSquare);
         assert!(non_grav.law_values_valid);
         assert!(non_grav.issues.is_empty());
@@ -608,8 +613,8 @@ mod tests {
         let inverse_square = nongrav(Some(1.0e-9), None, None, None, None, None, None, None);
         let assessment = assess_orbit_batch(&orbit(None, Some(inverse_square))).unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert!(non_grav.nominal_active);
-        assert!(non_grav.law_required);
+        assert_eq!(non_grav.nominal_active, Some(true));
+        assert_eq!(non_grav.law_required, Some(true));
         assert_eq!(non_grav.law_encoding, MarsdenLawEncoding::InverseSquare);
         assert!(non_grav.issues.is_empty());
 
@@ -635,7 +640,7 @@ mod tests {
         let parameters = nongrav(None, None, None, Some(1.0), None, None, None, None);
         let assessment = assess_orbit_batch(&orbit(None, Some(parameters))).unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert!(!non_grav.law_required);
+        assert_eq!(non_grav.law_required, Some(false));
         assert_eq!(non_grav.law_encoding, MarsdenLawEncoding::Partial);
         assert_eq!(
             non_grav.issues,
@@ -645,19 +650,10 @@ mod tests {
 
     #[test]
     fn active_partial_marsden_law_is_required_and_invalid() {
-        let parameters = nongrav(
-            Some(1.0e-9),
-            None,
-            None,
-            Some(1.0),
-            None,
-            None,
-            None,
-            None,
-        );
+        let parameters = nongrav(Some(1.0e-9), None, None, Some(1.0), None, None, None, None);
         let assessment = assess_orbit_batch(&orbit(None, Some(parameters))).unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert!(non_grav.law_required);
+        assert_eq!(non_grav.law_required, Some(true));
         assert_eq!(
             non_grav.issues,
             vec![
@@ -681,7 +677,7 @@ mod tests {
         );
         let assessment = assess_orbit_batch(&orbit(None, Some(parameters))).unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert!(non_grav.law_required);
+        assert_eq!(non_grav.law_required, Some(true));
         assert!(!non_grav.law_values_valid);
         assert_eq!(
             non_grav.issues,
@@ -695,19 +691,12 @@ mod tests {
 
     #[test]
     fn nonfinite_acceleration_is_reported_without_gravity_fallback() {
-        let parameters = nongrav(
-            Some(f64::NAN),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        let parameters = nongrav(Some(f64::NAN), None, None, None, None, None, None, None);
         let assessment = assess_orbit_batch(&orbit(None, Some(parameters))).unwrap();
         let non_grav = &assessment[0].non_gravitational;
         assert!(!non_grav.coefficients_finite);
+        assert_eq!(non_grav.nominal_active, None);
+        assert_eq!(non_grav.law_required, None);
         assert_eq!(
             non_grav.issues,
             vec![NonGravitationalIssue::NonFiniteAccelerationCoefficient]
@@ -732,9 +721,9 @@ mod tests {
         ))
         .unwrap();
         let non_grav = &assessment[0].non_gravitational;
-        assert!(!non_grav.nominal_active);
+        assert_eq!(non_grav.nominal_active, Some(false));
         assert!(non_grav.covariance_may_activate);
-        assert!(non_grav.law_required);
+        assert_eq!(non_grav.law_required, Some(true));
         assert!(non_grav.law_values_valid);
         assert!(non_grav.issues.is_empty());
     }
@@ -749,7 +738,7 @@ mod tests {
         let non_grav = &assessment[0].non_gravitational;
         assert_eq!(non_grav.effective_acceleration, [0.0; 3]);
         assert!(non_grav.covariance_may_activate);
-        assert!(non_grav.law_required);
+        assert_eq!(non_grav.law_required, Some(true));
         assert_eq!(non_grav.law_encoding, MarsdenLawEncoding::InverseSquare);
         assert!(non_grav.law_values_valid);
         assert!(non_grav.issues.is_empty());
