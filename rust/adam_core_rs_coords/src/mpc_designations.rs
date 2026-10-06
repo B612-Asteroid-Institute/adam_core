@@ -1531,7 +1531,7 @@ pub fn parse_ades_designation(
 }
 
 /// Legacy packed MPC epoch to ISOT string (TT scale).
-/// See https://minorplanetcenter.net/iau/info/PackedDates.html.
+/// See <https://minorplanetcenter.net/iau/info/PackedDates.html>.
 pub fn unpack_mpc_date_isot(epoch_pf: &str) -> Result<String> {
     let chars: Vec<char> = epoch_pf.chars().collect();
     if chars.len() < 5 {

@@ -11,7 +11,7 @@
 //!   n_used      — # rows in the fit
 //!
 //! NaN-as-sentinel for the optional outputs; the Python wrapper translates
-//! NaN → None to preserve the existing Optional[float] interface.
+//! NaN → None to preserve the existing `Optional[float]` interface.
 
 use rayon::prelude::*;
 

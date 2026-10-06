@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify adam-core Python/Rust prerelease versions before candidate builds."""
+"""Verify adam-core Python/Rust versions before preview or stable builds."""
 
 from __future__ import annotations
 
@@ -8,7 +8,10 @@ import tomllib
 from pathlib import Path
 from typing import Any
 
-from write_maturin_version import cargo_version_to_pep440
+try:
+    from .write_maturin_version import cargo_version_to_pep440
+except ImportError:
+    from write_maturin_version import cargo_version_to_pep440
 
 PUBLIC_CRATES = (
     "adam_core_rs_autodiff",
@@ -26,11 +29,24 @@ def _manifest(repo: Path, crate: str) -> dict[str, Any]:
         return tomllib.load(source)
 
 
-def verify(repo: Path, python_version: str, rust_version: str) -> None:
-    if not any(marker in python_version for marker in ("a", "b", "rc")):
+def verify(
+    repo: Path,
+    python_version: str,
+    rust_version: str,
+    channel: str = "preview",
+) -> None:
+    if channel not in {"preview", "stable"}:
+        raise ValueError(f"unsupported release channel: {channel}")
+    python_is_prerelease = any(marker in python_version for marker in ("a", "b", "rc"))
+    rust_is_prerelease = "-" in rust_version
+    if channel == "preview" and not python_is_prerelease:
         raise ValueError(f"Python version is not a prerelease: {python_version}")
-    if "-" not in rust_version:
+    if channel == "preview" and not rust_is_prerelease:
         raise ValueError(f"Rust version is not a prerelease: {rust_version}")
+    if channel == "stable" and python_is_prerelease:
+        raise ValueError(f"Python stable version is a prerelease: {python_version}")
+    if channel == "stable" and rust_is_prerelease:
+        raise ValueError(f"Rust stable version is a prerelease: {rust_version}")
 
     py_manifest = _manifest(repo, "adam_core_py")
     cargo_python_version = py_manifest["package"]["version"]
@@ -40,6 +56,13 @@ def verify(repo: Path, python_version: str, rust_version: str) -> None:
             f"adam_core_py {cargo_python_version} normalizes to {normalized}, "
             f"not {python_version}"
         )
+    if channel == "stable":
+        normalized_rust = cargo_version_to_pep440(rust_version)
+        if normalized_rust != python_version:
+            raise ValueError(
+                "stable Python and public Rust versions must align: "
+                f"{python_version} != {rust_version}"
+            )
 
     manifests = {crate: _manifest(repo, crate) for crate in PUBLIC_CRATES}
     mismatched = {
@@ -67,7 +90,7 @@ def verify(repo: Path, python_version: str, rust_version: str) -> None:
                 )
     if invalid_dependencies:
         raise ValueError(
-            "internal prerelease dependencies must be exact:\n  "
+            "internal release dependencies must be exact:\n  "
             + "\n  ".join(invalid_dependencies)
         )
 
@@ -77,10 +100,11 @@ def main() -> None:
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--python-version", required=True)
     parser.add_argument("--rust-version", required=True)
+    parser.add_argument("--channel", choices=("preview", "stable"), default="preview")
     args = parser.parse_args()
-    verify(args.repo.resolve(), args.python_version, args.rust_version)
+    verify(args.repo.resolve(), args.python_version, args.rust_version, args.channel)
     print(
-        f"verified preview versions: adam-core=={args.python_version}; "
+        f"verified {args.channel} versions: adam-core=={args.python_version}; "
         f"six Rust crates =={args.rust_version} with exact internal pins"
     )
 

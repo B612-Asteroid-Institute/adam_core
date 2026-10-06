@@ -1,16 +1,12 @@
 name: Release candidate wheel matrix
 
 on:
-  push:
-    branches: ["rust-migration-*"]
-  pull_request:
-    branches: [main, "v*"]
   workflow_dispatch:
     inputs:
       adam_assist_ref:
-        description: adam-assist revision to test with this adam-core revision
+        description: Exact compatible adam-assist revision to test
         required: true
-        default: release-candidate/adam-assist-0.4.0rc7
+        type: string
 
 permissions:
   contents: read
@@ -20,9 +16,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref || 'release-candidate/adam-assist-0.4.0rc7' }}
+  ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}
   PIP_ONLY_BINARY: ":all:"
-  PYTHON_PREVIEW_VERSION: "0.5.6rc6"
+  PYTHON_PREVIEW_VERSION: "0.5.8"
 
 jobs:
   artifact-acceptance:
@@ -69,6 +65,23 @@ jobs:
           path: adam-assist
           fetch-depth: 0
 
+      - name: Verify exact ASSIST revision and patch unpublished Core crates
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git -C adam-assist rev-parse HEAD)" = "$ADAM_ASSIST_REF"
+          mkdir -p adam-assist/.cargo
+          cat > adam-assist/.cargo/config.toml <<'EOF'
+          [patch.crates-io]
+          adam_core = { path = "../rust/adam_core" }
+          adam_core_rs_autodiff = { path = "../rust/adam_core_rs_autodiff" }
+          adam_core_rs_coords = { path = "../rust/adam_core_rs_coords" }
+          adam_core_rs_kernel_data = { path = "../rust/adam_core_rs_kernel_data" }
+          adam_core_rs_orbit_determination = { path = "../rust/adam_core_rs_orbit_determination" }
+          adam_core_rs_spice = { path = "../rust/adam_core_rs_spice" }
+          EOF
+
       - name: Set up CPython
         uses: actions/setup-python@v5
         with:
@@ -91,7 +104,6 @@ jobs:
           PY
 
       - name: Write adam-core runtime version
-        if: matrix.platform.family == 'manylinux'
         run: python migration/scripts/write_maturin_version.py
 
       - name: Build adam-core manylinux wheel
@@ -112,29 +124,30 @@ jobs:
           target: ${{ matrix.platform.target }}
           manylinux: "2_17"
           working-directory: adam-assist
-          args: --release -i python${{ matrix.python-version }} --out ../wheelhouse
+          args: --release --locked -i python${{ matrix.python-version }} --out ../wheelhouse
 
-      - name: Run exact clean-room acceptance with prebuilt manylinux wheels
-        if: matrix.platform.family == 'manylinux'
+      - name: Build adam-core native wheel
+        if: matrix.platform.family == 'native'
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          working-directory: .
+          args: --release -i python${{ matrix.python-version }} --out wheelhouse
+
+      - name: Build adam-assist native wheel
+        if: matrix.platform.family == 'native'
+        uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          working-directory: adam-assist
+          args: --release --locked -i python${{ matrix.python-version }} --out ../wheelhouse
+
+      - name: Run exact clean-room acceptance with prebuilt source-pair wheels
         shell: bash
         run: |
           set -euo pipefail
           python migration/scripts/run_clean_room_artifact_acceptance.py \
             --prebuilt-wheelhouse "$GITHUB_WORKSPACE/wheelhouse" \
-            --adam-core-repo "$GITHUB_WORKSPACE" \
-            --adam-core-ref HEAD \
-            --adam-assist-repo "$GITHUB_WORKSPACE/adam-assist" \
-            --adam-assist-ref HEAD \
-            --workspace "$RUNNER_TEMP/acceptance" \
-            --report "$RUNNER_TEMP/acceptance-report.json" \
-            --python "$(command -v python)"
-
-      - name: Build and run exact clean-room acceptance on native platform
-        if: matrix.platform.family == 'native'
-        shell: bash
-        run: |
-          set -euo pipefail
-          python migration/scripts/run_clean_room_artifact_acceptance.py \
             --adam-core-repo "$GITHUB_WORKSPACE" \
             --adam-core-ref HEAD \
             --adam-assist-repo "$GITHUB_WORKSPACE/adam-assist" \
@@ -156,9 +169,11 @@ jobs:
       - name: Verify platform wheel count and tags
         shell: bash
         run: |
+          python -m pip install --only-binary=:all: packaging
           python - <<'PY'
           import email
           import fnmatch
+          import json
           import os
           import zipfile
           from pathlib import Path
@@ -176,8 +191,46 @@ jobs:
               metadata = email.message_from_bytes(archive.read(metadata_paths[0]))
           if metadata["Name"] != "adam_core" or metadata["Version"] != expected_version:
               raise SystemExit(
-                  f"adam-core preview metadata mismatch: {metadata['Name']} {metadata['Version']}"
+                  f"adam-core release metadata mismatch: {metadata['Name']} {metadata['Version']}"
               )
+          with zipfile.ZipFile(assist[0]) as archive:
+              metadata_paths = [n for n in archive.namelist() if n.endswith(".dist-info/METADATA")]
+              if len(metadata_paths) != 1:
+                  raise SystemExit(f"unexpected ASSIST METADATA files: {metadata_paths}")
+              assist_metadata = email.message_from_bytes(archive.read(metadata_paths[0]))
+          from packaging.requirements import Requirement
+          from packaging.version import Version
+
+          core_requirements = [
+              requirement
+              for requirement in map(
+                  Requirement, assist_metadata.get_all("Requires-Dist", [])
+              )
+              if requirement.name == "adam-core" and requirement.marker is None
+          ]
+          if len(core_requirements) != 1:
+              raise SystemExit(
+                  "expected one unconditional adam-core requirement: "
+                  f"{core_requirements}"
+              )
+          if Version(expected_version) not in core_requirements[0].specifier:
+              raise SystemExit(
+                  "adam-assist does not admit the candidate Core version: "
+                  f"{expected_version} not in {core_requirements[0]}"
+              )
+          report = json.loads(
+              (Path(os.environ["RUNNER_TEMP"]) / "acceptance-report.json").read_text()
+          )
+          smoke_versions = report["runtime"]["smoke"]["stages"][
+              "imports_and_provenance"
+          ]["versions"]
+          smoke_runtime_versions = report["runtime"]["smoke"]["stages"][
+              "imports_and_provenance"
+          ]["runtime_versions"]
+          if smoke_versions["adam-core"] != expected_version:
+              raise SystemExit(f"installed adam-core mismatch: {smoke_versions}")
+          if smoke_runtime_versions["adam-core"] != expected_version:
+              raise SystemExit(f"runtime adam-core mismatch: {smoke_runtime_versions}")
           pattern = "*${{ matrix.platform.wheel_tag }}.whl"
           invalid = [
               path.name
@@ -187,6 +240,14 @@ jobs:
           if invalid:
               raise SystemExit(f"wheel tag mismatch for {pattern}: {invalid}")
           PY
+
+      - name: Preserve pairing patch evidence
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/acceptance"
+          cp adam-assist/.cargo/config.toml \
+            "$RUNNER_TEMP/acceptance/pairing-cargo-config.toml"
 
       - name: Upload wheel acceptance evidence
         if: always()
@@ -198,6 +259,7 @@ jobs:
             ${{ runner.temp }}/acceptance/invocation/smoke-report.json
             ${{ runner.temp }}/acceptance/wheelhouse/*.whl
             ${{ runner.temp }}/acceptance/logs/*.log
+            ${{ runner.temp }}/acceptance/pairing-cargo-config.toml
           if-no-files-found: error
 
   extended-coverage:
@@ -213,6 +275,22 @@ jobs:
           repository: B612-Asteroid-Institute/adam-assist
           ref: ${{ env.ADAM_ASSIST_REF }}
           path: .ci/adam-assist
+      - name: Verify exact ASSIST revision and patch unpublished Core crates
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git -C .ci/adam-assist rev-parse HEAD)" = "$ADAM_ASSIST_REF"
+          mkdir -p .ci/adam-assist/.cargo
+          cat > .ci/adam-assist/.cargo/config.toml <<'EOF'
+          [patch.crates-io]
+          adam_core = { path = "../../rust/adam_core" }
+          adam_core_rs_autodiff = { path = "../../rust/adam_core_rs_autodiff" }
+          adam_core_rs_coords = { path = "../../rust/adam_core_rs_coords" }
+          adam_core_rs_kernel_data = { path = "../../rust/adam_core_rs_kernel_data" }
+          adam_core_rs_orbit_determination = { path = "../../rust/adam_core_rs_orbit_determination" }
+          adam_core_rs_spice = { path = "../../rust/adam_core_rs_spice" }
+          EOF
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"

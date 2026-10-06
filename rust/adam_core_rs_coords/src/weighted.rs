@@ -1,7 +1,9 @@
 //! Small linear-algebra kernels for weighted-sample statistics.
 //!
-//! `weighted_mean`:        mean[d]   = Σ_i W[i] · samples[i,:]
-//! `weighted_covariance`:  cov[d,d]  = Σ_i W[i] · residual[i] ⊗ residual[i]
+//! ```text
+//! weighted_mean:        mean[d]  = Σ_i W[i] · samples[i,:]
+//! weighted_covariance:  cov[d,d] = Σ_i W[i] · residual[i] ⊗ residual[i]
+//! ```
 //!
 //! Both written as tight rust loops with the row-sequential access
 //! pattern. Auto-vectorizes well for typical D=6 (compiler unrolls the

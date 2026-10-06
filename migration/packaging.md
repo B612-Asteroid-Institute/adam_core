@@ -1,6 +1,6 @@
 # adam-core Rust Packaging Notes
 
-Last updated: 2026-08-27.
+Last updated: 2026-08-31.
 
 ## Supported Build Path
 
@@ -18,8 +18,7 @@ Last updated: 2026-08-27.
 - Stable versions are identical in both systems. Supported Cargo prereleases are normalized explicitly, for example `0.5.6-rc.1` to PEP 440 `0.5.6rc1`.
 - `pyproject.toml` does not declare `[tool.pdm.version]`; PDM SCM versioning is not part of the native wheel path.
 - If the checkout is exactly on a `vX.Y.Z` or prerelease tag, `write_maturin_version.py` fails when the normalized tag and Cargo versions differ.
-- `migration/scripts/verify_preview_versions.py` requires all six public Rust crates to share the candidate version (`0.1.0-rc.5`) and every internal prerelease dependency to use the exact requirement `=0.1.0-rc.5`.
-- Rust crate publication uses the Rust-version tag `v0.1.0-rc.5`, independently of Python wheel tags, so immutable registry ordering does not force a premature Python release commit.
+- `migration/scripts/verify_preview_versions.py` enforces explicit preview/stable channel semantics and exact public-crate pins. Stable version, tag, protected-environment, resumable-publication, and release-order policy is canonical in `docs/source/getting_started/releasing.rst`.
 
 ## uv Status
 

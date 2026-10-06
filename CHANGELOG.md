@@ -2,7 +2,29 @@
 
 This file contains notable changes in adam-core
 
-## [Unreleased]
+## [0.5.8] - 2026-10-05
+
+### Added
+
+- Standards-complete MPC minor-planet, comet, and satellite designation codecs,
+  plus strict classification into ADES `permID`, `provID`, and `trkSub` fields.
+- ATLAS Teide (`R17`) station and observatory-band mappings.
+
+### Changed
+
+- ADES `rmsRA` and `rmsDec` accept the representable positive range from
+  `0.00001` through values below `99999.5`, reducing fixed-point precision only
+  as needed to satisfy the seven-character PSV field width.
+
+### Compatibility
+
+- MPC designation codecs now require canonical, standards-defined spellings,
+  use the MPC A-prefix form for pre-1925 minor-planet provisionals, and raise
+  `ValueError` for malformed or ambiguous forms that legacy helpers accepted.
+- The minimum representable ADES `rmsRA` and `rmsDec` value is now `0.00001`;
+  smaller positive values cannot be represented in PosDecimalTypeW7.
+
+## [0.5.7] - 2026-08-31
 
 ### Added
 
@@ -17,8 +39,6 @@ This file contains notable changes in adam-core
 - Upstream `main` at `9b756803` is integrated: MPC Obs80 parsing, strict Scout
   `file=mpc` snapshots and lifecycle errors, and validity-bounded Trajectory
   methods are Rust-owned behind compatible Python schemas.
-- Standards-complete MPC minor-planet, comet, and satellite designation codecs,
-  plus strict classification into ADES `permID`, `provID`, and `trkSub` fields.
 
 ### Changed
 
@@ -39,9 +59,6 @@ This file contains notable changes in adam-core
 - `gaussIOD(mu=...)` now uses the supplied central-body gravitational parameter
   consistently for candidate geometry and velocity. The legacy implementation
   incorrectly reverted to the solar constant inside its velocity helpers.
-- ADES `rmsRA` and `rmsDec` accept the representable positive range from
-  `0.00001` through values below `99999.5`, reducing fixed-point precision only
-  as needed to satisfy the seven-character PSV field width.
 
 ### Compatibility
 
@@ -53,11 +70,12 @@ This file contains notable changes in adam-core
   arguments remain accepted where needed for call compatibility.
 - Optional Astropy/UT1, Astroquery monkeypatch, Healpy, plotting, external
   propagator, and provider integrations remain explicit boundaries.
-- MPC designation codecs now require canonical, standards-defined spellings,
-  use the MPC A-prefix form for pre-1925 minor-planet provisionals, and raise
-  `ValueError` for malformed or ambiguous forms that legacy helpers accepted.
-- The minimum representable ADES `rmsRA` and `rmsDec` value is now `0.00001`;
-  smaller positive values cannot be represented in PosDecimalTypeW7.
+
+### Known limitations
+
+- Near-parabolic and hyperbolic cometary conversion retains the inherited
+  legacy defect tracked by issue #210; its post-stable correction is not part
+  of this migration release.
 
 ## [0.2.4] - 2024-09-20
 
