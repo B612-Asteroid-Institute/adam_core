@@ -64,13 +64,14 @@ Release order
 Stable promotion remains separately approval-gated and proceeds in dependency
 order:
 
-#. prepare an exact ``adam-assist 0.4.1`` source candidate pinned to Core
-   ``0.5.8`` for paired acceptance without publishing ASSIST;
+#. prepare an ``adam-assist 0.4.1`` source candidate declaring compatibility
+   with Core ``>=0.5.7,<0.6`` and selecting Core ``0.5.8`` in its preliminary
+   locks for paired acceptance without publishing ASSIST;
 #. accept the exact Core ``0.5.8`` six-crate set and paired 12-wheel matrix;
 #. publish and verify the six Core crates in dependency order;
 #. publish and verify the exact Core Python wheel set;
-#. finalize the ASSIST Python/Rust exact pins and frozen lock against public
-   Core ``0.5.8``;
+#. finalize the ASSIST Python/Rust compatibility requirements and frozen
+   registry locks selected at public Core ``0.5.8``;
 #. accept, publish, and verify ``adam_assist 0.4.1`` and the exact
    ``adam-assist==0.4.1`` wheel set; and
 #. run clean no-lock Cargo 1.87/latest-stable and clean pip/current-uv

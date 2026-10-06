@@ -169,6 +169,7 @@ jobs:
       - name: Verify platform wheel count and tags
         shell: bash
         run: |
+          python -m pip install --only-binary=:all: packaging
           python - <<'PY'
           import email
           import fnmatch
@@ -197,15 +198,25 @@ jobs:
               if len(metadata_paths) != 1:
                   raise SystemExit(f"unexpected ASSIST METADATA files: {metadata_paths}")
               assist_metadata = email.message_from_bytes(archive.read(metadata_paths[0]))
-          assist_requirements = {
-              value.replace(" ", "").lower()
-              for value in assist_metadata.get_all("Requires-Dist", [])
-          }
-          expected_core_requirement = f"adam-core=={expected_version}"
-          if expected_core_requirement not in assist_requirements:
+          from packaging.requirements import Requirement
+          from packaging.version import Version
+
+          core_requirements = [
+              requirement
+              for requirement in map(
+                  Requirement, assist_metadata.get_all("Requires-Dist", [])
+              )
+              if requirement.name == "adam-core" and requirement.marker is None
+          ]
+          if len(core_requirements) != 1:
               raise SystemExit(
-                  "adam-assist does not require the candidate Core version: "
-                  f"{expected_core_requirement} not in {sorted(assist_requirements)}"
+                  "expected one unconditional adam-core requirement: "
+                  f"{core_requirements}"
+              )
+          if Version(expected_version) not in core_requirements[0].specifier:
+              raise SystemExit(
+                  "adam-assist does not admit the candidate Core version: "
+                  f"{expected_version} not in {core_requirements[0]}"
               )
           report = json.loads(
               (Path(os.environ["RUNNER_TEMP"]) / "acceptance-report.json").read_text()
