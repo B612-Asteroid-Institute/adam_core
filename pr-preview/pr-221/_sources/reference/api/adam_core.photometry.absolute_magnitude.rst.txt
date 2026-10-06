@@ -1,0 +1,7 @@
+adam\_core.photometry.absolute\_magnitude module
+================================================
+
+.. automodule:: adam_core.photometry.absolute_magnitude
+   :members:
+   :show-inheritance:
+   :undoc-members:
