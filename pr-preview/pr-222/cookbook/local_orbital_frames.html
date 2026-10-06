@@ -481,7 +481,7 @@ how the CCSDS orbit data messages use them.</p>
     <span class="n">propagated</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span>
 <span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">vnc</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span> <span class="n">vnc</span><span class="o">.</span><span class="n">reference_frame</span><span class="p">)</span>      <span class="c1"># VNC_ROTATING equatorial</span>
-<span class="nb">print</span><span class="p">(</span><span class="n">vnc</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>               <span class="c1"># (N, 6, 6) in AU and AU/day</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">vnc</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>    <span class="c1"># (N, 6, 6) in AU and AU/day</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">vnc</span><span class="o">.</span><span class="n">to_matrix_km</span><span class="p">()</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>            <span class="c1"># (N, 6, 6) in km and km/s</span>
 <span class="n">vnc</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">"covariance_vnc_rotating.parquet"</span><span class="p">)</span>
 </pre></div>

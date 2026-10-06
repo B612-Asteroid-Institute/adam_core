@@ -44,7 +44,7 @@ Covariance Product
        propagated, frame="VNC_ROTATING"
    )
    print(vnc.frame, vnc.reference_frame)      # VNC_ROTATING equatorial
-   print(vnc.to_matrix().shape)               # (N, 6, 6) in AU and AU/day
+   print(vnc.covariance.to_matrix().shape)    # (N, 6, 6) in AU and AU/day
    print(vnc.to_matrix_km().shape)            # (N, 6, 6) in km and km/s
    vnc.to_parquet("covariance_vnc_rotating.parquet")
 

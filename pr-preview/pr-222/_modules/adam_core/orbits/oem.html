@@ -434,20 +434,18 @@
           <h1>Source code for adam_core.orbits.oem</h1><div class="highlight"><pre>
 <span></span><span class="sd">"""CCSDS Orbit Ephemeris Message (OEM) with explicit metadata.</span>
 
-<span class="sd">The helpers in :mod:`adam_core.orbits.oem_io` write one fixed shape of file.</span>
-<span class="sd">This module adds a typed message whose CCSDS labels (center, reference frame,</span>
-<span class="sd">time system, version) are explicit, and a reader that keeps every header and</span>
-<span class="sd">metadata key it finds. Inside the message, states stay in adam_core units and</span>
-<span class="sd">frames. Only the rendered file is in kilometres and kilometres per second.</span>
+<span class="sd">:func:`adam_core.orbits.oem_io.orbit_to_oem` writes one fixed shape of file.</span>
+<span class="sd">:class:`OrbitEphemerisMessage` makes the CCSDS labels (center, reference</span>
+<span class="sd">frame, time system, version) explicit, renders through the same Rust KVN</span>
+<span class="sd">renderer, and reads every header and metadata keyword back. Inside the</span>
+<span class="sd">message states stay in adam_core units and frames. Only the file is in km.</span>
 
-<span class="sd">A state covariance in the OEM reference frame can be written into the</span>
-<span class="sd">covariance block. A covariance in a local orbital frame (see</span>
-<span class="sd">:mod:`adam_core.coordinates.local_orbital_frames`) can also be written there</span>
-<span class="sd">with its own ``COV_REF_FRAME`` label. The CCSDS orbit data message standard</span>
-<span class="sd">(502.0-B-3, section 3.2.4.11 via table 5-4) lists only ``RSW``, ``RTN`` and</span>
-<span class="sd">``TNW`` as local covariance frames for an OEM, so a ``VNC`` label is a</span>
-<span class="sd">registered SANA frame name outside that set. The writer records that with a</span>
-<span class="sd">comment line and can refuse it when ``strict`` is set.</span>
+<span class="sd">A covariance block is written on request, either in the OEM reference frame</span>
+<span class="sd">or rotated into a local orbital frame</span>
+<span class="sd">(:mod:`adam_core.coordinates.local_orbital_frames`) with its own</span>
+<span class="sd">``COV_REF_FRAME``. CCSDS 502.0-B-3 lists only RSW, RTN and TNW for that</span>
+<span class="sd">keyword (table 5-4 via 3.2.4.11), so a VNC label is recorded with a COMMENT</span>
+<span class="sd">line and refused under ``strict``.</span>
 <span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
@@ -467,10 +465,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoordinateCovariances</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.local_orbital_frames</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">LocalFrameCovariances</span><span class="p">,</span>
-    <span class="n">resolve_local_orbital_frame</span><span class="p">,</span>
-<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.local_orbital_frames</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalFrameCovariances</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.units</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">convert_cartesian_covariance_au_to_km</span><span class="p">,</span>
@@ -482,9 +477,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="s2">"EPOCH_PRECISION_NANOS"</span><span class="p">,</span>
     <span class="s2">"OEM_COVARIANCE_FRAMES"</span><span class="p">,</span>
-    <span class="s2">"OEM_DEFAULT_REF_FRAME"</span><span class="p">,</span>
     <span class="s2">"OEM_REF_FRAME_LABELS"</span><span class="p">,</span>
     <span class="s2">"OEM_TIME_SYSTEMS"</span><span class="p">,</span>
     <span class="s2">"OemHeader"</span><span class="p">,</span>
@@ -493,37 +486,27 @@
     <span class="s2">"OrbitEphemerisMessage"</span><span class="p">,</span>
 <span class="p">]</span>
 
-<span class="c1">#: OEM reference frame labels accepted for each adam_core frame on read, and</span>
-<span class="c1">#: allowed as overrides on write. Every label in a row names the same axes</span>
-<span class="c1">#: within the precision adam_core models (the ICRF to J2000 frame bias of</span>
-<span class="c1">#: about 23 milliarcseconds is not applied anywhere in adam_core).</span>
-<span class="n">OEM_REF_FRAME_LABELS</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span>
+<span class="c1">#: REF_FRAME labels accepted for each adam_core frame. The first is written</span>
+<span class="c1">#: by default. Every label in a row names the same axes within the precision</span>
+<span class="c1">#: adam_core models (the ICRF to J2000 frame bias of about 23 mas is not</span>
+<span class="c1">#: applied anywhere in adam_core).</span>
+<span class="n">OEM_REF_FRAME_LABELS</span> <span class="o">=</span> <span class="p">{</span>
     <span class="s2">"equatorial"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"ICRF"</span><span class="p">,</span> <span class="s2">"EME2000"</span><span class="p">,</span> <span class="s2">"J2000"</span><span class="p">,</span> <span class="s2">"GCRF"</span><span class="p">),</span>
     <span class="s2">"itrf93"</span><span class="p">:</span> <span class="p">(</span><span class="s2">"ITRF-93"</span><span class="p">,),</span>
 <span class="p">}</span>
 
-<span class="c1">#: Label written for each adam_core frame when the caller gives none.</span>
-<span class="n">OEM_DEFAULT_REF_FRAME</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">"equatorial"</span><span class="p">:</span> <span class="s2">"ICRF"</span><span class="p">,</span>
-    <span class="s2">"itrf93"</span><span class="p">:</span> <span class="s2">"ITRF-93"</span><span class="p">,</span>
-<span class="p">}</span>
-
-<span class="c1">#: OEM TIME_SYSTEM values mapped to adam_core Timestamp scales.</span>
-<span class="n">OEM_TIME_SYSTEMS</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s2">"TDB"</span><span class="p">:</span> <span class="s2">"tdb"</span><span class="p">,</span>
-    <span class="s2">"TT"</span><span class="p">:</span> <span class="s2">"tt"</span><span class="p">,</span>
-    <span class="s2">"TAI"</span><span class="p">:</span> <span class="s2">"tai"</span><span class="p">,</span>
-    <span class="s2">"UTC"</span><span class="p">:</span> <span class="s2">"utc"</span><span class="p">,</span>
-<span class="p">}</span>
+<span class="c1">#: TIME_SYSTEM values mapped to adam_core Timestamp scales.</span>
+<span class="n">OEM_TIME_SYSTEMS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"TDB"</span><span class="p">:</span> <span class="s2">"tdb"</span><span class="p">,</span> <span class="s2">"TT"</span><span class="p">:</span> <span class="s2">"tt"</span><span class="p">,</span> <span class="s2">"TAI"</span><span class="p">:</span> <span class="s2">"tai"</span><span class="p">,</span> <span class="s2">"UTC"</span><span class="p">:</span> <span class="s2">"utc"</span><span class="p">}</span>
 
 <span class="c1">#: Local orbital frames the OEM standard lists for COV_REF_FRAME (3.2.4.11).</span>
-<span class="n">OEM_COVARIANCE_FRAMES</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"RSW"</span><span class="p">,</span> <span class="s2">"RTN"</span><span class="p">,</span> <span class="s2">"TNW"</span><span class="p">)</span>
+<span class="n">OEM_COVARIANCE_FRAMES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"RSW"</span><span class="p">,</span> <span class="s2">"RTN"</span><span class="p">,</span> <span class="s2">"TNW"</span><span class="p">)</span>
 
-<span class="c1">#: Epoch precision of the KVN renderer, in nanoseconds. Epochs are written</span>
-<span class="c1">#: with three decimal places of seconds.</span>
-<span class="n">EPOCH_PRECISION_NANOS</span> <span class="o">=</span> <span class="mi">1_000_000</span>
+<span class="c1"># The Rust KVN renderer writes epochs with three decimal places of seconds.</span>
+<span class="n">_EPOCH_PRECISION_NANOS</span> <span class="o">=</span> <span class="mi">1_000_000</span>
 
-<span class="n">_METADATA_ORDER</span> <span class="o">=</span> <span class="p">(</span>
+<span class="c1"># Metadata keywords in CCSDS table 5-3 order. Each is a field of</span>
+<span class="c1"># OemSegmentMetadata in lower case.</span>
+<span class="n">_METADATA_KEYS</span> <span class="o">=</span> <span class="p">(</span>
     <span class="s2">"OBJECT_NAME"</span><span class="p">,</span>
     <span class="s2">"OBJECT_ID"</span><span class="p">,</span>
     <span class="s2">"CENTER_NAME"</span><span class="p">,</span>
@@ -543,29 +526,12 @@
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbits.oem.html#adam_core.orbits.OemHeader">[docs]</a>
 <span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 <span class="k">class</span><span class="w"> </span><span class="nc">OemHeader</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    OEM header block.</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    originator : str</span>
-<span class="sd">        ORIGINATOR, the organisation producing the file.</span>
-<span class="sd">    creation_date : str, optional</span>
-<span class="sd">        CREATION_DATE in UTC as ``YYYY-MM-DDTHH:MM:SS``. When None the write</span>
-<span class="sd">        time in UTC is used.</span>
-<span class="sd">    ccsds_oem_vers : str, optional</span>
-<span class="sd">        CCSDS_OEM_VERS. Default ``"3.0"``, the current standard.</span>
-<span class="sd">    message_id : str, optional</span>
-<span class="sd">        MESSAGE_ID, optional in OEM 3.0.</span>
-<span class="sd">    comments : tuple of str, optional</span>
-<span class="sd">        COMMENT lines written after the version line.</span>
-<span class="sd">    """</span>
+<span class="w">    </span><span class="sd">"""OEM header. ``creation_date`` is UTC and defaults to the write time."""</span>
 
     <span class="n">originator</span><span class="p">:</span> <span class="nb">str</span>
     <span class="n">creation_date</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">ccsds_oem_vers</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"3.0"</span>
-    <span class="n">message_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">comments</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span></div>
+    <span class="n">message_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
 
@@ -576,11 +542,10 @@
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    OEM metadata block for one segment.</span>
 
-<span class="sd">    Every field is the CCSDS keyword of the same name in lower case. Labels are</span>
-<span class="sd">    CCSDS labels, for example ``center_name="SUN"``, ``ref_frame="ICRF"``,</span>
-<span class="sd">    ``time_system="TDB"``. Times are rendered epoch strings in ``time_system``.</span>
-<span class="sd">    ``extra`` keeps keywords this module does not model, in file order, so a</span>
-<span class="sd">    read file can be written back without losing them.</span>
+<span class="sd">    Fields are the CCSDS keywords in lower case and hold CCSDS labels, for</span>
+<span class="sd">    example ``center_name="SUN"``, ``ref_frame="ICRF"``, ``time_system="TDB"``.</span>
+<span class="sd">    ``comments`` are written after META_START. ``extra`` keeps keywords this</span>
+<span class="sd">    module does not model, in file order.</span>
 <span class="sd">    """</span>
 
     <span class="n">object_name</span><span class="p">:</span> <span class="nb">str</span>
@@ -598,56 +563,16 @@
     <span class="n">comments</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
     <span class="n">extra</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">],</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
 
-<div class="viewcode-block" id="OemSegmentMetadata.adam_frame">
-<a class="viewcode-back" href="../../../reference/api/adam_core.orbits.oem.html#adam_core.orbits.OemSegmentMetadata.adam_frame">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">adam_frame</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""adam_core frame matching ``ref_frame``."""</span>
-        <span class="k">return</span> <span class="n">_oem_frame_to_adam</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ref_frame</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="OemSegmentMetadata.adam_origin_code">
-<a class="viewcode-back" href="../../../reference/api/adam_core.orbits.oem.html#adam_core.orbits.OemSegmentMetadata.adam_origin_code">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">adam_origin_code</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""adam_core origin code matching ``center_name``."""</span>
-        <span class="c1"># Imported here because oem_io imports the orbits package, which</span>
-        <span class="c1"># imports this module.</span>
-        <span class="kn">from</span><span class="w"> </span><span class="nn">.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">_oem_to_adam_center</span>
-
-        <span class="k">return</span> <span class="n">_oem_to_adam_center</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">center_name</span><span class="p">)</span></div>
-
-
-<div class="viewcode-block" id="OemSegmentMetadata.adam_time_scale">
-<a class="viewcode-back" href="../../../reference/api/adam_core.orbits.oem.html#adam_core.orbits.OemSegmentMetadata.adam_time_scale">[docs]</a>
-    <span class="k">def</span><span class="w"> </span><span class="nf">adam_time_scale</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""adam_core Timestamp scale matching ``time_system``."""</span>
-        <span class="k">return</span> <span class="n">_oem_time_system_to_scale</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">time_system</span><span class="p">)</span></div>
-
-
 <div class="viewcode-block" id="OemSegmentMetadata.as_ordered_items">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbits.oem.html#adam_core.orbits.OemSegmentMetadata.as_ordered_items">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">as_ordered_items</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]]:</span>
 <span class="w">        </span><span class="sd">"""Metadata as ``(keyword, value)`` pairs in CCSDS table 5-3 order."""</span>
-        <span class="n">values</span> <span class="o">=</span> <span class="p">{</span>
-            <span class="s2">"OBJECT_NAME"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">object_name</span><span class="p">,</span>
-            <span class="s2">"OBJECT_ID"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">object_id</span><span class="p">,</span>
-            <span class="s2">"CENTER_NAME"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">center_name</span><span class="p">,</span>
-            <span class="s2">"REF_FRAME"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_frame</span><span class="p">,</span>
-            <span class="s2">"REF_FRAME_EPOCH"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_frame_epoch</span><span class="p">,</span>
-            <span class="s2">"TIME_SYSTEM"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">time_system</span><span class="p">,</span>
-            <span class="s2">"START_TIME"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">start_time</span><span class="p">,</span>
-            <span class="s2">"USEABLE_START_TIME"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">useable_start_time</span><span class="p">,</span>
-            <span class="s2">"USEABLE_STOP_TIME"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">useable_stop_time</span><span class="p">,</span>
-            <span class="s2">"STOP_TIME"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">stop_time</span><span class="p">,</span>
-            <span class="s2">"INTERPOLATION"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">interpolation</span><span class="p">,</span>
-            <span class="s2">"INTERPOLATION_DEGREE"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">interpolation_degree</span><span class="p">,</span>
-        <span class="p">}</span>
         <span class="n">items</span> <span class="o">=</span> <span class="p">[</span>
-            <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">values</span><span class="p">[</span><span class="n">key</span><span class="p">]))</span>
-            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_METADATA_ORDER</span>
-            <span class="k">if</span> <span class="n">values</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+            <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="o">.</span><span class="n">lower</span><span class="p">())))</span>
+            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_METADATA_KEYS</span>
+            <span class="k">if</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">key</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
         <span class="p">]</span>
-        <span class="n">items</span><span class="o">.</span><span class="n">extend</span><span class="p">((</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">))</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">extra</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">items</span></div>
+        <span class="k">return</span> <span class="n">items</span> <span class="o">+</span> <span class="p">[(</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">))</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">extra</span><span class="p">]</span></div>
 </div>
 
 
@@ -659,12 +584,11 @@
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    One OEM segment: a metadata block and the states it describes.</span>
 
-<span class="sd">    ``states`` is an :class:`~adam_core.orbits.orbits.Orbits` table in</span>
-<span class="sd">    adam_core units with the frame, origin and time scale implied by the</span>
-<span class="sd">    metadata. A covariance block whose frame equals ``REF_FRAME`` is carried</span>
-<span class="sd">    on ``states.coordinates.covariance``. Covariance records in another frame</span>
-<span class="sd">    are kept in ``local_covariances`` with the file's label as ``frame``.</span>
-<span class="sd">    ``local_covariances`` is only populated by :meth:`OrbitEphemerisMessage.from_kvn`.</span>
+<span class="sd">    ``states`` is in adam_core units with the frame, origin and time scale the</span>
+<span class="sd">    metadata implies. A covariance block in ``REF_FRAME`` is carried on</span>
+<span class="sd">    ``states.coordinates.covariance``. Covariance records in another frame are</span>
+<span class="sd">    kept in ``local_covariances`` with the file's label as ``frame``, which</span>
+<span class="sd">    only :meth:`OrbitEphemerisMessage.from_kvn` populates.</span>
 <span class="sd">    """</span>
 
     <span class="n">metadata</span><span class="p">:</span> <span class="n">OemSegmentMetadata</span>
@@ -680,10 +604,9 @@
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    A CCSDS OEM: one header and one or more segments.</span>
 
-<span class="sd">    Build one from propagated states with :meth:`from_orbits`, render it with</span>
-<span class="sd">    :meth:`to_kvn` or :meth:`write`, and read one back with :meth:`from_kvn`.</span>
-<span class="sd">    Writing supports one segment, which is one object per file. Reading keeps</span>
-<span class="sd">    every segment.</span>
+<span class="sd">    Build one with :meth:`from_orbits`, render it with :meth:`to_kvn` or</span>
+<span class="sd">    :meth:`write`, read one back with :meth:`from_kvn`. Writing supports one</span>
+<span class="sd">    segment, one object per file. Reading keeps every segment.</span>
 <span class="sd">    """</span>
 
     <span class="n">header</span><span class="p">:</span> <span class="n">OemHeader</span>
@@ -700,15 +623,11 @@
         <span class="n">object_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">object_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">ref_frame</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">center_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">time_system</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">creation_date</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">ccsds_oem_vers</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"3.0"</span><span class="p">,</span>
         <span class="n">message_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">comments</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
         <span class="n">metadata_comments</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
-        <span class="n">interpolation</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">interpolation_degree</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"OrbitEphemerisMessage"</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Build a single-segment message from a multi-epoch state history.</span>
@@ -716,77 +635,47 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        orbits : `~adam_core.orbits.orbits.Orbits` (N)</span>
-<span class="sd">            States of one object at N epochs, for example the output of</span>
-<span class="sd">            ``propagate_orbits``. ``object_id`` must be set and single valued.</span>
-<span class="sd">            The frame must be ``"equatorial"`` or ``"itrf93"``. Ecliptic</span>
-<span class="sd">            states raise, transform them first. Rows are sorted by time and</span>
-<span class="sd">            epochs must be unique.</span>
+<span class="sd">            States of one object at N unique epochs, for example the output</span>
+<span class="sd">            of ``propagate_orbits``, in the ``"equatorial"`` or ``"itrf93"``</span>
+<span class="sd">            frame with a single non-null ``object_id`` and a single origin.</span>
+<span class="sd">            Rows are sorted by time.</span>
 <span class="sd">        originator : str</span>
 <span class="sd">            ORIGINATOR header value.</span>
 <span class="sd">        object_name, object_id : str, optional</span>
 <span class="sd">            OBJECT_NAME and OBJECT_ID. Default to the orbits' ``object_id``.</span>
 <span class="sd">        ref_frame : str, optional</span>
-<span class="sd">            REF_FRAME label. Default ``"ICRF"`` for equatorial states and</span>
-<span class="sd">            ``"ITRF-93"`` for ITRF93 states. An override must name the same</span>
-<span class="sd">            axes, see :data:`OEM_REF_FRAME_LABELS`.</span>
-<span class="sd">        center_name : str, optional</span>
-<span class="sd">            CENTER_NAME. Default derived from the orbits' origin, for example</span>
-<span class="sd">            ``"SUN"``.</span>
+<span class="sd">            REF_FRAME label. Defaults to ``"ICRF"`` for equatorial states. An</span>
+<span class="sd">            override must name the same axes, see :data:`OEM_REF_FRAME_LABELS`.</span>
 <span class="sd">        time_system : str, optional</span>
-<span class="sd">            TIME_SYSTEM. Default is the Timestamp scale of the orbits in upper</span>
-<span class="sd">            case. A different value rescales every epoch before writing.</span>
-<span class="sd">        creation_date, ccsds_oem_vers, message_id, comments :</span>
+<span class="sd">            TIME_SYSTEM. Defaults to the Timestamp scale in upper case. A</span>
+<span class="sd">            different value rescales every epoch.</span>
+<span class="sd">        creation_date, ccsds_oem_vers, message_id : optional</span>
 <span class="sd">            Header fields, see :class:`OemHeader`.</span>
 <span class="sd">        metadata_comments : sequence of str, optional</span>
 <span class="sd">            COMMENT lines written after META_START.</span>
-<span class="sd">        interpolation, interpolation_degree : optional</span>
-<span class="sd">            INTERPOLATION and INTERPOLATION_DEGREE metadata.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        message : `OrbitEphemerisMessage`</span>
 <span class="sd">        """</span>
         <span class="n">states</span> <span class="o">=</span> <span class="n">_single_object_sorted</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span>
         <span class="n">coords</span> <span class="o">=</span> <span class="n">states</span><span class="o">.</span><span class="n">coordinates</span>
-
-        <span class="kn">from</span><span class="w"> </span><span class="nn">.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">_adam_to_oem_center</span>
-
-        <span class="n">frame_label</span> <span class="o">=</span> <span class="n">_adam_frame_to_oem</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span> <span class="n">ref_frame</span><span class="p">)</span>
-        <span class="n">center</span> <span class="o">=</span> <span class="n">center_name</span> <span class="ow">or</span> <span class="n">_adam_to_oem_center</span><span class="p">(</span>
-            <span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">unique</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
-        <span class="p">)</span>
-        <span class="n">scale</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span>
-        <span class="n">system</span> <span class="o">=</span> <span class="p">(</span><span class="n">time_system</span> <span class="ow">or</span> <span class="n">scale</span><span class="p">)</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
-        <span class="n">target_scale</span> <span class="o">=</span> <span class="n">_oem_time_system_to_scale</span><span class="p">(</span><span class="n">system</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">target_scale</span> <span class="o">!=</span> <span class="n">scale</span><span class="p">:</span>
-            <span class="n">states</span> <span class="o">=</span> <span class="n">states</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
-                <span class="s2">"coordinates.time"</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="n">target_scale</span><span class="p">)</span>
-            <span class="p">)</span>
-            <span class="n">states</span> <span class="o">=</span> <span class="n">_single_object_sorted</span><span class="p">(</span><span class="n">states</span><span class="p">)</span>
+        <span class="n">ref_frame</span> <span class="o">=</span> <span class="n">_ref_frame_label</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span> <span class="n">ref_frame</span><span class="p">)</span>
+        <span class="n">time_system</span> <span class="o">=</span> <span class="p">(</span><span class="n">time_system</span> <span class="ow">or</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span><span class="p">)</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+        <span class="n">scale</span> <span class="o">=</span> <span class="n">_time_scale</span><span class="p">(</span><span class="n">time_system</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">scale</span> <span class="o">!=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span><span class="p">:</span>
+            <span class="n">states</span> <span class="o">=</span> <span class="n">states</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"coordinates.time"</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">rescale</span><span class="p">(</span><span class="n">scale</span><span class="p">))</span>
             <span class="n">coords</span> <span class="o">=</span> <span class="n">states</span><span class="o">.</span><span class="n">coordinates</span>
-
-        <span class="n">default_id</span> <span class="o">=</span> <span class="n">states</span><span class="o">.</span><span class="n">object_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
         <span class="n">epochs</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_iso8601</span><span class="p">()</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
+        <span class="n">default_id</span> <span class="o">=</span> <span class="n">states</span><span class="o">.</span><span class="n">object_id</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">()</span>
         <span class="n">metadata</span> <span class="o">=</span> <span class="n">OemSegmentMetadata</span><span class="p">(</span>
             <span class="n">object_name</span><span class="o">=</span><span class="n">object_name</span> <span class="ow">or</span> <span class="n">default_id</span><span class="p">,</span>
             <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span> <span class="ow">or</span> <span class="n">default_id</span><span class="p">,</span>
-            <span class="n">center_name</span><span class="o">=</span><span class="n">center</span><span class="p">,</span>
-            <span class="n">ref_frame</span><span class="o">=</span><span class="n">frame_label</span><span class="p">,</span>
-            <span class="n">time_system</span><span class="o">=</span><span class="n">system</span><span class="p">,</span>
+            <span class="n">center_name</span><span class="o">=</span><span class="n">_center_name</span><span class="p">(</span><span class="n">coords</span><span class="p">),</span>
+            <span class="n">ref_frame</span><span class="o">=</span><span class="n">ref_frame</span><span class="p">,</span>
+            <span class="n">time_system</span><span class="o">=</span><span class="n">time_system</span><span class="p">,</span>
             <span class="n">start_time</span><span class="o">=</span><span class="n">epochs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
             <span class="n">stop_time</span><span class="o">=</span><span class="n">epochs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
-            <span class="n">interpolation</span><span class="o">=</span><span class="n">interpolation</span><span class="p">,</span>
-            <span class="n">interpolation_degree</span><span class="o">=</span><span class="n">interpolation_degree</span><span class="p">,</span>
             <span class="n">comments</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">metadata_comments</span><span class="p">),</span>
         <span class="p">)</span>
-        <span class="n">header</span> <span class="o">=</span> <span class="n">OemHeader</span><span class="p">(</span>
-            <span class="n">originator</span><span class="o">=</span><span class="n">originator</span><span class="p">,</span>
-            <span class="n">creation_date</span><span class="o">=</span><span class="n">creation_date</span><span class="p">,</span>
-            <span class="n">ccsds_oem_vers</span><span class="o">=</span><span class="n">ccsds_oem_vers</span><span class="p">,</span>
-            <span class="n">message_id</span><span class="o">=</span><span class="n">message_id</span><span class="p">,</span>
-            <span class="n">comments</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="n">comments</span><span class="p">),</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">header</span><span class="o">=</span><span class="n">header</span><span class="p">,</span> <span class="n">segments</span><span class="o">=</span><span class="p">(</span><span class="n">OemSegment</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">states</span><span class="p">),))</span></div>
+        <span class="n">header</span> <span class="o">=</span> <span class="n">OemHeader</span><span class="p">(</span><span class="n">originator</span><span class="p">,</span> <span class="n">creation_date</span><span class="p">,</span> <span class="n">ccsds_oem_vers</span><span class="p">,</span> <span class="n">message_id</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="p">(</span><span class="n">OemSegment</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">states</span><span class="p">),))</span></div>
 
 
 <div class="viewcode-block" id="OrbitEphemerisMessage.to_kvn">
@@ -805,32 +694,24 @@
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        covariance_frame : str, optional</span>
-<span class="sd">            Frame of the covariance block. None writes no covariance block.</span>
-<span class="sd">            The segment's REF_FRAME label writes ``states.coordinates.covariance``</span>
-<span class="sd">            as is. A local orbital frame name or alias (``"TNW"``,</span>
-<span class="sd">            ``"VNC_ROTATING"``, ...) rotates each epoch's covariance into that</span>
-<span class="sd">            frame and writes it with a per record COV_REF_FRAME. The label is</span>
-<span class="sd">            written exactly as given. When the segment was read from a file</span>
-<span class="sd">            and carries ``local_covariances`` under that same label, that</span>
-<span class="sd">            block is written back unchanged instead of being recomputed.</span>
+<span class="sd">            Frame of the covariance block. None writes no block. The REF_FRAME</span>
+<span class="sd">            label writes ``states.coordinates.covariance``. A local orbital</span>
+<span class="sd">            frame name or alias (``"TNW"``, ``"VNC_ROTATING"``, ...) rotates</span>
+<span class="sd">            each epoch's covariance into that frame and writes a per record</span>
+<span class="sd">            COV_REF_FRAME with the label as given. A segment read from a file</span>
+<span class="sd">            with ``local_covariances`` under that label writes them back</span>
+<span class="sd">            unchanged.</span>
 <span class="sd">        strict : bool, optional</span>
-<span class="sd">            When True, refuse a covariance frame outside the set the OEM</span>
-<span class="sd">            standard lists (the REF_FRAME set plus RSW, RTN, TNW). When False,</span>
-<span class="sd">            the default, such a frame is written and a COMMENT line in the</span>
-<span class="sd">            metadata block records that it is a SANA orbit-relative frame</span>
-<span class="sd">            outside that set.</span>
+<span class="sd">            Refuse a covariance frame outside the REF_FRAME set and</span>
+<span class="sd">            :data:`OEM_COVARIANCE_FRAMES`. Off by default, in which case such</span>
+<span class="sd">            a frame is written and a COMMENT line records that it is a SANA</span>
+<span class="sd">            orbit-relative frame outside the OEM set.</span>
 <span class="sd">        mu : float or array, optional</span>
 <span class="sd">            Gravitational parameter for the frame rate of ``_ROTATING``</span>
 <span class="sd">            covariance frames. Defaults to the origin's value.</span>
 <span class="sd">        allow_epoch_rounding : bool, optional</span>
-<span class="sd">            The renderer writes epochs with millisecond precision. By default</span>
-<span class="sd">            an epoch that is not on a millisecond boundary raises so a state</span>
-<span class="sd">            is never silently placed at a shifted time. Set True to round.</span>
-
-<span class="sd">        Returns</span>
-<span class="sd">        -------</span>
-<span class="sd">        str</span>
-<span class="sd">            The KVN text.</span>
+<span class="sd">            Epochs are written with millisecond precision. By default an epoch</span>
+<span class="sd">            off that grid raises so a state is never silently shifted in time.</span>
 <span class="sd">        """</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span>
@@ -838,28 +719,12 @@
                 <span class="sa">f</span><span class="s2">"(one object per file), got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">)</span><span class="si">}</span><span class="s2">."</span>
             <span class="p">)</span>
         <span class="n">segment</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="n">metadata</span> <span class="o">=</span> <span class="n">segment</span><span class="o">.</span><span class="n">metadata</span>
         <span class="n">states</span> <span class="o">=</span> <span class="n">_single_object_sorted</span><span class="p">(</span><span class="n">segment</span><span class="o">.</span><span class="n">states</span><span class="p">)</span>
         <span class="n">coords</span> <span class="o">=</span> <span class="n">states</span><span class="o">.</span><span class="n">coordinates</span>
-        <span class="n">_check_frame_matches</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span> <span class="n">metadata</span><span class="o">.</span><span class="n">ref_frame</span><span class="p">)</span>
-        <span class="n">_check_center_matches</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">metadata</span><span class="o">.</span><span class="n">center_name</span><span class="p">)</span>
-        <span class="n">scale</span> <span class="o">=</span> <span class="n">_oem_time_system_to_scale</span><span class="p">(</span><span class="n">metadata</span><span class="o">.</span><span class="n">time_system</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span> <span class="o">!=</span> <span class="n">scale</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"States are in time scale </span><span class="si">{</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span><span class="si">!r}</span><span class="s2"> but the metadata "</span>
-                <span class="sa">f</span><span class="s2">"TIME_SYSTEM is </span><span class="si">{</span><span class="n">metadata</span><span class="o">.</span><span class="n">time_system</span><span class="si">!r}</span><span class="s2">."</span>
-            <span class="p">)</span>
-        <span class="n">_check_epoch_precision</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="p">,</span> <span class="n">allow_epoch_rounding</span><span class="p">)</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="n">_checked_metadata</span><span class="p">(</span><span class="n">segment</span><span class="o">.</span><span class="n">metadata</span><span class="p">,</span> <span class="n">coords</span><span class="p">,</span> <span class="n">allow_epoch_rounding</span><span class="p">)</span>
 
-        <span class="n">epochs</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_iso8601</span><span class="p">()</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
-        <span class="n">metadata</span> <span class="o">=</span> <span class="n">replace</span><span class="p">(</span>
-            <span class="n">metadata</span><span class="p">,</span>
-            <span class="n">start_time</span><span class="o">=</span><span class="n">metadata</span><span class="o">.</span><span class="n">start_time</span> <span class="ow">or</span> <span class="n">epochs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
-            <span class="n">stop_time</span><span class="o">=</span><span class="n">metadata</span><span class="o">.</span><span class="n">stop_time</span> <span class="ow">or</span> <span class="n">epochs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
-        <span class="p">)</span>
-
-        <span class="n">records</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">metadata_comments</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">metadata</span><span class="o">.</span><span class="n">comments</span><span class="p">)</span>
+        <span class="n">records</span><span class="p">:</span> <span class="nb">list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">comments</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">metadata</span><span class="o">.</span><span class="n">comments</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">covariance_frame</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">records</span><span class="p">,</span> <span class="n">note</span> <span class="o">=</span> <span class="n">_covariance_records</span><span class="p">(</span>
                 <span class="n">states</span><span class="p">,</span>
@@ -869,38 +734,29 @@
                 <span class="n">mu</span><span class="p">,</span>
                 <span class="n">segment</span><span class="o">.</span><span class="n">local_covariances</span><span class="p">,</span>
             <span class="p">)</span>
-            <span class="k">if</span> <span class="n">note</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-                <span class="n">metadata_comments</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">note</span><span class="p">)</span>
+            <span class="n">comments</span> <span class="o">+=</span> <span class="p">[</span><span class="n">note</span><span class="p">]</span> <span class="k">if</span> <span class="n">note</span> <span class="k">else</span> <span class="p">[]</span>
 
-        <span class="n">header_items</span> <span class="o">=</span> <span class="p">[(</span><span class="s2">"CCSDS_OEM_VERS"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">ccsds_oem_vers</span><span class="p">)]</span>
-        <span class="n">header_items</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="p">(</span>
-                <span class="s2">"CREATION_DATE"</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">creation_date</span> <span class="ow">or</span> <span class="n">_utc_now_iso</span><span class="p">(),</span>
-            <span class="p">)</span>
-        <span class="p">)</span>
-        <span class="n">header_items</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">"ORIGINATOR"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">originator</span><span class="p">))</span>
+        <span class="n">header</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="s2">"CCSDS_OEM_VERS"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">ccsds_oem_vers</span><span class="p">),</span>
+            <span class="p">(</span><span class="s2">"CREATION_DATE"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">creation_date</span> <span class="ow">or</span> <span class="n">_utc_now</span><span class="p">()),</span>
+            <span class="p">(</span><span class="s2">"ORIGINATOR"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">originator</span><span class="p">),</span>
+        <span class="p">]</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">message_id</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">header_items</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">"MESSAGE_ID"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">message_id</span><span class="p">))</span>
-
-        <span class="n">text</span> <span class="o">=</span> <span class="n">_render_kvn</span><span class="p">(</span>
-            <span class="n">header_items</span><span class="p">,</span>
-            <span class="n">metadata</span><span class="o">.</span><span class="n">as_ordered_items</span><span class="p">(),</span>
-            <span class="n">coords</span><span class="p">,</span>
-            <span class="n">records</span><span class="p">,</span>
-        <span class="p">)</span>
-        <span class="k">return</span> <span class="n">_insert_comments</span><span class="p">(</span><span class="n">text</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">comments</span><span class="p">,</span> <span class="n">metadata_comments</span><span class="p">)</span></div>
+            <span class="n">header</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="s2">"MESSAGE_ID"</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="o">.</span><span class="n">message_id</span><span class="p">))</span>
+        <span class="n">text</span> <span class="o">=</span> <span class="n">_render_kvn</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">metadata</span><span class="o">.</span><span class="n">as_ordered_items</span><span class="p">(),</span> <span class="n">coords</span><span class="p">,</span> <span class="n">records</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">comments</span><span class="p">:</span>
+            <span class="n">lines</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
+            <span class="n">at</span> <span class="o">=</span> <span class="n">lines</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="s2">"META_START"</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="n">lines</span><span class="p">[</span><span class="n">at</span><span class="p">:</span><span class="n">at</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"COMMENT </span><span class="si">{</span><span class="n">comment</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">comment</span> <span class="ow">in</span> <span class="n">comments</span><span class="p">]</span>
+            <span class="n">text</span> <span class="o">=</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">lines</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">text</span></div>
 
 
 <div class="viewcode-block" id="OrbitEphemerisMessage.write">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbits.oem.html#adam_core.orbits.OrbitEphemerisMessage.write">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span><span class="p">],</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""</span>
-<span class="sd">        Write the message to ``path`` as KVN. Keyword arguments are those of</span>
-<span class="sd">        :meth:`to_kvn`. Returns the path as a string.</span>
-<span class="sd">        """</span>
-        <span class="n">text</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_kvn</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-        <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+<span class="w">        </span><span class="sd">"""Write KVN to ``path``. Keyword arguments are those of :meth:`to_kvn`."""</span>
+        <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">write_text</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_kvn</span><span class="p">(</span><span class="o">**</span><span class="n">kwargs</span><span class="p">))</span>
         <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">)</span></div>
 
 
@@ -911,79 +767,61 @@
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Read a KVN OEM file.</span>
 
-<span class="sd">        Every header and metadata keyword is kept. COMMENT lines are not,</span>
-<span class="sd">        the parser drops them. States are converted to AU and AU/day in the</span>
-<span class="sd">        adam_core frame matching REF_FRAME. Covariance records in REF_FRAME</span>
-<span class="sd">        attach to ``states.coordinates.covariance``. Records in a different</span>
-<span class="sd">        frame become a :class:`~adam_core.coordinates.local_orbital_frames.LocalFrameCovariances`</span>
-<span class="sd">        on the segment with the file's label as ``frame``.</span>
-
-<span class="sd">        Raises</span>
-<span class="sd">        ------</span>
-<span class="sd">        ValueError</span>
-<span class="sd">            For a REF_FRAME, CENTER_NAME or TIME_SYSTEM this module does not</span>
-<span class="sd">            map, or for covariance records in more than one non REF_FRAME</span>
-<span class="sd">            frame within a segment.</span>
+<span class="sd">        Every header and metadata keyword is kept (the parser drops COMMENT</span>
+<span class="sd">        lines). States are converted to AU and AU/day in the adam_core frame</span>
+<span class="sd">        matching REF_FRAME. Covariance records at a state epoch attach to</span>
+<span class="sd">        ``states.coordinates.covariance`` when in REF_FRAME, otherwise they</span>
+<span class="sd">        become the segment's ``local_covariances`` with the file's label.</span>
+<span class="sd">        Raises ``ValueError`` for labels this module does not map or for more</span>
+<span class="sd">        than one non REF_FRAME covariance frame in a segment.</span>
 <span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
         <span class="n">payload</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">_rn</span><span class="o">.</span><span class="n">oem_parse_kvn</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">path</span><span class="p">)))</span>
-        <span class="n">raw_header</span> <span class="o">=</span> <span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"header"</span><span class="p">,</span> <span class="p">{})</span>
+        <span class="n">raw</span> <span class="o">=</span> <span class="n">payload</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"header"</span><span class="p">,</span> <span class="p">{})</span>
         <span class="n">header</span> <span class="o">=</span> <span class="n">OemHeader</span><span class="p">(</span>
-            <span class="n">originator</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">raw_header</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ORIGINATOR"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
-            <span class="n">creation_date</span><span class="o">=</span><span class="n">_optional_str</span><span class="p">(</span><span class="n">raw_header</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CREATION_DATE"</span><span class="p">)),</span>
-            <span class="n">ccsds_oem_vers</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">raw_header</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CCSDS_OEM_VERS"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
-            <span class="n">message_id</span><span class="o">=</span><span class="n">_optional_str</span><span class="p">(</span><span class="n">raw_header</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"MESSAGE_ID"</span><span class="p">)),</span>
+            <span class="n">originator</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ORIGINATOR"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
+            <span class="n">creation_date</span><span class="o">=</span><span class="n">_optional_str</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CREATION_DATE"</span><span class="p">)),</span>
+            <span class="n">ccsds_oem_vers</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"CCSDS_OEM_VERS"</span><span class="p">,</span> <span class="s2">""</span><span class="p">)),</span>
+            <span class="n">message_id</span><span class="o">=</span><span class="n">_optional_str</span><span class="p">(</span><span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"MESSAGE_ID"</span><span class="p">)),</span>
         <span class="p">)</span>
-        <span class="n">segments</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_segment_from_payload</span><span class="p">(</span><span class="n">raw</span><span class="p">)</span> <span class="k">for</span> <span class="n">raw</span> <span class="ow">in</span> <span class="n">payload</span><span class="p">[</span><span class="s2">"segments"</span><span class="p">])</span>
-        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">header</span><span class="o">=</span><span class="n">header</span><span class="p">,</span> <span class="n">segments</span><span class="o">=</span><span class="n">segments</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">cls</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">_segment_from_payload</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">payload</span><span class="p">[</span><span class="s2">"segments"</span><span class="p">]))</span></div>
 
 
 <div class="viewcode-block" id="OrbitEphemerisMessage.to_orbits">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbits.oem.html#adam_core.orbits.OrbitEphemerisMessage.to_orbits">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">to_orbits</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""</span>
-<span class="sd">        States of every segment as one Orbits table.</span>
-
-<span class="sd">        Raises</span>
-<span class="sd">        ------</span>
-<span class="sd">        ValueError</span>
-<span class="sd">            If segments disagree on frame or time scale, because the</span>
-<span class="sd">            concatenated table carries one of each.</span>
-<span class="sd">        """</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
+<span class="w">        </span><span class="sd">"""States of every segment as one Orbits table. Segments must share a frame and time scale."""</span>
         <span class="n">tables</span> <span class="o">=</span> <span class="p">[</span><span class="n">segment</span><span class="o">.</span><span class="n">states</span> <span class="k">for</span> <span class="n">segment</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">segments</span><span class="p">]</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">tables</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
         <span class="n">frames</span> <span class="o">=</span> <span class="p">{</span><span class="n">table</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">frame</span> <span class="k">for</span> <span class="n">table</span> <span class="ow">in</span> <span class="n">tables</span><span class="p">}</span>
         <span class="n">scales</span> <span class="o">=</span> <span class="p">{</span><span class="n">table</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span> <span class="k">for</span> <span class="n">table</span> <span class="ow">in</span> <span class="n">tables</span><span class="p">}</span>
         <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">scales</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">"Segments have mixed frames or time scales "</span>
-                <span class="sa">f</span><span class="s2">"(frames </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span><span class="si">}</span><span class="s2">, scales </span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">scales</span><span class="p">)</span><span class="si">}</span><span class="s2">), "</span>
-                <span class="s2">"convert them before concatenating."</span>
+                <span class="sa">f</span><span class="s2">"Segments have mixed frames or time scales (</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">frames</span><span class="p">)</span><span class="si">}</span><span class="s2">, "</span>
+                <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">sorted</span><span class="p">(</span><span class="n">scales</span><span class="p">)</span><span class="si">}</span><span class="s2">), convert them before concatenating."</span>
             <span class="p">)</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">tables</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">tables</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">tables</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="n">tables</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">tables</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="k">else</span> <span class="n">qv</span><span class="o">.</span><span class="n">concatenate</span><span class="p">(</span><span class="n">tables</span><span class="p">)</span></div>
 </div>
 
 
 
-<span class="c1"># --- label maps -----------------------------------------------------------------</span>
+<span class="c1"># --- labels -----------------------------------------------------------------------</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_adam_frame_to_oem</span><span class="p">(</span><span class="n">frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_ref_frame_label</span><span class="p">(</span><span class="n">frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">frame</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">OEM_REF_FRAME_LABELS</span><span class="p">:</span>
         <span class="n">hint</span> <span class="o">=</span> <span class="p">(</span>
             <span class="s2">" Transform to the equatorial frame first."</span> <span class="k">if</span> <span class="n">frame</span> <span class="o">==</span> <span class="s2">"ecliptic"</span> <span class="k">else</span> <span class="s2">""</span>
         <span class="p">)</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"Frame </span><span class="si">{</span><span class="n">frame</span><span class="si">!r}</span><span class="s2"> cannot be written to an OEM. Supported adam_core "</span>
-            <span class="sa">f</span><span class="s2">"frames are </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">OEM_REF_FRAME_LABELS</span><span class="p">)</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">hint</span><span class="si">}</span><span class="s2">"</span>
+            <span class="sa">f</span><span class="s2">"Frame </span><span class="si">{</span><span class="n">frame</span><span class="si">!r}</span><span class="s2"> cannot be written to an OEM. Supported frames are "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">OEM_REF_FRAME_LABELS</span><span class="p">)</span><span class="si">}</span><span class="s2">.</span><span class="si">{</span><span class="n">hint</span><span class="si">}</span><span class="s2">"</span>
         <span class="p">)</span>
-    <span class="k">if</span> <span class="n">label</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">OEM_DEFAULT_REF_FRAME</span><span class="p">[</span><span class="n">frame</span><span class="p">]</span>
     <span class="n">allowed</span> <span class="o">=</span> <span class="n">OEM_REF_FRAME_LABELS</span><span class="p">[</span><span class="n">frame</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">label</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">allowed</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
     <span class="k">if</span> <span class="n">label</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">allowed</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"REF_FRAME </span><span class="si">{</span><span class="n">label</span><span class="si">!r}</span><span class="s2"> does not name the axes of adam_core frame "</span>
@@ -992,39 +830,37 @@
     <span class="k">return</span> <span class="n">label</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_oem_frame_to_adam</span><span class="p">(</span><span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-    <span class="n">upper</span> <span class="o">=</span> <span class="n">label</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_adam_frame</span><span class="p">(</span><span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
     <span class="k">for</span> <span class="n">frame</span><span class="p">,</span> <span class="n">labels</span> <span class="ow">in</span> <span class="n">OEM_REF_FRAME_LABELS</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
-        <span class="k">if</span> <span class="n">upper</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">label</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">frame</span>
-    <span class="n">supported</span> <span class="o">=</span> <span class="p">[</span><span class="n">label</span> <span class="k">for</span> <span class="n">labels</span> <span class="ow">in</span> <span class="n">OEM_REF_FRAME_LABELS</span><span class="o">.</span><span class="n">values</span><span class="p">()</span> <span class="k">for</span> <span class="n">label</span> <span class="ow">in</span> <span class="n">labels</span><span class="p">]</span>
     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-        <span class="sa">f</span><span class="s2">"Unsupported OEM REF_FRAME: </span><span class="si">{</span><span class="n">label</span><span class="si">!r}</span><span class="s2">. Supported labels are </span><span class="si">{</span><span class="n">supported</span><span class="si">}</span><span class="s2">."</span>
+        <span class="sa">f</span><span class="s2">"Unsupported OEM REF_FRAME: </span><span class="si">{</span><span class="n">label</span><span class="si">!r}</span><span class="s2">. Supported labels are "</span>
+        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="p">[</span><span class="n">x</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">labels</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">OEM_REF_FRAME_LABELS</span><span class="o">.</span><span class="n">values</span><span class="p">()</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">x</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">labels</span><span class="p">]</span><span class="si">}</span><span class="s2">."</span>
     <span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_check_frame_matches</span><span class="p">(</span><span class="n">frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="k">if</span> <span class="n">_oem_frame_to_adam</span><span class="p">(</span><span class="n">label</span><span class="p">)</span> <span class="o">!=</span> <span class="n">frame</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"States are in frame </span><span class="si">{</span><span class="n">frame</span><span class="si">!r}</span><span class="s2"> but the metadata REF_FRAME is </span><span class="si">{</span><span class="n">label</span><span class="si">!r}</span><span class="s2">."</span>
-        <span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_oem_time_system_to_scale</span><span class="p">(</span><span class="n">system</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-    <span class="n">upper</span> <span class="o">=</span> <span class="n">system</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
-    <span class="k">if</span> <span class="n">upper</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">OEM_TIME_SYSTEMS</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_time_scale</span><span class="p">(</span><span class="n">system</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">OEM_TIME_SYSTEMS</span><span class="p">[</span><span class="n">system</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">upper</span><span class="p">()]</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"Unsupported OEM TIME_SYSTEM: </span><span class="si">{</span><span class="n">system</span><span class="si">!r}</span><span class="s2">. Supported values are "</span>
             <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">OEM_TIME_SYSTEMS</span><span class="p">)</span><span class="si">}</span><span class="s2">."</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">OEM_TIME_SYSTEMS</span><span class="p">[</span><span class="n">upper</span><span class="p">]</span>
+        <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="kc">None</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_center_name</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">_adam_to_oem_center</span>
+
+    <span class="k">return</span> <span class="n">_adam_to_oem_center</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">())</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_optional_str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
     <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="n">value</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_utc_now_iso</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_utc_now</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
     <span class="k">return</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(</span><span class="n">datetime</span><span class="o">.</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">"%Y-%m-</span><span class="si">%d</span><span class="s2">T%H:%M:%S"</span><span class="p">)</span>
 
 
@@ -1032,175 +868,141 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_single_object_sorted</span><span class="p">(</span><span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""One object, one origin, unique epochs, sorted by time."""</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"An OEM needs at least one state."</span><span class="p">)</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">pc</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(</span><span class="n">orbits</span><span class="o">.</span><span class="n">object_id</span><span class="p">))</span><span class="o">.</span><span class="n">as_py</span><span class="p">():</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Every state needs an object_id for the OEM metadata."</span><span class="p">)</span>
-    <span class="n">object_ids</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">object_id</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+    <span class="n">object_ids</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">object_id</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">object_ids</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="s2">"An OEM carries one object per file, got object_ids "</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">object_ids</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span><span class="si">}</span><span class="s2">."</span>
-        <span class="p">)</span>
-    <span class="n">origins</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"An OEM carries one object per file, got </span><span class="si">{</span><span class="n">object_ids</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+    <span class="n">origins</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">origins</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="s2">"An OEM segment has one CENTER_NAME, so every state needs the same "</span>
-            <span class="sa">f</span><span class="s2">"origin, got </span><span class="si">{</span><span class="n">origins</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span><span class="si">}</span><span class="s2">."</span>
+            <span class="sa">f</span><span class="s2">"An OEM segment has one CENTER_NAME, so every state needs the same "</span>
+            <span class="sa">f</span><span class="s2">"origin, got </span><span class="si">{</span><span class="n">origins</span><span class="si">}</span><span class="s2">."</span>
         <span class="p">)</span>
-    <span class="n">time</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span>
-    <span class="n">days</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">nanos</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">days</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">nanos</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
     <span class="n">order</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">lexsort</span><span class="p">((</span><span class="n">nanos</span><span class="p">,</span> <span class="n">days</span><span class="p">))</span>
-    <span class="n">sorted_days</span> <span class="o">=</span> <span class="n">days</span><span class="p">[</span><span class="n">order</span><span class="p">]</span>
-    <span class="n">sorted_nanos</span> <span class="o">=</span> <span class="n">nanos</span><span class="p">[</span><span class="n">order</span><span class="p">]</span>
-    <span class="n">duplicate</span> <span class="o">=</span> <span class="p">(</span><span class="n">sorted_days</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">==</span> <span class="n">sorted_days</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">&amp;</span> <span class="p">(</span>
-        <span class="n">sorted_nanos</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">==</span> <span class="n">sorted_nanos</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
-    <span class="p">)</span>
-    <span class="k">if</span> <span class="n">duplicate</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+    <span class="n">epochs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">days</span><span class="p">[</span><span class="n">order</span><span class="p">],</span> <span class="n">nanos</span><span class="p">[</span><span class="n">order</span><span class="p">]],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="p">(</span><span class="n">epochs</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">==</span> <span class="n">epochs</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Epochs must be unique within an OEM segment."</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">))):</span>
         <span class="k">return</span> <span class="n">orbits</span>
-    <span class="k">return</span> <span class="n">orbits</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">int64</span><span class="p">()))</span>
+    <span class="k">return</span> <span class="n">orbits</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">order</span><span class="p">))</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_check_epoch_precision</span><span class="p">(</span><span class="n">time</span><span class="p">:</span> <span class="n">Timestamp</span><span class="p">,</span> <span class="n">allow_rounding</span><span class="p">:</span> <span class="nb">bool</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="n">days</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">nanos</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">off_grid</span> <span class="o">=</span> <span class="n">nanos</span> <span class="o">%</span> <span class="n">EPOCH_PRECISION_NANOS</span> <span class="o">!=</span> <span class="mi">0</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_checked_metadata</span><span class="p">(</span>
+    <span class="n">metadata</span><span class="p">:</span> <span class="n">OemSegmentMetadata</span><span class="p">,</span> <span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">allow_rounding</span><span class="p">:</span> <span class="nb">bool</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OemSegmentMetadata</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Check the metadata against the states and fill START_TIME and STOP_TIME."""</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">expected</span><span class="p">,</span> <span class="n">actual</span> <span class="ow">in</span> <span class="p">(</span>
+        <span class="p">(</span><span class="s2">"REF_FRAME"</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="p">,</span> <span class="n">_adam_frame</span><span class="p">(</span><span class="n">metadata</span><span class="o">.</span><span class="n">ref_frame</span><span class="p">)),</span>
+        <span class="p">(</span><span class="s2">"CENTER_NAME"</span><span class="p">,</span> <span class="n">_center_name</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span><span class="o">.</span><span class="n">upper</span><span class="p">(),</span> <span class="n">metadata</span><span class="o">.</span><span class="n">center_name</span><span class="o">.</span><span class="n">upper</span><span class="p">()),</span>
+        <span class="p">(</span><span class="s2">"TIME_SYSTEM"</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span> <span class="n">_time_scale</span><span class="p">(</span><span class="n">metadata</span><span class="o">.</span><span class="n">time_system</span><span class="p">)),</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">expected</span> <span class="o">!=</span> <span class="n">actual</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">"Metadata </span><span class="si">{</span><span class="n">name</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span><span class="w"> </span><span class="n">name</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span><span class="si">!r}</span><span class="s2"> does not "</span>
+                <span class="s2">"match the states."</span>
+            <span class="p">)</span>
+    <span class="n">days</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">nanos</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">off_grid</span> <span class="o">=</span> <span class="n">nanos</span> <span class="o">%</span> <span class="n">_EPOCH_PRECISION_NANOS</span> <span class="o">!=</span> <span class="mi">0</span>
     <span class="k">if</span> <span class="n">off_grid</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
         <span class="k">if</span> <span class="ow">not</span> <span class="n">allow_rounding</span><span class="p">:</span>
-            <span class="n">row</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">off_grid</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"Epoch at row </span><span class="si">{</span><span class="n">row</span><span class="si">}</span><span class="s2"> is not on a millisecond boundary and the OEM "</span>
-                <span class="s2">"renderer writes three decimal places of seconds. Choose epochs on "</span>
-                <span class="s2">"millisecond boundaries or pass allow_epoch_rounding=True."</span>
+                <span class="sa">f</span><span class="s2">"Epoch at row </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">off_grid</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span><span class="si">}</span><span class="s2"> is not on a "</span>
+                <span class="s2">"millisecond boundary and OEM epochs are written with three "</span>
+                <span class="s2">"decimal places of seconds. Pass allow_epoch_rounding=True to round."</span>
             <span class="p">)</span>
-        <span class="n">rounded</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">nanos</span> <span class="o">/</span> <span class="n">EPOCH_PRECISION_NANOS</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-        <span class="n">keys</span> <span class="o">=</span> <span class="n">days</span> <span class="o">*</span> <span class="p">(</span><span class="mi">86_400_000</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">rounded</span>
-        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">keys</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">keys</span><span class="p">):</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">"Two epochs fall in the same millisecond, so the rendered OEM "</span>
-                <span class="s2">"would carry duplicate epochs. Thin the states before writing."</span>
-            <span class="p">)</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_check_center_matches</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">center_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">_adam_to_oem_center</span>
-
-    <span class="n">expected</span> <span class="o">=</span> <span class="n">_adam_to_oem_center</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">unique</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">as_py</span><span class="p">())</span>
-    <span class="k">if</span> <span class="n">center_name</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="o">!=</span> <span class="n">expected</span><span class="o">.</span><span class="n">upper</span><span class="p">():</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"States have origin </span><span class="si">{</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span><span class="si">}</span><span class="s2"> "</span>
-            <span class="sa">f</span><span class="s2">"(CENTER_NAME </span><span class="si">{</span><span class="n">expected</span><span class="si">}</span><span class="s2">) but the metadata CENTER_NAME is "</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">center_name</span><span class="si">!r}</span><span class="s2">."</span>
-        <span class="p">)</span>
+        <span class="n">rounded</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">days</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">nanos</span> <span class="o">/</span> <span class="n">_EPOCH_PRECISION_NANOS</span><span class="p">)],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">rounded</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">rounded</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Two epochs fall in the same millisecond."</span><span class="p">)</span>
+    <span class="n">epochs</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">to_iso8601</span><span class="p">()</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">replace</span><span class="p">(</span>
+        <span class="n">metadata</span><span class="p">,</span>
+        <span class="n">start_time</span><span class="o">=</span><span class="n">metadata</span><span class="o">.</span><span class="n">start_time</span> <span class="ow">or</span> <span class="n">epochs</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+        <span class="n">stop_time</span><span class="o">=</span><span class="n">metadata</span><span class="o">.</span><span class="n">stop_time</span> <span class="ow">or</span> <span class="n">epochs</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span>
+    <span class="p">)</span>
 
 
 <span class="c1"># --- covariance block -----------------------------------------------------------</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_is_standard_covariance_frame</span><span class="p">(</span><span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">ref_frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-    <span class="n">upper</span> <span class="o">=</span> <span class="n">label</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">upper</span> <span class="o">==</span> <span class="n">ref_frame</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="ow">or</span> <span class="n">upper</span> <span class="ow">in</span> <span class="n">OEM_COVARIANCE_FRAMES</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_lower_triangle</span><span class="p">(</span><span class="n">matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]:</span>
-    <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tril_indices</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span>
-    <span class="k">return</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">matrix</span><span class="p">[</span><span class="n">rows</span><span class="p">,</span> <span class="n">cols</span><span class="p">]]</span>
-
-
 <span class="k">def</span><span class="w"> </span><span class="nf">_covariance_records</span><span class="p">(</span>
     <span class="n">states</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
     <span class="n">ref_frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="n">covariance_frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">label</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">strict</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
-    <span class="n">mu</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]],</span>
-    <span class="n">stored</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">LocalFrameCovariances</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">mu</span><span class="p">,</span>
+    <span class="n">stored</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">LocalFrameCovariances</span><span class="p">],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]],</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]]:</span>
-    <span class="n">label</span> <span class="o">=</span> <span class="n">covariance_frame</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-    <span class="n">note</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+<span class="w">    </span><span class="sd">"""Per epoch (days, nanos, frame, lower triangle in km) plus an optional COMMENT."""</span>
+    <span class="n">label</span> <span class="o">=</span> <span class="n">label</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
     <span class="n">coords</span> <span class="o">=</span> <span class="n">states</span><span class="o">.</span><span class="n">coordinates</span>
+    <span class="n">days</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
+    <span class="n">nanos</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
+    <span class="n">note</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">if</span> <span class="n">label</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="o">==</span> <span class="n">ref_frame</span><span class="o">.</span><span class="n">upper</span><span class="p">():</span>
         <span class="k">if</span> <span class="n">coords</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">is_all_nan</span><span class="p">():</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="sa">f</span><span class="s2">"covariance_frame=</span><span class="si">{</span><span class="n">covariance_frame</span><span class="si">!r}</span><span class="s2"> was requested but the "</span>
-                <span class="s2">"states carry no covariance."</span>
-            <span class="p">)</span>
-        <span class="n">matrices</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
-        <span class="n">label</span> <span class="o">=</span> <span class="n">ref_frame</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"The states carry no covariance."</span><span class="p">)</span>
+        <span class="n">label</span><span class="p">,</span> <span class="n">matrices</span> <span class="o">=</span> <span class="n">ref_frame</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="n">_is_standard_covariance_frame</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">ref_frame</span><span class="p">):</span>
-            <span class="n">message</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="k">if</span> <span class="n">label</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">OEM_COVARIANCE_FRAMES</span><span class="p">:</span>
+            <span class="n">note</span> <span class="o">=</span> <span class="p">(</span>
                 <span class="sa">f</span><span class="s2">"COV_REF_FRAME </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> is a SANA orbit-relative reference frame "</span>
                 <span class="s2">"outside the OEM covariance frame set of CCSDS 502.0-B-3 "</span>
                 <span class="sa">f</span><span class="s2">"section 3.2.4.11 (</span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">OEM_COVARIANCE_FRAMES</span><span class="p">)</span><span class="si">}</span><span class="s2">)."</span>
             <span class="p">)</span>
             <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">message</span> <span class="o">+</span> <span class="s2">" Pass strict=False to write it anyway."</span><span class="p">)</span>
-            <span class="n">note</span> <span class="o">=</span> <span class="n">message</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">note</span> <span class="o">+</span> <span class="s2">" Pass strict=False to write it anyway."</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">stored</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">stored</span><span class="o">.</span><span class="n">frame</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="o">==</span> <span class="n">label</span><span class="o">.</span><span class="n">upper</span><span class="p">():</span>
-            <span class="c1"># A segment read from a file keeps its local-frame block here.</span>
-            <span class="c1"># Writing the same label writes that block back unchanged.</span>
-            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">stored</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">states</span><span class="p">):</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">"local_covariances must be row aligned with the states."</span>
+            <span class="n">by_epoch</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
+                <span class="nb">zip</span><span class="p">(</span>
+                    <span class="nb">zip</span><span class="p">(</span><span class="n">stored</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span> <span class="n">stored</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()),</span>
+                    <span class="n">stored</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">(),</span>
                 <span class="p">)</span>
-            <span class="n">matrices</span> <span class="o">=</span> <span class="n">stored</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
+            <span class="p">)</span>
+            <span class="n">missing</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
+            <span class="n">matrices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+                <span class="p">[</span><span class="n">by_epoch</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">epoch</span><span class="p">,</span> <span class="n">missing</span><span class="p">)</span> <span class="k">for</span> <span class="n">epoch</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">days</span><span class="p">,</span> <span class="n">nanos</span><span class="p">)]</span>
+            <span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">canonical</span> <span class="o">=</span> <span class="n">resolve_local_orbital_frame</span><span class="p">(</span><span class="n">label</span><span class="p">)</span>
-            <span class="k">if</span> <span class="n">coords</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">is_all_nan</span><span class="p">():</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"covariance_frame=</span><span class="si">{</span><span class="n">covariance_frame</span><span class="si">!r}</span><span class="s2"> was requested but the "</span>
-                    <span class="s2">"states carry no covariance."</span>
-                <span class="p">)</span>
             <span class="n">matrices</span> <span class="o">=</span> <span class="n">LocalFrameCovariances</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span>
-                <span class="n">states</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="n">canonical</span><span class="p">,</span> <span class="n">mu</span><span class="o">=</span><span class="n">mu</span>
-            <span class="p">)</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
+                <span class="n">states</span><span class="p">,</span> <span class="n">label</span><span class="p">,</span> <span class="n">mu</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
 
     <span class="n">matrices_km</span> <span class="o">=</span> <span class="n">convert_cartesian_covariance_au_to_km</span><span class="p">(</span><span class="n">matrices</span><span class="p">)</span>
-    <span class="n">days</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">nanos</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">records</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">states</span><span class="p">)):</span>
-        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">matrices_km</span><span class="p">[</span><span class="n">i</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">():</span>
-            <span class="k">continue</span>
-        <span class="n">records</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
-            <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">days</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">nanos</span><span class="p">[</span><span class="n">i</span><span class="p">]),</span> <span class="n">label</span><span class="p">,</span> <span class="n">_lower_triangle</span><span class="p">(</span><span class="n">matrices_km</span><span class="p">[</span><span class="n">i</span><span class="p">]))</span>
-        <span class="p">)</span>
-    <span class="k">return</span> <span class="n">records</span><span class="p">,</span> <span class="n">note</span>
+    <span class="n">lower</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">tril_indices</span><span class="p">(</span><span class="mi">6</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span>
+        <span class="p">(</span><span class="n">days</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">nanos</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">label</span><span class="p">,</span> <span class="n">matrices_km</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">lower</span><span class="p">]</span><span class="o">.</span><span class="n">tolist</span><span class="p">())</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">states</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">matrices_km</span><span class="p">[</span><span class="n">i</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
+    <span class="p">],</span> <span class="n">note</span>
 
 
-<span class="c1"># --- rendering --------------------------------------------------------------------</span>
+<span class="c1"># --- rendering and parsing ----------------------------------------------------</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_render_kvn</span><span class="p">(</span>
-    <span class="n">header_items</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]],</span>
-    <span class="n">metadata_items</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">str</span><span class="p">]],</span>
-    <span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span><span class="p">,</span>
-    <span class="n">records</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">str</span><span class="p">,</span> <span class="nb">list</span><span class="p">[</span><span class="nb">float</span><span class="p">]]],</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_render_kvn</span><span class="p">(</span><span class="n">header</span><span class="p">,</span> <span class="n">metadata</span><span class="p">,</span> <span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">records</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Render through the Rust KVN renderer, which owns epoch and float formatting."""</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
-    <span class="n">header_json</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">header_items</span><span class="p">))</span>
-    <span class="n">metadata_json</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">metadata_items</span><span class="p">))</span>
-    <span class="n">days</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
-    <span class="n">nanos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
-    <span class="n">states_km</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
-        <span class="n">convert_cartesian_values_au_to_km</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">values</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span>
-    <span class="p">)</span>
     <span class="n">handle</span><span class="p">,</span> <span class="n">path</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">mkstemp</span><span class="p">(</span><span class="n">suffix</span><span class="o">=</span><span class="s2">".oem"</span><span class="p">)</span>
     <span class="n">os</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">handle</span><span class="p">)</span>
     <span class="k">try</span><span class="p">:</span>
         <span class="n">_rn</span><span class="o">.</span><span class="n">oem_write_kvn</span><span class="p">(</span>
             <span class="n">path</span><span class="p">,</span>
-            <span class="n">header_json</span><span class="p">,</span>
-            <span class="n">metadata_json</span><span class="p">,</span>
+            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">header</span><span class="p">)),</span>
+            <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">metadata</span><span class="p">)),</span>
             <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
-            <span class="n">days</span><span class="p">,</span>
-            <span class="n">nanos</span><span class="p">,</span>
-            <span class="n">states_km</span><span class="p">,</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)),</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span>
+                <span class="n">convert_cartesian_values_au_to_km</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">values</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+            <span class="p">),</span>
             <span class="n">records</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span>
@@ -1208,122 +1010,89 @@
         <span class="n">os</span><span class="o">.</span><span class="n">unlink</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_insert_comments</span><span class="p">(</span>
-    <span class="n">text</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">header_comments</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">metadata_comments</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
-<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">header_comments</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">metadata_comments</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">text</span>
-    <span class="n">lines</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
-    <span class="n">out</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">for</span> <span class="n">index</span><span class="p">,</span> <span class="n">line</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">lines</span><span class="p">):</span>
-        <span class="n">out</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">index</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">header_comments</span> <span class="ow">and</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">"CCSDS_OEM_VERS"</span><span class="p">):</span>
-            <span class="n">out</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="sa">f</span><span class="s2">"COMMENT </span><span class="si">{</span><span class="n">comment</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">comment</span> <span class="ow">in</span> <span class="n">header_comments</span><span class="p">)</span>
-        <span class="k">elif</span> <span class="n">line</span> <span class="o">==</span> <span class="s2">"META_START"</span> <span class="ow">and</span> <span class="n">metadata_comments</span><span class="p">:</span>
-            <span class="n">out</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="sa">f</span><span class="s2">"COMMENT </span><span class="si">{</span><span class="n">comment</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">comment</span> <span class="ow">in</span> <span class="n">metadata_comments</span><span class="p">)</span>
-    <span class="k">return</span> <span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">out</span><span class="p">)</span>
-
-
-<span class="c1"># --- parsing ----------------------------------------------------------------------</span>
-
-
 <span class="k">def</span><span class="w"> </span><span class="nf">_segment_from_payload</span><span class="p">(</span><span class="n">raw</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">OemSegment</span><span class="p">:</span>
-    <span class="n">meta</span> <span class="o">=</span> <span class="p">{</span><span class="nb">str</span><span class="p">(</span><span class="n">key</span><span class="p">):</span> <span class="n">value</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">raw</span><span class="p">[</span><span class="s2">"metadata"</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">()}</span>
-    <span class="n">known</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">meta</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_METADATA_ORDER</span><span class="p">}</span>
-    <span class="k">for</span> <span class="n">required</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"OBJECT_ID"</span><span class="p">,</span> <span class="s2">"CENTER_NAME"</span><span class="p">,</span> <span class="s2">"REF_FRAME"</span><span class="p">,</span> <span class="s2">"TIME_SYSTEM"</span><span class="p">):</span>
+    <span class="n">meta</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">raw</span><span class="p">[</span><span class="s2">"metadata"</span><span class="p">])</span>
+    <span class="n">known</span> <span class="o">=</span> <span class="p">{</span><span class="n">key</span><span class="o">.</span><span class="n">lower</span><span class="p">():</span> <span class="n">meta</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">_METADATA_KEYS</span><span class="p">}</span>
+    <span class="k">for</span> <span class="n">required</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"object_id"</span><span class="p">,</span> <span class="s2">"center_name"</span><span class="p">,</span> <span class="s2">"ref_frame"</span><span class="p">,</span> <span class="s2">"time_system"</span><span class="p">):</span>
         <span class="k">if</span> <span class="n">known</span><span class="p">[</span><span class="n">required</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"OEM segment is missing </span><span class="si">{</span><span class="n">required</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
-    <span class="n">degree</span> <span class="o">=</span> <span class="n">known</span><span class="p">[</span><span class="s2">"INTERPOLATION_DEGREE"</span><span class="p">]</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"OEM segment is missing </span><span class="si">{</span><span class="n">required</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
+    <span class="n">degree</span> <span class="o">=</span> <span class="n">known</span><span class="o">.</span><span class="n">pop</span><span class="p">(</span><span class="s2">"interpolation_degree"</span><span class="p">)</span>
     <span class="n">metadata</span> <span class="o">=</span> <span class="n">OemSegmentMetadata</span><span class="p">(</span>
-        <span class="n">object_name</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">known</span><span class="p">[</span><span class="s2">"OBJECT_NAME"</span><span class="p">]</span> <span class="ow">or</span> <span class="n">known</span><span class="p">[</span><span class="s2">"OBJECT_ID"</span><span class="p">]),</span>
-        <span class="n">object_id</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">known</span><span class="p">[</span><span class="s2">"OBJECT_ID"</span><span class="p">]),</span>
-        <span class="n">center_name</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">known</span><span class="p">[</span><span class="s2">"CENTER_NAME"</span><span class="p">]),</span>
-        <span class="n">ref_frame</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">known</span><span class="p">[</span><span class="s2">"REF_FRAME"</span><span class="p">]),</span>
-        <span class="n">time_system</span><span class="o">=</span><span class="nb">str</span><span class="p">(</span><span class="n">known</span><span class="p">[</span><span class="s2">"TIME_SYSTEM"</span><span class="p">]),</span>
-        <span class="n">start_time</span><span class="o">=</span><span class="n">_optional_str</span><span class="p">(</span><span class="n">known</span><span class="p">[</span><span class="s2">"START_TIME"</span><span class="p">]),</span>
-        <span class="n">stop_time</span><span class="o">=</span><span class="n">_optional_str</span><span class="p">(</span><span class="n">known</span><span class="p">[</span><span class="s2">"STOP_TIME"</span><span class="p">]),</span>
-        <span class="n">useable_start_time</span><span class="o">=</span><span class="n">_optional_str</span><span class="p">(</span><span class="n">known</span><span class="p">[</span><span class="s2">"USEABLE_START_TIME"</span><span class="p">]),</span>
-        <span class="n">useable_stop_time</span><span class="o">=</span><span class="n">_optional_str</span><span class="p">(</span><span class="n">known</span><span class="p">[</span><span class="s2">"USEABLE_STOP_TIME"</span><span class="p">]),</span>
-        <span class="n">ref_frame_epoch</span><span class="o">=</span><span class="n">_optional_str</span><span class="p">(</span><span class="n">known</span><span class="p">[</span><span class="s2">"REF_FRAME_EPOCH"</span><span class="p">]),</span>
-        <span class="n">interpolation</span><span class="o">=</span><span class="n">_optional_str</span><span class="p">(</span><span class="n">known</span><span class="p">[</span><span class="s2">"INTERPOLATION"</span><span class="p">]),</span>
+        <span class="o">**</span><span class="p">{</span><span class="n">key</span><span class="p">:</span> <span class="n">_optional_str</span><span class="p">(</span><span class="n">value</span><span class="p">)</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">known</span><span class="o">.</span><span class="n">items</span><span class="p">()},</span>
         <span class="n">interpolation_degree</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">degree</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">degree</span><span class="p">),</span>
         <span class="n">extra</span><span class="o">=</span><span class="nb">tuple</span><span class="p">((</span><span class="n">key</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">value</span><span class="p">))</span> <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">meta</span><span class="o">.</span><span class="n">items</span><span class="p">()),</span>
     <span class="p">)</span>
+    <span class="k">if</span> <span class="n">metadata</span><span class="o">.</span><span class="n">object_name</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">metadata</span> <span class="o">=</span> <span class="n">replace</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">object_name</span><span class="o">=</span><span class="n">metadata</span><span class="o">.</span><span class="n">object_id</span><span class="p">)</span>
 
-    <span class="n">frame</span> <span class="o">=</span> <span class="n">metadata</span><span class="o">.</span><span class="n">adam_frame</span><span class="p">()</span>
-    <span class="n">origin_code</span> <span class="o">=</span> <span class="n">metadata</span><span class="o">.</span><span class="n">adam_origin_code</span><span class="p">()</span>
-    <span class="n">scale</span> <span class="o">=</span> <span class="n">metadata</span><span class="o">.</span><span class="n">adam_time_scale</span><span class="p">()</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">_oem_to_adam_center</span>
 
-    <span class="n">states</span> <span class="o">=</span> <span class="n">raw</span><span class="p">[</span><span class="s2">"states"</span><span class="p">]</span>
-    <span class="n">days</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">states</span><span class="p">[</span><span class="s2">"days"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
-    <span class="n">nanos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">states</span><span class="p">[</span><span class="s2">"nanos"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">frame</span> <span class="o">=</span> <span class="n">_adam_frame</span><span class="p">(</span><span class="n">metadata</span><span class="o">.</span><span class="n">ref_frame</span><span class="p">)</span>
+    <span class="n">origin_code</span> <span class="o">=</span> <span class="n">_oem_to_adam_center</span><span class="p">(</span><span class="n">metadata</span><span class="o">.</span><span class="n">center_name</span><span class="p">)</span>
+    <span class="n">scale</span> <span class="o">=</span> <span class="n">_time_scale</span><span class="p">(</span><span class="n">metadata</span><span class="o">.</span><span class="n">time_system</span><span class="p">)</span>
+
+    <span class="n">days</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">raw</span><span class="p">[</span><span class="s2">"states"</span><span class="p">][</span><span class="s2">"days"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">nanos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">raw</span><span class="p">[</span><span class="s2">"states"</span><span class="p">][</span><span class="s2">"nanos"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
     <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">days</span><span class="p">)</span>
-    <span class="n">values_km</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">states</span><span class="p">[</span><span class="s2">"values_km"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
-    <span class="n">values_au</span> <span class="o">=</span> <span class="n">convert_cartesian_values_km_to_au</span><span class="p">(</span><span class="n">values_km</span><span class="p">)</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="n">convert_cartesian_values_km_to_au</span><span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">raw</span><span class="p">[</span><span class="s2">"states"</span><span class="p">][</span><span class="s2">"values_km"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+    <span class="p">)</span>
     <span class="n">time</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">days</span><span class="o">=</span><span class="n">days</span><span class="p">,</span> <span class="n">nanos</span><span class="o">=</span><span class="n">nanos</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">scale</span><span class="p">)</span>
 
-    <span class="c1"># Covariance records keyed by epoch. Records in REF_FRAME attach to the</span>
-    <span class="c1"># states. Records in another frame become a local-frame product.</span>
+    <span class="c1"># Covariance records at a state epoch: REF_FRAME ones attach to the states,</span>
+    <span class="c1"># the others become a local frame product.</span>
     <span class="n">epoch_index</span> <span class="o">=</span> <span class="p">{(</span><span class="nb">int</span><span class="p">(</span><span class="n">d</span><span class="p">),</span> <span class="nb">int</span><span class="p">(</span><span class="n">ns</span><span class="p">)):</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">d</span><span class="p">,</span> <span class="n">ns</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">days</span><span class="p">,</span> <span class="n">nanos</span><span class="p">))}</span>
     <span class="n">state_cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
     <span class="n">local_cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
-    <span class="n">local_label</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">has_state_cov</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="n">local_label</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">for</span> <span class="n">record</span> <span class="ow">in</span> <span class="n">raw</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"covariances"</span><span class="p">,</span> <span class="p">[]):</span>
-        <span class="n">key</span> <span class="o">=</span> <span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">"days"</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">"nanos"</span><span class="p">]))</span>
-        <span class="k">if</span> <span class="n">key</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">epoch_index</span><span class="p">:</span>
+        <span class="n">index</span> <span class="o">=</span> <span class="n">epoch_index</span><span class="o">.</span><span class="n">get</span><span class="p">((</span><span class="nb">int</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">"days"</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">"nanos"</span><span class="p">])))</span>
+        <span class="k">if</span> <span class="n">index</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">continue</span>
         <span class="n">label</span> <span class="o">=</span> <span class="n">record</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"frame"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">metadata</span><span class="o">.</span><span class="n">ref_frame</span>
-        <span class="n">matrix_km</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">"matrix"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
-        <span class="n">matrix_au</span> <span class="o">=</span> <span class="n">convert_cartesian_covariance_km_to_au</span><span class="p">(</span><span class="n">matrix_km</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">matrix</span> <span class="o">=</span> <span class="n">convert_cartesian_covariance_km_to_au</span><span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">record</span><span class="p">[</span><span class="s2">"matrix"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+        <span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
         <span class="k">if</span> <span class="n">label</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="o">==</span> <span class="n">metadata</span><span class="o">.</span><span class="n">ref_frame</span><span class="o">.</span><span class="n">upper</span><span class="p">():</span>
-            <span class="n">state_cov</span><span class="p">[</span><span class="n">epoch_index</span><span class="p">[</span><span class="n">key</span><span class="p">]]</span> <span class="o">=</span> <span class="n">matrix_au</span>
-            <span class="n">has_state_cov</span> <span class="o">=</span> <span class="kc">True</span>
-        <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">local_label</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">label</span> <span class="o">!=</span> <span class="n">local_label</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                    <span class="s2">"OEM segment has covariance records in more than one "</span>
-                    <span class="sa">f</span><span class="s2">"non REF_FRAME frame: </span><span class="si">{</span><span class="n">local_label</span><span class="si">!r}</span><span class="s2"> and </span><span class="si">{</span><span class="n">label</span><span class="si">!r}</span><span class="s2">."</span>
-                <span class="p">)</span>
+            <span class="n">state_cov</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">matrix</span>
+        <span class="k">elif</span> <span class="n">local_label</span> <span class="ow">in</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="n">label</span><span class="p">):</span>
             <span class="n">local_label</span> <span class="o">=</span> <span class="n">label</span>
-            <span class="n">local_cov</span><span class="p">[</span><span class="n">epoch_index</span><span class="p">[</span><span class="n">key</span><span class="p">]]</span> <span class="o">=</span> <span class="n">matrix_au</span>
+            <span class="n">local_cov</span><span class="p">[</span><span class="n">index</span><span class="p">]</span> <span class="o">=</span> <span class="n">matrix</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                <span class="s2">"OEM segment has covariance records in more than one non "</span>
+                <span class="sa">f</span><span class="s2">"REF_FRAME frame: </span><span class="si">{</span><span class="n">local_label</span><span class="si">!r}</span><span class="s2"> and </span><span class="si">{</span><span class="n">label</span><span class="si">!r}</span><span class="s2">."</span>
+            <span class="p">)</span>
 
-    <span class="n">covariance</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span><span class="n">state_cov</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">has_state_cov</span>
-        <span class="k">else</span> <span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">nulls</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
-    <span class="p">)</span>
     <span class="n">origin</span> <span class="o">=</span> <span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="n">origin_code</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">)</span>
-    <span class="n">coordinates</span> <span class="o">=</span> <span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">x</span><span class="o">=</span><span class="n">values_au</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-        <span class="n">y</span><span class="o">=</span><span class="n">values_au</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-        <span class="n">z</span><span class="o">=</span><span class="n">values_au</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-        <span class="n">vx</span><span class="o">=</span><span class="n">values_au</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
-        <span class="n">vy</span><span class="o">=</span><span class="n">values_au</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
-        <span class="n">vz</span><span class="o">=</span><span class="n">values_au</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
-        <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="p">,</span>
-        <span class="n">covariance</span><span class="o">=</span><span class="n">covariance</span><span class="p">,</span>
-        <span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">,</span>
-        <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span>
-    <span class="p">)</span>
-    <span class="n">orbits</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+    <span class="n">states</span> <span class="o">=</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
         <span class="n">orbit_id</span><span class="o">=</span><span class="p">[</span><span class="n">metadata</span><span class="o">.</span><span class="n">object_id</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">,</span>
         <span class="n">object_id</span><span class="o">=</span><span class="p">[</span><span class="n">metadata</span><span class="o">.</span><span class="n">object_id</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">,</span>
-        <span class="n">coordinates</span><span class="o">=</span><span class="n">coordinates</span><span class="p">,</span>
+        <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">x</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+            <span class="n">y</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+            <span class="n">z</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
+            <span class="n">vx</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
+            <span class="n">vy</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
+            <span class="n">vz</span><span class="o">=</span><span class="n">values</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
+            <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="p">,</span>
+            <span class="n">covariance</span><span class="o">=</span><span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span><span class="n">state_cov</span><span class="p">),</span>
+            <span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">,</span>
+            <span class="n">frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span>
+        <span class="p">),</span>
     <span class="p">)</span>
-
     <span class="n">local_covariances</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="k">if</span> <span class="n">local_label</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">local_covariances</span> <span class="o">=</span> <span class="n">LocalFrameCovariances</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-            <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
-            <span class="n">object_id</span><span class="o">=</span><span class="n">orbits</span><span class="o">.</span><span class="n">object_id</span><span class="p">,</span>
+            <span class="n">orbit_id</span><span class="o">=</span><span class="n">states</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>
+            <span class="n">object_id</span><span class="o">=</span><span class="n">states</span><span class="o">.</span><span class="n">object_id</span><span class="p">,</span>
             <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="p">,</span>
             <span class="n">covariance</span><span class="o">=</span><span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span><span class="n">local_cov</span><span class="p">),</span>
             <span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">,</span>
             <span class="n">frame</span><span class="o">=</span><span class="n">local_label</span><span class="p">,</span>
             <span class="n">reference_frame</span><span class="o">=</span><span class="n">frame</span><span class="p">,</span>
         <span class="p">)</span>
-    <span class="k">return</span> <span class="n">OemSegment</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">orbits</span><span class="p">,</span> <span class="n">local_covariances</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">OemSegment</span><span class="p">(</span><span class="n">metadata</span><span class="p">,</span> <span class="n">states</span><span class="p">,</span> <span class="n">local_covariances</span><span class="p">)</span>
 </pre></div>
         </article>
       </div>
