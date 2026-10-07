@@ -47,13 +47,13 @@ _Mu = Optional[Union[float, npt.ArrayLike]]
 
 
 def _canonical_frame(frame: str) -> str:
-    label = str(frame).strip().upper()
-    label = _ALIASES.get(label, label)
-    if label not in _FRAMES:
+    name = str(frame).strip().upper()
+    name = _ALIASES.get(name, name)
+    if name not in _FRAMES:
         raise ValueError(
             f"Unknown local orbital frame {frame!r}, expected one of {_FRAMES}."
         )
-    return label
+    return name
 
 
 def _rotation_matrices(coords: CartesianCoordinates, frame: str) -> np.ndarray:
