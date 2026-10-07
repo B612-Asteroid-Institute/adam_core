@@ -6,10 +6,9 @@ KVN renderer with the labels spelled out: ICRF for adam_core's equatorial
 frame (the J2000 axes SPICE and DE440 deliver, which NAIF aligns with the
 ICRF), the origin as CENTER_NAME and the Timestamp scale as TIME_SYSTEM.
 ``orbit_from_oem`` reads the result back. A covariance block is written on
-request, in REF_FRAME or a local orbital frame. CCSDS 502.0-B-3 table 5-4
-cites RSW, RTN and TNW (3.2.4.11) for COV_REF_FRAME and its normative annex B5
-admits the SANA orbit-relative frames such as VNC_ROTATING, so labels outside
-the 3.2.4.11 set get a COMMENT line and are refused under ``strict``.
+request, in REF_FRAME or a local orbital frame. CCSDS 502.0-B-3 table 5-4 cites
+RSW, RTN and TNW (3.2.4.11) there and annex B5 admits SANA frames such as
+VNC_ROTATING, so other labels get a COMMENT line and are refused under ``strict``.
 """
 
 from __future__ import annotations
@@ -162,10 +161,9 @@ class OrbitEphemerisMessage:
         else:
             if label not in _OEM_COVARIANCE_FRAMES:
                 note = (
-                    f"COV_REF_FRAME {label} is a SANA orbit-relative reference frame "
-                    "admitted by CCSDS 502.0-B-3 annex B5, outside the "
-                    f"{', '.join(_OEM_COVARIANCE_FRAMES)} set of 3.2.4.11 that "
-                    "table 5-4 cites."
+                    f"COV_REF_FRAME {label} is a SANA orbit-relative frame admitted "
+                    "by CCSDS 502.0-B-3 annex B5, outside the "
+                    f"{', '.join(_OEM_COVARIANCE_FRAMES)} set of 3.2.4.11, table 5-4."
                 )
                 if strict:
                     raise ValueError(note + " Pass strict=False to write it anyway.")
