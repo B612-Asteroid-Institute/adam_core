@@ -450,7 +450,7 @@ KVN renderer with the labels spelled out: ICRF for adam_core’s equatorial
 frame (the J2000 axes SPICE and DE440 deliver, which NAIF aligns with the
 ICRF), the origin as CENTER_NAME and the Timestamp scale as TIME_SYSTEM.
 <code class="docutils literal notranslate"><span class="pre">orbit_from_oem</span></code> reads the result back. A covariance block is written on
-request, in REF_FRAME or in a local orbital frame. CCSDS 502.0-B-3 lists only
+request, in REF_FRAME or a local orbital frame. CCSDS 502.0-B-3 lists only
 RSW, RTN and TNW for COV_REF_FRAME (3.2.4.11), so other labels get a COMMENT
 line and are refused under <code class="docutils literal notranslate"><span class="pre">strict</span></code>.</p>
 <dl class="py class">
@@ -459,9 +459,8 @@ line and are refused under <code class="docutils literal notranslate"><span clas
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>One object’s state history (an Orbits table in adam_core units) and the
 CCSDS labels it is written under, for example <code class="docutils literal notranslate"><span class="pre">center_name=&quot;SUN&quot;</span></code>,
-<code class="docutils literal notranslate"><span class="pre">ref_frame=&quot;ICRF&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">time_system=&quot;TDB&quot;</span></code>. Epochs sit on the millisecond
-grid the renderer writes. <code class="docutils literal notranslate"><span class="pre">creation_date</span></code> is UTC and defaults to the write
-time. <code class="docutils literal notranslate"><span class="pre">comments</span></code> follow META_START.</p>
+<code class="docutils literal notranslate"><span class="pre">ref_frame=&quot;ICRF&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">time_system=&quot;TDB&quot;</span></code>. <code class="docutils literal notranslate"><span class="pre">creation_date</span></code> is UTC and
+defaults to the write time. <code class="docutils literal notranslate"><span class="pre">comments</span></code> follow META_START.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.orbits.oem.OrbitEphemerisMessage.states">
 <span class="sig-name descname"><span class="pre">states</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></em><a class="headerlink" href="#adam_core.orbits.oem.OrbitEphemerisMessage.states" title="Link to this definition">¶</a></dt>
@@ -525,9 +524,8 @@ TIME_SYSTEM the Timestamp scale, so rescale first for a different one.</p>
 <span class="sig-name descname"><span class="pre">write</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">path</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/os.html#os.PathLike" title="(in Python v3.14)"><span class="pre">PathLike</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">covariance_frame</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">strict</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.14)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbits/oem.html#OrbitEphemerisMessage.write"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbits.oem.OrbitEphemerisMessage.write" title="Link to this definition">¶</a></dt>
 <dd><p>Write the KVN file and return its path. <code class="docutils literal notranslate"><span class="pre">covariance_frame</span></code> None writes
 no covariance block, the REF_FRAME label writes the state covariance, a
-local orbital frame name or alias writes the covariance rotated into it
-under that COV_REF_FRAME label. <code class="docutils literal notranslate"><span class="pre">strict</span></code> refuses labels outside the
-OEM covariance frame set, which otherwise get a COMMENT line.</p>
+local orbital frame name or alias writes the rotated covariance under
+that label. <code class="docutils literal notranslate"><span class="pre">strict</span></code> refuses labels outside the OEM covariance set.</p>
 </dd></dl>
 
 </dd></dl>

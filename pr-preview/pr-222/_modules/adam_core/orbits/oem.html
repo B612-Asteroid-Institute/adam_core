@@ -439,7 +439,7 @@
 <span class="sd">frame (the J2000 axes SPICE and DE440 deliver, which NAIF aligns with the</span>
 <span class="sd">ICRF), the origin as CENTER_NAME and the Timestamp scale as TIME_SYSTEM.</span>
 <span class="sd">``orbit_from_oem`` reads the result back. A covariance block is written on</span>
-<span class="sd">request, in REF_FRAME or in a local orbital frame. CCSDS 502.0-B-3 lists only</span>
+<span class="sd">request, in REF_FRAME or a local orbital frame. CCSDS 502.0-B-3 lists only</span>
 <span class="sd">RSW, RTN and TNW for COV_REF_FRAME (3.2.4.11), so other labels get a COMMENT</span>
 <span class="sd">line and are refused under ``strict``.</span>
 <span class="sd">"""</span>
@@ -463,8 +463,6 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"OrbitEphemerisMessage"</span><span class="p">]</span>
-
 <span class="n">_REF_FRAME</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"equatorial"</span><span class="p">:</span> <span class="s2">"ICRF"</span><span class="p">,</span> <span class="s2">"itrf93"</span><span class="p">:</span> <span class="s2">"ITRF-93"</span><span class="p">}</span>
 <span class="n">_OEM_COVARIANCE_FRAMES</span> <span class="o">=</span> <span class="p">(</span><span class="s2">"RSW"</span><span class="p">,</span> <span class="s2">"RTN"</span><span class="p">,</span> <span class="s2">"TNW"</span><span class="p">)</span>
 
@@ -476,9 +474,8 @@
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    One object's state history (an Orbits table in adam_core units) and the</span>
 <span class="sd">    CCSDS labels it is written under, for example ``center_name="SUN"``,</span>
-<span class="sd">    ``ref_frame="ICRF"``, ``time_system="TDB"``. Epochs sit on the millisecond</span>
-<span class="sd">    grid the renderer writes. ``creation_date`` is UTC and defaults to the write</span>
-<span class="sd">    time. ``comments`` follow META_START.</span>
+<span class="sd">    ``ref_frame="ICRF"``, ``time_system="TDB"``. ``creation_date`` is UTC and</span>
+<span class="sd">    defaults to the write time. ``comments`` follow META_START.</span>
 <span class="sd">    """</span>
 
     <span class="n">states</span><span class="p">:</span> <span class="n">Orbits</span>
@@ -544,9 +541,8 @@
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Write the KVN file and return its path. ``covariance_frame`` None writes</span>
 <span class="sd">        no covariance block, the REF_FRAME label writes the state covariance, a</span>
-<span class="sd">        local orbital frame name or alias writes the covariance rotated into it</span>
-<span class="sd">        under that COV_REF_FRAME label. ``strict`` refuses labels outside the</span>
-<span class="sd">        OEM covariance frame set, which otherwise get a COMMENT line.</span>
+<span class="sd">        local orbital frame name or alias writes the rotated covariance under</span>
+<span class="sd">        that label. ``strict`` refuses labels outside the OEM covariance set.</span>
 <span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
@@ -627,7 +623,6 @@
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_on_millisecond_grid</span><span class="p">(</span><span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Move epochs onto the renderer's millisecond grid, warning when any move."""</span>
     <span class="n">time</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span>
     <span class="n">rounded</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">rounded</span><span class="p">(</span><span class="s2">"ms"</span><span class="p">)</span>
     <span class="n">shift</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span>
@@ -636,10 +631,9 @@
     <span class="p">)</span>
     <span class="k">if</span> <span class="n">shift</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
         <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">int</span><span class="p">((</span><span class="n">shift</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">time</span><span class="p">)</span><span class="si">}</span><span class="s2"> epochs were not on the "</span>
-            <span class="s2">"millisecond grid OEM epochs are written with and were moved onto it, "</span>
-            <span class="sa">f</span><span class="s2">"the largest by </span><span class="si">{</span><span class="n">shift</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1e3</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> microseconds."</span><span class="p">,</span>
-            <span class="ne">UserWarning</span><span class="p">,</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">int</span><span class="p">((</span><span class="n">shift</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">())</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">time</span><span class="p">)</span><span class="si">}</span><span class="s2"> epochs were moved onto the "</span>
+            <span class="sa">f</span><span class="s2">"millisecond grid OEM epochs are written with, the largest by "</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">shift</span><span class="o">.</span><span class="n">max</span><span class="p">()</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">1e3</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> microseconds."</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">orbits</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span><span class="s2">"coordinates.time"</span><span class="p">,</span> <span class="n">rounded</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">orbits</span>

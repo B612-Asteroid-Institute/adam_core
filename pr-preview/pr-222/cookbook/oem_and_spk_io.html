@@ -512,28 +512,24 @@ table into <code class="docutils literal notranslate"><span class="pre">Orbits</
 <a class="reference internal" href="../reference/api/adam_core.orbits.oem.html#adam_core.orbits.oem.OrbitEphemerisMessage" title="adam_core.orbits.oem.OrbitEphemerisMessage"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrbitEphemerisMessage</span></code></a> built from the same
 <code class="docutils literal notranslate"><span class="pre">Orbits</span></code> table writes OEM 3.0 with <code class="docutils literal notranslate"><span class="pre">REF_FRAME</span> <span class="pre">=</span> <span class="pre">ICRF</span></code> for equatorial
 states, <code class="docutils literal notranslate"><span class="pre">CENTER_NAME</span></code> from the origin and <code class="docutils literal notranslate"><span class="pre">TIME_SYSTEM</span></code> from the Timestamp
-scale. Epochs off the renderer’s millisecond grid are moved onto it with a
-warning.</p>
+scale.</p>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitEphemerisMessage</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalFrameCovariances</span>
 
-<span class="c1"># propagated: Orbits with one object_id, N epochs, frame "equatorial",</span>
-<span class="c1"># origin SUN, time scale "tdb", covariance from propagate_orbits(..., covariance=True)</span>
+<span class="c1"># propagated: Orbits of one object, frame "equatorial", origin SUN, scale "tdb"</span>
 <span class="n">message</span> <span class="o">=</span> <span class="n">OrbitEphemerisMessage</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span>
     <span class="n">propagated</span><span class="p">,</span> <span class="n">originator</span><span class="o">=</span><span class="s2">"B612 ASTEROID INSTITUTE"</span><span class="p">,</span> <span class="n">object_name</span><span class="o">=</span><span class="s2">"99942 Apophis"</span>
 <span class="p">)</span>
-<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states.oem"</span><span class="p">)</span>                               <span class="c1"># states only</span>
-<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states_icrf_cov.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"ICRF"</span><span class="p">)</span>
+<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states.oem"</span><span class="p">)</span>   <span class="c1"># states only, or covariance_frame="ICRF"</span>
 
 <span class="c1"># Covariance in a local orbital frame as a separate product. VNC_ROTATING</span>
-<span class="c1"># follows the SANA registry, VNC_INERTIAL is the pure rotation, and TNW</span>
-<span class="c1"># and RSW (RTN, RIC) are available the same way.</span>
+<span class="c1"># follows the SANA registry, VNC_INERTIAL is the pure rotation, TNW and</span>
+<span class="c1"># RSW (RTN, RIC) work the same way.</span>
 <span class="n">vnc</span> <span class="o">=</span> <span class="n">LocalFrameCovariances</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span><span class="n">propagated</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span>
 <span class="n">vnc</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">"covariance_vnc_rotating.parquet"</span><span class="p">)</span>
 
 <span class="c1"># The OEM standard lists RSW, RTN and TNW for COV_REF_FRAME. Other labels</span>
-<span class="c1"># are written with a COMMENT line, or refused with strict=True.</span>
-<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states_tnw_cov.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"TNW"</span><span class="p">)</span>
+<span class="c1"># get a COMMENT line, or are refused with strict=True.</span>
 <span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states_vnc_cov.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span>
 </pre></div>
 </div>

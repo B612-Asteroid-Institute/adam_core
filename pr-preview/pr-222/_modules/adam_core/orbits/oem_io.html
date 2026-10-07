@@ -889,8 +889,7 @@
     <span class="k">try</span><span class="p">:</span>
         <span class="n">raw</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">oem_read_orbits_ipc</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">input_file</span><span class="p">))</span>
     <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-        <span class="c1"># The fused reader maps EME2000 and ITRF-93 only. The Python</span>
-        <span class="c1"># composer also reads the ICRF labels OrbitEphemerisMessage writes.</span>
+        <span class="c1"># The Python composer also reads the ICRF labels oem.py writes.</span>
         <span class="k">if</span> <span class="s2">"mixed reference frames or time systems"</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span>
             <span class="s2">"Unsupported OEM frame"</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span>
         <span class="p">):</span>

@@ -434,17 +434,15 @@
 <span></span><span class="sd">"""Local orbital frames and covariances expressed in them.</span>
 
 <span class="sd">Names follow the SANA orbit-relative reference frames registry used by the</span>
-<span class="sd">CCSDS navigation data messages. RSW has x along the position and z along the</span>
-<span class="sd">orbital angular momentum (also called RTN and RIC). TNW has x along the</span>
-<span class="sd">velocity and z along the angular momentum. VNC has x along the velocity and y</span>
-<span class="sd">along the angular momentum. The third axis completes each right-handed set, so</span>
-<span class="sd">VNC and TNW share two axes and must never be labelled as each other.</span>
-
-<span class="sd">``_INERTIAL`` variants rotate position and velocity with the same 3x3 matrix.</span>
-<span class="sd">``_ROTATING`` variants also carry the frame angular velocity, from two-body</span>
-<span class="sd">motion about the origin, into the velocity rows. Bare names resolve to the</span>
-<span class="sd">``_INERTIAL`` variants, as the CCSDS messages use them. Only covariances are</span>
-<span class="sd">expressed in these frames. State vectors stay inertial.</span>
+<span class="sd">CCSDS navigation data messages. RSW (also RTN, RIC) has x along the position</span>
+<span class="sd">and z along the orbital angular momentum, TNW has x along the velocity and z</span>
+<span class="sd">along the angular momentum, VNC has x along the velocity and y along the</span>
+<span class="sd">angular momentum. The third axis completes each right-handed set, so VNC and</span>
+<span class="sd">TNW share two axes and must never be labelled as each other. ``_INERTIAL``</span>
+<span class="sd">variants rotate position and velocity alike. ``_ROTATING`` variants also carry</span>
+<span class="sd">the frame rate, from two-body motion about the origin, into the velocity rows.</span>
+<span class="sd">Bare names resolve to ``_INERTIAL``, as the CCSDS messages use them. Only</span>
+<span class="sd">covariances are expressed in these frames. State vectors stay inertial.</span>
 <span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
@@ -462,8 +460,6 @@
 
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
-
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"LocalFrameCovariances"</span><span class="p">,</span> <span class="s2">"local_frame_jacobians"</span><span class="p">]</span>
 
 <span class="n">_FRAMES</span> <span class="o">=</span> <span class="p">(</span>
     <span class="s2">"RSW_ROTATING"</span><span class="p">,</span>
@@ -488,54 +484,48 @@
     <span class="n">label</span> <span class="o">=</span> <span class="n">_ALIASES</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">label</span><span class="p">,</span> <span class="n">label</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_FRAMES</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"Unknown local orbital frame </span><span class="si">{</span><span class="n">frame</span><span class="si">!r}</span><span class="s2">, expected one of "</span>
-            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">_FRAMES</span><span class="p">)</span><span class="si">}</span><span class="s2"> or an alias in </span><span class="si">{</span><span class="nb">list</span><span class="p">(</span><span class="n">_ALIASES</span><span class="p">)</span><span class="si">}</span><span class="s2">."</span>
+            <span class="sa">f</span><span class="s2">"Unknown local orbital frame </span><span class="si">{</span><span class="n">frame</span><span class="si">!r}</span><span class="s2">, expected one of </span><span class="si">{</span><span class="n">_FRAMES</span><span class="si">}</span><span class="s2">."</span>
         <span class="p">)</span>
     <span class="k">return</span> <span class="n">label</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_unit_vectors</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""Validated r_hat, v_hat and the unit orbit normal."""</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_rotation_matrices</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
     <span class="k">if</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"equatorial"</span><span class="p">,</span> <span class="s2">"ecliptic"</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"Local orbital frames need states in an inertial frame, got </span><span class="si">{</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="si">!r}</span><span class="s2">."</span>
+            <span class="sa">f</span><span class="s2">"Local orbital frames need an inertial frame, got </span><span class="si">{</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="si">!r}</span><span class="s2">."</span>
         <span class="p">)</span>
-    <span class="n">h_mag</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">h_mag</span>
-    <span class="n">degenerate</span> <span class="o">=</span> <span class="n">h_mag</span> <span class="o">&lt;</span> <span class="n">SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE</span>
+    <span class="n">degenerate</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">h_mag</span> <span class="o">&lt;</span> <span class="n">SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE</span>
     <span class="k">if</span> <span class="n">degenerate</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"State at row </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">degenerate</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span><span class="si">}</span><span class="s2"> has no orbit plane."</span>
+            <span class="sa">f</span><span class="s2">"State </span><span class="si">{</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">flatnonzero</span><span class="p">(</span><span class="n">degenerate</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span><span class="si">}</span><span class="s2"> has no orbit plane."</span>
         <span class="p">)</span>
-    <span class="k">return</span> <span class="n">coords</span><span class="o">.</span><span class="n">r_hat</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">v_hat</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">h</span> <span class="o">/</span> <span class="n">h_mag</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span>
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_rotation_matrices</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
     <span class="n">family</span> <span class="o">=</span> <span class="n">_canonical</span><span class="p">(</span><span class="n">frame</span><span class="p">)</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"_"</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">r_hat</span><span class="p">,</span> <span class="n">v_hat</span><span class="p">,</span> <span class="n">w_hat</span> <span class="o">=</span> <span class="n">_unit_vectors</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">family</span> <span class="o">==</span> <span class="s2">"RSW"</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">coords</span><span class="o">.</span><span class="n">ric3_matrix</span>
     <span class="k">if</span> <span class="n">family</span> <span class="o">==</span> <span class="s2">"TNW"</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">v_hat</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">w_hat</span><span class="p">,</span> <span class="n">v_hat</span><span class="p">),</span> <span class="n">w_hat</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">v_hat</span><span class="p">,</span> <span class="n">w_hat</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">v_hat</span><span class="p">,</span> <span class="n">w_hat</span><span class="p">)],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">coords</span><span class="o">.</span><span class="n">v_hat</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">h_hat</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">v_hat</span><span class="p">),</span> <span class="n">coords</span><span class="o">.</span><span class="n">h_hat</span><span class="p">],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span>
+        <span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">coords</span><span class="o">.</span><span class="n">v_hat</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">h_hat</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">v_hat</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">h_hat</span><span class="p">)],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span>
+    <span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_unit_rate</span><span class="p">(</span><span class="n">vectors</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">rates</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">norms</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
-    <span class="c1"># d(u/|u|)/dt = (du - (du . u_hat) u_hat) / |u|</span>
     <span class="n">unit</span> <span class="o">=</span> <span class="n">vectors</span> <span class="o">/</span> <span class="n">norms</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span>
     <span class="k">return</span> <span class="p">(</span><span class="n">rates</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">einsum</span><span class="p">(</span><span class="s2">"ij,ij-&gt;i"</span><span class="p">,</span> <span class="n">rates</span><span class="p">,</span> <span class="n">unit</span><span class="p">)[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">unit</span><span class="p">)</span> <span class="o">/</span> <span class="n">norms</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_angular_velocity</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mu</span><span class="p">:</span> <span class="n">_Mu</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
     <span class="n">family</span> <span class="o">=</span> <span class="n">frame</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"_"</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
-    <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">w_hat</span> <span class="o">=</span> <span class="n">_unit_vectors</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+    <span class="n">w_hat</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">h_hat</span>
     <span class="k">if</span> <span class="n">mu</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">try</span><span class="p">:</span>
             <span class="n">mu</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">mu</span><span class="p">()</span>
         <span class="k">except</span> <span class="ne">ValueError</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-                <span class="s2">"A _ROTATING frame needs the origin's gravitational parameter, "</span>
-                <span class="sa">f</span><span class="s2">"unknown for </span><span class="si">{</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span><span class="si">}</span><span class="s2">. Pass mu= "</span>
-                <span class="s2">"in AU^3/day^2 or use the _INERTIAL variant."</span>
+                <span class="sa">f</span><span class="s2">"No gravitational parameter for </span><span class="si">{</span><span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span><span class="si">}</span><span class="s2">. "</span>
+                <span class="s2">"Pass mu= in AU^3/day^2 or use the _INERTIAL variant."</span>
             <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span>
     <span class="n">mu</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">broadcast_to</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">),))</span>
     <span class="n">acceleration</span> <span class="o">=</span> <span class="o">-</span><span class="n">mu</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">*</span> <span class="n">coords</span><span class="o">.</span><span class="n">r</span> <span class="o">/</span> <span class="n">coords</span><span class="o">.</span><span class="n">r_mag</span><span class="p">[:,</span> <span class="kc">None</span><span class="p">]</span> <span class="o">**</span> <span class="mi">3</span>
@@ -561,8 +551,8 @@
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    (N, 6, 6) Jacobians from inertial position and velocity to a local orbital</span>
 <span class="sd">    frame (name or alias), so a covariance there is ``J @ C @ J.T``. The top</span>
-<span class="sd">    left block is the 3x3 rotation. ``_ROTATING`` variants take ``mu`` in</span>
-<span class="sd">    AU^3/day^2 for the frame rate (default: the origin's value).</span>
+<span class="sd">    left block is the rotation. ``mu`` (AU^3/day^2, default the origin's) sets</span>
+<span class="sd">    the ``_ROTATING`` frame rate.</span>
 <span class="sd">    """</span>
     <span class="n">canonical</span> <span class="o">=</span> <span class="n">_canonical</span><span class="p">(</span><span class="n">frame</span><span class="p">)</span>
     <span class="n">rotation</span> <span class="o">=</span> <span class="n">_rotation_matrices</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">canonical</span><span class="p">)</span>
@@ -590,9 +580,8 @@
     <span class="n">time</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">as_column</span><span class="p">()</span>
     <span class="n">covariance</span> <span class="o">=</span> <span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">as_column</span><span class="p">()</span>
     <span class="n">origin</span> <span class="o">=</span> <span class="n">Origin</span><span class="o">.</span><span class="n">as_column</span><span class="p">()</span>
-    <span class="c1">#: Canonical frame name, for example ``"VNC_ROTATING"``.</span>
+    <span class="c1">#: Canonical frame name, and the inertial frame the axes were built from.</span>
     <span class="n">frame</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">StringAttribute</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="s2">"unspecified"</span><span class="p">)</span>
-    <span class="c1">#: Inertial adam_core frame the axes were built from.</span>
     <span class="n">reference_frame</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">StringAttribute</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="s2">"unspecified"</span><span class="p">)</span>
 
 <div class="viewcode-block" id="LocalFrameCovariances.from_orbits">
