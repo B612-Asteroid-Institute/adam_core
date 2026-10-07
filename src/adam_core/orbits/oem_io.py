@@ -504,7 +504,7 @@ def _single_object_sorted(orbits: Orbits) -> Orbits:
         )
     if len(orbits.coordinates.time.unique()) != len(orbits):
         raise ValueError("Epochs must be unique within an OEM.")
-    return orbits.sort_by(["coordinates.time.days", "coordinates.time.nanos"])
+    return orbits.sort_by("coordinates.time")
 
 
 def orbit_to_oem(
