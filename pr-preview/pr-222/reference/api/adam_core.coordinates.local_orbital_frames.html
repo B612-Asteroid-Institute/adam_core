@@ -442,17 +442,14 @@
         <article role="main" id="furo-main-content">
           <section id="module-adam_core.coordinates.local_orbital_frames">
 <span id="adam-core-coordinates-local-orbital-frames-module"></span><h1>adam_core.coordinates.local_orbital_frames module<a class="headerlink" href="#module-adam_core.coordinates.local_orbital_frames" title="Link to this heading">¶</a></h1>
-<p>Local orbital frames and covariances expressed in them.</p>
-<p>Names follow the SANA orbit-relative reference frames registry used by the
-CCSDS navigation data messages. RSW (also RTN, RIC) has x along the position
-and z along the orbital angular momentum, TNW has x along the velocity and z
-along the angular momentum, VNC has x along the velocity and y along the
-angular momentum. The third axis completes each right-handed set, so VNC and
-TNW share two axes and must never be labelled as each other. <code class="docutils literal notranslate"><span class="pre">_INERTIAL</span></code>
-variants rotate position and velocity alike. <code class="docutils literal notranslate"><span class="pre">_ROTATING</span></code> variants also carry
-the frame rate, from two-body motion about the origin, into the velocity rows.
-Bare names resolve to <code class="docutils literal notranslate"><span class="pre">_INERTIAL</span></code>, as the CCSDS messages use them. Only
-covariances are expressed in these frames. State vectors stay inertial.</p>
+<p>Local orbital frames (SANA orbit-relative registry names) for covariances.</p>
+<p>RSW (RTN, RIC): x along position, z along the orbital angular momentum h.
+TNW: x along velocity, z along h. VNC: x along velocity, y along h. The third
+axis completes each right-handed set, so VNC is TNW with rows (T, W, -N) and the
+two must never be labelled as each other. <code class="docutils literal notranslate"><span class="pre">_INERTIAL</span></code> variants rotate position
+and velocity alike, <code class="docutils literal notranslate"><span class="pre">_ROTATING</span></code> variants add the two-body frame rate to the
+velocity rows. Bare names resolve to <code class="docutils literal notranslate"><span class="pre">_INERTIAL</span></code>. Only covariances are
+expressed here. State vectors stay inertial.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.coordinates.local_orbital_frames.local_frame_jacobians">
 <span class="sig-prename descclassname"><span class="pre">adam_core.coordinates.local_orbital_frames.</span></span><span class="sig-name descname"><span class="pre">local_frame_jacobians</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">coords</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.coordinates.cartesian.html#adam_core.coordinates.cartesian.CartesianCoordinates" title="adam_core.coordinates.cartesian.CartesianCoordinates"><span class="pre">CartesianCoordinates</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">frame</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">mu</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><span class="pre">ArrayLike</span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.14)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.5)"><span class="pre">ndarray</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.14)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.14)"><span class="pre">Any</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="p"><span class="pre">...</span></span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.dtype.html#numpy.dtype" title="(in NumPy v2.5)"><span class="pre">dtype</span></a><span class="p"><span class="pre">[</span></span><span class="pre">float64</span><span class="p"><span class="pre">]</span></span><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/coordinates/local_orbital_frames.html#local_frame_jacobians"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.coordinates.local_orbital_frames.local_frame_jacobians" title="Link to this definition">¶</a></dt>
@@ -466,9 +463,8 @@ the <code class="docutils literal notranslate"><span class="pre">_ROTATING</span
 <dt class="sig sig-object py" id="adam_core.coordinates.local_orbital_frames.LocalFrameCovariances">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.coordinates.local_orbital_frames.</span></span><span class="sig-name descname"><span class="pre">LocalFrameCovariances</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v25.0.1)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/coordinates/local_orbital_frames.html#LocalFrameCovariances"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/tables.html#quivr.Table" title="(in quivr v0.7.6.dev5+g5e130d9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
-<p>Per-epoch state covariances in a local orbital frame, AU and AU/day. Rows
-align one to one with the source orbits, which stay inertial. Rows without
-a source covariance stay NaN.</p>
+<p>Per epoch covariances in a local orbital frame (AU, AU/day), one row per
+source orbit. Rows without a source covariance stay NaN.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.orbit_id">
 <span class="sig-name descname"><span class="pre">orbit_id</span></span><a class="headerlink" href="#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.orbit_id" title="Link to this definition">¶</a></dt>
@@ -531,12 +527,12 @@ variable-length chunks.</p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.frame">
 <span class="sig-name descname"><span class="pre">frame</span></span><a class="headerlink" href="#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.frame" title="Link to this definition">¶</a></dt>
-<dd><p>Canonical frame name, and the inertial frame the axes were built from.</p>
+<dd><p>Canonical local frame name, and the inertial frame its axes were built from.</p>
 </dd></dl>
 
 <dl class="py attribute">
-<dt class="sig sig-object py" id="adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.reference_frame">
-<span class="sig-name descname"><span class="pre">reference_frame</span></span><a class="headerlink" href="#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.reference_frame" title="Link to this definition">¶</a></dt>
+<dt class="sig sig-object py" id="adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.inertial_frame">
+<span class="sig-name descname"><span class="pre">inertial_frame</span></span><a class="headerlink" href="#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.inertial_frame" title="Link to this definition">¶</a></dt>
 <dd><p>StringAttribute represents a string which is stored as UTF-8
 bytes in Table metadata.</p>
 <dl class="field-list simple">
@@ -627,7 +623,7 @@ then the attribute must be set whenever constructing a table that uses it.</p>
 <li><a class="reference internal" href="#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.covariance"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.covariance</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.origin"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.origin</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.frame"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.frame</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.reference_frame"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.reference_frame</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.inertial_frame"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.inertial_frame</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.from_orbits"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.from_orbits()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.schema"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.schema</span></code></a></li>
 </ul>

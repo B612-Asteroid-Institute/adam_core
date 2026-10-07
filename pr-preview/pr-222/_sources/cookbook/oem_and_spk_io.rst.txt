@@ -87,17 +87,15 @@ scale.
        propagated, originator="B612 ASTEROID INSTITUTE", object_name="99942 Apophis"
    )
 
-   # States with a covariance block per epoch in VNC_ROTATING, a SANA frame
-   # CCSDS 502.0-B-3 admits through annex B5. VNC_INERTIAL is the pure rotation,
-   # TNW and RSW (RTN, RIC) work the same way, "ICRF" writes the state covariance.
+   # One file: states plus a covariance block per epoch in VNC_ROTATING, a SANA
+   # frame CCSDS 502.0-B-3 admits through annex B5. TNW, RSW (RTN, RIC) and
+   # "ICRF" (the state covariance) work the same way.
    message.write("states_cov_vnc_rotating.oem", covariance_frame="VNC_ROTATING")
 
-   # strict=True keeps to the RSW, RTN, TNW set of table 5-4 for readers that
-   # only know that list. VNC_ROTATING is TNW_ROTATING with rows (T, W, -N).
-   message.write("states_cov_tnw.oem", covariance_frame="TNW", strict=True)
+   # Table 5-4 frames only (RSW, RTN, TNW), for readers that know just that list.
+   message.write("states_cov_tnw.oem", covariance_frame="TNW", table_frames_only=True)
 
-   # States only, with the covariance as a separate product at full epoch
-   # precision in AU and AU/day, for consumers that want it outside the OEM.
+   # Or states only, with the covariance as a separate full precision product.
    message.write("states.oem")
    LocalFrameCovariances.from_orbits(propagated, frame="VNC_ROTATING").to_parquet(
        "covariance_vnc_rotating.parquet"
