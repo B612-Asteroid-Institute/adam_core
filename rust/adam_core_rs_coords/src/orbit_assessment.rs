@@ -160,9 +160,9 @@ pub fn assess_orbit_batch(orbits: &OrbitBatch) -> SchemaResult<Vec<OrbitAssessme
     let mut assessments = Vec::with_capacity(orbits.len());
     for row in 0..orbits.len() {
         let covariance = match orbits.coordinates.covariance.as_ref() {
-            Some(covariance) => {
-                OrbitCovarianceAssessment::Present(assess_orbit_covariance(covariance, row)?)
-            }
+            Some(covariance) => OrbitCovarianceAssessment::Present(
+                assess_validated_orbit_covariance(covariance, row),
+            ),
             None => OrbitCovarianceAssessment::Absent,
         };
         let non_gravitational = assess_non_gravitational(
@@ -204,7 +204,13 @@ pub fn assess_orbit_covariance(
             covariance.rows
         )));
     }
+    Ok(assess_validated_orbit_covariance(covariance, row))
+}
 
+fn assess_validated_orbit_covariance(
+    covariance: &CovarianceBatch,
+    row: usize,
+) -> PresentOrbitCovarianceAssessment {
     let semantic_dimension = covariance.row_dimension(row);
     let row_declared_valid = covariance.is_row_valid(row);
     let units_compatible = matches!(
@@ -274,7 +280,7 @@ pub fn assess_orbit_covariance(
         }
     }
 
-    Ok(PresentOrbitCovarianceAssessment {
+    PresentOrbitCovarianceAssessment {
         semantic_dimension,
         row_declared_valid,
         units_compatible,
@@ -284,7 +290,7 @@ pub fn assess_orbit_covariance(
         strictly_positive_definite,
         maximum_correlation_asymmetry,
         issues,
-    })
+    }
 }
 
 fn semantic_covariance_row(
