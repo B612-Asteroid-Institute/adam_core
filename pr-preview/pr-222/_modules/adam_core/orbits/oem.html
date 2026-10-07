@@ -455,8 +455,6 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.local_orbital_frames</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalFrameCovariances</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.units</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -651,7 +649,7 @@
 <span class="w">    </span><span class="sd">"""One object with one origin at unique epochs, sorted by time."""</span>
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"An OEM needs at least one state."</span><span class="p">)</span>
-    <span class="k">if</span> <span class="ow">not</span> <span class="n">pc</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">pc</span><span class="o">.</span><span class="n">is_valid</span><span class="p">(</span><span class="n">orbits</span><span class="o">.</span><span class="n">object_id</span><span class="p">))</span><span class="o">.</span><span class="n">as_py</span><span class="p">():</span>
+    <span class="k">if</span> <span class="n">orbits</span><span class="o">.</span><span class="n">object_id</span><span class="o">.</span><span class="n">null_count</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Every state needs an object_id for the OEM metadata."</span><span class="p">)</span>
     <span class="n">object_ids</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">object_id</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
     <span class="n">origins</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">code</span><span class="o">.</span><span class="n">unique</span><span class="p">()</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
@@ -660,15 +658,9 @@
             <span class="s2">"An OEM carries one object about one center per file, got object_ids "</span>
             <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">object_ids</span><span class="si">}</span><span class="s2"> and origins </span><span class="si">{</span><span class="n">origins</span><span class="si">}</span><span class="s2">."</span>
         <span class="p">)</span>
-    <span class="n">days</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">days</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">nanos</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
-    <span class="n">order</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">lexsort</span><span class="p">((</span><span class="n">nanos</span><span class="p">,</span> <span class="n">days</span><span class="p">))</span>
-    <span class="n">epochs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">stack</span><span class="p">([</span><span class="n">days</span><span class="p">[</span><span class="n">order</span><span class="p">],</span> <span class="n">nanos</span><span class="p">[</span><span class="n">order</span><span class="p">]],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
-    <span class="k">if</span> <span class="p">(</span><span class="n">epochs</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">==</span> <span class="n">epochs</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">.</span><span class="n">any</span><span class="p">():</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">unique</span><span class="p">())</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"Epochs must be unique within an OEM."</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">order</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">))):</span>
-        <span class="k">return</span> <span class="n">orbits</span>
-    <span class="k">return</span> <span class="n">orbits</span><span class="o">.</span><span class="n">take</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">order</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">orbits</span><span class="o">.</span><span class="n">sort_by</span><span class="p">([</span><span class="s2">"coordinates.time.days"</span><span class="p">,</span> <span class="s2">"coordinates.time.nanos"</span><span class="p">])</span>
 </pre></div>
         </article>
       </div>
@@ -687,7 +679,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-06</div>
+              Last updated on 2026-10-07</div>
           </div>
           <div class="right-details">
             
