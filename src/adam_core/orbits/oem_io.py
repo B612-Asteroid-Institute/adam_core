@@ -8,8 +8,8 @@ deliver, which NAIF aligns with the ICRF), the origin as CENTER_NAME and the
 Timestamp scale as TIME_SYSTEM, plus an optional covariance block in REF_FRAME
 or a local orbital frame. CCSDS 502.0-B-3 table 5-4 cites RSW, RTN and TNW
 (3.2.4.11) for COV_REF_FRAME and annex B5 admits SANA frames such as
-VNC_ROTATING, so other labels get a COMMENT line and are refused under
-``strict``. :func:`orbit_from_oem` reads either back.
+VNC_ROTATING, so other labels get a COMMENT line and are refused with
+``table_frames_only``. :func:`orbit_from_oem` reads either back.
 """
 
 from __future__ import annotations
@@ -325,7 +325,7 @@ def _oem_to_adam_center(center: str) -> str:
         )
 
 
-_REF_FRAME = {"equatorial": "ICRF", "itrf93": "ITRF-93"}
+_REF_FRAME_LABELS = {"equatorial": "ICRF", "itrf93": "ITRF-93"}
 _OEM_COVARIANCE_FRAMES = ("RSW", "RTN", "TNW")
 
 
@@ -367,10 +367,10 @@ class OrbitEphemerisMessage:
         """
         states = _single_object_sorted(_on_millisecond_grid(orbits))
         coords = states.coordinates
-        if coords.frame not in _REF_FRAME:
+        if coords.frame not in _REF_FRAME_LABELS:
             raise ValueError(
                 f"Frame {coords.frame!r} cannot be written to an OEM, supported "
-                f"frames are {list(_REF_FRAME)}. Transform to equatorial first."
+                f"frames are {list(_REF_FRAME_LABELS)}. Transform to equatorial first."
             )
         default_id = states.object_id[0].as_py()
         return cls(
@@ -379,7 +379,7 @@ class OrbitEphemerisMessage:
             object_name=object_name or default_id,
             object_id=object_id or default_id,
             center_name=_adam_to_oem_center(coords.origin.code[0].as_py()),
-            ref_frame=_REF_FRAME[coords.frame],
+            ref_frame=_REF_FRAME_LABELS[coords.frame],
             time_system=coords.time.scale.upper(),
             creation_date=creation_date,
             comments=tuple(comments),
@@ -389,23 +389,26 @@ class OrbitEphemerisMessage:
         self,
         path: Union[str, os.PathLike],
         covariance_frame: Optional[str] = None,
-        strict: bool = False,
+        table_frames_only: bool = False,
     ) -> str:
         """
         Write the KVN file and return its path. ``covariance_frame`` None writes
         no covariance block, the REF_FRAME label writes the state covariance, a
         local orbital frame name or alias writes the rotated covariance under
-        that label. ``strict`` refuses labels outside the 3.2.4.11 set.
+        that label. ``table_frames_only`` refuses frames outside RSW, RTN, TNW
+        and REF_FRAME, the set CCSDS 502.0-B-3 table 5-4 cites.
         """
         from adam_core import _rust_native as _rn
 
         coords = self.states.coordinates
         epochs = coords.time.to_iso8601().to_pylist()
         comments = list(self.comments)
-        records: list = []
+        covariance_records: list = []
         if covariance_frame is not None:
-            records, note = self._covariance_records(covariance_frame, strict)
-            comments += [note] if note else []
+            covariance_records, frame_comment = self._covariance_records(
+                covariance_frame, table_frames_only
+            )
+            comments += [frame_comment] if frame_comment else []
         header = {
             "CCSDS_OEM_VERS": self.ccsds_oem_vers,
             "CREATION_DATE": self.creation_date
@@ -433,61 +436,67 @@ class OrbitEphemerisMessage:
             np.ascontiguousarray(
                 convert_cartesian_values_au_to_km(coords.values).ravel()
             ),
-            records,
+            covariance_records,
         )
         if comments:
             lines = Path(path).read_text().split("\n")
-            at = lines.index("META_START") + 1
-            lines[at:at] = [f"COMMENT {comment}" for comment in comments]
+            insert_at = lines.index("META_START") + 1
+            lines[insert_at:insert_at] = [f"COMMENT {comment}" for comment in comments]
             Path(path).write_text("\n".join(lines))
         return str(path)
 
-    def _covariance_records(self, label: str, strict: bool):
+    def _covariance_records(self, covariance_frame: str, table_frames_only: bool):
         """Per epoch (days, nanos, frame, lower triangle in km) plus a COMMENT or None."""
         coords = self.states.coordinates
         if coords.covariance.is_all_nan():
             raise ValueError("The states carry no covariance.")
-        note = None
-        label = label.upper()  # normative values are single case (7.5.3)
-        if label == self.ref_frame.upper():
-            label, matrices = self.ref_frame, coords.covariance.to_matrix()
+        frame_comment = None
+        covariance_frame = covariance_frame.upper()  # single case values (7.5.3)
+        if covariance_frame == self.ref_frame.upper():
+            covariance_frame = self.ref_frame
+            matrices = coords.covariance.to_matrix()
         else:
-            if label not in _OEM_COVARIANCE_FRAMES:
-                note = (
-                    f"COV_REF_FRAME {label} follows the SANA orbit-relative reference "
+            if covariance_frame not in _OEM_COVARIANCE_FRAMES:
+                frame_comment = (
+                    f"COV_REF_FRAME {covariance_frame} follows the SANA orbit-relative reference "
                     "frames registry (CCSDS 502.0-B-3 annex B5)."
                 )
-                if strict:
+                if table_frames_only:
                     raise ValueError(
-                        f"{note} It is outside the {', '.join(_OEM_COVARIANCE_FRAMES)} "
-                        "set of table 5-4. Pass strict=False to write it anyway."
+                        f"{frame_comment} It is outside the {', '.join(_OEM_COVARIANCE_FRAMES)} "
+                        "set of table 5-4. Pass table_frames_only=False to write it anyway."
                     )
             matrices = LocalFrameCovariances.from_orbits(
-                self.states, label
+                self.states, covariance_frame
             ).covariance.to_matrix()
         matrices_km = convert_cartesian_covariance_au_to_km(matrices)
         days = coords.time.days.to_pylist()
         nanos = coords.time.nanos.to_pylist()
-        lower = np.tril_indices(6)
+        lower_triangle = np.tril_indices(6)
         return [
-            (days[i], nanos[i], label, matrices_km[i][lower].tolist())
+            (
+                days[i],
+                nanos[i],
+                covariance_frame,
+                matrices_km[i][lower_triangle].tolist(),
+            )
             for i in range(len(days))
             if not np.isnan(matrices_km[i]).all()
-        ], note
+        ], frame_comment
 
 
 def _on_millisecond_grid(orbits: Orbits) -> Orbits:
     time = orbits.coordinates.time
     rounded = time.rounded("ms")
-    shift = np.abs(
+    shift_nanos = np.abs(
         rounded.nanos.to_numpy(zero_copy_only=False)
         - time.nanos.to_numpy(zero_copy_only=False)
     )
-    if shift.any():
+    if shift_nanos.any():
         warnings.warn(
-            f"{int((shift > 0).sum())} of {len(time)} epochs were moved onto the "
+            f"{int((shift_nanos > 0).sum())} of {len(time)} epochs were moved onto the "
             f"millisecond grid OEM epochs are written with, the largest by "
-            f"{shift.max() / 1e3:.1f} microseconds."
+            f"{shift_nanos.max() / 1e3:.1f} microseconds."
         )
         return orbits.set_column("coordinates.time", rounded)
     return orbits
@@ -495,12 +504,12 @@ def _on_millisecond_grid(orbits: Orbits) -> Orbits:
 
 def _single_object_sorted(orbits: Orbits) -> Orbits:
     """One object about one center at unique epochs, sorted by time (OEM 5.1.3)."""
-    ids = orbits.object_id.unique().to_pylist()
+    object_ids = orbits.object_id.unique().to_pylist()
     origins = orbits.coordinates.origin.code.unique().to_pylist()
-    if len(ids) != 1 or ids[0] is None or len(origins) != 1:
+    if len(object_ids) != 1 or object_ids[0] is None or len(origins) != 1:
         raise ValueError(
             "An OEM needs an object_id and carries one object about one center per "
-            f"file, got object_ids {ids} and origins {origins}."
+            f"file, got object_ids {object_ids} and origins {origins}."
         )
     if len(orbits.coordinates.time.unique()) != len(orbits):
         raise ValueError("Epochs must be unique within an OEM.")
