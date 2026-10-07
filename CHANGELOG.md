@@ -8,7 +8,8 @@ This file contains notable changes in adam-core
 
 - Rust-native per-row `OrbitBatch` assessment of strict 6D/9D covariance
   semantics and canonical non-gravitational/Marsden consistency, without
-  mutating or repairing supplied inputs.
+  mutating or repairing supplied inputs. Consumers can call the same canonical
+  covariance-row assessment directly.
 - Native CPython 3.11-3.13 wheels for manylinux 2.17 x86-64/AArch64 and
   macOS Apple silicon/Intel, with clean-room artifact acceptance and build-once
   trusted-publishing automation. Windows is deferred while upstream ASSIST

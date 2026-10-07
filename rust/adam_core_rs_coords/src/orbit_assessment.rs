@@ -6,8 +6,9 @@
 //! mutating, repairing, or otherwise normalizing the supplied values.
 
 use crate::{
-    types::SchemaResult, CoordinateRepresentation, CovarianceBatch, CovarianceUnits,
-    NonGravitationalParametersRow, OrbitBatch,
+    types::{SchemaError, SchemaResult},
+    CoordinateRepresentation, CovarianceBatch, CovarianceUnits, NonGravitationalParametersRow,
+    OrbitBatch,
 };
 
 const MAX_COVARIANCE_DIMENSION: usize = 9;
@@ -158,7 +159,12 @@ pub fn assess_orbit_batch(orbits: &OrbitBatch) -> SchemaResult<Vec<OrbitAssessme
     orbits.validate()?;
     let mut assessments = Vec::with_capacity(orbits.len());
     for row in 0..orbits.len() {
-        let covariance = assess_covariance(orbits.coordinates.covariance.as_ref(), row);
+        let covariance = match orbits.coordinates.covariance.as_ref() {
+            Some(covariance) => {
+                OrbitCovarianceAssessment::Present(assess_orbit_covariance(covariance, row)?)
+            }
+            None => OrbitCovarianceAssessment::Absent,
+        };
         let non_gravitational = assess_non_gravitational(
             orbits
                 .non_gravitational_parameters
@@ -175,13 +181,30 @@ pub fn assess_orbit_batch(orbits: &OrbitBatch) -> SchemaResult<Vec<OrbitAssessme
     Ok(assessments)
 }
 
-fn assess_covariance(
-    covariance: Option<&CovarianceBatch>,
+/// Assess one supplied orbit-covariance row without modifying it.
+///
+/// The batch must use physical width six or nine, and `row` must address an
+/// existing row. Padded coordinate-only rows in physical 9D storage are
+/// assessed using their semantic 6D block.
+pub fn assess_orbit_covariance(
+    covariance: &CovarianceBatch,
     row: usize,
-) -> OrbitCovarianceAssessment {
-    let Some(covariance) = covariance else {
-        return OrbitCovarianceAssessment::Absent;
-    };
+) -> SchemaResult<PresentOrbitCovarianceAssessment> {
+    covariance.validate()?;
+    if !matches!(covariance.dimension, 6 | 9) {
+        return Err(SchemaError::InvalidCovarianceShape {
+            rows: covariance.rows,
+            dimension: covariance.dimension,
+            values: covariance.values_row_major.len(),
+        });
+    }
+    if row >= covariance.rows {
+        return Err(SchemaError::InvalidRecordBatch(format!(
+            "covariance row {row} is outside {} rows",
+            covariance.rows
+        )));
+    }
+
     let semantic_dimension = covariance.row_dimension(row);
     let row_declared_valid = covariance.is_row_valid(row);
     let units_compatible = matches!(
@@ -251,7 +274,7 @@ fn assess_covariance(
         }
     }
 
-    OrbitCovarianceAssessment::Present(PresentOrbitCovarianceAssessment {
+    Ok(PresentOrbitCovarianceAssessment {
         semantic_dimension,
         row_declared_valid,
         units_compatible,
@@ -493,6 +516,38 @@ mod tests {
             OrbitCovarianceAssessment::Present(covariance) => covariance,
             OrbitCovarianceAssessment::Absent => panic!("expected covariance"),
         }
+    }
+
+    #[test]
+    fn direct_covariance_assessment_matches_orbit_batch() {
+        let covariance = cartesian_covariance(6, diagonal_covariance(6));
+        let direct = assess_orbit_covariance(&covariance, 0).unwrap();
+        let batch = assess_orbit_batch(&orbit(Some(covariance), None)).unwrap();
+        assert_eq!(
+            batch[0].covariance,
+            OrbitCovarianceAssessment::Present(direct)
+        );
+    }
+
+    #[test]
+    fn direct_covariance_assessment_rejects_bad_address_and_dimension() {
+        let covariance = cartesian_covariance(6, diagonal_covariance(6));
+        assert!(matches!(
+            assess_orbit_covariance(&covariance, 1),
+            Err(SchemaError::InvalidRecordBatch(_))
+        ));
+
+        let unsupported = CovarianceBatch::new(
+            1,
+            7,
+            diagonal_covariance(7),
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap();
+        assert!(matches!(
+            assess_orbit_covariance(&unsupported, 0),
+            Err(SchemaError::InvalidCovarianceShape { dimension: 7, .. })
+        ));
     }
 
     #[test]
