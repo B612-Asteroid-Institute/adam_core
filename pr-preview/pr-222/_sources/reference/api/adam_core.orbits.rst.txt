@@ -25,7 +25,6 @@ Submodules
    adam_core.orbits.classification
    adam_core.orbits.ephemeris
    adam_core.orbits.non_gravitational_parameters
-   adam_core.orbits.oem
    adam_core.orbits.oem_io
    adam_core.orbits.orbits
    adam_core.orbits.physical_parameters

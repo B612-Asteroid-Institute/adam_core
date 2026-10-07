@@ -72,7 +72,7 @@ OEM 3.0 with Explicit Labels and Local Frame Covariances
 ---------------------------------------------------------
 
 ``orbit_to_oem`` writes OEM 2.0 with ``REF_FRAME = EME2000``. An
-:class:`~adam_core.orbits.oem.OrbitEphemerisMessage` built from the same
+:class:`~adam_core.orbits.oem_io.OrbitEphemerisMessage` built from the same
 ``Orbits`` table writes OEM 3.0 with ``REF_FRAME = ICRF`` for equatorial
 states, ``CENTER_NAME`` from the origin and ``TIME_SYSTEM`` from the Timestamp
 scale.
