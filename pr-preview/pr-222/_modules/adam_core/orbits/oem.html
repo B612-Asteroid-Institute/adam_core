@@ -439,9 +439,9 @@
 <span class="sd">frame (the J2000 axes SPICE and DE440 deliver, which NAIF aligns with the</span>
 <span class="sd">ICRF), the origin as CENTER_NAME and the Timestamp scale as TIME_SYSTEM.</span>
 <span class="sd">``orbit_from_oem`` reads the result back. A covariance block is written on</span>
-<span class="sd">request, in REF_FRAME or a local orbital frame. CCSDS 502.0-B-3 lists only</span>
-<span class="sd">RSW, RTN and TNW for COV_REF_FRAME (3.2.4.11), so other labels get a COMMENT</span>
-<span class="sd">line and are refused under ``strict``.</span>
+<span class="sd">request, in REF_FRAME or a local orbital frame. CCSDS 502.0-B-3 table 5-4 cites</span>
+<span class="sd">RSW, RTN and TNW (3.2.4.11) there and annex B5 admits SANA frames such as</span>
+<span class="sd">VNC_ROTATING, so other labels get a COMMENT line and are refused under ``strict``.</span>
 <span class="sd">"""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
@@ -542,7 +542,7 @@
 <span class="sd">        Write the KVN file and return its path. ``covariance_frame`` None writes</span>
 <span class="sd">        no covariance block, the REF_FRAME label writes the state covariance, a</span>
 <span class="sd">        local orbital frame name or alias writes the rotated covariance under</span>
-<span class="sd">        that label. ``strict`` refuses labels outside the OEM covariance set.</span>
+<span class="sd">        that label. ``strict`` refuses labels outside the 3.2.4.11 set.</span>
 <span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
@@ -596,14 +596,15 @@
         <span class="k">if</span> <span class="n">coords</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">is_all_nan</span><span class="p">():</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"The states carry no covariance."</span><span class="p">)</span>
         <span class="n">note</span> <span class="o">=</span> <span class="kc">None</span>
-        <span class="k">if</span> <span class="n">label</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_frame</span><span class="o">.</span><span class="n">upper</span><span class="p">():</span>
+        <span class="n">label</span> <span class="o">=</span> <span class="n">label</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span>  <span class="c1"># normative values are single case (7.5.3)</span>
+        <span class="k">if</span> <span class="n">label</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_frame</span><span class="o">.</span><span class="n">upper</span><span class="p">():</span>
             <span class="n">label</span><span class="p">,</span> <span class="n">matrices</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ref_frame</span><span class="p">,</span> <span class="n">coords</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="k">if</span> <span class="n">label</span><span class="o">.</span><span class="n">upper</span><span class="p">()</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_OEM_COVARIANCE_FRAMES</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_OEM_COVARIANCE_FRAMES</span><span class="p">:</span>
                 <span class="n">note</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"COV_REF_FRAME </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> is a SANA orbit-relative reference frame "</span>
-                    <span class="s2">"outside the OEM covariance frame set of CCSDS 502.0-B-3 "</span>
-                    <span class="sa">f</span><span class="s2">"section 3.2.4.11 (</span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">_OEM_COVARIANCE_FRAMES</span><span class="p">)</span><span class="si">}</span><span class="s2">)."</span>
+                    <span class="sa">f</span><span class="s2">"COV_REF_FRAME </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> is a SANA orbit-relative frame admitted "</span>
+                    <span class="s2">"by CCSDS 502.0-B-3 annex B5, outside the "</span>
+                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">_OEM_COVARIANCE_FRAMES</span><span class="p">)</span><span class="si">}</span><span class="s2"> set of 3.2.4.11, table 5-4."</span>
                 <span class="p">)</span>
                 <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">note</span> <span class="o">+</span> <span class="s2">" Pass strict=False to write it anyway."</span><span class="p">)</span>

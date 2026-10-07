@@ -528,8 +528,8 @@ scale.</p>
 <span class="n">vnc</span> <span class="o">=</span> <span class="n">LocalFrameCovariances</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span><span class="n">propagated</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span>
 <span class="n">vnc</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">"covariance_vnc_rotating.parquet"</span><span class="p">)</span>
 
-<span class="c1"># The OEM standard lists RSW, RTN and TNW for COV_REF_FRAME. Other labels</span>
-<span class="c1"># get a COMMENT line, or are refused with strict=True.</span>
+<span class="c1"># Table 5-4 cites RSW, RTN and TNW for COV_REF_FRAME, annex B5 admits SANA</span>
+<span class="c1"># frames such as VNC_ROTATING. Others get a COMMENT line, or raise with strict.</span>
 <span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states_vnc_cov.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span>
 </pre></div>
 </div>
