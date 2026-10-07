@@ -520,17 +520,22 @@ scale.</p>
 <span class="n">message</span> <span class="o">=</span> <span class="n">OrbitEphemerisMessage</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span>
     <span class="n">propagated</span><span class="p">,</span> <span class="n">originator</span><span class="o">=</span><span class="s2">"B612 ASTEROID INSTITUTE"</span><span class="p">,</span> <span class="n">object_name</span><span class="o">=</span><span class="s2">"99942 Apophis"</span>
 <span class="p">)</span>
-<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states.oem"</span><span class="p">)</span>   <span class="c1"># states only, or covariance_frame="ICRF"</span>
 
-<span class="c1"># Covariance in a local orbital frame as a separate product. VNC_ROTATING</span>
-<span class="c1"># follows the SANA registry, VNC_INERTIAL is the pure rotation, TNW and</span>
-<span class="c1"># RSW (RTN, RIC) work the same way.</span>
-<span class="n">vnc</span> <span class="o">=</span> <span class="n">LocalFrameCovariances</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span><span class="n">propagated</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span>
-<span class="n">vnc</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">"covariance_vnc_rotating.parquet"</span><span class="p">)</span>
+<span class="c1"># States with a covariance block per epoch in VNC_ROTATING, a SANA frame</span>
+<span class="c1"># CCSDS 502.0-B-3 admits through annex B5. VNC_INERTIAL is the pure rotation,</span>
+<span class="c1"># TNW and RSW (RTN, RIC) work the same way, "ICRF" writes the state covariance.</span>
+<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states_cov_vnc_rotating.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span>
 
-<span class="c1"># Table 5-4 cites RSW, RTN and TNW for COV_REF_FRAME, annex B5 admits SANA</span>
-<span class="c1"># frames such as VNC_ROTATING. Others get a COMMENT line, or raise with strict.</span>
-<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states_vnc_cov.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span>
+<span class="c1"># strict=True keeps to the RSW, RTN, TNW set of table 5-4 for readers that</span>
+<span class="c1"># only know that list. VNC_ROTATING is TNW_ROTATING with rows (T, W, -N).</span>
+<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states_cov_tnw.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"TNW"</span><span class="p">,</span> <span class="n">strict</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># States only, with the covariance as a separate product at full epoch</span>
+<span class="c1"># precision in AU and AU/day, for consumers that want it outside the OEM.</span>
+<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states.oem"</span><span class="p">)</span>
+<span class="n">LocalFrameCovariances</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span><span class="n">propagated</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span>
+    <span class="s2">"covariance_vnc_rotating.parquet"</span>
+<span class="p">)</span>
 </pre></div>
 </div>
 </section>

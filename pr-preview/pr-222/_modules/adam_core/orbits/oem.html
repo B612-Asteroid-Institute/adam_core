@@ -602,12 +602,14 @@
         <span class="k">else</span><span class="p">:</span>
             <span class="k">if</span> <span class="n">label</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">_OEM_COVARIANCE_FRAMES</span><span class="p">:</span>
                 <span class="n">note</span> <span class="o">=</span> <span class="p">(</span>
-                    <span class="sa">f</span><span class="s2">"COV_REF_FRAME </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> is a SANA orbit-relative frame admitted "</span>
-                    <span class="s2">"by CCSDS 502.0-B-3 annex B5, outside the "</span>
-                    <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">_OEM_COVARIANCE_FRAMES</span><span class="p">)</span><span class="si">}</span><span class="s2"> set of 3.2.4.11, table 5-4."</span>
+                    <span class="sa">f</span><span class="s2">"COV_REF_FRAME </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2"> follows the SANA orbit-relative reference "</span>
+                    <span class="s2">"frames registry (CCSDS 502.0-B-3 annex B5)."</span>
                 <span class="p">)</span>
                 <span class="k">if</span> <span class="n">strict</span><span class="p">:</span>
-                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">note</span> <span class="o">+</span> <span class="s2">" Pass strict=False to write it anyway."</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">note</span><span class="si">}</span><span class="s2"> It is outside the </span><span class="si">{</span><span class="s1">', '</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">_OEM_COVARIANCE_FRAMES</span><span class="p">)</span><span class="si">}</span><span class="s2"> "</span>
+                        <span class="s2">"set of table 5-4. Pass strict=False to write it anyway."</span>
+                    <span class="p">)</span>
             <span class="n">matrices</span> <span class="o">=</span> <span class="n">LocalFrameCovariances</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">,</span> <span class="n">label</span>
             <span class="p">)</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()</span>
