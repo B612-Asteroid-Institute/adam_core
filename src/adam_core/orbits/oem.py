@@ -6,9 +6,10 @@ KVN renderer with the labels spelled out: ICRF for adam_core's equatorial
 frame (the J2000 axes SPICE and DE440 deliver, which NAIF aligns with the
 ICRF), the origin as CENTER_NAME and the Timestamp scale as TIME_SYSTEM.
 ``orbit_from_oem`` reads the result back. A covariance block is written on
-request, in REF_FRAME or a local orbital frame. CCSDS 502.0-B-3 lists only
-RSW, RTN and TNW for COV_REF_FRAME (3.2.4.11), so other labels get a COMMENT
-line and are refused under ``strict``.
+request, in REF_FRAME or a local orbital frame. CCSDS 502.0-B-3 table 5-4
+cites RSW, RTN and TNW (3.2.4.11) for COV_REF_FRAME and its normative annex B5
+admits the SANA orbit-relative frames such as VNC_ROTATING, so labels outside
+the 3.2.4.11 set get a COMMENT line and are refused under ``strict``.
 """
 
 from __future__ import annotations
@@ -102,7 +103,7 @@ class OrbitEphemerisMessage:
         Write the KVN file and return its path. ``covariance_frame`` None writes
         no covariance block, the REF_FRAME label writes the state covariance, a
         local orbital frame name or alias writes the rotated covariance under
-        that label. ``strict`` refuses labels outside the OEM covariance set.
+        that label. ``strict`` refuses labels outside the 3.2.4.11 set.
         """
         from adam_core import _rust_native as _rn
 
@@ -155,14 +156,16 @@ class OrbitEphemerisMessage:
         if coords.covariance.is_all_nan():
             raise ValueError("The states carry no covariance.")
         note = None
-        if label.upper() == self.ref_frame.upper():
+        label = label.upper()  # normative values are single case (7.5.3)
+        if label == self.ref_frame.upper():
             label, matrices = self.ref_frame, coords.covariance.to_matrix()
         else:
-            if label.upper() not in _OEM_COVARIANCE_FRAMES:
+            if label not in _OEM_COVARIANCE_FRAMES:
                 note = (
                     f"COV_REF_FRAME {label} is a SANA orbit-relative reference frame "
-                    "outside the OEM covariance frame set of CCSDS 502.0-B-3 "
-                    f"section 3.2.4.11 ({', '.join(_OEM_COVARIANCE_FRAMES)})."
+                    "admitted by CCSDS 502.0-B-3 annex B5, outside the "
+                    f"{', '.join(_OEM_COVARIANCE_FRAMES)} set of 3.2.4.11 that "
+                    "table 5-4 cites."
                 )
                 if strict:
                     raise ValueError(note + " Pass strict=False to write it anyway.")

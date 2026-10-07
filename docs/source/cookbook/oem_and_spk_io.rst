@@ -94,8 +94,9 @@ scale.
    vnc = LocalFrameCovariances.from_orbits(propagated, frame="VNC_ROTATING")
    vnc.to_parquet("covariance_vnc_rotating.parquet")
 
-   # The OEM standard lists RSW, RTN and TNW for COV_REF_FRAME. Other labels
-   # get a COMMENT line, or are refused with strict=True.
+   # Table 5-4 of the OEM standard cites RSW, RTN and TNW for COV_REF_FRAME and
+   # annex B5 admits SANA frames such as VNC_ROTATING. Labels outside the table
+   # set get a COMMENT line, or are refused with strict=True.
    message.write("states_vnc_cov.oem", covariance_frame="VNC_ROTATING")
 
 Read OEM Back into ``Orbits``
