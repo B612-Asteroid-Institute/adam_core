@@ -81,8 +81,7 @@ def test_round_trip_heliocentric_icrf(history, tmp_path):
     assert loaded.coordinates.frame == "equatorial"
     assert loaded.coordinates.time.scale == "tdb"
     assert loaded.coordinates.origin.code.to_pylist() == ["SUN"] * 6
-    assert loaded.coordinates.time.days.equals(history.coordinates.time.days)
-    assert loaded.coordinates.time.nanos.equals(history.coordinates.time.nanos)
+    assert loaded.coordinates.time.equals(history.coordinates.time)
     np.testing.assert_allclose(
         loaded.coordinates.values, history.coordinates.values, rtol=1e-12
     )

@@ -1,15 +1,12 @@
-"""Local orbital frames and covariances expressed in them.
+"""Local orbital frames (SANA orbit-relative registry names) for covariances.
 
-Names follow the SANA orbit-relative reference frames registry used by the
-CCSDS navigation data messages. RSW (also RTN, RIC) has x along the position
-and z along the orbital angular momentum, TNW has x along the velocity and z
-along the angular momentum, VNC has x along the velocity and y along the
-angular momentum. The third axis completes each right-handed set, so VNC and
-TNW share two axes and must never be labelled as each other. ``_INERTIAL``
-variants rotate position and velocity alike. ``_ROTATING`` variants also carry
-the frame rate, from two-body motion about the origin, into the velocity rows.
-Bare names resolve to ``_INERTIAL``, as the CCSDS messages use them. Only
-covariances are expressed in these frames. State vectors stay inertial.
+RSW (RTN, RIC): x along position, z along the orbital angular momentum h.
+TNW: x along velocity, z along h. VNC: x along velocity, y along h. The third
+axis completes each right-handed set, so VNC is TNW with rows (T, W, -N) and the
+two must never be labelled as each other. ``_INERTIAL`` variants rotate position
+and velocity alike, ``_ROTATING`` variants add the two-body frame rate to the
+velocity rows. Bare names resolve to ``_INERTIAL``. Only covariances are
+expressed here. State vectors stay inertial.
 """
 
 from __future__ import annotations
@@ -28,27 +25,17 @@ from .origin import Origin
 if TYPE_CHECKING:
     from ..orbits.orbits import Orbits
 
-_FRAMES = (
-    "RSW_ROTATING",
-    "RSW_INERTIAL",
-    "TNW_ROTATING",
-    "TNW_INERTIAL",
-    "VNC_ROTATING",
-    "VNC_INERTIAL",
-)
-_ALIASES = {
-    "RSW": "RSW_INERTIAL",
-    "RTN": "RSW_INERTIAL",
-    "RIC": "RSW_INERTIAL",
-    "TNW": "TNW_INERTIAL",
-    "VNC": "VNC_INERTIAL",
-}
+_FAMILIES = ("RSW", "TNW", "VNC")
+_FRAMES = tuple(f"{f}_{kind}" for f in _FAMILIES for kind in ("ROTATING", "INERTIAL"))
+_ALIASES = {"RTN": "RSW", "RIC": "RSW"}
 _Mu = Optional[Union[float, npt.ArrayLike]]
 
 
 def _canonical_frame(frame: str) -> str:
     name = str(frame).strip().upper()
     name = _ALIASES.get(name, name)
+    if name in _FAMILIES:  # a bare name means the quasi-inertial variant
+        name += "_INERTIAL"
     if name not in _FRAMES:
         raise ValueError(
             f"Unknown local orbital frame {frame!r}, expected one of {_FRAMES}."
@@ -103,19 +90,13 @@ def _angular_velocity(coords: CartesianCoordinates, frame: str, mu: _Mu) -> np.n
     r_hat_rate = _unit_vector_rate(coords.r, coords.v, coords.r_mag)
     v_hat_rate = _unit_vector_rate(coords.v, acceleration, coords.v_mag)
     # Under two-body motion only r_hat and v_hat turn, the orbit normal does not.
+    x_rate = r_hat_rate if family == "RSW" else v_hat_rate
+    y_rate = np.cross(h_hat, x_rate)  # rate of the axis completing (x, h_hat)
     zero_rate = np.zeros_like(h_hat)
-    if family == "RSW":
-        axis_rates = np.stack(
-            [r_hat_rate, np.cross(h_hat, r_hat_rate), zero_rate], axis=1
-        )
-    elif family == "TNW":
-        axis_rates = np.stack(
-            [v_hat_rate, np.cross(h_hat, v_hat_rate), zero_rate], axis=1
-        )
+    if family == "VNC":  # VNC rows are (x, h_hat, -y)
+        axis_rates = np.stack([x_rate, zero_rate, -y_rate], axis=1)
     else:
-        axis_rates = np.stack(
-            [v_hat_rate, zero_rate, np.cross(v_hat_rate, h_hat)], axis=1
-        )
+        axis_rates = np.stack([x_rate, y_rate, zero_rate], axis=1)
     # For an orthonormal triad with de_i = omega x e_i, sum_i e_i x de_i = 2 omega.
     return 0.5 * np.cross(_rotation_matrices(coords, frame), axis_rates, axis=2).sum(
         axis=1
@@ -144,9 +125,8 @@ def local_frame_jacobians(
 
 class LocalFrameCovariances(qv.Table):
     """
-    Per-epoch state covariances in a local orbital frame, AU and AU/day. Rows
-    align one to one with the source orbits, which stay inertial. Rows without
-    a source covariance stay NaN.
+    Per epoch covariances in a local orbital frame (AU, AU/day), one row per
+    source orbit. Rows without a source covariance stay NaN.
     """
 
     orbit_id = qv.LargeStringColumn()

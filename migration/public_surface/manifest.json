@@ -3369,7 +3369,7 @@
       "kind": "class",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/local_orbital_frames.py",
-      "line": 145,
+      "line": 126,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -3397,7 +3397,7 @@
       "kind": "classmethod",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/local_orbital_frames.py",
-      "line": 162,
+      "line": 142,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -3425,7 +3425,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/local_orbital_frames.py",
-      "line": 125,
+      "line": 106,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10705,7 +10705,7 @@
       "kind": "constant",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 70,
+      "line": 66,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10733,7 +10733,7 @@
       "kind": "constant",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 54,
+      "line": 50,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10761,7 +10761,7 @@
       "kind": "class",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 333,
+      "line": 329,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10789,13 +10789,13 @@
       "kind": "classmethod",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 353,
+      "line": 347,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
         "rust_reference": false,
-        "python_loop": true,
+        "python_loop": false,
         "numpy_reference": false,
         "pyarrow_reference": false,
         "quivr_reference": false,
@@ -10817,7 +10817,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 388,
+      "line": 381,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10845,7 +10845,7 @@
       "kind": "constant",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 56,
+      "line": 52,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10873,7 +10873,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 635,
+      "line": 620,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10901,7 +10901,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 519,
+      "line": 504,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10929,7 +10929,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 590,
+      "line": 575,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

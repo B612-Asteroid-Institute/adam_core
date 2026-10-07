@@ -42,7 +42,7 @@ def circular_state(a: float = 1.3, origin: str = "SUN") -> CartesianCoordinates:
 def test_axes_follow_the_registry_and_match_rust_ric(heliocentric_orbits):
     coords = heliocentric_orbits.coordinates
     r_hat, v_hat = coords.r_hat, coords.v_hat
-    w_hat = coords.h / np.linalg.norm(coords.h, axis=1)[:, None]
+    w_hat = coords.h_hat
 
     rsw = axes_of(coords, "rtn")
     np.testing.assert_allclose(rsw[:, 0], r_hat, atol=1e-14)
@@ -91,12 +91,7 @@ def test_rotating_frames_follow_two_body_motion(heliocentric_orbits):
     for orbit_id in orbits.orbit_id.to_pylist():
         rows = propagated.apply_mask(
             propagated.orbit_id.to_numpy(zero_copy_only=False) == orbit_id
-        ).sort_by(
-            [
-                ("coordinates.time.days", "ascending"),
-                ("coordinates.time.nanos", "ascending"),
-            ]
-        )
+        ).sort_by("coordinates.time")
         for frame in ("RSW_ROTATING", "TNW_ROTATING", "VNC_ROTATING"):
             basis = axes_of(rows.coordinates, frame)
             rate = local_frame_jacobians(rows.coordinates, frame)[1, 3:, :3]
