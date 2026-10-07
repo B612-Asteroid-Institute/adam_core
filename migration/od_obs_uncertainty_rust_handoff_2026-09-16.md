@@ -202,6 +202,23 @@ Rust-callable part for Rust propagators; this slice finishes the facade:
   configuration by hand); adam-assist's five fused methods (separate PR,
   needs a core release that contains the drivers and a pin bump from rc.5).
 
+## 2026-10-07 follow-up: Arrow slice-offset bug mitigated
+
+Found 2026-10-01 while routing OD through the callback: `propagate_2body(
+orbits[1:2], times)` propagated row 0. The Python `RecordBatch` carries the
+slice offset correctly; the Rust nested-schema decoders (`OrbitBatch`,
+`ObserverBatch`, ...) read struct children from the start of the shared
+buffers. Flat primitive columns (the day/nanos time batches, the coordinate
+value columns of `transform_coordinates`) honour offsets, and adam-assist
+marshals through numpy, so ASSIST propagation / ephemeris / fused OD were never
+exposed. Fix: `adam_core._rust.arrow.contiguous_record_batch` rebuilds every
+offset array with `pa.concat_arrays` and is now the input half of every
+table-shaped crossing (`arrow_bridge._to_record_batch`,
+`transform._coordinate_record_batch`, `Trajectory._native_batch`,
+`LambertSolutions._record_batch`). The Rust decoders are unchanged; a Rust-side
+fix (apply `ArrayData::offset()` in the nested decode) would make the Python
+step redundant. The former strict-xfail pins are now regression tests.
+
 ## Correctness gates
 
 * **HEALPix RING order.** `efcc18::tests::ring_order_matches_jpl_tiles_dat`

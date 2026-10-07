@@ -51,6 +51,15 @@ This file contains notable changes in adam-core
   accepted and ignored). A Python propagator's exception is re-raised
   unchanged; driver errors are `ValueError` / `RuntimeError`. Observation
   models provide `_native_specs()` so a model stack crosses once.
+- Fixed: a sliced quivr table (`orbits[i:i+1]`, Arrow offset > 0) handed to
+  the typed Rust record-batch crossings (`propagate_2body`,
+  `generate_ephemeris_2body`, the trajectory and porkchop batches) was read as
+  the parent table's first rows, because the Rust nested-schema decoders read
+  struct children from the start of the shared buffers. The Python bridge now
+  materializes offset arrays (`adam_core._rust.arrow.contiguous_record_batch`)
+  before every such crossing; `take`, `apply_mask` and the IPC path were
+  already correct. Regression tests in
+  `dynamics/tests/test_dynamics_table_slices.py`.
 - The shipped defaults are the signature defaults: `NativeOrbitFitter` now
   defaults to `outlier_rejection="cmc2003"` (was `"worst_residual"`), and
   `run_od` called without `models` applies the default observation-model

@@ -20,6 +20,7 @@ from .._rust import (
     spherical_to_cartesian_numpy,
 )
 from .._rust.arrow import (
+    contiguous_record_batch,
     ensure_spice_backend,
     stamp_adam_core_metadata,
     table_from_record_batch,
@@ -124,13 +125,7 @@ def _coordinate_record_batch(
         scale=coords.time.scale,
         schema_name="CoordinateBatch.cartesian.nested.quivr.v1",
     )
-    batches = table.to_batches(max_chunksize=max(len(coords), 1))
-    if batches:
-        return batches[0]
-    return pa.RecordBatch.from_arrays(
-        [pa.array([], type=field.type) for field in table.schema],
-        schema=table.schema,
-    )
+    return contiguous_record_batch(table)
 
 
 def _transform_coordinates_native(
