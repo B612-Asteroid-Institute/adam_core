@@ -97,11 +97,15 @@ def test_local_frame_covariance_blocks(history, tmp_path):
     message = OrbitEphemerisMessage.from_orbits(history, ORIGINATOR)
     # TNW is in the table 5-4 set, VNC_ROTATING only through annex B5.
     tnw = open(
-        message.write(tmp_path / "tnw.oem", covariance_frame="tnw", strict=True)
+        message.write(
+            tmp_path / "tnw.oem", covariance_frame="tnw", table_frames_only=True
+        )
     ).read()
     assert tnw.count("COV_REF_FRAME = TNW") == 6 and "SANA" not in tnw
     with pytest.raises(ValueError, match="outside the RSW, RTN, TNW set"):
-        message.write(tmp_path / "x.oem", covariance_frame="VNC_ROTATING", strict=True)
+        message.write(
+            tmp_path / "x.oem", covariance_frame="VNC_ROTATING", table_frames_only=True
+        )
     path = message.write(tmp_path / "vnc.oem", covariance_frame="VNC_ROTATING")
     text = open(path).read()
     assert text.count("COV_REF_FRAME = VNC_ROTATING") == 6

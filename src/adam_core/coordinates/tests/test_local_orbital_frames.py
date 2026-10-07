@@ -114,7 +114,7 @@ def test_covariance_product(heliocentric_orbits):
     product = LocalFrameCovariances.from_orbits(orbits, "vnc_inertial")
     rotated = product.covariance.to_matrix()
     assert product.frame == "VNC_INERTIAL"
-    assert product.reference_frame == "equatorial"
+    assert product.inertial_frame == "equatorial"
     assert product.orbit_id.to_pylist() == orbits.orbit_id.to_pylist()
     assert product.time.days.equals(orbits.coordinates.time.days)
     assert product.origin.code.to_pylist() == ["SUN"] * 5

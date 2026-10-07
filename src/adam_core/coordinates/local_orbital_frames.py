@@ -46,7 +46,7 @@ _ALIASES = {
 _Mu = Optional[Union[float, npt.ArrayLike]]
 
 
-def _canonical(frame: str) -> str:
+def _canonical_frame(frame: str) -> str:
     label = str(frame).strip().upper()
     label = _ALIASES.get(label, label)
     if label not in _FRAMES:
@@ -66,7 +66,7 @@ def _rotation_matrices(coords: CartesianCoordinates, frame: str) -> np.ndarray:
         raise ValueError(
             f"State {int(np.flatnonzero(degenerate)[0])} has no orbit plane."
         )
-    family = _canonical(frame).split("_")[0]
+    family = _canonical_frame(frame).split("_")[0]
     if family == "RSW":
         return coords.ric3_matrix
     if family == "TNW":
@@ -78,14 +78,18 @@ def _rotation_matrices(coords: CartesianCoordinates, frame: str) -> np.ndarray:
     )
 
 
-def _unit_rate(vectors: np.ndarray, rates: np.ndarray, norms: np.ndarray) -> np.ndarray:
+def _unit_vector_rate(
+    vectors: np.ndarray, vector_rates: np.ndarray, norms: np.ndarray
+) -> np.ndarray:
+    """d(u/|u|)/dt for each row, given u and du/dt."""
     unit = vectors / norms[:, None]
-    return (rates - np.einsum("ij,ij->i", rates, unit)[:, None] * unit) / norms[:, None]
+    along = np.einsum("ij,ij->i", vector_rates, unit)[:, None]
+    return (vector_rates - along * unit) / norms[:, None]
 
 
 def _angular_velocity(coords: CartesianCoordinates, frame: str, mu: _Mu) -> np.ndarray:
     family = frame.split("_")[0]
-    w_hat = coords.h_hat
+    h_hat = coords.h_hat
     if mu is None:
         try:
             mu = coords.origin.mu()
@@ -96,18 +100,26 @@ def _angular_velocity(coords: CartesianCoordinates, frame: str, mu: _Mu) -> np.n
             ) from exc
     mu = np.broadcast_to(np.asarray(mu, dtype=np.float64), (len(coords),))
     acceleration = -mu[:, None] * coords.r / coords.r_mag[:, None] ** 3
-    dr_hat = _unit_rate(coords.r, coords.v, coords.r_mag)
-    dv_hat = _unit_rate(coords.v, acceleration, coords.v_mag)
-    # Under two-body motion the orbit normal is fixed, so only r_hat and v_hat turn.
-    fixed = np.zeros_like(w_hat)
+    r_hat_rate = _unit_vector_rate(coords.r, coords.v, coords.r_mag)
+    v_hat_rate = _unit_vector_rate(coords.v, acceleration, coords.v_mag)
+    # Under two-body motion only r_hat and v_hat turn, the orbit normal does not.
+    zero_rate = np.zeros_like(h_hat)
     if family == "RSW":
-        rates = np.stack([dr_hat, np.cross(w_hat, dr_hat), fixed], axis=1)
+        axis_rates = np.stack(
+            [r_hat_rate, np.cross(h_hat, r_hat_rate), zero_rate], axis=1
+        )
     elif family == "TNW":
-        rates = np.stack([dv_hat, np.cross(w_hat, dv_hat), fixed], axis=1)
+        axis_rates = np.stack(
+            [v_hat_rate, np.cross(h_hat, v_hat_rate), zero_rate], axis=1
+        )
     else:
-        rates = np.stack([dv_hat, fixed, np.cross(dv_hat, w_hat)], axis=1)
+        axis_rates = np.stack(
+            [v_hat_rate, zero_rate, np.cross(v_hat_rate, h_hat)], axis=1
+        )
     # For an orthonormal triad with de_i = omega x e_i, sum_i e_i x de_i = 2 omega.
-    return 0.5 * np.cross(_rotation_matrices(coords, frame), rates, axis=2).sum(axis=1)
+    return 0.5 * np.cross(_rotation_matrices(coords, frame), axis_rates, axis=2).sum(
+        axis=1
+    )
 
 
 def local_frame_jacobians(
@@ -119,13 +131,13 @@ def local_frame_jacobians(
     left block is the rotation. ``mu`` (AU^3/day^2, default the origin's) sets
     the ``_ROTATING`` frame rate.
     """
-    canonical = _canonical(frame)
-    rotation = _rotation_matrices(coords, canonical)
+    canonical_frame = _canonical_frame(frame)
+    rotation = _rotation_matrices(coords, canonical_frame)
     jacobians = np.zeros((len(coords), 6, 6))
     jacobians[:, :3, :3] = rotation
     jacobians[:, 3:, 3:] = rotation
-    if canonical.endswith("_ROTATING"):
-        omega = _angular_velocity(coords, canonical, mu)
+    if canonical_frame.endswith("_ROTATING"):
+        omega = _angular_velocity(coords, canonical_frame, mu)
         jacobians[:, 3:, :3] = np.cross(omega[:, None, :], rotation)
     return jacobians
 
@@ -142,21 +154,22 @@ class LocalFrameCovariances(qv.Table):
     time = Timestamp.as_column()
     covariance = CoordinateCovariances.as_column()
     origin = Origin.as_column()
-    #: Canonical frame name, and the inertial frame the axes were built from.
+    #: Canonical local frame name, and the inertial frame its axes were built from.
     frame = qv.StringAttribute(default="unspecified")
-    reference_frame = qv.StringAttribute(default="unspecified")
+    inertial_frame = qv.StringAttribute(default="unspecified")
 
     @classmethod
     def from_orbits(
         cls, orbits: "Orbits", frame: str = "VNC_ROTATING", mu: _Mu = None
     ) -> "LocalFrameCovariances":
         """Rotate the covariances of ``orbits`` into ``frame`` (name or alias)."""
-        canonical = _canonical(frame)
+        canonical_frame = _canonical_frame(frame)
         coords = orbits.coordinates
         if coords.covariance.is_all_nan():
             raise ValueError("The orbits carry no covariance.")
         rotated = apply_linear_covariance_transform(
-            local_frame_jacobians(coords, canonical, mu), coords.covariance.to_matrix()
+            local_frame_jacobians(coords, canonical_frame, mu),
+            coords.covariance.to_matrix(),
         )
         return cls.from_kwargs(
             orbit_id=orbits.orbit_id,
@@ -164,6 +177,6 @@ class LocalFrameCovariances(qv.Table):
             time=coords.time,
             covariance=CoordinateCovariances.from_matrix(rotated),
             origin=coords.origin,
-            frame=canonical,
-            reference_frame=coords.frame,
+            frame=canonical_frame,
+            inertial_frame=coords.frame,
         )

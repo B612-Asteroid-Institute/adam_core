@@ -92,9 +92,9 @@ scale.
    # TNW and RSW (RTN, RIC) work the same way, "ICRF" writes the state covariance.
    message.write("states_cov_vnc_rotating.oem", covariance_frame="VNC_ROTATING")
 
-   # strict=True keeps to the RSW, RTN, TNW set of table 5-4 for readers that
+   # table_frames_only=True keeps to the RSW, RTN, TNW set of table 5-4 for readers that
    # only know that list. VNC_ROTATING is TNW_ROTATING with rows (T, W, -N).
-   message.write("states_cov_tnw.oem", covariance_frame="TNW", strict=True)
+   message.write("states_cov_tnw.oem", covariance_frame="TNW", table_frames_only=True)
 
    # States only, with the covariance as a separate product at full epoch
    # precision in AU and AU/day, for consumers that want it outside the OEM.
