@@ -105,7 +105,7 @@ def test_local_frame_covariance_blocks(history, tmp_path):
     path = message.write(tmp_path / "vnc.oem", covariance_frame="VNC_ROTATING")
     text = open(path).read()
     assert text.count("COV_REF_FRAME = VNC_ROTATING") == 6
-    assert "COMMENT COV_REF_FRAME VNC_ROTATING is a SANA orbit-relative" in text
+    assert "COMMENT COV_REF_FRAME VNC_ROTATING follows the SANA" in text
 
     # The block holds the separate product's matrices in km, and the legacy
     # reader ignores a block that is not in REF_FRAME.

@@ -161,12 +161,14 @@ class OrbitEphemerisMessage:
         else:
             if label not in _OEM_COVARIANCE_FRAMES:
                 note = (
-                    f"COV_REF_FRAME {label} is a SANA orbit-relative frame admitted "
-                    "by CCSDS 502.0-B-3 annex B5, outside the "
-                    f"{', '.join(_OEM_COVARIANCE_FRAMES)} set of 3.2.4.11, table 5-4."
+                    f"COV_REF_FRAME {label} follows the SANA orbit-relative reference "
+                    "frames registry (CCSDS 502.0-B-3 annex B5)."
                 )
                 if strict:
-                    raise ValueError(note + " Pass strict=False to write it anyway.")
+                    raise ValueError(
+                        f"{note} It is outside the {', '.join(_OEM_COVARIANCE_FRAMES)} "
+                        "set of table 5-4. Pass strict=False to write it anyway."
+                    )
             matrices = LocalFrameCovariances.from_orbits(
                 self.states, label
             ).covariance.to_matrix()
