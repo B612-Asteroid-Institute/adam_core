@@ -22,8 +22,6 @@ from pathlib import Path
 from typing import Optional, Sequence, Union
 
 import numpy as np
-import pyarrow as pa
-import pyarrow.compute as pc
 
 from ..coordinates.local_orbital_frames import LocalFrameCovariances
 from ..coordinates.units import (
@@ -209,7 +207,7 @@ def _single_object_sorted(orbits: Orbits) -> Orbits:
     """One object with one origin at unique epochs, sorted by time."""
     if len(orbits) == 0:
         raise ValueError("An OEM needs at least one state.")
-    if not pc.all(pc.is_valid(orbits.object_id)).as_py():
+    if orbits.object_id.null_count:
         raise ValueError("Every state needs an object_id for the OEM metadata.")
     object_ids = orbits.object_id.unique().to_pylist()
     origins = orbits.coordinates.origin.code.unique().to_pylist()
@@ -218,12 +216,6 @@ def _single_object_sorted(orbits: Orbits) -> Orbits:
             "An OEM carries one object about one center per file, got object_ids "
             f"{object_ids} and origins {origins}."
         )
-    days = orbits.coordinates.time.days.to_numpy(zero_copy_only=False)
-    nanos = orbits.coordinates.time.nanos.to_numpy(zero_copy_only=False)
-    order = np.lexsort((nanos, days))
-    epochs = np.stack([days[order], nanos[order]], axis=1)
-    if (epochs[1:] == epochs[:-1]).all(axis=1).any():
+    if len(orbits.coordinates.time.unique()) != len(orbits):
         raise ValueError("Epochs must be unique within an OEM.")
-    if np.array_equal(order, np.arange(len(orbits))):
-        return orbits
-    return orbits.take(pa.array(order))
+    return orbits.sort_by(["coordinates.time.days", "coordinates.time.nanos"])

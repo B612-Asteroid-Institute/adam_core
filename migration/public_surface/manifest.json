@@ -10677,7 +10677,7 @@
       "kind": "class",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem.py",
-      "line": 42,
+      "line": 40,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10705,7 +10705,7 @@
       "kind": "classmethod",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem.py",
-      "line": 63,
+      "line": 61,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10733,7 +10733,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem.py",
-      "line": 100,
+      "line": 98,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
