@@ -28,6 +28,10 @@ This file contains notable changes in adam-core
 
 ### Added
 
+- Rust-native per-row `OrbitBatch` assessment of strict 6D/9D covariance
+  semantics and canonical non-gravitational/Marsden consistency, without
+  mutating or repairing supplied inputs. Consumers can call the same canonical
+  covariance-row assessment directly.
 - Native CPython 3.11-3.13 wheels for manylinux 2.17 x86-64/AArch64 and
   macOS Apple silicon/Intel, with clean-room artifact acceptance and build-once
   trusted-publishing automation. Windows is deferred while upstream ASSIST
@@ -42,6 +46,9 @@ This file contains notable changes in adam-core
 
 ### Changed
 
+- Non-gravitational assessment now reports explicit A-coefficient and covariance
+  parameterization facts, with separate nominal and covariance reasons for
+  requiring a Marsden law, instead of ambiguous force-activation terminology.
 - The compiled Rust extension is now required. Public Python functions remain
   compatibility veneers while numerical, table, product, query, and
   orchestration work executes in Rust.

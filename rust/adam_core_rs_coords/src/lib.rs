@@ -36,6 +36,14 @@ pub use oem_io::{oem_parse_kvn, oem_to_kvn, oem_write_kvn, OemCovarianceRecord};
 pub mod openspace;
 pub use openspace::{openspace_create_initialization, openspace_lua_to_string};
 
+pub mod orbit_assessment;
+pub use orbit_assessment::{
+    assess_non_gravitational_parameters, assess_orbit_batch, assess_orbit_covariance,
+    MarsdenLawEncoding, NonGravitationalAssessment, NonGravitationalIssue, OrbitAssessment,
+    OrbitCovarianceAssessment, OrbitCovarianceIssue, PresentOrbitCovarianceAssessment,
+    ORBIT_COVARIANCE_CORRELATION_SYMMETRY_TOLERANCE,
+};
+
 pub mod query;
 pub use query::{
     horizons_elements_normalize_json, horizons_ephemeris_normalize_json,
