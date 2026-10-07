@@ -75,31 +75,27 @@ OEM 3.0 with Explicit Labels and Local Frame Covariances
 :class:`~adam_core.orbits.oem.OrbitEphemerisMessage` built from the same
 ``Orbits`` table writes OEM 3.0 with ``REF_FRAME = ICRF`` for equatorial
 states, ``CENTER_NAME`` from the origin and ``TIME_SYSTEM`` from the Timestamp
-scale. Epochs off the renderer's millisecond grid are moved onto it with a
-warning.
+scale.
 
 .. code-block:: python
 
    from adam_core.orbits import OrbitEphemerisMessage
    from adam_core.coordinates import LocalFrameCovariances
 
-   # propagated: Orbits with one object_id, N epochs, frame "equatorial",
-   # origin SUN, time scale "tdb", covariance from propagate_orbits(..., covariance=True)
+   # propagated: Orbits of one object, frame "equatorial", origin SUN, scale "tdb"
    message = OrbitEphemerisMessage.from_orbits(
        propagated, originator="B612 ASTEROID INSTITUTE", object_name="99942 Apophis"
    )
-   message.write("states.oem")                               # states only
-   message.write("states_icrf_cov.oem", covariance_frame="ICRF")
+   message.write("states.oem")   # states only, or covariance_frame="ICRF"
 
    # Covariance in a local orbital frame as a separate product. VNC_ROTATING
-   # follows the SANA registry, VNC_INERTIAL is the pure rotation, and TNW
-   # and RSW (RTN, RIC) are available the same way.
+   # follows the SANA registry, VNC_INERTIAL is the pure rotation, TNW and
+   # RSW (RTN, RIC) work the same way.
    vnc = LocalFrameCovariances.from_orbits(propagated, frame="VNC_ROTATING")
    vnc.to_parquet("covariance_vnc_rotating.parquet")
 
    # The OEM standard lists RSW, RTN and TNW for COV_REF_FRAME. Other labels
-   # are written with a COMMENT line, or refused with strict=True.
-   message.write("states_tnw_cov.oem", covariance_frame="TNW")
+   # get a COMMENT line, or are refused with strict=True.
    message.write("states_vnc_cov.oem", covariance_frame="VNC_ROTATING")
 
 Read OEM Back into ``Orbits``

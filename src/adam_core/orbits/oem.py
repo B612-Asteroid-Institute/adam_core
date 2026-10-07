@@ -6,7 +6,7 @@ KVN renderer with the labels spelled out: ICRF for adam_core's equatorial
 frame (the J2000 axes SPICE and DE440 deliver, which NAIF aligns with the
 ICRF), the origin as CENTER_NAME and the Timestamp scale as TIME_SYSTEM.
 ``orbit_from_oem`` reads the result back. A covariance block is written on
-request, in REF_FRAME or in a local orbital frame. CCSDS 502.0-B-3 lists only
+request, in REF_FRAME or a local orbital frame. CCSDS 502.0-B-3 lists only
 RSW, RTN and TNW for COV_REF_FRAME (3.2.4.11), so other labels get a COMMENT
 line and are refused under ``strict``.
 """
@@ -30,8 +30,6 @@ from ..coordinates.units import (
 )
 from .orbits import Orbits
 
-__all__ = ["OrbitEphemerisMessage"]
-
 _REF_FRAME = {"equatorial": "ICRF", "itrf93": "ITRF-93"}
 _OEM_COVARIANCE_FRAMES = ("RSW", "RTN", "TNW")
 
@@ -41,9 +39,8 @@ class OrbitEphemerisMessage:
     """
     One object's state history (an Orbits table in adam_core units) and the
     CCSDS labels it is written under, for example ``center_name="SUN"``,
-    ``ref_frame="ICRF"``, ``time_system="TDB"``. Epochs sit on the millisecond
-    grid the renderer writes. ``creation_date`` is UTC and defaults to the write
-    time. ``comments`` follow META_START.
+    ``ref_frame="ICRF"``, ``time_system="TDB"``. ``creation_date`` is UTC and
+    defaults to the write time. ``comments`` follow META_START.
     """
 
     states: Orbits
@@ -104,9 +101,8 @@ class OrbitEphemerisMessage:
         """
         Write the KVN file and return its path. ``covariance_frame`` None writes
         no covariance block, the REF_FRAME label writes the state covariance, a
-        local orbital frame name or alias writes the covariance rotated into it
-        under that COV_REF_FRAME label. ``strict`` refuses labels outside the
-        OEM covariance frame set, which otherwise get a COMMENT line.
+        local orbital frame name or alias writes the rotated covariance under
+        that label. ``strict`` refuses labels outside the OEM covariance set.
         """
         from adam_core import _rust_native as _rn
 
@@ -185,7 +181,6 @@ class OrbitEphemerisMessage:
 
 
 def _on_millisecond_grid(orbits: Orbits) -> Orbits:
-    """Move epochs onto the renderer's millisecond grid, warning when any move."""
     time = orbits.coordinates.time
     rounded = time.rounded("ms")
     shift = np.abs(
@@ -194,10 +189,9 @@ def _on_millisecond_grid(orbits: Orbits) -> Orbits:
     )
     if shift.any():
         warnings.warn(
-            f"{int((shift > 0).sum())} of {len(time)} epochs were not on the "
-            "millisecond grid OEM epochs are written with and were moved onto it, "
-            f"the largest by {shift.max() / 1e3:.1f} microseconds.",
-            UserWarning,
+            f"{int((shift > 0).sum())} of {len(time)} epochs were moved onto the "
+            f"millisecond grid OEM epochs are written with, the largest by "
+            f"{shift.max() / 1e3:.1f} microseconds."
         )
         return orbits.set_column("coordinates.time", rounded)
     return orbits

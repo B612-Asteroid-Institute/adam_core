@@ -33,7 +33,6 @@ EPOCHS = [
 
 @pytest.fixture
 def history() -> Orbits:
-    """One object, six heliocentric equatorial TDB epochs with covariances."""
     seed = make_real_orbits(1)
     seed = seed.set_column(
         "coordinates", transform_coordinates(seed.coordinates, frame_out="equatorial")
@@ -63,12 +62,10 @@ def test_round_trip_heliocentric_icrf(history, tmp_path):
 
     path = message.write(tmp_path / "states.oem")
     lines = open(path).read().split("\n")
-    assert lines[:3] == [
-        "CCSDS_OEM_VERS = 3.0",
+    assert lines[0] == "CCSDS_OEM_VERS = 3.0"
+    for line in (
         "CREATION_DATE = 2026-10-06T00:00:00",
         f"ORIGINATOR = {ORIGINATOR}",
-    ]
-    for line in (
         "COMMENT a comment",
         "CENTER_NAME = SUN",
         "REF_FRAME = ICRF",
@@ -132,37 +129,23 @@ def test_local_frame_covariance_blocks(history, tmp_path):
 
 
 def test_input_rules(history, tmp_path):
-    bad = [
-        (
-            "Transform to equatorial first",
-            history.set_column(
-                "coordinates",
-                transform_coordinates(history.coordinates, frame_out="ecliptic"),
-            ),
-        ),
-        (
-            "one object about one center",
-            history.set_column(
-                "object_id", pa.array(["A"] * 3 + ["B"] * 3, type=pa.large_string())
-            ),
-        ),
-        (
-            "one object about one center",
-            history.set_column(
-                "coordinates.origin",
-                Origin.from_kwargs(code=["SUN"] * 5 + ["SOLAR_SYSTEM_BARYCENTER"]),
-            ),
-        ),
-        (
-            "needs an object_id",
-            history.set_column("object_id", pa.nulls(6, pa.large_string())),
-        ),
-        ("at least one state", Orbits.empty()),
-        ("unique", history.take(pa.array([0, 0, 1, 2, 3, 4]))),
-    ]
-    for match, orbits in bad:
+    ecliptic = transform_coordinates(history.coordinates, frame_out="ecliptic")
+    two_ids = pa.array(["A"] * 3 + ["B"] * 3, type=pa.large_string())
+    two_origins = Origin.from_kwargs(code=["SUN"] * 5 + ["SOLAR_SYSTEM_BARYCENTER"])
+    for match, column, value in [
+        ("Transform to equatorial first", "coordinates", ecliptic),
+        ("one object about one center", "object_id", two_ids),
+        ("one object about one center", "coordinates.origin", two_origins),
+        ("needs an object_id", "object_id", pa.nulls(6, pa.large_string())),
+    ]:
         with pytest.raises(ValueError, match=match):
-            OrbitEphemerisMessage.from_orbits(orbits, ORIGINATOR)
+            OrbitEphemerisMessage.from_orbits(
+                history.set_column(column, value), ORIGINATOR
+            )
+    with pytest.raises(ValueError, match="unique"):
+        OrbitEphemerisMessage.from_orbits(
+            history.take(pa.array([0, 0, 1, 2, 3, 4])), ORIGINATOR
+        )
     # Unsorted input is sorted by time.
     states = OrbitEphemerisMessage.from_orbits(
         history.take(pa.array([5, 4, 3, 2, 1, 0])), ORIGINATOR

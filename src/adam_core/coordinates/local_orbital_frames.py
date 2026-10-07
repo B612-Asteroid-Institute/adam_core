@@ -1,17 +1,15 @@
 """Local orbital frames and covariances expressed in them.
 
 Names follow the SANA orbit-relative reference frames registry used by the
-CCSDS navigation data messages. RSW has x along the position and z along the
-orbital angular momentum (also called RTN and RIC). TNW has x along the
-velocity and z along the angular momentum. VNC has x along the velocity and y
-along the angular momentum. The third axis completes each right-handed set, so
-VNC and TNW share two axes and must never be labelled as each other.
-
-``_INERTIAL`` variants rotate position and velocity with the same 3x3 matrix.
-``_ROTATING`` variants also carry the frame angular velocity, from two-body
-motion about the origin, into the velocity rows. Bare names resolve to the
-``_INERTIAL`` variants, as the CCSDS messages use them. Only covariances are
-expressed in these frames. State vectors stay inertial.
+CCSDS navigation data messages. RSW (also RTN, RIC) has x along the position
+and z along the orbital angular momentum, TNW has x along the velocity and z
+along the angular momentum, VNC has x along the velocity and y along the
+angular momentum. The third axis completes each right-handed set, so VNC and
+TNW share two axes and must never be labelled as each other. ``_INERTIAL``
+variants rotate position and velocity alike. ``_ROTATING`` variants also carry
+the frame rate, from two-body motion about the origin, into the velocity rows.
+Bare names resolve to ``_INERTIAL``, as the CCSDS messages use them. Only
+covariances are expressed in these frames. State vectors stay inertial.
 """
 
 from __future__ import annotations
@@ -29,8 +27,6 @@ from .origin import Origin
 
 if TYPE_CHECKING:
     from ..orbits.orbits import Orbits
-
-__all__ = ["LocalFrameCovariances", "local_frame_jacobians"]
 
 _FRAMES = (
     "RSW_ROTATING",
@@ -55,54 +51,48 @@ def _canonical(frame: str) -> str:
     label = _ALIASES.get(label, label)
     if label not in _FRAMES:
         raise ValueError(
-            f"Unknown local orbital frame {frame!r}, expected one of "
-            f"{list(_FRAMES)} or an alias in {list(_ALIASES)}."
+            f"Unknown local orbital frame {frame!r}, expected one of {_FRAMES}."
         )
     return label
 
 
-def _unit_vectors(coords: CartesianCoordinates) -> tuple[np.ndarray, ...]:
-    """Validated r_hat, v_hat and the unit orbit normal."""
+def _rotation_matrices(coords: CartesianCoordinates, frame: str) -> np.ndarray:
     if coords.frame not in ("equatorial", "ecliptic"):
         raise ValueError(
-            f"Local orbital frames need states in an inertial frame, got {coords.frame!r}."
+            f"Local orbital frames need an inertial frame, got {coords.frame!r}."
         )
-    h_mag = coords.h_mag
-    degenerate = h_mag < SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE
+    degenerate = coords.h_mag < SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE
     if degenerate.any():
         raise ValueError(
-            f"State at row {int(np.flatnonzero(degenerate)[0])} has no orbit plane."
+            f"State {int(np.flatnonzero(degenerate)[0])} has no orbit plane."
         )
-    return coords.r_hat, coords.v_hat, coords.h / h_mag[:, None]
-
-
-def _rotation_matrices(coords: CartesianCoordinates, frame: str) -> np.ndarray:
     family = _canonical(frame).split("_")[0]
-    r_hat, v_hat, w_hat = _unit_vectors(coords)
     if family == "RSW":
         return coords.ric3_matrix
     if family == "TNW":
-        return np.stack([v_hat, np.cross(w_hat, v_hat), w_hat], axis=1)
-    return np.stack([v_hat, w_hat, np.cross(v_hat, w_hat)], axis=1)
+        return np.stack(
+            [coords.v_hat, np.cross(coords.h_hat, coords.v_hat), coords.h_hat], axis=1
+        )
+    return np.stack(
+        [coords.v_hat, coords.h_hat, np.cross(coords.v_hat, coords.h_hat)], axis=1
+    )
 
 
 def _unit_rate(vectors: np.ndarray, rates: np.ndarray, norms: np.ndarray) -> np.ndarray:
-    # d(u/|u|)/dt = (du - (du . u_hat) u_hat) / |u|
     unit = vectors / norms[:, None]
     return (rates - np.einsum("ij,ij->i", rates, unit)[:, None] * unit) / norms[:, None]
 
 
 def _angular_velocity(coords: CartesianCoordinates, frame: str, mu: _Mu) -> np.ndarray:
     family = frame.split("_")[0]
-    _, _, w_hat = _unit_vectors(coords)
+    w_hat = coords.h_hat
     if mu is None:
         try:
             mu = coords.origin.mu()
         except ValueError as exc:
             raise ValueError(
-                "A _ROTATING frame needs the origin's gravitational parameter, "
-                f"unknown for {coords.origin.code.unique().to_pylist()}. Pass mu= "
-                "in AU^3/day^2 or use the _INERTIAL variant."
+                f"No gravitational parameter for {coords.origin.code.unique().to_pylist()}. "
+                "Pass mu= in AU^3/day^2 or use the _INERTIAL variant."
             ) from exc
     mu = np.broadcast_to(np.asarray(mu, dtype=np.float64), (len(coords),))
     acceleration = -mu[:, None] * coords.r / coords.r_mag[:, None] ** 3
@@ -126,8 +116,8 @@ def local_frame_jacobians(
     """
     (N, 6, 6) Jacobians from inertial position and velocity to a local orbital
     frame (name or alias), so a covariance there is ``J @ C @ J.T``. The top
-    left block is the 3x3 rotation. ``_ROTATING`` variants take ``mu`` in
-    AU^3/day^2 for the frame rate (default: the origin's value).
+    left block is the rotation. ``mu`` (AU^3/day^2, default the origin's) sets
+    the ``_ROTATING`` frame rate.
     """
     canonical = _canonical(frame)
     rotation = _rotation_matrices(coords, canonical)
@@ -152,9 +142,8 @@ class LocalFrameCovariances(qv.Table):
     time = Timestamp.as_column()
     covariance = CoordinateCovariances.as_column()
     origin = Origin.as_column()
-    #: Canonical frame name, for example ``"VNC_ROTATING"``.
+    #: Canonical frame name, and the inertial frame the axes were built from.
     frame = qv.StringAttribute(default="unspecified")
-    #: Inertial adam_core frame the axes were built from.
     reference_frame = qv.StringAttribute(default="unspecified")
 
     @classmethod

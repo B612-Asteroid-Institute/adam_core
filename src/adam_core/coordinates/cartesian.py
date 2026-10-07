@@ -223,6 +223,13 @@ class CartesianCoordinates(qv.Table):
         )
 
     @property
+    def h_hat(self) -> npt.NDArray[np.float64]:
+        """Unit vector in the direction of the specific angular momentum vector."""
+        from adam_core import _rust_native
+
+        return np.asarray(_rust_native.row_unit3_numpy(self.h), dtype=np.float64)
+
+    @property
     def values_km(self) -> npt.NDArray[np.float64]:
         """
         Get coordinate values in km and km/s units.

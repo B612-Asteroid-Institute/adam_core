@@ -448,8 +448,7 @@ def orbit_from_oem(
     try:
         raw = _rn.oem_read_orbits_ipc(str(input_file))
     except ValueError as exc:
-        # The fused reader maps EME2000 and ITRF-93 only. The Python
-        # composer also reads the ICRF labels OrbitEphemerisMessage writes.
+        # The Python composer also reads the ICRF labels oem.py writes.
         if "mixed reference frames or time systems" in str(exc) or (
             "Unsupported OEM frame" in str(exc)
         ):

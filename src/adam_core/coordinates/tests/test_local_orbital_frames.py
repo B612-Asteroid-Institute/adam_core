@@ -70,7 +70,6 @@ def test_axes_follow_the_registry_and_match_rust_ric(heliocentric_orbits):
 
 
 def test_rotating_frames_follow_two_body_motion(heliocentric_orbits):
-    # Circular orbit: every family turns at the mean motion about the normal.
     a = 1.3
     coords = circular_state(a)
     n = np.sqrt(MU_SUN / a**3)
@@ -83,7 +82,7 @@ def test_rotating_frames_follow_two_body_motion(heliocentric_orbits):
     at_rest = local_frame_jacobians(coords, "RSW_ROTATING")[0] @ coords.values[0]
     np.testing.assert_allclose(at_rest, [a, 0, 0, 0, 0, 0], atol=1e-15)
 
-    # Real orbits: the velocity block rows omega x e_i match finite differences.
+    # Velocity block rows omega x e_i match finite differences of the axes.
     orbits = heliocentric_orbits[:2]
     t0 = orbits.coordinates.time[0].rescale("tdb").mjd().to_numpy(False)[0]
     dt = 1e-3
@@ -149,7 +148,6 @@ def test_errors(heliocentric_orbits):
     with pytest.raises(ValueError, match="no orbit plane"):
         local_frame_jacobians(radial, "VNC")
 
-    # MARS has no mu in Origin.mu(). Only rotating frames need one.
     mars = circular_state(2.0e-5, origin="MARS")
     np.testing.assert_allclose(
         local_frame_jacobians(mars, "RSW")[0], np.eye(6), atol=1e-15
