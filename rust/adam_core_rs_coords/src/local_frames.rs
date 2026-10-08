@@ -2,15 +2,14 @@
 //! for covariances: RSW (aliases RTN, RIC), TNW and VNC, each `_INERTIAL`
 //! (pure rotation) or `_ROTATING` (velocity rows carry the two-body frame
 //! rate). Jacobians come from forward-mode autodiff of the frame axes along
-//! the two-body motion; the covariance product `J C J^T` is accumulated in
-//! double-double arithmetic and rounded once.
+//! the two-body motion; the Jacobian and the covariance product `J C J^T`
+//! are evaluated in double-double arithmetic and rounded once, because the
+//! rotating frame velocity rows cancel and amplify any rounding of J.
 //!
 //! Interface fixed on 2026-10-08. Bodies are filled by the kernel task; the
 //! OEM renderer calls these functions for its COV_REF_FRAME blocks.
 
-use std::ops::{Add, Mul};
-
-use adam_core_rs_autodiff::{Dual, Scalar};
+use std::ops::{Add, Div, Mul, Sub};
 
 use crate::types::{SchemaError, SchemaResult};
 
@@ -123,12 +122,8 @@ pub fn local_frame_jacobians(
     let n = state_count(values, mu, frame)?;
     let mut out = Vec::with_capacity(n * 36);
     for (index, state) in values.chunks_exact(6).enumerate() {
-        out.extend_from_slice(&state_jacobian(
-            state,
-            mu_of(mu, index, frame),
-            frame,
-            index,
-        )?);
+        let jacobian = state_jacobian(state, mu_of(mu, index, frame), frame, index)?;
+        out.extend(jacobian.map(|x| x.hi + x.lo));
     }
     Ok(out)
 }
@@ -162,9 +157,7 @@ pub fn local_frame_covariances(
         if covariance.iter().all(|x| x.is_nan()) {
             continue;
         }
-        // f64 entries are exact double-doubles, so each J_ik J_jl is exact.
-        let jacobian = state_jacobian(state, mu_of(mu, index, frame), frame, index)?
-            .map(|x| DoubleDouble::new((x, 0.0)));
+        let jacobian = state_jacobian(state, mu_of(mu, index, frame), frame, index)?;
         rotated.copy_from_slice(&rotate_covariance(&jacobian, covariance));
     }
     Ok(out)
@@ -203,7 +196,7 @@ fn state_jacobian(
     mu: f64,
     frame: LocalFrame,
     index: usize,
-) -> SchemaResult<[f64; 36]> {
+) -> SchemaResult<[DoubleDouble; 36]> {
     let r = [state[0], state[1], state[2]];
     let v = [state[3], state[4], state[5]];
     let h = cross(r, v);
@@ -212,25 +205,32 @@ fn state_jacobian(
             "State {index} has no orbit plane."
         )));
     }
+    let (r, v) = (r.map(DoubleDouble::from), v.map(DoubleDouble::from));
     let (rotation, rate) = if frame.rotating {
         // Forward mode in time along the two-body motion: r(t) = r + v t and
         // v(t) = v + a t, so each axis carries its time derivative as tangent.
         let r_mag = dot(r, r).sqrt();
-        let a = r.map(|x| -mu * x / (r_mag * r_mag * r_mag));
-        let t = Dual::<1>::variable(0.0, 0);
-        let r_t: [Dual<1>; 3] =
-            std::array::from_fn(|k| Dual::constant(r[k]) + Dual::constant(v[k]) * t);
-        let v_t: [Dual<1>; 3] =
-            std::array::from_fn(|k| Dual::constant(v[k]) + Dual::constant(a[k]) * t);
+        let scale = DoubleDouble::from(-mu) / (r_mag * r_mag * r_mag);
+        let a = r.map(|x| x * scale);
+        let t = DualDoubleDouble {
+            re: DoubleDouble::ZERO,
+            du: DoubleDouble::from(1.0),
+        };
+        let r_t: [DualDoubleDouble; 3] = std::array::from_fn(|k| {
+            DualDoubleDouble::constant(r[k]) + DualDoubleDouble::constant(v[k]) * t
+        });
+        let v_t: [DualDoubleDouble; 3] = std::array::from_fn(|k| {
+            DualDoubleDouble::constant(v[k]) + DualDoubleDouble::constant(a[k]) * t
+        });
         let axes = triad(r_t, v_t, frame.family);
-        let mut rate = axes.map(|axis| axis.map(|x| x.du[0]));
+        let mut rate = axes.map(|axis| axis.map(|x| x.du));
         // The frame turns about h under two-body motion, so the h row is exactly zero.
-        rate[frame.family.normal_axis()] = [0.0; 3];
+        rate[frame.family.normal_axis()] = [DoubleDouble::ZERO; 3];
         (axes.map(|axis| axis.map(|x| x.re)), rate)
     } else {
-        (triad(r, v, frame.family), [[0.0; 3]; 3])
+        (triad(r, v, frame.family), [[DoubleDouble::ZERO; 3]; 3])
     };
-    let mut jacobian = [0.0; 36];
+    let mut jacobian = [DoubleDouble::ZERO; 36];
     for i in 0..3 {
         for j in 0..3 {
             jacobian[i * 6 + j] = rotation[i][j];
@@ -241,8 +241,21 @@ fn state_jacobian(
     Ok(jacobian)
 }
 
+/// The arithmetic the frame axes need.
+trait Real:
+    Copy + Add<Output = Self> + Sub<Output = Self> + Mul<Output = Self> + Div<Output = Self>
+{
+    fn sqrt(self) -> Self;
+}
+
+impl Real for f64 {
+    fn sqrt(self) -> Self {
+        f64::sqrt(self)
+    }
+}
+
 /// The frame axes, i.e. the rows of the rotation from inertial to local.
-fn triad<T: Scalar>(r: [T; 3], v: [T; 3], family: LocalFrameFamily) -> [[T; 3]; 3] {
+fn triad<T: Real>(r: [T; 3], v: [T; 3], family: LocalFrameFamily) -> [[T; 3]; 3] {
     let h_hat = unit(cross(r, v));
     match family {
         LocalFrameFamily::Rsw => {
@@ -260,11 +273,11 @@ fn triad<T: Scalar>(r: [T; 3], v: [T; 3], family: LocalFrameFamily) -> [[T; 3]; 
     }
 }
 
-fn dot<T: Scalar>(a: [T; 3], b: [T; 3]) -> T {
+fn dot<T: Real>(a: [T; 3], b: [T; 3]) -> T {
     a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 }
 
-fn cross<T: Scalar>(a: [T; 3], b: [T; 3]) -> [T; 3] {
+fn cross<T: Real>(a: [T; 3], b: [T; 3]) -> [T; 3] {
     [
         a[1] * b[2] - a[2] * b[1],
         a[2] * b[0] - a[0] * b[2],
@@ -272,7 +285,7 @@ fn cross<T: Scalar>(a: [T; 3], b: [T; 3]) -> [T; 3] {
     ]
 }
 
-fn unit<T: Scalar>(a: [T; 3]) -> [T; 3] {
+fn unit<T: Real>(a: [T; 3]) -> [T; 3] {
     let norm = dot(a, a).sqrt();
     a.map(|x| x / norm)
 }
@@ -330,6 +343,105 @@ impl Mul for DoubleDouble {
             p,
             e + (self.hi * other.lo + self.lo * other.hi),
         ))
+    }
+}
+
+impl From<f64> for DoubleDouble {
+    fn from(x: f64) -> Self {
+        Self::new((x, 0.0))
+    }
+}
+
+impl Sub for DoubleDouble {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        self + Self::new((-other.hi, -other.lo))
+    }
+}
+
+impl Div for DoubleDouble {
+    type Output = Self;
+    /// Two quotient digits, the second from the double-double remainder.
+    fn div(self, other: Self) -> Self {
+        let q = self.hi / other.hi;
+        let remainder = self - other * Self::from(q);
+        Self::new(quick_two_sum(q, remainder.hi / other.hi))
+    }
+}
+
+impl Real for DoubleDouble {
+    /// One Newton step from the f64 root.
+    fn sqrt(self) -> Self {
+        let s = self.hi.sqrt();
+        let remainder = self - Self::new(two_prod(s, s));
+        Self::new(quick_two_sum(s, remainder.hi / (2.0 * s)))
+    }
+}
+
+/// A double-double value and its double-double time derivative.
+#[derive(Debug, Clone, Copy)]
+struct DualDoubleDouble {
+    re: DoubleDouble,
+    du: DoubleDouble,
+}
+
+impl DualDoubleDouble {
+    fn constant(re: DoubleDouble) -> Self {
+        Self {
+            re,
+            du: DoubleDouble::ZERO,
+        }
+    }
+}
+
+impl Add for DualDoubleDouble {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Self {
+            re: self.re + other.re,
+            du: self.du + other.du,
+        }
+    }
+}
+
+impl Sub for DualDoubleDouble {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        Self {
+            re: self.re - other.re,
+            du: self.du - other.du,
+        }
+    }
+}
+
+impl Mul for DualDoubleDouble {
+    type Output = Self;
+    fn mul(self, other: Self) -> Self {
+        Self {
+            re: self.re * other.re,
+            du: self.du * other.re + self.re * other.du,
+        }
+    }
+}
+
+impl Div for DualDoubleDouble {
+    type Output = Self;
+    fn div(self, other: Self) -> Self {
+        let re = self.re / other.re;
+        Self {
+            re,
+            du: (self.du - re * other.du) / other.re,
+        }
+    }
+}
+
+impl Real for DualDoubleDouble {
+    fn sqrt(self) -> Self {
+        let re = self.re.sqrt();
+        Self {
+            re,
+            du: self.du / (re + re),
+        }
     }
 }
 
@@ -815,6 +927,85 @@ mod tests {
         }
         // the plain f64 product is far off on these elements
         assert!(worst_naive > 1e3, "{worst_naive}");
+    }
+
+    /// Rotating Jacobian from the analytic axis rates, as the Python module
+    /// evaluates them, in double-double: no autodiff involved.
+    fn reference_jacobian(state: &[f64; 6], family: LocalFrameFamily) -> [DoubleDouble; 36] {
+        let r = [state[0], state[1], state[2]].map(DoubleDouble::from);
+        let v = [state[3], state[4], state[5]].map(DoubleDouble::from);
+        let (r_mag, v_mag) = (dot(r, r).sqrt(), dot(v, v).sqrt());
+        let (r_hat, v_hat, h_hat) = (unit(r), unit(v), unit(cross(r, v)));
+        let rows = match family {
+            LocalFrameFamily::Rsw => [r_hat, cross(h_hat, r_hat), h_hat],
+            LocalFrameFamily::Tnw => [v_hat, cross(h_hat, v_hat), h_hat],
+            LocalFrameFamily::Vnc => [v_hat, h_hat, cross(v_hat, h_hat)],
+        };
+        // d(x/|x|)/dt = (x' - (x' . x_hat) x_hat) / |x| for the first axis; h is fixed
+        let k = DoubleDouble::from(-MU_SUN) / (r_mag * r_mag * r_mag);
+        let (x_hat, x_mag, x_dot) = match family {
+            LocalFrameFamily::Rsw => (r_hat, r_mag, v),
+            _ => (v_hat, v_mag, r.map(|x| x * k)),
+        };
+        let along = dot(x_dot, x_hat);
+        let x_rate: [DoubleDouble; 3] =
+            std::array::from_fn(|i| (x_dot[i] - along * x_hat[i]) / x_mag);
+        let zero = [DoubleDouble::ZERO; 3];
+        let rates = match family {
+            LocalFrameFamily::Vnc => [x_rate, zero, cross(x_rate, h_hat)],
+            _ => [x_rate, cross(h_hat, x_rate), zero],
+        };
+        let mut j = [DoubleDouble::ZERO; 36];
+        for i in 0..3 {
+            for c in 0..3 {
+                j[i * 6 + c] = rows[i][c];
+                j[(i + 3) * 6 + c + 3] = rows[i][c];
+                j[(i + 3) * 6 + c] = rates[i][c];
+            }
+        }
+        j
+    }
+
+    #[test]
+    fn rotating_jacobian_and_covariance_match_a_double_double_reference() {
+        let mut states = sample_states();
+        for nu in [10.0, 95.0, 200.0, 333.0] {
+            states.push(state_from_elements(2.7, 0.15, 12.0, 80.0, 140.0, nu));
+            states.push(state_from_elements(1.1, 0.45, 30.0, 300.0, 20.0, nu));
+            states.push(state_from_elements(5.2, 0.05, 3.0, 150.0, 250.0, nu));
+        }
+        let ulp = |x: f64| f64::from_bits(x.abs().to_bits() + 1) - x.abs();
+        for family in FAMILIES {
+            let frame = frame(family, true);
+            let jacobians = jacobians(&states, frame);
+            for (index, (state, j)) in states.iter().zip(jacobians).enumerate() {
+                let reference = reference_jacobian(state, family);
+                let rounded = reference.map(|x| x.hi + x.lo);
+                for (row, col) in [(0, 0), (3, 0), (3, 3)] {
+                    let (actual, expected) = (block(&j, row, col), block(&rounded, row, col));
+                    assert!(max_abs_diff(actual, expected) <= ulp(max_abs(expected)));
+                }
+                // timing errors of 0.01 to 3 days along the orbit over full rank noise
+                for (n, sigma_t) in [0.01, 0.1, 0.3, 3.0].into_iter().enumerate() {
+                    let noise = well_conditioned_covariance(index as u64 * 7 + n as u64 + 11);
+                    let timing = timing_covariance(state, sigma_t);
+                    let c: Vec<f64> = timing.iter().zip(&noise).map(|(a, b)| a + b).collect();
+                    let p = local_frame_covariances(state, &c, &[MU_SUN], frame).unwrap();
+                    for (ik, &actual) in p.iter().enumerate() {
+                        let (i, k) = (ik / 6, ik % 6);
+                        let mut sum = DoubleDouble::ZERO;
+                        for ab in 0..36 {
+                            let (a, b) = (ab / 6, ab % 6);
+                            let (s, e) = two_sum(c[ab], c[b * 6 + a]);
+                            let symmetric = DoubleDouble::new((0.5 * s, 0.5 * e));
+                            sum = sum + reference[i * 6 + a] * (symmetric * reference[k * 6 + b]);
+                        }
+                        let expected = sum.hi + sum.lo;
+                        assert!((actual - expected).abs() <= ulp(expected));
+                    }
+                }
+            }
+        }
     }
 
     #[test]
