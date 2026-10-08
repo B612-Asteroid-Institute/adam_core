@@ -428,7 +428,7 @@ def _write_oem_fused(
     rounded = _rn.oem_write_orbits_kvn(
         str(output_file), orbits_to_ipc(orbits), json.dumps(options), mu
     )
-    if rounded:
+    if rounded and options.get("version") == "3.0":  # the 2.0 writer never warned
         warnings.warn(
             f"{rounded} of {len(orbits)} epochs rounded to the millisecond grid."
         )
