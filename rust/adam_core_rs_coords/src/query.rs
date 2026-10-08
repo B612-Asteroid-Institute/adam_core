@@ -907,6 +907,20 @@ mod tests {
     }
 
     #[test]
+    fn normalized_query_json_round_trips_sensitive_binary64_values() {
+        for token in [
+            "-1.277978316302211E-18",
+            "9.141096354333449E-12",
+            "1.388363387201769E-15",
+        ] {
+            let expected = token.parse::<f64>().unwrap();
+            let encoded = serde_json::to_string(&json!(expected)).unwrap();
+            let decoded: Value = serde_json::from_str(&encoded).unwrap();
+            assert_eq!(decoded.as_f64().unwrap().to_bits(), expected.to_bits());
+        }
+    }
+
+    #[test]
     fn scout_normalizer_parses_rows() {
         let out = scout_normalize_orbits_json(
             "2024AA",

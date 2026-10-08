@@ -42,6 +42,9 @@ This file contains notable changes in adam-core
 
 ### Changed
 
+- SBDB query covariance values now preserve correctly rounded binary64 bits
+  across the complete Rust query path instead of losing one ULP in an
+  intermediate normalized-JSON parse.
 - The compiled Rust extension is now required. Public Python functions remain
   compatibility veneers while numerical, table, product, query, and
   orchestration work executes in Rust.

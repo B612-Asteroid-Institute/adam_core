@@ -30,3 +30,22 @@ To refresh or add samples, run from repo root:
 - https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=443104&cov=mat&full-prec=true
 - https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=54509&cov=mat&full-prec=true
 - https://ssd-api.jpl.nasa.gov/sbdb.api?sstr=missingno&cov=mat&full-prec=true
+
+## Float round-trip regression responses
+
+These exact public SBDB responses exercise decimal covariance values that move
+by one binary64 ULP when normalized JSON is reparsed without correctly rounded
+float conversion. They were captured serially from
+`https://ssd-api.jpl.nasa.gov/sbdb.api` during
+`2026-10-06T13:21:18Z`–`2026-10-06T13:21:40Z` with `cov=mat`,
+`full-prec=true`, and `phys-par=true`:
+
+| File | Requested ID | SHA-256 |
+|------|--------------|---------|
+| `7994.json` | `7994` | `2ce5294a1e0d0ecb273c7f9180d69fbd43d7384cde9a1341d7376d66769da497` |
+| `C_2024_A1.json` | `C/2024 A1` | `c88d85b8a783903932a541b3106a33802b0c57f2f403603769c734b4eb5398ff` |
+| `C_2022_R6.json` | `C/2022 R6` | `98501e31ac5a94d85326b14c20ef77fc5c338d9413cf6d7aa5e34b1e36ebee1f` |
+
+The recorded-response regression sends these retained bytes through the complete
+Rust query product and requires exact state and covariance bit parity with the
+canonical payload facade. It performs no live network access.

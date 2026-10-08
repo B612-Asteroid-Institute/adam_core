@@ -109,15 +109,19 @@ def test_query_sbdb_for_missing_value():
             query_sbdb(["missing"])
 
 
-def _load_sbdb_fixture_payload(response_file: str) -> dict:
+def _load_sbdb_fixture_text(response_file: str) -> str:
     resp_path = os.path.join(
         os.path.dirname(__file__), "testdata", "sbdb", response_file
     )
     with open(resp_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        return f.read()
 
 
-def _assert_orbits_equivalent(a, b, *, covariance_atol: float = 0.0) -> None:
+def _load_sbdb_fixture_payload(response_file: str) -> dict:
+    return json.loads(_load_sbdb_fixture_text(response_file))
+
+
+def _assert_orbits_equivalent(a, b) -> None:
     assert len(a) == len(b)
     assert a.orbit_id.to_pylist() == b.orbit_id.to_pylist()
     assert a.object_id.to_pylist() == b.object_id.to_pylist()
@@ -148,7 +152,7 @@ def _assert_orbits_equivalent(a, b, *, covariance_atol: float = 0.0) -> None:
         a.coordinates.covariance.to_matrix(),
         b.coordinates.covariance.to_matrix(),
         rtol=0.0,
-        atol=covariance_atol,
+        atol=0.0,
         equal_nan=True,
     )
 
@@ -475,9 +479,20 @@ def test_query_sbdb_new_include_nongrav_false_strips_solution() -> None:
     assert not orbits.coordinates.covariance.has_nongrav_block()
 
 
-def test_recorded_sbdb_complete_rust_product_matches_payload_facade() -> None:
-    ids = ["Ceres", "2001VB", "54509"]
-    payloads = [_load_sbdb_fixture_payload(f"{object_id}.json") for object_id in ids]
+def test_recorded_sbdb_complete_rust_product_matches_payload_facade_bits() -> None:
+    fixtures = [
+        ("Ceres", "Ceres.json"),
+        ("2001VB", "2001VB.json"),
+        ("54509", "54509.json"),
+        ("7994", "7994.json"),
+        ("C/2024 A1", "C_2024_A1.json"),
+        ("C/2022 R6", "C_2022_R6.json"),
+    ]
+    ids = [object_id for object_id, _ in fixtures]
+    recorded_responses = [
+        _load_sbdb_fixture_text(response_file) for _, response_file in fixtures
+    ]
+    payloads = [json.loads(response) for response in recorded_responses]
     expected = _orbits_from_sbdb_payloads(ids, payloads)
     batch, warnings = _rust_native.query_sbdb_arrow(
         ids,
@@ -486,11 +501,19 @@ def test_recorded_sbdb_complete_rust_product_matches_payload_facade() -> None:
         1,
         False,
         False,
-        [json.dumps(payload) for payload in payloads],
+        recorded_responses,
     )
     actual = table_from_record_batch(Orbits, batch)
     assert warnings == []
-    _assert_orbits_equivalent(actual, expected, covariance_atol=3e-28)
+    _assert_orbits_equivalent(actual, expected)
+    np.testing.assert_array_equal(
+        actual.coordinates.values.view(np.uint64),
+        expected.coordinates.values.view(np.uint64),
+    )
+    np.testing.assert_array_equal(
+        actual.coordinates.covariance.to_matrix().view(np.uint64),
+        expected.coordinates.covariance.to_matrix().view(np.uint64),
+    )
 
 
 def test_sbdb_complete_product_has_rust_owned_timing() -> None:
