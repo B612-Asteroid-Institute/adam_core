@@ -1884,7 +1884,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "enable when local_frames bodies land"]
     fn local_frame_covariance_blocks() {
         let orbits = fixture(Frame::Equatorial, TimeScale::Tdb, true);
         let mu = [MU_SUN; 3];
