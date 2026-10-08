@@ -822,12 +822,15 @@
         <span class="n">path</span><span class="p">:</span> <span class="n">Union</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">PathLike</span><span class="p">],</span>
         <span class="n">covariance_frame</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">table_frames_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">significant_digits</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">16</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Write the KVN file and return its path. ``covariance_frame`` None, the</span>
 <span class="sd">        REF_FRAME label, or a local orbital frame name writes no block, the state</span>
 <span class="sd">        covariance, or the rotated covariance under that label.</span>
 <span class="sd">        ``table_frames_only`` refuses frames outside RSW, RTN, TNW (table 5-4).</span>
+<span class="sd">        ``significant_digits`` is the mantissa length of states and covariances,</span>
+<span class="sd">        at most 16 (CCSDS 502.0-B-3 7.5.7); the legacy writer uses 15.</span>
 <span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
@@ -866,6 +869,7 @@
             <span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">nanos</span><span class="o">.</span><span class="n">to_numpy</span><span class="p">(</span><span class="n">zero_copy_only</span><span class="o">=</span><span class="kc">False</span><span class="p">),</span>
             <span class="n">convert_cartesian_values_au_to_km</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">values</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">(),</span>
             <span class="n">covariance_records</span><span class="p">,</span>
+            <span class="n">significant_digits</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="k">if</span> <span class="n">comments</span><span class="p">:</span>
             <span class="n">lines</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">read_text</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">"</span><span class="se">\n</span><span class="s2">"</span><span class="p">)</span>
