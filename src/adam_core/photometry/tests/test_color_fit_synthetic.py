@@ -5,7 +5,9 @@ The fixture tests exercise the full pipeline against real MPC data and paper
 values, but cannot pin down exact behaviour. Here we build reduced magnitudes
 directly from known per-band absolute magnitudes and a known phase function, then
 check `_fit_per_band_h` recovers the injected colors, phase parameter, outlier
-count, missing-band handling, and error scaling.
+count, missing-band handling, error scaling, and, for fits that are sparse or
+degenerate, the parameter count, rank, degrees of freedom and which quantities
+the data can actually determine.
 """
 
 from __future__ import annotations
@@ -15,7 +17,7 @@ from typing import Literal
 import numpy as np
 import pytest
 
-from ..color_determination import _fit_per_band_h
+from ..color_determination import _BANDS, _fit_per_band_h
 from ..hg12star import hg12star_correction
 from ..magnitude_common import hg_phase_correction
 
@@ -142,3 +144,242 @@ def test_fit_uncertainties_scale_with_injected_noise() -> None:
     assert large["g_r_sigma"] == pytest.approx(2.0 * small["g_r_sigma"], rel=1e-6)
     # ~sigma / sqrt(N) per band scatter, loosely (covariance with G inflates it a bit).
     assert 0.0 < small["g_r_sigma"] < 0.03
+
+
+def _constant_phase(
+    channels: list[str],
+    alpha_deg: np.ndarray | float,
+    H_true: dict[str, float] = _H_TRUE,
+    g12star: float = 0.4,
+    sigma: float = 0.02,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Build a noiseless HG12* dataset at caller-chosen (possibly repeated) phase angles.
+
+    Used for the degenerate cases, where the point is the geometry of the phase
+    sampling rather than the noise: ``alpha_deg`` may be a scalar (one common
+    angle for every row) or a per-row array.
+    """
+    ch = np.array(channels, dtype=object)
+    alpha = np.broadcast_to(np.asarray(alpha_deg, dtype=np.float64), ch.shape).copy()
+    m_red = np.array([H_true[c] for c in channels], dtype=np.float64) + np.asarray(
+        hg12star_correction(alpha, g12star)
+    )
+    return m_red, alpha, ch, np.full(len(ch), 1.0 / sigma)
+
+
+def _emptied_band_dataset() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    30 clean g-band points plus two r-band points straddling the truth by 50 sigma.
+
+    Both r points sit at one phase angle, so H_r lands between them and each is
+    rejected in the same iteration, emptying the band.
+    """
+    alpha = np.concatenate([np.linspace(2.0, 32.0, 30), [15.0, 15.0]])
+    m_red, alpha, channels, rw = _constant_phase(["g"] * 30 + ["r"] * 2, alpha)
+    m_red = m_red.copy()
+    m_red[30] += 50 * 0.02
+    m_red[31] -= 50 * 0.02
+    return m_red, alpha, channels, rw
+
+
+@pytest.mark.parametrize("bands", [("g",), ("g", "r"), ("g", "r", "i")])
+def test_dof_counts_only_observed_bands(bands: tuple[str, ...]) -> None:
+    """
+    Unobserved bands are not parameters, so rank and DOF follow the bands present.
+
+    Four nominal H columns (three of them all-zero for a g-only fit) used to be
+    charged to the parameter count, understating DOF by one per missing band and
+    thereby inflating the reduced chi-square, the rescaled covariance and the
+    clipping threshold.
+    """
+    H_true = {b: _H_TRUE[b] for b in bands}
+    m_red, alpha, channels, rw = _synthesize(
+        "HG12star", 0.4, H_true=H_true, n_per_band=60, noise=0.02, seed=11
+    )
+    fit = _fit_per_band_h(m_red, alpha, channels, rw, "HG12star")
+
+    # G12* plus one absolute magnitude per observed band, all of them identified.
+    expected = 1 + len(bands)
+    assert fit["num_params"] == expected
+    assert fit["rank"] == expected
+    assert fit["dof"] == len(m_red) - fit["num_outliers"] - expected
+    assert fit["reduced_chi2"] == pytest.approx(1.0, abs=0.4)
+    assert fit["chi2"] == pytest.approx(fit["reduced_chi2"] * fit["dof"])
+
+    for band in bands:
+        assert np.isfinite(fit[f"H_{band}"])
+        assert fit[f"H_{band}_sigma"] > 0.0
+    for band in set(_BANDS) - set(bands):
+        assert np.isnan(fit[f"H_{band}"])
+        assert np.isnan(fit[f"H_{band}_sigma"])
+
+
+@pytest.mark.parametrize("bands", [("g",), ("g", "i"), ("g", "r", "i")])
+def test_c1c2_dof_counts_only_observed_bands(bands: tuple[str, ...]) -> None:
+    """Same accounting for the linear model, whose phase part costs two parameters."""
+    H_true = {b: _H_TRUE[b] for b in bands}
+    m_red, alpha, channels, rw = _synthesize(
+        "c1c2", (0.03, -5e-4), H_true=H_true, n_per_band=60, noise=0.02, seed=13
+    )
+    fit = _fit_per_band_h(m_red, alpha, channels, rw, "c1c2")
+
+    expected = 2 + len(bands)
+    assert fit["num_params"] == expected
+    assert fit["rank"] == expected
+    assert fit["dof"] == len(m_red) - fit["num_outliers"] - expected
+    assert fit["reduced_chi2"] == pytest.approx(1.0, abs=0.4)
+
+
+def test_sparse_single_band_fit_still_has_degrees_of_freedom() -> None:
+    """
+    Five g-only observations constrain two parameters, so DOF is 3, not 0.
+
+    Charging all four nominal H columns gave dof = 5 - 5 = 0, which left the
+    reduced chi-square and every uncertainty NaN and made the scatter estimate
+    infinite, disabling outlier clipping entirely.
+    """
+    m_red, alpha, channels, rw = _constant_phase(
+        ["g"] * 5, np.array([3.0, 9.0, 15.0, 22.0, 30.0])
+    )
+    noise = np.array([0.01, -0.02, 0.015, -0.005, 0.0])
+    fit = _fit_per_band_h(m_red + noise, alpha, channels, rw, "HG12star")
+
+    assert fit["num_params"] == 2
+    assert fit["rank"] == 2
+    assert fit["dof"] == 3
+    assert np.isfinite(fit["reduced_chi2"])
+    assert fit["H_g_sigma"] > 0.0
+    assert fit["G_sigma"] > 0.0
+
+
+def test_rank_based_scatter_keeps_outlier_clipping_alive() -> None:
+    """
+    A gross outlier in a 12-observation, single-band fit is clipped and G12* recovered.
+
+    With the nominal five-parameter count the scatter was estimated over
+    dof = 12 - 5 = 7 instead of 12 - 2 = 10, which raised the 3-sigma threshold
+    enough that the blunder survived and dragged the slope off (G12* came out
+    0.59 rather than the injected 0.40).
+    """
+    alpha = np.linspace(2.0, 32.0, 12)
+    m_red, alpha, channels, rw = _constant_phase(["g"] * 12, alpha)
+    m_red = m_red.copy()
+    m_red[6] += 50 * 0.02  # 50-sigma blunder
+
+    fit = _fit_per_band_h(m_red, alpha, channels, rw, "HG12star")
+    assert fit["num_outliers"] == 1
+    assert fit["dof"] == 11 - 2
+    assert fit["G"] == pytest.approx(0.4, abs=1e-4)
+    assert fit["H_g"] == pytest.approx(_H_TRUE["g"], abs=1e-4)
+
+
+def test_emptied_band_drops_out_of_the_parameter_set() -> None:
+    """
+    A band whose every observation is clipped stops being a parameter.
+
+    The two r-band points sit at one phase angle and straddle the truth by
+    +-50 sigma, so both are rejected in the same iteration; the active set is
+    recomputed afterwards, leaving a two-parameter g-only fit rather than one
+    still charged for an r magnitude it can no longer constrain.
+    """
+    fit = _fit_per_band_h(*_emptied_band_dataset(), "HG12star")
+    assert fit["num_outliers"] == 2
+    assert fit["num_params"] == 2  # G12* and H_g only
+    assert fit["rank"] == 2
+    assert fit["dof"] == 30 - 2
+    assert np.isnan(fit["H_r"]) and np.isnan(fit["g_r"])
+    assert fit["G"] == pytest.approx(0.4, abs=1e-4)
+
+
+def test_shared_single_phase_angle_keeps_color_but_not_magnitudes() -> None:
+    """
+    One common phase angle leaves the slope and the magnitudes non-identifiable.
+
+    Every row then sees the same phase correction, so G12* trades off against all
+    the absolute magnitudes by an equal amount: rank is one short of the parameter
+    count, H_g/H_r/G12* are not individually fitable and are reported as NaN,
+    but the trade-off cancels in g-r, which stays exact. The pseudoinverse alone
+    would have handed back a finite number for every one of them.
+    """
+    m_red, alpha, channels, rw = _constant_phase(["g"] * 3 + ["r"] * 3, 10.0)
+    fit = _fit_per_band_h(m_red, alpha, channels, rw, "HG12star")
+
+    assert fit["num_params"] == 3
+    assert fit["rank"] == 2
+    assert fit["dof"] == 6 - 2
+    assert np.isnan(fit["G"]) and np.isnan(fit["G_sigma"])
+    assert np.isnan(fit["H_g"]) and np.isnan(fit["H_g_sigma"])
+    assert np.isnan(fit["H_r"]) and np.isnan(fit["H_r_sigma"])
+    assert fit["g_r"] == pytest.approx(0.6, abs=1e-6)
+    # i was never observed, so that color is unavailable for a different reason.
+    assert np.isnan(fit["g_i"]) and np.isnan(fit["r_i"])
+
+
+def test_single_band_single_phase_angle_determines_nothing() -> None:
+    """With one band at one angle there is no fitable parameter or color at all."""
+    m_red, alpha, channels, rw = _constant_phase(["g"] * 5, 10.0)
+    fit = _fit_per_band_h(m_red, alpha, channels, rw, "HG12star")
+
+    assert fit["num_params"] == 2
+    assert fit["rank"] == 1
+    assert np.isnan(fit["G"]) and np.isnan(fit["H_g"])
+    assert all(np.isnan(fit[c]) for c in ("g_r", "g_i", "r_i"))
+
+
+def test_one_phase_angle_per_band_leaves_the_color_non_fitable() -> None:
+    """
+    Distinct single angles per band make even the color non-identifiable.
+
+    The slope now trades off against H_g and H_r by *different* amounts, so the
+    trade-off no longer cancels in g-r: unlike the shared-angle case, the color
+    must be reported as NaN rather than retained.
+    """
+    m_red, alpha, channels, rw = _constant_phase(
+        ["g"] * 3 + ["r"] * 3, np.array([10.0] * 3 + [25.0] * 3)
+    )
+    fit = _fit_per_band_h(m_red, alpha, channels, rw, "HG12star")
+
+    assert fit["num_params"] == 3
+    assert fit["rank"] == 2
+    assert np.isnan(fit["g_r"]) and np.isnan(fit["g_r_sigma"])
+
+
+def test_rank_deficiency_is_logged(caplog: pytest.LogCaptureFixture) -> None:
+    """A rank-deficient fit names the parameters it had to NaN out."""
+    m_red, alpha, channels, rw = _constant_phase(["g"] * 3 + ["r"] * 3, 10.0)
+    with caplog.at_level("WARNING", logger="adam_core.photometry.color_determination"):
+        _fit_per_band_h(m_red, alpha, channels, rw, "HG12star")
+
+    assert "rank deficient (rank 2 of 3 parameters" in caplog.text
+    assert "G12*, H_g, H_r" in caplog.text
+
+
+@pytest.mark.parametrize("bands", [("g",), ("g", "r"), ("g", "r", "i")])
+def test_uncertainties_shrink_as_the_root_of_the_sample_size(
+    bands: tuple[str, ...],
+) -> None:
+    """
+    Reported magnitude errors fall as 1/sqrt(N) once DOF is counted correctly.
+
+    Quadrupling the observations per band must halve each H sigma, for any number
+    of observed bands; a band-count-dependent DOF error would break that scaling.
+    """
+    H_true = {b: _H_TRUE[b] for b in bands}
+
+    def run(n_per_band: int) -> dict[str, float]:
+        m_red, alpha, channels, rw = _synthesize(
+            "HG12star",
+            0.4,
+            H_true=H_true,
+            n_per_band=n_per_band,
+            noise=0.03,
+            seed=23,
+        )
+        return _fit_per_band_h(m_red, alpha, channels, rw, "HG12star")
+
+    few, many = run(50), run(200)
+    for band in bands:
+        assert many[f"H_{band}_sigma"] == pytest.approx(
+            0.5 * few[f"H_{band}_sigma"], rel=0.25
+        )
