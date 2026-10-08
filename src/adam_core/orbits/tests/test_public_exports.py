@@ -5,7 +5,6 @@ def test_declared_orbit_exports_are_importable() -> None:
     assert set(orbits.__all__) == {
         "Ephemeris",
         "NonGravitationalParameters",
-        "OrbitEphemerisMessage",
         "Orbits",
         "Trajectory",
         "VariantOrbits",

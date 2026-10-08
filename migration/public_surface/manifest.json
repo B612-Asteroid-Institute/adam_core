@@ -12,36 +12,36 @@
     "plotting_policy": "plotting/display may remain Python; all other symbols require review"
   },
   "summary": {
-    "symbols": 650,
+    "symbols": 646,
     "by_kind": {
-      "class": 90,
-      "classmethod": 34,
+      "class": 89,
+      "classmethod": 33,
       "constant": 78,
       "constructor": 4,
       "function": 227,
-      "method": 149,
-      "property": 68
+      "method": 148,
+      "property": 67
     },
     "by_domain": {
       "constants": 4,
-      "coordinates": 176,
+      "coordinates": 175,
       "dynamics": 59,
       "missions": 16,
       "observations": 41,
       "observers": 19,
       "orbit_determination": 33,
-      "orbits": 118,
+      "orbits": 115,
       "photometry": 69,
       "propagator": 7,
       "time": 38,
       "utils": 70
     },
     "by_implementation_class": {
-      "compatibility_data_or_external_generic": 166,
-      "mixed_rust_python_gap": 96,
+      "compatibility_data_or_external_generic": 165,
+      "mixed_rust_python_gap": 95,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 240,
-      "rust_veneer_candidate_see_domain_audit": 132
+      "python_gap_or_external_boundary": 237,
+      "rust_veneer_candidate_see_domain_audit": 133
     },
     "plotting_exemption_candidates": 16,
     "unreviewed": 0
@@ -49,7 +49,7 @@
   "frozen_updated_upstream_reconciliation": {
     "commit": "757c09fca86adf9e3d5899952db3d379e09413f6",
     "upstream_symbols": 600,
-    "current_symbols": 650,
+    "current_symbols": 646,
     "upstream_only_symbols": 22,
     "all_upstream_only_symbols_classified": true,
     "disposition": "The listed upstream implementation helpers are intentionally retired; their useful public workflows are Rust-backed or are explicit provider boundaries in the referenced domain audit.",
@@ -345,7 +345,7 @@
       "kind": "method",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 278,
+      "line": 271,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -373,7 +373,7 @@
       "kind": "classmethod",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 437,
+      "line": 430,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -401,7 +401,7 @@
       "kind": "classmethod",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 452,
+      "line": 445,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -429,7 +429,7 @@
       "kind": "classmethod",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 467,
+      "line": 460,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -458,34 +458,6 @@
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
       "line": 204,
-      "explicit_export": null,
-      "plotting_exemption_candidate": false,
-      "signals": {
-        "plotting": false,
-        "rust_reference": true,
-        "python_loop": false,
-        "numpy_reference": true,
-        "pyarrow_reference": false,
-        "quivr_reference": false,
-        "external_io_reference": false
-      },
-      "review_status": "domain_audited",
-      "implementation_class": "rust_veneer_candidate_see_domain_audit",
-      "rust_entrypoint": null,
-      "parity_coverage": "see_domain_audit",
-      "native_timing": "see_domain_audit",
-      "tracking_issue": "personal-cmy.37.2",
-      "audit_document": "migration/public_surface/coordinates_time_observers.md"
-    },
-    {
-      "id": "adam_core.coordinates.cartesian:CartesianCoordinates.h_hat",
-      "module": "adam_core.coordinates.cartesian",
-      "qualname": "CartesianCoordinates.h_hat",
-      "name": "h_hat",
-      "kind": "property",
-      "domain": "coordinates",
-      "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 226,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -597,7 +569,7 @@
       "kind": "property",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 247,
+      "line": 240,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -653,7 +625,7 @@
       "kind": "property",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 261,
+      "line": 254,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -681,7 +653,7 @@
       "kind": "property",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 270,
+      "line": 263,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -709,7 +681,7 @@
       "kind": "method",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 293,
+      "line": 286,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -1017,7 +989,7 @@
       "kind": "method",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 430,
+      "line": 423,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -1045,7 +1017,7 @@
       "kind": "method",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 445,
+      "line": 438,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -1073,7 +1045,7 @@
       "kind": "method",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 460,
+      "line": 453,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -1101,7 +1073,7 @@
       "kind": "method",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 378,
+      "line": 371,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -1185,7 +1157,7 @@
       "kind": "property",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 254,
+      "line": 247,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -1269,7 +1241,7 @@
       "kind": "property",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/cartesian.py",
-      "line": 233,
+      "line": 226,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -3369,14 +3341,14 @@
       "kind": "class",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/local_orbital_frames.py",
-      "line": 256,
+      "line": 56,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": false,
-        "numpy_reference": false,
+        "numpy_reference": true,
         "pyarrow_reference": false,
         "quivr_reference": true,
         "external_io_reference": false
@@ -3397,23 +3369,23 @@
       "kind": "classmethod",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/local_orbital_frames.py",
-      "line": 272,
+      "line": 72,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": false,
-        "numpy_reference": false,
+        "numpy_reference": true,
         "pyarrow_reference": false,
         "quivr_reference": false,
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.2",
       "audit_document": "migration/public_surface/coordinates_time_observers.md"
     },
@@ -3425,12 +3397,12 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/local_orbital_frames.py",
-      "line": 243,
+      "line": 44,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
-        "rust_reference": false,
+        "rust_reference": true,
         "python_loop": false,
         "numpy_reference": true,
         "pyarrow_reference": false,
@@ -3438,10 +3410,10 @@
         "external_io_reference": false
       },
       "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.2",
       "audit_document": "migration/public_surface/coordinates_time_observers.md"
     },
@@ -4349,7 +4321,7 @@
       "kind": "constant",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 105,
+      "line": 106,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4377,7 +4349,7 @@
       "kind": "constant",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 40,
+      "line": 41,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4405,7 +4377,7 @@
       "kind": "constant",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 37,
+      "line": 38,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4433,7 +4405,7 @@
       "kind": "constant",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 104,
+      "line": 105,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4461,7 +4433,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 703,
+      "line": 698,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4489,7 +4461,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 492,
+      "line": 487,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4517,7 +4489,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 756,
+      "line": 751,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4545,7 +4517,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 202,
+      "line": 197,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4573,7 +4545,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 332,
+      "line": 327,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4601,7 +4573,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 658,
+      "line": 653,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4629,7 +4601,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 252,
+      "line": 247,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4657,7 +4629,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 83,
+      "line": 84,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4685,7 +4657,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 536,
+      "line": 531,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4713,7 +4685,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 395,
+      "line": 390,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4741,7 +4713,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 291,
+      "line": 286,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -4769,7 +4741,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/transform.py",
-      "line": 792,
+      "line": 787,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -9921,7 +9893,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 113,
+      "line": 114,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -9949,7 +9921,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 108,
+      "line": 109,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -9977,7 +9949,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 92,
+      "line": 93,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10005,7 +9977,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 186,
+      "line": 183,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10033,7 +10005,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 82,
+      "line": 83,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10061,7 +10033,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 162,
+      "line": 159,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10089,7 +10061,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 52,
+      "line": 53,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10117,7 +10089,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 150,
+      "line": 147,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10145,7 +10117,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 206,
+      "line": 203,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10173,7 +10145,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 201,
+      "line": 198,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10201,7 +10173,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 352,
+      "line": 349,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10229,7 +10201,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 87,
+      "line": 88,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10257,7 +10229,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 180,
+      "line": 177,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10285,7 +10257,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 61,
+      "line": 62,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10313,7 +10285,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/arrow_bridge.py",
-      "line": 168,
+      "line": 165,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10705,7 +10677,7 @@
       "kind": "constant",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 66,
+      "line": 46,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10733,7 +10705,7 @@
       "kind": "constant",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 50,
+      "line": 30,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10750,90 +10722,6 @@
       "rust_entrypoint": null,
       "parity_coverage": "compatibility_or_schema_see_domain_audit",
       "native_timing": "not_applicable_data_or_generic",
-      "tracking_issue": "personal-cmy.37.1",
-      "audit_document": "migration/public_surface/orbits.md"
-    },
-    {
-      "id": "adam_core.orbits.oem_io:OrbitEphemerisMessage",
-      "module": "adam_core.orbits.oem_io",
-      "qualname": "OrbitEphemerisMessage",
-      "name": "OrbitEphemerisMessage",
-      "kind": "class",
-      "domain": "orbits",
-      "source": "src/adam_core/orbits/oem_io.py",
-      "line": 329,
-      "explicit_export": null,
-      "plotting_exemption_candidate": false,
-      "signals": {
-        "plotting": false,
-        "rust_reference": true,
-        "python_loop": true,
-        "numpy_reference": true,
-        "pyarrow_reference": false,
-        "quivr_reference": false,
-        "external_io_reference": true
-      },
-      "review_status": "domain_audited",
-      "implementation_class": "compatibility_data_or_external_generic",
-      "rust_entrypoint": null,
-      "parity_coverage": "compatibility_or_schema_see_domain_audit",
-      "native_timing": "not_applicable_data_or_generic",
-      "tracking_issue": "personal-cmy.37.1",
-      "audit_document": "migration/public_surface/orbits.md"
-    },
-    {
-      "id": "adam_core.orbits.oem_io:OrbitEphemerisMessage.from_orbits",
-      "module": "adam_core.orbits.oem_io",
-      "qualname": "OrbitEphemerisMessage.from_orbits",
-      "name": "from_orbits",
-      "kind": "classmethod",
-      "domain": "orbits",
-      "source": "src/adam_core/orbits/oem_io.py",
-      "line": 347,
-      "explicit_export": null,
-      "plotting_exemption_candidate": false,
-      "signals": {
-        "plotting": false,
-        "rust_reference": false,
-        "python_loop": false,
-        "numpy_reference": false,
-        "pyarrow_reference": false,
-        "quivr_reference": false,
-        "external_io_reference": false
-      },
-      "review_status": "domain_audited",
-      "implementation_class": "python_gap_or_external_boundary",
-      "rust_entrypoint": null,
-      "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_not_applicable_see_domain_audit",
-      "tracking_issue": "personal-cmy.37.1",
-      "audit_document": "migration/public_surface/orbits.md"
-    },
-    {
-      "id": "adam_core.orbits.oem_io:OrbitEphemerisMessage.write",
-      "module": "adam_core.orbits.oem_io",
-      "qualname": "OrbitEphemerisMessage.write",
-      "name": "write",
-      "kind": "method",
-      "domain": "orbits",
-      "source": "src/adam_core/orbits/oem_io.py",
-      "line": 381,
-      "explicit_export": null,
-      "plotting_exemption_candidate": false,
-      "signals": {
-        "plotting": false,
-        "rust_reference": true,
-        "python_loop": true,
-        "numpy_reference": true,
-        "pyarrow_reference": false,
-        "quivr_reference": false,
-        "external_io_reference": true
-      },
-      "review_status": "domain_audited",
-      "implementation_class": "mixed_rust_python_gap",
-      "rust_entrypoint": null,
-      "parity_coverage": "see_domain_audit",
-      "native_timing": "missing_or_partial_see_domain_audit",
       "tracking_issue": "personal-cmy.37.1",
       "audit_document": "migration/public_surface/orbits.md"
     },
@@ -10845,7 +10733,7 @@
       "kind": "constant",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 52,
+      "line": 32,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10873,7 +10761,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 624,
+      "line": 482,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10901,7 +10789,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 508,
+      "line": 301,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10929,7 +10817,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 579,
+      "line": 437,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12721,7 +12609,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/trajectory.py",
-      "line": 68,
+      "line": 64,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12749,7 +12637,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/trajectory.py",
-      "line": 59,
+      "line": 55,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12777,7 +12665,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/trajectory.py",
-      "line": 77,
+      "line": 73,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12805,7 +12693,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/trajectory.py",
-      "line": 86,
+      "line": 82,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12833,7 +12721,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/trajectory.py",
-      "line": 108,
+      "line": 104,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12861,7 +12749,7 @@
       "kind": "method",
       "domain": "orbits",
       "source": "src/adam_core/orbits/trajectory.py",
-      "line": 95,
+      "line": 91,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

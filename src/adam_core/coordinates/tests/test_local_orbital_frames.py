@@ -42,7 +42,7 @@ def circular_state(a: float = 1.3, origin: str = "SUN") -> CartesianCoordinates:
 def test_axes_follow_the_registry_and_match_rust_ric(heliocentric_orbits):
     coords = heliocentric_orbits.coordinates
     r_hat, v_hat = coords.r_hat, coords.v_hat
-    w_hat = coords.h_hat
+    w_hat = coords.h / np.linalg.norm(coords.h, axis=1, keepdims=True)
 
     rsw = axes_of(coords, "rtn")
     np.testing.assert_allclose(rsw[:, 0], r_hat, atol=1e-14)
@@ -147,14 +147,14 @@ def test_errors(heliocentric_orbits):
     np.testing.assert_allclose(
         local_frame_jacobians(mars, "RSW")[0], np.eye(6), atol=1e-15
     )
-    with pytest.raises(ValueError, match="Pass mu="):
+    with pytest.raises(ValueError, match="Unknown origin code"):
         local_frame_jacobians(mars, "RSW_ROTATING")
     assert local_frame_jacobians(mars, "RSW_ROTATING", mu=1e-12).shape == (1, 6, 6)
 
 
 def test_jacobian_and_product_are_correctly_rounded(heliocentric_orbits):
-    """The double-double evaluation gives the exact result rounded once: Jacobian
-    and rotated covariance within one ulp of a 50 digit Decimal reference."""
+    """The Rust double-double evaluation gives the exact result rounded once:
+    Jacobian and rotated covariance within one ulp of a 50 digit Decimal reference."""
     from decimal import Decimal, getcontext
 
     getcontext().prec = 50

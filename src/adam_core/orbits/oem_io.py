@@ -1,23 +1,8 @@
-"""CCSDS OEM reading and writing.
-
-:func:`orbit_to_oem` is the legacy one shot writer (OEM 2.0, REF_FRAME EME2000).
-:class:`OrbitEphemerisMessage` writes OEM 3.0 with explicit labels: ICRF for
-adam_core's equatorial frame (J2000 axes, which NAIF aligns with the ICRF), the
-origin as CENTER_NAME, the time scale as TIME_SYSTEM, and an optional covariance
-block in REF_FRAME or a local orbital frame. Both use the Rust KVN renderer and
-:func:`orbit_from_oem` reads either back.
-"""
-
-from __future__ import annotations
-
 import datetime
 import json
 import logging
-import os
 import warnings
-from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Sequence, Type, Union
+from typing import Optional, Sequence, Type
 
 import numpy as np
 import pyarrow.compute as pc
@@ -27,20 +12,15 @@ from adam_core.coordinates.transform import transform_coordinates
 
 from ..coordinates import CartesianCoordinates
 from ..coordinates.covariances import CoordinateCovariances
-from ..coordinates.local_orbital_frames import LocalFrameCovariances
 from ..coordinates.origin import Origin
 from ..coordinates.units import (
-    convert_cartesian_covariance_au_to_km,
     convert_cartesian_covariance_km_to_au,
-    convert_cartesian_values_au_to_km,
     km_per_s_to_au_per_day,
     km_to_au,
 )
+from ..propagator import Propagator
 from ..time import Timestamp
-from .orbits import Orbits
-
-if TYPE_CHECKING:
-    from ..propagator import Propagator
+from . import Orbits
 
 logger = logging.getLogger(__name__)
 
@@ -210,9 +190,6 @@ def _oem_to_adam_frame(frame: str) -> str:
     """
     frame_map = {
         "EME2000": "equatorial",  # Earth Mean Equator and Equinox of J2000
-        "ICRF": "equatorial",  # the J2000 axes within the frame bias adam_core ignores
-        "J2000": "equatorial",
-        "GCRF": "equatorial",
         "ITRF-93": "itrf93",  # International Terrestrial Reference Frame
     }
 
@@ -321,194 +298,21 @@ def _oem_to_adam_center(center: str) -> str:
         )
 
 
-_REF_FRAME_LABELS = {"equatorial": "ICRF", "itrf93": "ITRF-93"}
-_OEM_COVARIANCE_FRAMES = ("RSW", "RTN", "TNW")
-
-
-@dataclass(frozen=True, eq=False)
-class OrbitEphemerisMessage:
-    """
-    One object's state history (Orbits, adam_core units) and the CCSDS labels it
-    is written under. ``creation_date`` (UTC) defaults to the write time.
-    """
-
-    states: Orbits
-    originator: str
-    object_name: str
-    object_id: str
-    center_name: str
-    ref_frame: str
-    time_system: str
-    creation_date: Optional[str] = None
-    ccsds_oem_vers: str = "3.0"
-    comments: tuple[str, ...] = ()
-
-    @classmethod
-    def from_orbits(
-        cls,
-        orbits: Orbits,
-        originator: str,
-        *,
-        object_name: Optional[str] = None,
-        object_id: Optional[str] = None,
-        creation_date: Optional[str] = None,
-        comments: Sequence[str] = (),
-    ) -> "OrbitEphemerisMessage":
-        """
-        Labels from an equatorial (written as ICRF) or itrf93 Orbits table:
-        CENTER_NAME from the origin, TIME_SYSTEM from the Timestamp scale.
-        """
-        states = _single_object_sorted(_on_millisecond_grid(orbits))
-        coords = states.coordinates
-        if coords.frame not in _REF_FRAME_LABELS:
-            raise ValueError(
-                f"Frame {coords.frame!r} cannot be written to an OEM, supported "
-                f"frames are {list(_REF_FRAME_LABELS)}. Transform to equatorial first."
-            )
-        default_id = states.object_id[0].as_py()
-        return cls(
-            states=states,
-            originator=originator,
-            object_name=object_name or default_id,
-            object_id=object_id or default_id,
-            center_name=_adam_to_oem_center(coords.origin.code[0].as_py()),
-            ref_frame=_REF_FRAME_LABELS[coords.frame],
-            time_system=coords.time.scale.upper(),
-            creation_date=creation_date,
-            comments=tuple(comments),
-        )
-
-    def write(
-        self,
-        path: Union[str, os.PathLike],
-        covariance_frame: Optional[str] = None,
-        table_frames_only: bool = False,
-        significant_digits: int = 16,
-    ) -> str:
-        """
-        Write the KVN file and return its path. ``covariance_frame`` None, the
-        REF_FRAME label, or a local orbital frame name writes no block, the state
-        covariance, or the rotated covariance under that label.
-        ``table_frames_only`` refuses frames outside RSW, RTN, TNW (table 5-4).
-        ``significant_digits`` is the mantissa length of states and covariances,
-        at most 16 (CCSDS 502.0-B-3 7.5.7); the legacy writer uses 15.
-        """
-        from adam_core import _rust_native as _rn
-
-        coords = self.states.coordinates
-        epochs = coords.time.to_iso8601().to_pylist()
-        comments = list(self.comments)
-        covariance_records: list = []
-        if covariance_frame is not None:
-            covariance_records, frame_comment = self._covariance_records(
-                covariance_frame, table_frames_only
-            )
-            comments += [frame_comment] if frame_comment else []
-        header = {
-            "CCSDS_OEM_VERS": self.ccsds_oem_vers,
-            "CREATION_DATE": self.creation_date
-            or datetime.datetime.now(datetime.timezone.utc).strftime(
-                "%Y-%m-%dT%H:%M:%S"
-            ),
-            "ORIGINATOR": self.originator,
-        }
-        metadata = {
-            "OBJECT_NAME": self.object_name,
-            "OBJECT_ID": self.object_id,
-            "CENTER_NAME": self.center_name,
-            "REF_FRAME": self.ref_frame,
-            "TIME_SYSTEM": self.time_system,
-            "START_TIME": epochs[0],
-            "STOP_TIME": epochs[-1],
-        }
-        _rn.oem_write_kvn(
-            str(path),
-            json.dumps(header),
-            json.dumps(metadata),
-            coords.time.scale,
-            coords.time.days.to_numpy(zero_copy_only=False),
-            coords.time.nanos.to_numpy(zero_copy_only=False),
-            convert_cartesian_values_au_to_km(coords.values).ravel(),
-            covariance_records,
-            significant_digits,
-        )
-        if comments:
-            lines = Path(path).read_text().split("\n")
-            insert_at = lines.index("META_START") + 1
-            lines[insert_at:insert_at] = [f"COMMENT {comment}" for comment in comments]
-            Path(path).write_text("\n".join(lines))
-        return str(path)
-
-    def _covariance_records(self, covariance_frame: str, table_frames_only: bool):
-        """Per epoch (days, nanos, frame, lower triangle in km) and a COMMENT or None."""
-        coords = self.states.coordinates
-        if coords.covariance.is_all_nan():
-            raise ValueError("The states carry no covariance.")
-        covariance_frame = covariance_frame.upper()  # single case values (7.5.3)
-        frame_comment = None
-        if covariance_frame == self.ref_frame.upper():
-            covariance_frame, matrices = self.ref_frame, coords.covariance.to_matrix()
-        else:
-            if covariance_frame not in _OEM_COVARIANCE_FRAMES:
-                frame_comment = (
-                    f"COV_REF_FRAME {covariance_frame} follows the SANA orbit-relative reference "
-                    "frames registry (CCSDS 502.0-B-3 annex B5)."
-                )
-                if table_frames_only:
-                    raise ValueError(
-                        f"{frame_comment} It is outside the {', '.join(_OEM_COVARIANCE_FRAMES)} "
-                        "set of table 5-4. Pass table_frames_only=False to write it anyway."
-                    )
-            matrices = LocalFrameCovariances.from_orbits(
-                self.states, covariance_frame
-            ).covariance.to_matrix()
-        lower_triangle = np.tril_indices(6)
-        epochs = zip(coords.time.days.to_pylist(), coords.time.nanos.to_pylist())
-        records = [
-            (days, nanos, covariance_frame, matrix[lower_triangle].tolist())
-            for (days, nanos), matrix in zip(
-                epochs, convert_cartesian_covariance_au_to_km(matrices)
-            )
-            if not np.isnan(matrix).all()
-        ]
-        return records, frame_comment
-
-
-def _on_millisecond_grid(orbits: Orbits) -> Orbits:
-    """Round epochs to the millisecond grid the renderer writes, warning if any move."""
-    time = orbits.coordinates.time
-    rounded = time.rounded("ms")
-    shift_nanos = np.abs(
-        rounded.nanos.to_numpy(zero_copy_only=False)
-        - time.nanos.to_numpy(zero_copy_only=False)
-    )
-    if shift_nanos.any():
-        warnings.warn(
-            f"{int((shift_nanos > 0).sum())} of {len(time)} epochs rounded to the "
-            f"millisecond grid, the largest by {shift_nanos.max() / 1e3:.1f} microseconds."
-        )
-        return orbits.set_column("coordinates.time", rounded)
-    return orbits
-
-
-def _single_object_sorted(orbits: Orbits) -> Orbits:
-    """One object about one center at unique epochs, sorted by time (OEM 5.1.3)."""
-    object_ids = orbits.object_id.unique().to_pylist()
-    origins = orbits.coordinates.origin.code.unique().to_pylist()
-    if len(object_ids) != 1 or object_ids[0] is None or len(origins) != 1:
-        raise ValueError(
-            "An OEM needs an object_id and carries one object about one center per "
-            f"file, got object_ids {object_ids} and origins {origins}."
-        )
-    if len(orbits.coordinates.time.unique()) != len(orbits):
-        raise ValueError("Epochs must be unique within an OEM.")
-    return orbits.sort_by("coordinates.time")
-
-
 def orbit_to_oem(
     orbits: Orbits,
     output_file: str,
     originator: str = "ADAM CORE USER",
+    *,
+    version: str = "2.0",
+    object_name: Optional[str] = None,
+    object_id: Optional[str] = None,
+    creation_date: Optional[str] = None,
+    comments: Sequence[str] = (),
+    include_covariance: bool = True,
+    covariance_frame: Optional[str] = None,
+    table_frames_only: bool = False,
+    significant_digits: Optional[int] = None,
+    ref_frame_label: Optional[str] = None,
 ) -> str:
     """
     Convert Orbit object to an OEM file.
@@ -521,6 +325,30 @@ def orbit_to_oem(
         The Orbit object to convert, must be pre-propagated to the desired times.
     output_file : str
         Path to the output OEM file
+    originator : str
+        ORIGINATOR header value.
+    version : str
+        "2.0" (REF_FRAME EME2000) or "3.0" (REF_FRAME ICRF, CREATION_DATE in UTC).
+    object_name, object_id : str, optional
+        OBJECT_NAME and OBJECT_ID, default the orbits' object_id.
+    creation_date : str, optional
+        CREATION_DATE, default the write time.
+    comments : sequence of str
+        COMMENT lines written right after META_START.
+    include_covariance : bool
+        False writes no covariance block.
+    covariance_frame : str, optional
+        None writes the state covariance in REF_FRAME. A local orbital frame name
+        (RSW, RTN, TNW, VNC, with _INERTIAL or _ROTATING) writes the rotated
+        covariance under that COV_REF_FRAME. Names outside table 5-4 of
+        CCSDS 502.0-B-3 get an annex B5 COMMENT.
+    table_frames_only : bool
+        Refuse covariance frames outside RSW, RTN, TNW.
+    significant_digits : int, optional
+        Mantissa digits of states and covariances, 1 to 16, default 15 for 2.0
+        and 16 for 3.0.
+    ref_frame_label : str, optional
+        REF_FRAME label of equatorial states, default EME2000 (2.0) or ICRF (3.0).
 
     Returns
     -------
@@ -542,18 +370,34 @@ def orbit_to_oem(
             "WARNING: Orbit has only one time, you probably wanted to use orbit_to_oem_propagated instead."
         )
 
-    _write_oem_fused(orbits, output_file, originator)
+    _write_oem_fused(
+        orbits,
+        output_file,
+        originator,
+        version=version,
+        object_name=object_name,
+        object_id=object_id,
+        creation_date=creation_date,
+        comments=list(comments),
+        include_covariance=include_covariance,
+        covariance_frame=covariance_frame,
+        table_frames_only=table_frames_only,
+        significant_digits=significant_digits,
+        ref_frame_label=ref_frame_label,
+    )
 
     return output_file
 
 
-def _write_oem_fused(orbits: Orbits, output_file: str, originator: str) -> None:
-    """One fused Rust crossing owns the equatorial rotation (ecliptic input),
-    stable time sort, metadata assembly, AU->km conversion, covariance
-    extraction, KVN rendering, and file write (bead personal-cmy.37.4.4).
-    The SPICE/time-dependent ITRF93 transform stays on the Rust-owned
-    ``transform_coordinates`` crossing; the nondeterministic CREATION_DATE
-    stays a Python input like other nondeterministic inputs."""
+def _write_oem_fused(
+    orbits: Orbits, output_file: str, originator: str, **options
+) -> None:
+    """One fused Rust crossing owns validation, the equatorial rotation
+    (ecliptic input), millisecond rounding, stable time sort, labels, AU->km
+    conversion, the covariance block, KVN rendering, and file write. The
+    SPICE/time-dependent ITRF93 transform stays on the Rust-owned
+    ``transform_coordinates`` crossing; the 2.0 CREATION_DATE stays the legacy
+    local time, Rust writes UTC for 3.0."""
     from adam_core import _rust_native as _rn
 
     from .arrow_bridge import orbits_to_ipc
@@ -568,12 +412,26 @@ def _write_oem_fused(orbits: Orbits, output_file: str, originator: str) -> None:
             transform_coordinates(orbits.coordinates, frame_out="equatorial"),
         )
 
-    _rn.oem_write_orbits_kvn(
-        str(output_file),
-        orbits_to_ipc(orbits),
-        originator,
-        datetime.datetime.now().isoformat(),
+    options["originator"] = originator
+    if options.get("creation_date") is None and options.get("version", "2.0") == "2.0":
+        options["creation_date"] = datetime.datetime.now().isoformat()
+    mu = None
+    covariance_frame = options.get("covariance_frame")
+    if covariance_frame is not None and options.get("include_covariance", True):
+        try:
+            canonical = _rn.local_frame_canonical_name(covariance_frame)
+        except ValueError:  # the REF_FRAME label, or a name Rust reports
+            canonical = ""
+        if canonical.endswith("_ROTATING"):
+            mu = np.asarray(orbits.coordinates.origin.mu(), dtype=np.float64)
+
+    rounded = _rn.oem_write_orbits_kvn(
+        str(output_file), orbits_to_ipc(orbits), json.dumps(options), mu
     )
+    if rounded:
+        warnings.warn(
+            f"{rounded} of {len(orbits)} epochs rounded to the millisecond grid."
+        )
 
 
 def orbit_to_oem_propagated(
@@ -653,10 +511,7 @@ def orbit_from_oem(
     try:
         raw = _rn.oem_read_orbits_ipc(str(input_file))
     except ValueError as exc:
-        # The Python composer also reads the ICRF labels the message writes.
-        if "mixed reference frames or time systems" in str(exc) or (
-            "Unsupported OEM frame" in str(exc)
-        ):
+        if "mixed reference frames or time systems" in str(exc):
             return _orbit_from_oem_legacy(input_file)
         raise
     if raw is None:

@@ -138,15 +138,19 @@ Public module functions:
 - `orbit_from_oem`
 
 `orbit_to_oem` keeps the legacy Python assertions, single-time warning, and
-nondeterministic CREATION_DATE input, then performs everything else in one
-`oem_write_orbits_kvn` crossing: ecliptic->equatorial rotation, stable time
-sort, metadata/frame/center mapping with exact legacy errors, AU->km state
-and covariance conversion in legacy IEEE order, `np.tril_indices` extraction,
-KVN rendering, and the file write. ITRF93 input pre-transforms on the
-Rust-owned `transform_coordinates` crossing (SPICE/time-dependent), then
-writes through the same fused crossing. `orbit_from_oem` is one
-`oem_read_orbits_ipc` crossing owning parsing, frame/center mapping with
-exact legacy errors, km->AU conversion, last-match-wins covariance joins,
+the OEM 2.0 local-time CREATION_DATE, builds the options JSON (version, labels,
+comments, covariance frame, digits), and performs everything else in one
+`oem_write_orbits_kvn(path, orbits_ipc, options_json, mu)` crossing:
+validation, ecliptic->equatorial rotation, millisecond rounding (the returned
+count drives a Python warning), stable time sort, metadata/frame/center mapping
+with exact legacy errors, AU->km state and covariance conversion in legacy IEEE
+order, local orbital frame covariance rotation (`mu` from the origin for
+`_ROTATING` frames), KVN rendering, and the file write. ITRF93 input
+pre-transforms on the Rust-owned `transform_coordinates` crossing
+(SPICE/time-dependent), then writes through the same fused crossing.
+`orbit_from_oem` is one `oem_read_orbits_ipc` crossing owning parsing,
+frame/center mapping with exact legacy errors, km->AU conversion,
+last-match-wins covariance joins,
 legacy per-state orbit ids, and nested Orbits assembly; empty files return
 `Orbits.empty()`, and the rare mixed-frame/scale multi-segment case falls
 back to the retained legacy composition so quivr surfaces its own behavior.
