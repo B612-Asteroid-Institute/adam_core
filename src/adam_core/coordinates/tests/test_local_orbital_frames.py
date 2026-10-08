@@ -150,3 +150,68 @@ def test_errors(heliocentric_orbits):
     with pytest.raises(ValueError, match="Pass mu="):
         local_frame_jacobians(mars, "RSW_ROTATING")
     assert local_frame_jacobians(mars, "RSW_ROTATING", mu=1e-12).shape == (1, 6, 6)
+
+
+def test_jacobian_and_product_are_correctly_rounded(heliocentric_orbits):
+    """The double-double evaluation gives the exact result rounded once: Jacobian
+    and rotated covariance within one ulp of a 50 digit Decimal reference."""
+    from decimal import Decimal, getcontext
+
+    getcontext().prec = 50
+    orbits = propagate_2body(
+        heliocentric_orbits[:1], Timestamp.from_mjd([60000.0, 60400.0], scale="tdb")
+    )
+    coords = orbits.coordinates
+    jacobians = local_frame_jacobians(coords, "VNC_ROTATING")
+    rotated = LocalFrameCovariances.from_orbits(orbits, "VNC_ROTATING")
+    rotated = rotated.covariance.to_matrix()
+    covariances = coords.covariance.to_matrix()
+    mu = Decimal(float(coords.origin.mu()[0]))
+
+    def cross(a, b):
+        return [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ]
+
+    def unit(a):
+        norm = sum(x * x for x in a).sqrt()
+        return [x / norm for x in a], norm
+
+    for k in range(len(coords)):
+        r = [Decimal(float(x)) for x in coords.values[k, :3]]
+        v = [Decimal(float(x)) for x in coords.values[k, 3:]]
+        v_hat, v_mag = unit(v)
+        h_hat, _ = unit(cross(r, v))
+        rows = [v_hat, h_hat, cross(v_hat, h_hat)]
+        r_mag = sum(x * x for x in r).sqrt()
+        acceleration = [-mu * x / r_mag**3 for x in r]
+        along = sum(a * u for a, u in zip(acceleration, v_hat))
+        v_hat_dot = [(a - along * u) / v_mag for a, u in zip(acceleration, v_hat)]
+        rates = [v_hat_dot, [Decimal(0)] * 3, cross(v_hat_dot, h_hat)]
+        omega = [Decimal(0)] * 3
+        for row, rate in zip(rows, rates):
+            omega = [o + x / 2 for o, x in zip(omega, cross(row, rate))]
+        J = [[Decimal(0)] * 6 for _ in range(6)]
+        for i, row in enumerate(rows):
+            w_x_e = cross(omega, row)
+            for j in range(3):
+                J[i][j] = J[i + 3][j + 3] = row[j]
+                J[i + 3][j] = w_x_e[j]
+        C = [[Decimal(float(x)) for x in row] for row in covariances[k]]
+        P = [
+            [
+                sum(J[i][a] * C[a][b] * J[j][b] for a in range(6) for b in range(6))
+                for j in range(6)
+            ]
+            for i in range(6)
+        ]
+        exact_J = np.array([[float(x) for x in row] for row in J])
+        exact_P = np.array([[float(x) for x in row] for row in P])
+        # one ulp of each block's largest entry: the orbit normal row of the rate
+        # block is zero in exact arithmetic and carries only reference noise
+        for block in (np.s_[:3, :3], np.s_[3:, :3], np.s_[3:, 3:]):
+            tolerance = np.spacing(np.abs(exact_J[block]).max())
+            assert np.all(np.abs(jacobians[k][block] - exact_J[block]) <= tolerance)
+        assert np.all(np.abs(rotated[k] - exact_P) <= np.spacing(np.abs(exact_P)))

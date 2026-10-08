@@ -7,6 +7,11 @@ two must never be labelled as each other. ``_INERTIAL`` variants rotate position
 and velocity alike, ``_ROTATING`` variants add the two-body frame rate to the
 velocity rows. Bare names resolve to ``_INERTIAL``. Only covariances are
 expressed here. State vectors stay inertial.
+
+The Jacobian and the product ``J @ C @ J.T`` are evaluated in double-double
+arithmetic (pairs of floats carrying about 32 digits), because the rotating
+frame velocity rows are small differences of large terms and lose two to three
+digits in plain double precision. The results are rounded once, at the end.
 """
 
 from __future__ import annotations
@@ -19,7 +24,7 @@ import quivr as qv
 
 from ..time import Timestamp
 from .cartesian import SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE, CartesianCoordinates
-from .covariances import CoordinateCovariances, apply_linear_covariance_transform
+from .covariances import CoordinateCovariances
 from .origin import Origin
 
 if TYPE_CHECKING:
@@ -43,7 +48,100 @@ def _canonical_frame(frame: str) -> str:
     return name
 
 
-def _rotation_matrices(coords: CartesianCoordinates, frame: str) -> np.ndarray:
+# Double-double arithmetic on arrays: a value is a (hi, lo) pair of float64 arrays
+# with hi + lo exact to about 1e-32 relative. Error free transformations after
+# Dekker and Knuth as in the QD library (Hida, Li, Bailey). No fused multiply-add
+# is assumed, so every platform gives the same bits.
+_SPLITTER = 134217729.0  # 2**27 + 1
+
+
+def _two_sum(a, b):
+    s = a + b
+    bb = s - a
+    return s, (a - (s - bb)) + (b - bb)
+
+
+def _quick_two_sum(a, b):  # |a| >= |b|
+    s = a + b
+    return s, b - (s - a)
+
+
+def _two_prod(a, b):
+    p = a * b
+    ca, cb = _SPLITTER * a, _SPLITTER * b
+    ah = ca - (ca - a)
+    bh = cb - (cb - b)
+    al, bl = a - ah, b - bh
+    return p, ((ah * bh - p) + ah * bl + al * bh) + al * bl
+
+
+def _dd(a):
+    a = np.asarray(a, dtype=np.float64)
+    return a, np.zeros_like(a)
+
+
+def _add(x, y):
+    s, e = _two_sum(x[0], y[0])
+    return _quick_two_sum(s, e + (x[1] + y[1]))
+
+
+def _neg(x):
+    return -x[0], -x[1]
+
+
+def _sub(x, y):
+    return _add(x, _neg(y))
+
+
+def _mul(x, y):
+    p, e = _two_prod(x[0], y[0])
+    return _quick_two_sum(p, e + (x[0] * y[1] + x[1] * y[0]))
+
+
+def _div(x, y):
+    q1 = x[0] / y[0]
+    r = _sub(x, _mul(_dd(q1), y))
+    q2 = r[0] / y[0]
+    r = _sub(r, _mul(_dd(q2), y))
+    return _add(_quick_two_sum(q1, q2), _dd(r[0] / y[0]))
+
+
+def _sqrt(x):
+    s = np.sqrt(x[0])
+    r = _sub(x, _mul(_dd(s), _dd(s)))
+    return _quick_two_sum(s, r[0] / (2.0 * s))
+
+
+def _dot(x, y):  # (N, 3) pairs -> (N,) pair
+    acc = _mul((x[0][:, 0], x[1][:, 0]), (y[0][:, 0], y[1][:, 0]))
+    for k in (1, 2):
+        acc = _add(acc, _mul((x[0][:, k], x[1][:, k]), (y[0][:, k], y[1][:, k])))
+    return acc
+
+
+def _cross(x, y):  # (N, 3) pairs -> (N, 3) pair
+    hi, lo = np.empty_like(x[0]), np.empty_like(x[0])
+    for k, (i, j) in enumerate(((1, 2), (2, 0), (0, 1))):
+        c = _sub(
+            _mul((x[0][:, i], x[1][:, i]), (y[0][:, j], y[1][:, j])),
+            _mul((x[0][:, j], x[1][:, j]), (y[0][:, i], y[1][:, i])),
+        )
+        hi[:, k], lo[:, k] = c
+    return hi, lo
+
+
+def _scale(x, s):  # (N, 3) pair times (N,) pair
+    return _mul(x, (s[0][:, None], s[1][:, None]))
+
+
+def _unit(x):
+    norm = _sqrt(_dot(x, x))
+    return _div(x, (norm[0][:, None], norm[1][:, None])), norm
+
+
+def _jacobian_dd(coords: CartesianCoordinates, frame: str, mu: _Mu):
+    """(hi, lo) pair of (N, 6, 6) Jacobians from inertial position and velocity
+    (AU, AU/day) to the canonical local frame ``frame``."""
     if coords.frame not in ("equatorial", "ecliptic"):
         raise ValueError(
             f"Local orbital frames need an inertial frame, got {coords.frame!r}."
@@ -53,30 +151,26 @@ def _rotation_matrices(coords: CartesianCoordinates, frame: str) -> np.ndarray:
         raise ValueError(
             f"State {int(np.flatnonzero(degenerate)[0])} has no orbit plane."
         )
-    family = _canonical_frame(frame).split("_")[0]
+    family, kind = frame.split("_")
+    r, v = _dd(coords.r), _dd(coords.v)
+    r_hat, r_mag = _unit(r)
+    v_hat, v_mag = _unit(v)
+    h_hat, _ = _unit(_cross(r, v))
     if family == "RSW":
-        return coords.ric3_matrix
-    if family == "TNW":
-        return np.stack(
-            [coords.v_hat, np.cross(coords.h_hat, coords.v_hat), coords.h_hat], axis=1
-        )
-    return np.stack(
-        [coords.v_hat, coords.h_hat, np.cross(coords.v_hat, coords.h_hat)], axis=1
-    )
+        rows = (r_hat, _cross(h_hat, r_hat), h_hat)
+    elif family == "TNW":
+        rows = (v_hat, _cross(h_hat, v_hat), h_hat)
+    else:
+        rows = (v_hat, h_hat, _cross(v_hat, h_hat))
 
+    n = len(coords)
+    hi, lo = np.zeros((n, 6, 6)), np.zeros((n, 6, 6))
+    for i, row in enumerate(rows):
+        hi[:, i, :3], lo[:, i, :3] = row
+        hi[:, i + 3, 3:], lo[:, i + 3, 3:] = row
+    if kind == "INERTIAL":
+        return hi, lo
 
-def _unit_vector_rate(
-    vectors: np.ndarray, vector_rates: np.ndarray, norms: np.ndarray
-) -> np.ndarray:
-    """d(u/|u|)/dt for each row, given u and du/dt."""
-    unit = vectors / norms[:, None]
-    along = np.einsum("ij,ij->i", vector_rates, unit)[:, None]
-    return (vector_rates - along * unit) / norms[:, None]
-
-
-def _angular_velocity(coords: CartesianCoordinates, frame: str, mu: _Mu) -> np.ndarray:
-    family = frame.split("_")[0]
-    h_hat = coords.h_hat
     if mu is None:
         try:
             mu = coords.origin.mu()
@@ -85,22 +179,58 @@ def _angular_velocity(coords: CartesianCoordinates, frame: str, mu: _Mu) -> np.n
                 f"No gravitational parameter for {coords.origin.code.unique().to_pylist()}. "
                 "Pass mu= in AU^3/day^2 or use the _INERTIAL variant."
             ) from exc
-    mu = np.broadcast_to(np.asarray(mu, dtype=np.float64), (len(coords),))
-    acceleration = -mu[:, None] * coords.r / coords.r_mag[:, None] ** 3
-    r_hat_rate = _unit_vector_rate(coords.r, coords.v, coords.r_mag)
-    v_hat_rate = _unit_vector_rate(coords.v, acceleration, coords.v_mag)
+    mu = _dd(np.broadcast_to(np.asarray(mu, dtype=np.float64), (n,)))
     # Under two-body motion only r_hat and v_hat turn, the orbit normal does not.
-    x_rate = r_hat_rate if family == "RSW" else v_hat_rate
-    y_rate = np.cross(h_hat, x_rate)  # rate of the axis completing (x, h_hat)
-    zero_rate = np.zeros_like(h_hat)
-    if family == "VNC":  # VNC rows are (x, h_hat, -y)
-        axis_rates = np.stack([x_rate, zero_rate, -y_rate], axis=1)
+    # d(u/|u|)/dt = (du/dt - (du/dt . u_hat) u_hat) / |u|.
+    if family == "RSW":
+        x_hat, x_mag, x_dot = r_hat, r_mag, v
     else:
-        axis_rates = np.stack([x_rate, y_rate, zero_rate], axis=1)
-    # For an orthonormal triad with de_i = omega x e_i, sum_i e_i x de_i = 2 omega.
-    return 0.5 * np.cross(_rotation_matrices(coords, frame), axis_rates, axis=2).sum(
-        axis=1
+        r_cubed = _mul(r_mag, _mul(r_mag, r_mag))
+        x_hat, x_mag, x_dot = v_hat, v_mag, _neg(_scale(r, _div(mu, r_cubed)))
+    x_rate = _div(
+        _sub(x_dot, _scale(x_hat, _dot(x_dot, x_hat))),
+        (x_mag[0][:, None], x_mag[1][:, None]),
     )
+    y_rate = _cross(h_hat, x_rate)  # rate of the axis completing (x, h_hat)
+    zero = _dd(np.zeros((n, 3)))
+    rates = (x_rate, zero, _neg(y_rate)) if family == "VNC" else (x_rate, y_rate, zero)
+    # For an orthonormal triad with de_i = omega x e_i, sum_i e_i x de_i = 2 omega.
+    omega = _cross(rows[0], rates[0])
+    for row, rate in zip(rows[1:], rates[1:]):
+        omega = _add(omega, _cross(row, rate))
+    omega = _scale(omega, _dd(np.full(n, 0.5)))
+    for i, row in enumerate(rows):
+        hi[:, i + 3, :3], lo[:, i + 3, :3] = _cross(omega, row)
+    # omega is along the orbit normal, so that row of the rate block is exactly zero.
+    normal_row = 1 if family == "VNC" else 2
+    hi[:, normal_row + 3, :3] = lo[:, normal_row + 3, :3] = 0.0
+    return hi, lo
+
+
+def _rotate_covariance_dd(jacobian, covariances: np.ndarray) -> np.ndarray:
+    """``J @ C @ J.T`` for a double-double ``jacobian`` and float64 ``covariances``
+    (N, 6, 6), accumulated in double-double and rounded once."""
+    j_hi, j_lo = jacobian
+    c = _dd(covariances)
+
+    def product(a, b):  # (N, 6, 6) pairs, a @ b
+        acc = _mul(
+            (a[0][:, :, 0, None], a[1][:, :, 0, None]),
+            (b[0][:, None, 0, :], b[1][:, None, 0, :]),
+        )
+        for k in range(1, 6):
+            acc = _add(
+                acc,
+                _mul(
+                    (a[0][:, :, k, None], a[1][:, :, k, None]),
+                    (b[0][:, None, k, :], b[1][:, None, k, :]),
+                ),
+            )
+        return acc
+
+    jc = product((j_hi, j_lo), c)
+    hi, lo = product(jc, (np.swapaxes(j_hi, 1, 2), np.swapaxes(j_lo, 1, 2)))
+    return hi + lo
 
 
 def local_frame_jacobians(
@@ -110,17 +240,10 @@ def local_frame_jacobians(
     (N, 6, 6) Jacobians from inertial position and velocity to a local orbital
     frame (name or alias), so a covariance there is ``J @ C @ J.T``. The top
     left block is the rotation. ``mu`` (AU^3/day^2, default the origin's) sets
-    the ``_ROTATING`` frame rate.
+    the ``_ROTATING`` frame rate. Correctly rounded from a double-double evaluation.
     """
-    canonical_frame = _canonical_frame(frame)
-    rotation = _rotation_matrices(coords, canonical_frame)
-    jacobians = np.zeros((len(coords), 6, 6))
-    jacobians[:, :3, :3] = rotation
-    jacobians[:, 3:, 3:] = rotation
-    if canonical_frame.endswith("_ROTATING"):
-        omega = _angular_velocity(coords, canonical_frame, mu)
-        jacobians[:, 3:, :3] = np.cross(omega[:, None, :], rotation)
-    return jacobians
+    hi, lo = _jacobian_dd(coords, _canonical_frame(frame), mu)
+    return hi + lo
 
 
 class LocalFrameCovariances(qv.Table):
@@ -147,9 +270,8 @@ class LocalFrameCovariances(qv.Table):
         coords = orbits.coordinates
         if coords.covariance.is_all_nan():
             raise ValueError("The orbits carry no covariance.")
-        rotated = apply_linear_covariance_transform(
-            local_frame_jacobians(coords, canonical_frame, mu),
-            coords.covariance.to_matrix(),
+        rotated = _rotate_covariance_dd(
+            _jacobian_dd(coords, canonical_frame, mu), coords.covariance.to_matrix()
         )
         return cls.from_kwargs(
             orbit_id=orbits.orbit_id,
