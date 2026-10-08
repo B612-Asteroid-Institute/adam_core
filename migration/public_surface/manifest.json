@@ -13785,7 +13785,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/color_determination.py",
-      "line": 580,
+      "line": 583,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

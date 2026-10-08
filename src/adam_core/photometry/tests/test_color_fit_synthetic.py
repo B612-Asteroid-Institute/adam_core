@@ -168,15 +168,18 @@ def _constant_phase(
     return m_red, alpha, ch, np.full(len(ch), 1.0 / sigma)
 
 
-def _emptied_band_dataset() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def _emptied_band_dataset(
+    kept: str, emptied: str
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    30 clean g-band points plus two r-band points straddling the truth by 50 sigma.
+    30 clean ``kept``-band points plus two ``emptied``-band points, both blunders.
 
-    Both r points sit at one phase angle, so H_r lands between them and each is
-    rejected in the same iteration, emptying the band.
+    The two ``emptied`` points sit at one phase angle and straddle the truth by
+    +-50 sigma, so H lands between them and each is rejected in the same
+    iteration, leaving the band with no surviving observation at all.
     """
     alpha = np.concatenate([np.linspace(2.0, 32.0, 30), [15.0, 15.0]])
-    m_red, alpha, channels, rw = _constant_phase(["g"] * 30 + ["r"] * 2, alpha)
+    m_red, alpha, channels, rw = _constant_phase([kept] * 30 + [emptied] * 2, alpha)
     m_red = m_red.copy()
     m_red[30] += 50 * 0.02
     m_red[31] -= 50 * 0.02
@@ -274,21 +277,33 @@ def test_rank_based_scatter_keeps_outlier_clipping_alive() -> None:
     assert fit["H_g"] == pytest.approx(_H_TRUE["g"], abs=1e-4)
 
 
-def test_emptied_band_drops_out_of_the_parameter_set() -> None:
+@pytest.mark.parametrize("kept, emptied", [("g", "r"), ("r", "g")])
+def test_emptied_band_drops_out_of_the_parameter_set(kept: str, emptied: str) -> None:
     """
-    A band whose every observation is clipped stops being a parameter.
+    Band presence follows the final included mask, not the pre-clipping one.
 
-    The two r-band points sit at one phase angle and straddle the truth by
-    +-50 sigma, so both are rejected in the same iteration; the active set is
-    recomputed afterwards, leaving a two-parameter g-only fit rather than one
-    still charged for an r magnitude it can no longer constrain.
+    Both of the emptied band's observations are rejected in one iteration; the
+    active set is recomputed afterwards, so the fit is a two-parameter single-band
+    one rather than one still charged for a magnitude it can no longer constrain.
+    Judging presence before clipping instead returned an arbitrary finite H for
+    that band (whatever the optimizer left its unconstrained parameter at), a
+    zero uncertainty from the all-zero Jacobian column, and a finite color built
+    on top of both.
     """
-    fit = _fit_per_band_h(*_emptied_band_dataset(), "HG12star")
+    fit = _fit_per_band_h(*_emptied_band_dataset(kept, emptied), "HG12star")
     assert fit["num_outliers"] == 2
-    assert fit["num_params"] == 2  # G12* and H_g only
+    assert fit["num_params"] == 2  # G12* and the kept band's H only
     assert fit["rank"] == 2
     assert fit["dof"] == 30 - 2
-    assert np.isnan(fit["H_r"]) and np.isnan(fit["g_r"])
+
+    assert np.isnan(fit[f"H_{emptied}"]) and np.isnan(fit[f"H_{emptied}_sigma"])
+    # Every color involving the emptied band goes with it.
+    for color in ("g_r", "g_i", "r_i"):
+        if emptied in color.split("_"):
+            assert np.isnan(fit[color]) and np.isnan(fit[f"{color}_sigma"])
+
+    # The surviving band is unaffected and still recovers the injected truth.
+    assert fit[f"H_{kept}"] == pytest.approx(_H_TRUE[kept], abs=1e-4)
     assert fit["G"] == pytest.approx(0.4, abs=1e-4)
 
 
