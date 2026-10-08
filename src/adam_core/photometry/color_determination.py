@@ -496,13 +496,16 @@ def _fit_per_band_h(
             f"H_{b}" for b in active
         ]
         non_fit = ", ".join(
-                        label
-                        for i, label in enumerate(labels)
-                        if not _is_fitable(null_basis, _unit(i)))
-        logger.warning(f"Weighted Jacobian for the {phi_type} fit is rank deficient "
-                       f"(rank {rank} of {num_params} parameters from {n_incl} observation(s)"
-                       f" in band(s) {''.join(active)}); reporting the "
-                       f"non-fitable parameter(s) {non_fit} as NaN")
+            label
+            for i, label in enumerate(labels)
+            if not _is_fitable(null_basis, _unit(i))
+        )
+        logger.warning(
+            f"Weighted Jacobian for the {phi_type} fit is rank deficient "
+            f"(rank {rank} of {num_params} parameters from {n_incl} observation(s)"
+            f" in band(s) {''.join(active)}); reporting the "
+            f"non-fitable parameter(s) {non_fit} as NaN"
+        )
 
     def _param(index: int) -> tuple[float, float]:
         """(value, 1-sigma) for one fitted parameter; NaN when non-fitable."""
