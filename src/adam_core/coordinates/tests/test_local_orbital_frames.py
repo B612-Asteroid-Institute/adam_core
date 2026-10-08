@@ -152,9 +152,10 @@ def test_errors(heliocentric_orbits):
     assert local_frame_jacobians(mars, "RSW_ROTATING", mu=1e-12).shape == (1, 6, 6)
 
 
-def test_jacobian_and_product_are_correctly_rounded(heliocentric_orbits):
-    """The Rust double-double evaluation gives the exact result rounded once:
-    Jacobian and rotated covariance within one ulp of a 50 digit Decimal reference."""
+def test_jacobian_and_product_match_a_decimal_reference(heliocentric_orbits):
+    """The Rust double-double evaluation against a 50 digit Decimal reference:
+    each Jacobian block within one ulp of its largest entry, the rotated
+    covariance within one ulp per element."""
     from decimal import Decimal, getcontext
 
     getcontext().prec = 50

@@ -157,7 +157,7 @@ def test_input_rules(history, tmp_path):
     two_origins = Origin.from_kwargs(code=["SUN"] * 5 + ["SOLAR_SYSTEM_BARYCENTER"])
     with pytest.raises(ValueError, match="one object about one center per file"):
         write(history.set_column("coordinates.origin", two_origins), path)
-    with pytest.raises(ValueError, match="Epochs must be unique within an OEM."):
+    with pytest.raises(ValueError, match="2027-03-01T00:00:00.000 appears twice"):
         write(history.take(pa.array([0, 0, 1, 2, 3, 4])), path)
     nulls = history.set_column("coordinates.covariance", CoordinateCovariances.nulls(6))
     with pytest.raises(ValueError, match="The states carry no covariance."):

@@ -26,7 +26,7 @@ fn rows6(values: &PyReadonlyArray2<'_, f64>, label: &str) -> PyResult<Vec<f64>> 
     }
     view.as_slice()
         .map(<[f64]>::to_vec)
-        .ok_or_else(|| PyValueError::new_err(format!("{label} must be contiguous")))
+        .ok_or_else(|| PyValueError::new_err(format!("{label} must be C-contiguous")))
 }
 
 fn scalars(values: &PyReadonlyArray1<'_, f64>, label: &str) -> PyResult<Vec<f64>> {
@@ -34,7 +34,7 @@ fn scalars(values: &PyReadonlyArray1<'_, f64>, label: &str) -> PyResult<Vec<f64>
         .as_array()
         .as_slice()
         .map(<[f64]>::to_vec)
-        .ok_or_else(|| PyValueError::new_err(format!("{label} must be contiguous")))
+        .ok_or_else(|| PyValueError::new_err(format!("{label} must be C-contiguous")))
 }
 
 fn matrices6(values: &PyReadonlyArray3<'_, f64>, label: &str) -> PyResult<Vec<f64>> {
@@ -46,7 +46,7 @@ fn matrices6(values: &PyReadonlyArray3<'_, f64>, label: &str) -> PyResult<Vec<f6
     }
     view.as_slice()
         .map(<[f64]>::to_vec)
-        .ok_or_else(|| PyValueError::new_err(format!("{label} must be contiguous")))
+        .ok_or_else(|| PyValueError::new_err(format!("{label} must be C-contiguous")))
 }
 
 fn array3<'py>(py: Python<'py>, values: Vec<f64>) -> PyResult<Bound<'py, PyArray3<f64>>> {

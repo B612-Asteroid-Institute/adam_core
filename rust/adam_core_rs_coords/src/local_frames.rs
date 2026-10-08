@@ -6,8 +6,7 @@
 //! are evaluated in double-double arithmetic and rounded once, because the
 //! rotating frame velocity rows cancel and amplify any rounding of J.
 //!
-//! Interface fixed on 2026-10-08. Bodies are filled by the kernel task; the
-//! OEM renderer calls these functions for its COV_REF_FRAME blocks.
+//! The OEM renderer calls [`local_frame_covariances`] for its COV_REF_FRAME blocks.
 
 use std::ops::{Add, Div, Mul, Sub};
 
@@ -79,7 +78,7 @@ impl LocalFrame {
     /// case-insensitively and ignoring surrounding whitespace.
     pub fn parse(name: &str) -> SchemaResult<Self> {
         let upper = name.trim().to_ascii_uppercase();
-        // Aliases are bare names only, as in the Python parser.
+        // Aliases are bare names only: RTN_ROTATING is not a registry name.
         let canonical = match upper.as_str() {
             "RSW" | "RTN" | "RIC" => "RSW_INERTIAL",
             "TNW" => "TNW_INERTIAL",
@@ -113,7 +112,8 @@ impl LocalFrame {
 /// Jacobians from inertial position and velocity to `frame`, one 6x6 per
 /// state, returned row-major as `N * 36` values. `values` is `N * 6`
 /// (x, y, z, vx, vy, vz in AU and AU/day), `mu` has one entry per state
-/// (AU^3/day^2) and is only read for `_ROTATING` frames.
+/// (AU^3/day^2) and is only read for `_ROTATING` frames, where it must be
+/// finite and positive.
 pub fn local_frame_jacobians(
     values: &[f64],
     mu: &[f64],
@@ -122,7 +122,7 @@ pub fn local_frame_jacobians(
     let n = state_count(values, mu, frame)?;
     let mut out = Vec::with_capacity(n * 36);
     for (index, state) in values.chunks_exact(6).enumerate() {
-        let jacobian = state_jacobian(state, mu_of(mu, index, frame), frame, index)?;
+        let jacobian = state_jacobian(state, mu_of(mu, index, frame)?, frame, index)?;
         out.extend(jacobian.map(|x| x.hi + x.lo));
     }
     Ok(out)
@@ -131,7 +131,8 @@ pub fn local_frame_jacobians(
 /// `J C J^T` for every state, `covariances` and the result row-major `N * 36`
 /// (AU, AU/day units). The input covariance is symmetrised exactly, the
 /// product is accumulated in double-double arithmetic and rounded once, and
-/// the result is symmetric to the bit. Rows whose covariance is all NaN stay NaN.
+/// the result is symmetric to the bit. Rows whose covariance is all NaN stay
+/// NaN and need neither an orbit plane nor `mu`.
 pub fn local_frame_covariances(
     values: &[f64],
     covariances: &[f64],
@@ -157,7 +158,7 @@ pub fn local_frame_covariances(
         if covariance.iter().all(|x| x.is_nan()) {
             continue;
         }
-        let jacobian = state_jacobian(state, mu_of(mu, index, frame), frame, index)?;
+        let jacobian = state_jacobian(state, mu_of(mu, index, frame)?, frame, index)?;
         rotated.copy_from_slice(&rotate_covariance(&jacobian, covariance));
     }
     Ok(out)
@@ -182,11 +183,17 @@ fn state_count(values: &[f64], mu: &[f64], frame: LocalFrame) -> SchemaResult<us
     Ok(n)
 }
 
-fn mu_of(mu: &[f64], index: usize, frame: LocalFrame) -> f64 {
-    if frame.rotating {
-        mu[index]
+fn mu_of(mu: &[f64], index: usize, frame: LocalFrame) -> SchemaResult<f64> {
+    if !frame.rotating {
+        return Ok(0.0);
+    }
+    let value = mu[index];
+    if value.is_finite() && value > 0.0 {
+        Ok(value)
     } else {
-        0.0
+        Err(SchemaError::InvalidRecordBatch(format!(
+            "mu must be finite and positive for a _ROTATING frame, got {value} at state {index}"
+        )))
     }
 }
 
@@ -200,9 +207,11 @@ fn state_jacobian(
     let r = [state[0], state[1], state[2]];
     let v = [state[3], state[4], state[5]];
     let h = cross(r, v);
-    if dot(h, h).sqrt() < SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE {
+    let norm = dot(h, h).sqrt();
+    // NaN fails the comparison, and an infinite component makes the norm infinite or NaN.
+    if !(norm >= SPECIFIC_ANGULAR_MOMENTUM_TOLERANCE && norm.is_finite()) {
         return Err(SchemaError::InvalidRecordBatch(format!(
-            "State {index} has no orbit plane."
+            "State {index} is not finite or has no orbit plane."
         )));
     }
     let (r, v) = (r.map(DoubleDouble::from), v.map(DoubleDouble::from));
@@ -550,15 +559,6 @@ mod tests {
         max_abs_diff(a, [[0.0; 3]; 3])
     }
 
-    fn naive_product(j: &[f64; 36], c: &[f64]) -> [f64; 36] {
-        std::array::from_fn(|ij| {
-            let (i, jj) = (ij / 6, ij % 6);
-            (0..36)
-                .map(|kl| j[i * 6 + kl / 6] * c[kl] * j[jj * 6 + kl % 6])
-                .sum()
-        })
-    }
-
     /// Covariance dominated by a timing error along the orbit, plus small noise.
     fn timing_covariance(state: &[f64; 6], sigma_t: f64) -> Vec<f64> {
         let r = [state[0], state[1], state[2]];
@@ -795,7 +795,7 @@ mod tests {
     }
 
     #[test]
-    fn covariance_product_matches_f64_and_is_bit_symmetric() {
+    fn covariance_product_is_bit_symmetric() {
         let states = sample_states();
         let flat: Vec<f64> = states.iter().flatten().copied().collect();
         let covariances: Vec<f64> = (0..states.len() as u64)
@@ -804,17 +804,9 @@ mod tests {
         let mu = vec![MU_SUN; states.len()];
         for frame in ALL_FRAMES {
             let rotated = local_frame_covariances(&flat, &covariances, &mu, frame).unwrap();
-            let jacobians = jacobians(&states, frame);
-            for ((p, c), j) in rotated
-                .chunks_exact(36)
-                .zip(covariances.chunks_exact(36))
-                .zip(&jacobians)
-            {
-                let naive = naive_product(j, c);
+            for p in rotated.chunks_exact(36) {
                 for i in 0..6 {
                     for k in 0..6 {
-                        let scale = (p[i * 7] * p[k * 7]).sqrt();
-                        assert!((p[i * 6 + k] - naive[i * 6 + k]).abs() <= 1e-12 * scale);
                         assert_eq!(p[i * 6 + k].to_bits(), p[k * 6 + i].to_bits());
                     }
                 }
@@ -861,76 +853,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn product_is_correctly_rounded_for_an_f64_jacobian() {
-        // Exact J C J^T for an f64 Jacobian from error free expansions,
-        // against which the double-double product is within one ulp.
-        fn exact(j: &[f64; 36], c: &[f64], i: usize, k: usize) -> f64 {
-            let mut parts = Vec::new();
-            for a in 0..6 {
-                for b in 0..6 {
-                    let (s, e) = two_sum(c[a * 6 + b], c[b * 6 + a]);
-                    let (p, q) = two_prod(j[i * 6 + a], j[k * 6 + b]);
-                    for x in [p, q] {
-                        for y in [0.5 * s, 0.5 * e] {
-                            let (u, w) = two_prod(x, y);
-                            parts.extend([u, w]);
-                        }
-                    }
-                }
-            }
-            // Shewchuk's exact summation into non-overlapping partials
-            let mut partials: Vec<f64> = Vec::new();
-            for mut x in parts {
-                let mut kept = Vec::new();
-                for y in partials {
-                    let (s, e) = if x.abs() >= y.abs() {
-                        quick_two_sum(x, y)
-                    } else {
-                        quick_two_sum(y, x)
-                    };
-                    if e != 0.0 {
-                        kept.push(e);
-                    }
-                    x = s;
-                }
-                kept.push(x);
-                partials = kept;
-            }
-            partials.iter().rev().fold(0.0, |acc, x| acc + x)
-        }
-        let states = sample_states();
-        let mut worst_naive: f64 = 0.0;
-        for (index, state) in states.iter().enumerate() {
-            let noise = well_conditioned_covariance(index as u64);
-            let timing = timing_covariance(state, 0.3);
-            let c: Vec<f64> = timing.iter().zip(&noise).map(|(a, b)| a + b).collect();
-            for family in FAMILIES {
-                let frame = frame(family, true);
-                let j = jacobians(&states[index..=index], frame)[0];
-                let p = rotate_covariance(&j.map(|x| DoubleDouble::new((x, 0.0))), &c);
-                let naive = naive_product(&j, &c);
-                for i in 0..6 {
-                    for k in 0..6 {
-                        let reference = exact(&j, &c, i, k);
-                        let ulp = f64::from_bits(reference.abs().to_bits() + 1) - reference.abs();
-                        // plus the double-double bound, for elements that cancel by 50 bits
-                        let terms: f64 = (0..36)
-                            .map(|ab| (j[i * 6 + ab / 6] * c[ab] * j[k * 6 + ab % 6]).abs())
-                            .sum();
-                        let tolerance = ulp + terms * 2f64.powi(-100);
-                        assert!((p[i * 6 + k] - reference).abs() <= tolerance);
-                        worst_naive = worst_naive.max((naive[i * 6 + k] - reference).abs() / ulp);
-                    }
-                }
-            }
-        }
-        // the plain f64 product is far off on these elements
-        assert!(worst_naive > 1e3, "{worst_naive}");
-    }
-
-    /// Rotating Jacobian from the analytic axis rates, as the Python module
-    /// evaluates them, in double-double: no autodiff involved.
+    /// Rotating Jacobian from the analytic axis rates in double-double: no
+    /// autodiff involved.
     fn reference_jacobian(state: &[f64; 6], family: LocalFrameFamily) -> [DoubleDouble; 36] {
         let r = [state[0], state[1], state[2]].map(DoubleDouble::from);
         let v = [state[3], state[4], state[5]].map(DoubleDouble::from);
@@ -981,6 +905,8 @@ mod tests {
             for (index, (state, j)) in states.iter().zip(jacobians).enumerate() {
                 let reference = reference_jacobian(state, family);
                 let rounded = reference.map(|x| x.hi + x.lo);
+                // within one ulp of each block's largest element, and the
+                // covariance below within one ulp per element
                 for (row, col) in [(0, 0), (3, 0), (3, 3)] {
                     let (actual, expected) = (block(&j, row, col), block(&rounded, row, col));
                     assert!(max_abs_diff(actual, expected) <= ulp(max_abs(expected)));
@@ -1021,14 +947,62 @@ mod tests {
         let mu = vec![MU_SUN; states.len()];
         let err = local_frame_covariances(&flat, &covariances, &mu, vnc).unwrap_err();
         assert!(err.to_string().contains("covariances"));
-        // radial motion has no orbit plane
+        // radial motion has no orbit plane, and NaN or infinite states fail the same check
+        let no_plane =
+            SchemaError::InvalidRecordBatch("State 1 is not finite or has no orbit plane.".into());
         let radial = [2.0 * flat[6], 2.0 * flat[7], 2.0 * flat[8]];
-        flat[9..12].copy_from_slice(&radial);
-        for frame in ALL_FRAMES {
-            assert_eq!(
-                local_frame_jacobians(&flat, &mu, frame).unwrap_err(),
-                SchemaError::InvalidRecordBatch("State 1 has no orbit plane.".to_string())
-            );
+        for bad in [radial, [f64::NAN, 0.01, 0.0], [f64::INFINITY, 0.01, 0.0]] {
+            let mut flat = flat.clone();
+            flat[9..12].copy_from_slice(&bad);
+            for frame in ALL_FRAMES {
+                assert_eq!(
+                    local_frame_jacobians(&flat, &mu, frame).unwrap_err(),
+                    no_plane
+                );
+            }
         }
+        flat[2] = f64::NAN;
+        let covariances: Vec<f64> = (0..states.len() as u64)
+            .flat_map(well_conditioned_covariance)
+            .collect();
+        assert_eq!(
+            local_frame_covariances(&flat, &covariances, &mu, vnc).unwrap_err(),
+            SchemaError::InvalidRecordBatch(
+                "State 0 is not finite or has no orbit plane.".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn rotating_frames_need_a_finite_positive_mu_on_rotated_rows() {
+        let states = sample_states();
+        let flat: Vec<f64> = states.iter().flatten().copied().collect();
+        let mut covariances: Vec<f64> = (0..states.len() as u64)
+            .flat_map(well_conditioned_covariance)
+            .collect();
+        for value in [f64::NAN, f64::INFINITY, 0.0, -MU_SUN] {
+            let mut mu = vec![MU_SUN; states.len()];
+            mu[2] = value;
+            for frame in ALL_FRAMES {
+                let jacobians = local_frame_jacobians(&flat, &mu, frame);
+                let rotated = local_frame_covariances(&flat, &covariances, &mu, frame);
+                if frame.rotating {
+                    let expected = SchemaError::InvalidRecordBatch(format!(
+                        "mu must be finite and positive for a _ROTATING frame, got {value} at \
+                         state 2"
+                    ));
+                    assert_eq!(jacobians.unwrap_err(), expected);
+                    assert_eq!(rotated.unwrap_err(), expected);
+                } else {
+                    assert!(jacobians.is_ok() && rotated.is_ok());
+                }
+            }
+        }
+        // a row without covariance is not rotated and needs no mu
+        covariances[72..108].fill(f64::NAN);
+        let mut mu = vec![MU_SUN; states.len()];
+        mu[2] = f64::NAN;
+        let vnc = frame(LocalFrameFamily::Vnc, true);
+        assert!(local_frame_covariances(&flat, &covariances, &mu, vnc).is_ok());
     }
 }
