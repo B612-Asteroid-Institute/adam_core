@@ -124,3 +124,69 @@ def test_correction_scalar_and_vector_agree() -> None:
         [float(np.atleast_1d(hg12star_correction(float(a), 0.4))[0]) for a in alpha]
     )
     np.testing.assert_allclose(vector, elementwise, atol=1e-12)
+
+
+def test_correction_at_150_deg_matches_tabulated_knots() -> None:
+    """
+    150 deg is the last tabulated knot and is inside the valid domain. There the
+    combined phase function is built purely from the tabulated endpoint values
+    (Phi3 is already clamped to 0), so the correction is known in closed form.
+    """
+    g12star = 0.5
+    G1 = 0.84293649 * g12star
+    G2 = 0.53513350 * (1.0 - g12star)
+    expected = -2.5 * np.log10(G1 * _XI1_Y[-1] + G2 * _XI2_Y[-1])
+    got = float(np.atleast_1d(hg12star_correction(np.array([150.0]), g12star))[0])
+    assert got == pytest.approx(expected, rel=1e-9)
+
+
+@pytest.mark.parametrize("g12star", [0.0, 0.5, 1.0])
+def test_correction_is_continuous_up_to_150_deg(g12star: float) -> None:
+    """
+    The approach to the 150 deg endpoint is smooth: no spurious jump or clipping
+    floor is allowed to appear just below the edge of the tables.
+    """
+    alpha = np.array([149.0, 149.9, 149.99, 150.0])
+    corr = np.asarray(hg12star_correction(alpha, g12star))
+    assert np.all(np.isfinite(corr))
+    assert np.all(np.diff(corr) >= -1e-9)
+    assert np.all(np.abs(np.diff(corr)) < 0.5)
+
+
+@pytest.mark.parametrize("alpha", [150.001, 151.0, 152.0, 153.0, 165.0, 179.9, 180.0])
+@pytest.mark.parametrize("g12star", [0.0, 0.5, 1.0])
+def test_correction_rejects_phase_angles_above_150_deg(
+    alpha: float, g12star: float
+) -> None:
+    """
+    The Penttila tables end at 150 deg, so the phase function is undefined past
+    that point and must be rejected rather than extrapolated.
+    """
+    with pytest.raises(ValueError, match="150"):
+        hg12star_correction(np.array([alpha]), g12star)
+    with pytest.raises(ValueError, match="150"):
+        hg12star_correction(alpha, g12star)
+
+
+def test_correction_rejects_array_with_a_single_bad_angle() -> None:
+    """A single out-of-domain entry invalidates the whole vectorized call."""
+    alpha = np.array([5.0, 40.0, 153.0, 90.0])
+    with pytest.raises(ValueError, match="150"):
+        hg12star_correction(alpha, 0.5)
+
+
+@pytest.mark.parametrize("alpha", [-1e-6, -5.0, -180.0])
+def test_correction_rejects_negative_phase_angles(alpha: float) -> None:
+    """Phase angles are unsigned; negative input is outside the tables too."""
+    with pytest.raises(ValueError):
+        hg12star_correction(np.array([alpha]), 0.5)
+
+
+def test_correction_propagates_nan_without_raising() -> None:
+    """
+    NaN is missing data rather than an out-of-domain angle: it propagates to a
+    NaN correction instead of triggering domain rejection.
+    """
+    corr = np.asarray(hg12star_correction(np.array([10.0, np.nan]), 0.5))
+    assert np.isfinite(corr[0])
+    assert np.isnan(corr[1])
