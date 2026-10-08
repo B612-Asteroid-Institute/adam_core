@@ -12,6 +12,7 @@ mod coordinates;
 mod dynamics;
 mod horizons;
 mod http;
+mod local_frames;
 mod native_benchmarks;
 mod obs80;
 mod od_ops;
@@ -32,6 +33,7 @@ fn _rust_native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     coordinates::register(m)?;
     dynamics::register(m)?;
     horizons::register(m)?;
+    local_frames::register(m)?;
     native_benchmarks::register(m)?;
     obs80::register(m)?;
     od_ops::register(m)?;
