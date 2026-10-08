@@ -30,6 +30,7 @@ pub mod healpix;
 pub mod mpc_designations;
 pub use mpc_designations::MpcDesignationError;
 
+pub mod local_frames;
 pub mod oem_io;
 pub use oem_io::{oem_parse_kvn, oem_to_kvn, oem_write_kvn, OemCovarianceRecord};
 
