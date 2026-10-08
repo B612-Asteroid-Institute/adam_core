@@ -16501,7 +16501,7 @@
       "kind": "class",
       "domain": "photometry",
       "source": "src/adam_core/photometry/color_determination.py",
-      "line": 74,
+      "line": 95,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16529,7 +16529,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/color_determination.py",
-      "line": 433,
+      "line": 580,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16557,7 +16557,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/hg12star.py",
-      "line": 143,
+      "line": 150,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16809,7 +16809,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 87,
+      "line": 119,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16837,7 +16837,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 138,
+      "line": 170,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16865,7 +16865,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 107,
+      "line": 139,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16893,7 +16893,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 127,
+      "line": 159,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16921,7 +16921,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 48,
+      "line": 80,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16949,7 +16949,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 72,
+      "line": 104,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16977,7 +16977,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/magnitude_common.py",
-      "line": 28,
+      "line": 39,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

@@ -453,15 +453,16 @@ def test_fit_diagnostics_are_populated(
     assert np.isclose(reduced_chi2, chi2 / dof)
     assert row.converged[0].as_py() is True
 
-    # DOF invariant: included observations minus the number of fitted parameters.
-    num_params = 6 if phi_type == "c1c2" else 5
-    assert dof == row.num_obs[0].as_py() - row.num_outliers[0].as_py() - num_params
-
-    # Design-matrix rank = one column per observed band, plus the phase columns
-    # (G for HG/HG12star; c1*alpha + c2*alpha^2 for c1c2).
+    # Parameters actually fitted: one per observed band plus the phase terms
+    # (G for HG/HG12star; c1*alpha + c2*alpha^2 for c1c2).  This object has
+    # enough phase coverage in every band for all of them to be identified, so
+    # the rank matches and the DOF invariant is included observations minus rank.
     present = _channels_present(fx)
     phase_cols = 2 if phi_type == "c1c2" else 1
-    assert row.rank[0].as_py() == len(present) + phase_cols
+    num_params = len(present) + phase_cols
+    assert row.num_params[0].as_py() == num_params
+    assert row.rank[0].as_py() == num_params
+    assert dof == row.num_obs[0].as_py() - row.num_outliers[0].as_py() - num_params
 
     # Phase slope parameter: fitted (with an uncertainty) for HG/HG12star, and
     # NaN for c1c2 which has no such parameter.

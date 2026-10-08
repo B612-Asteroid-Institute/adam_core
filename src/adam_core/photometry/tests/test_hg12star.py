@@ -26,6 +26,7 @@ from ..hg12star import (
     _XI2_Y,
     _XI3_X,
     _XI3_Y,
+    _hg12star_correction_dg12star,
     _phi1,
     _phi2,
     _phi3,
@@ -190,3 +191,31 @@ def test_correction_propagates_nan_without_raising() -> None:
     corr = np.asarray(hg12star_correction(np.array([10.0, np.nan]), 0.5))
     assert np.isfinite(corr[0])
     assert np.isnan(corr[1])
+
+
+@pytest.mark.parametrize("g12star", [0.0, 0.1, 0.4, 0.75, 1.0])
+def test_analytic_slope_derivative_matches_central_difference(
+    g12star: float,
+) -> None:
+    """
+    `_hg12star_correction_dg12star` is the exact d(correction)/d(G12*).
+
+    The color fit feeds it to the optimizer as the slope column of the residual
+    Jacobian, and the rank test there only tells true degeneracy from mere
+    ill-conditioning if that column is exact, so it is checked against a central
+    difference of `hg12star_correction` itself.
+    """
+    alpha = np.array([0.0, 0.3, 2.0, 7.5, 12.0, 30.0, 60.0, 120.0, 150.0])
+    h = 1e-6
+    numerical = (
+        np.asarray(hg12star_correction(alpha, g12star + h))
+        - np.asarray(hg12star_correction(alpha, g12star - h))
+    ) / (2 * h)
+    analytic = np.asarray(_hg12star_correction_dg12star(alpha, g12star))
+    np.testing.assert_allclose(analytic, numerical, rtol=1e-6, atol=1e-8)
+
+
+def test_analytic_slope_derivative_rejects_out_of_domain_angles() -> None:
+    """The derivative shares the correction's [0, 150] deg domain."""
+    with pytest.raises(ValueError, match="150"):
+        _hg12star_correction_dg12star(np.array([10.0, 151.0]), 0.4)

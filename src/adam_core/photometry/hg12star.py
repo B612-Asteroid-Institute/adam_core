@@ -116,6 +116,15 @@ def _phi3(alpha_deg: npt.NDArray[np.float64] | float) -> npt.NDArray[np.float64]
 # rather than extrapolated.
 _ALPHA_MAX_DEG = 150.0
 
+# Penttila et al. (2016) Eq. 22: the G1/G2 pair is parameterized by the single
+# G12* via these coefficients.  Defined once so `hg12star_correction` and its
+# derivative below cannot drift apart.
+_G1_PER_G12STAR = 0.84293649
+_G2_PER_G12STAR = 0.53513350
+# The combined basis sum can go non-positive for an unphysical G12* outside
+# [0, 1] (as a fitter may try), which would break log10; clip it here.
+_PHASE_FLOOR = 1e-10
+
 
 def _check_alpha_domain(alpha_deg: npt.NDArray[np.float64] | float) -> None:
     """Raise if any phase angle falls outside the tabulated [0, 150] deg range.
@@ -161,11 +170,53 @@ def hg12star_correction(
       Penttila et al. (2016) spline tables define the basis functions.
     """
     _check_alpha_domain(alpha_deg)
-    G1 = 0.84293649 * g12star
-    G2 = 0.53513350 * (1.0 - g12star)
-    G3 = 1.0 - G1 - G2
-    combined = G1 * _phi1(alpha_deg) + G2 * _phi2(alpha_deg) + G3 * _phi3(alpha_deg)
-    # Guards log10 of a non-positive value, which the combined function can
-    # still reach for an unphysical G12* outside [0, 1] (as a fitter may try).
-    combined = np.maximum(combined, 1e-10)
+    combined, _, _, _ = _hg12star_basis_sum(alpha_deg, g12star)
+    combined = np.maximum(combined, _PHASE_FLOOR)
     return -2.5 * np.log10(combined)
+
+
+def _hg12star_basis_sum(
+    alpha_deg: npt.NDArray[np.float64] | float, g12star: float
+) -> tuple[
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+    npt.NDArray[np.float64],
+]:
+    """``(G1*phi1 + G2*phi2 + G3*phi3, phi1, phi2, phi3)`` for one ``G12*``."""
+    phi1 = _phi1(alpha_deg)
+    phi2 = _phi2(alpha_deg)
+    phi3 = _phi3(alpha_deg)
+    G1 = _G1_PER_G12STAR * g12star
+    G2 = _G2_PER_G12STAR * (1.0 - g12star)
+    return G1 * phi1 + G2 * phi2 + (1.0 - G1 - G2) * phi3, phi1, phi2, phi3
+
+
+def _hg12star_correction_dg12star(
+    alpha_deg: npt.NDArray[np.float64] | float, g12star: float
+) -> npt.NDArray[np.float64]:
+    """
+    Analytic ``d(hg12star_correction)/d(G12*)`` at ``alpha_deg``.
+
+    Supplying this to a least-squares fit makes the residual Jacobian exact,
+    which is what lets a rank test distinguish a genuinely degenerate fit (e.g.
+    a single phase angle, where ``G12*`` trades off against the absolute
+    magnitude exactly) from a merely ill-conditioned one; a finite-difference
+    Jacobian blurs that distinction at the ~1e-8 level.  Zero wherever
+    `hg12star_correction` clips at ``_PHASE_FLOOR``, so the two agree on the
+    flat region.
+    """
+    _check_alpha_domain(alpha_deg)
+    combined, phi1, phi2, phi3 = _hg12star_basis_sum(alpha_deg, g12star)
+    # d(G1)/dg = +_G1_PER_G12STAR, d(G2)/dg = -_G2_PER_G12STAR, and G3 = 1-G1-G2
+    # so d(G3)/dg = _G2_PER_G12STAR - _G1_PER_G12STAR.
+    d_combined = (
+        _G1_PER_G12STAR * phi1
+        - _G2_PER_G12STAR * phi2
+        + (_G2_PER_G12STAR - _G1_PER_G12STAR) * phi3
+    )
+    return np.where(
+        combined > _PHASE_FLOOR,
+        -2.5 / np.log(10.0) * d_combined / np.maximum(combined, _PHASE_FLOOR),
+        0.0,
+    )
