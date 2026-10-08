@@ -5,6 +5,9 @@ import numpy.typing as npt
 # Basis functions Phi1, Phi2, Phi3 from Penttila et al. (2016)
 # Hermite cubic spline (Appendix A, Eq. A.1).
 # xs in degrees; derivatives ds are in d(y)/d(alpha_rad) as given in Penttila Table A.2/A.3.
+#
+# Interpolation only: x must lie within [xs[0], xs[-1]]. Callers are responsible
+# for restricting x to the tabulated range first.
 def _hermite_spline(
     x_deg: npt.NDArray[np.float64] | float,
     xs_deg: npt.NDArray[np.float64],
@@ -107,6 +110,34 @@ def _phi3(alpha_deg: npt.NDArray[np.float64] | float) -> npt.NDArray[np.float64]
     return np.where(a <= 30.0, spl, 0.0)
 
 
+# The Penttila et al. (2016) spline tables end at 150 deg (Table A.2), so the
+# HG12* phase function is only defined on [0, 150] deg. The paper gives no
+# prescription beyond the last knot, so angles outside the table are rejected
+# rather than extrapolated.
+_ALPHA_MAX_DEG = 150.0
+
+
+def _check_alpha_domain(alpha_deg: npt.NDArray[np.float64] | float) -> None:
+    """Raise if any phase angle falls outside the tabulated [0, 150] deg range.
+
+    NaN is left alone (it compares False here and propagates to a NaN
+    correction); it means "no phase angle", not an out-of-domain one.
+    """
+    a = np.atleast_1d(np.asarray(alpha_deg, dtype=float))
+    outside = (a < 0.0) | (a > _ALPHA_MAX_DEG)
+    if np.any(outside):
+        offending = np.unique(a[outside])
+        shown = ", ".join(f"{v:.2f}" for v in offending[:5])
+        if len(offending) > 5:
+            shown += ", ..."
+        raise ValueError(
+            "The HG12* phase function is only defined for phase angles in "
+            f"[0, {_ALPHA_MAX_DEG:.2f}] deg, where the Penttila et al. (2016) spline "
+            f"tables are given; got {int(np.sum(outside))} value(s) outside that "
+            f"range: {shown} deg."
+        )
+
+
 def hg12star_correction(
     alpha_deg: npt.NDArray[np.float64] | float, g12star: float
 ) -> npt.NDArray[np.float64]:
@@ -122,10 +153,19 @@ def hg12star_correction(
     Returns:
     --------
     Magnitude correction for the given alphas.
+
+    Raises:
+    -------
+    ValueError
+      If any alpha falls outside [0, 150] deg, the range over which the
+      Penttila et al. (2016) spline tables define the basis functions.
     """
+    _check_alpha_domain(alpha_deg)
     G1 = 0.84293649 * g12star
     G2 = 0.53513350 * (1.0 - g12star)
     G3 = 1.0 - G1 - G2
     combined = G1 * _phi1(alpha_deg) + G2 * _phi2(alpha_deg) + G3 * _phi3(alpha_deg)
+    # Guards log10 of a non-positive value, which the combined function can
+    # still reach for an unphysical G12* outside [0, 1] (as a fitter may try).
     combined = np.maximum(combined, 1e-10)
     return -2.5 * np.log10(combined)

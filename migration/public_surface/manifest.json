@@ -13813,7 +13813,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/hg12star.py",
-      "line": 110,
+      "line": 143,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
