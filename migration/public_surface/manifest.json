@@ -3369,7 +3369,7 @@
       "kind": "class",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/local_orbital_frames.py",
-      "line": 249,
+      "line": 256,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -3397,7 +3397,7 @@
       "kind": "classmethod",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/local_orbital_frames.py",
-      "line": 265,
+      "line": 272,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -3425,7 +3425,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/local_orbital_frames.py",
-      "line": 236,
+      "line": 243,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

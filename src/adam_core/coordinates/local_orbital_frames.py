@@ -209,9 +209,15 @@ def _jacobian_dd(coords: CartesianCoordinates, frame: str, mu: _Mu):
 
 def _rotate_covariance_dd(jacobian, covariances: np.ndarray) -> np.ndarray:
     """``J @ C @ J.T`` for a double-double ``jacobian`` and float64 ``covariances``
-    (N, 6, 6), accumulated in double-double and rounded once."""
+    (N, 6, 6), accumulated in double-double and rounded once. The input is
+    symmetrised exactly first (stored covariances carry ulp level asymmetry that
+    the cancellation in the velocity rows would amplify) and the result is
+    symmetric to the bit."""
     j_hi, j_lo = jacobian
-    c = _dd(covariances)
+    c = _mul(
+        _add(_dd(covariances), _dd(np.swapaxes(covariances, 1, 2))),
+        _dd(np.full(covariances.shape, 0.5)),
+    )
 
     def product(a, b):  # (N, 6, 6) pairs, a @ b
         acc = _mul(
@@ -230,7 +236,8 @@ def _rotate_covariance_dd(jacobian, covariances: np.ndarray) -> np.ndarray:
 
     jc = product((j_hi, j_lo), c)
     hi, lo = product(jc, (np.swapaxes(j_hi, 1, 2), np.swapaxes(j_lo, 1, 2)))
-    return hi + lo
+    rotated = np.triu(hi + lo)
+    return rotated + np.swapaxes(np.triu(rotated, 1), 1, 2)
 
 
 def local_frame_jacobians(

@@ -199,7 +199,18 @@ def test_jacobian_and_product_are_correctly_rounded(heliocentric_orbits):
             for j in range(3):
                 J[i][j] = J[i + 3][j + 3] = row[j]
                 J[i + 3][j] = w_x_e[j]
-        C = [[Decimal(float(x)) for x in row] for row in covariances[k]]
+        # the library symmetrises the stored covariance exactly before rotating
+        C = [
+            [
+                (
+                    Decimal(float(covariances[k][a, b]))
+                    + Decimal(float(covariances[k][b, a]))
+                )
+                / 2
+                for b in range(6)
+            ]
+            for a in range(6)
+        ]
         P = [
             [
                 sum(J[i][a] * C[a][b] * J[j][b] for a in range(6) for b in range(6))
