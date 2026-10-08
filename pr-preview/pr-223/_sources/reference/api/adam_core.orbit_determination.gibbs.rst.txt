@@ -1,0 +1,7 @@
+adam\_core.orbit\_determination.gibbs module
+============================================
+
+.. automodule:: adam_core.orbit_determination.gibbs
+   :members:
+   :show-inheritance:
+   :undoc-members:
