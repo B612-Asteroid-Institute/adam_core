@@ -66,7 +66,7 @@ def _load_fixture_observations(fx: np.lib.npyio.NpzFile):
 
 
 def _load_fixture_orbits(fx: np.lib.npyio.NpzFile):
-    orbits =  pytest.importorskip("mpcq.orbits")
+    orbits = pytest.importorskip("mpcq.orbits")
     obj_id = str(fx["object_id"][0])
     epoch = Timestamp.from_kwargs(
         days=pa.array([int(fx["epoch_days"][0])], type=pa.int64()),
