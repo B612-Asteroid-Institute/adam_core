@@ -507,29 +507,37 @@ table into <code class="docutils literal notranslate"><span class="pre">Orbits</
 </section>
 <section id="oem-3-0-with-explicit-labels-and-local-frame-covariances">
 <h2>OEM 3.0 with Explicit Labels and Local Frame Covariances<a class="headerlink" href="#oem-3-0-with-explicit-labels-and-local-frame-covariances" title="Link to this heading">¶</a></h2>
-<p><code class="docutils literal notranslate"><span class="pre">orbit_to_oem</span></code> writes OEM 2.0 with <code class="docutils literal notranslate"><span class="pre">REF_FRAME</span> <span class="pre">=</span> <span class="pre">EME2000</span></code>. An
-<a class="reference internal" href="../reference/api/adam_core.orbits.oem_io.html#adam_core.orbits.oem_io.OrbitEphemerisMessage" title="adam_core.orbits.oem_io.OrbitEphemerisMessage"><code class="xref py py-class docutils literal notranslate"><span class="pre">OrbitEphemerisMessage</span></code></a> built from the same
-<code class="docutils literal notranslate"><span class="pre">Orbits</span></code> table writes OEM 3.0 with <code class="docutils literal notranslate"><span class="pre">REF_FRAME</span> <span class="pre">=</span> <span class="pre">ICRF</span></code> for equatorial
-states, <code class="docutils literal notranslate"><span class="pre">CENTER_NAME</span></code> from the origin and <code class="docutils literal notranslate"><span class="pre">TIME_SYSTEM</span></code> from the Timestamp
-scale.</p>
-<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitEphemerisMessage</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalFrameCovariances</span>
+<p><code class="docutils literal notranslate"><span class="pre">orbit_to_oem</span></code> writes OEM 2.0 with <code class="docutils literal notranslate"><span class="pre">REF_FRAME</span> <span class="pre">=</span> <span class="pre">EME2000</span></code> by default. With
+<code class="docutils literal notranslate"><span class="pre">version=&quot;3.0&quot;</span></code> it writes <code class="docutils literal notranslate"><span class="pre">REF_FRAME</span> <span class="pre">=</span> <span class="pre">ICRF</span></code> for equatorial states, 16
+significant digits and a UTC <code class="docutils literal notranslate"><span class="pre">CREATION_DATE</span></code>. <code class="docutils literal notranslate"><span class="pre">CENTER_NAME</span></code> comes from the
+origin and <code class="docutils literal notranslate"><span class="pre">TIME_SYSTEM</span></code> from the Timestamp scale in both versions.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalFrameCovariances</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbit_to_oem</span>
 
 <span class="c1"># propagated: Orbits of one object, frame "equatorial", origin SUN, scale "tdb"</span>
-<span class="n">message</span> <span class="o">=</span> <span class="n">OrbitEphemerisMessage</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span>
-    <span class="n">propagated</span><span class="p">,</span> <span class="n">originator</span><span class="o">=</span><span class="s2">"B612 ASTEROID INSTITUTE"</span><span class="p">,</span> <span class="n">object_name</span><span class="o">=</span><span class="s2">"99942 Apophis"</span>
+<span class="c1"># States plus a covariance block per epoch in VNC_ROTATING, a SANA frame</span>
+<span class="c1"># CCSDS 502.0-B-3 admits through annex B5 (the file says so in a COMMENT).</span>
+<span class="c1"># RSW (RTN, RIC), TNW and their _INERTIAL or _ROTATING variants work the same</span>
+<span class="c1"># way; covariance_frame=None writes the state covariance in REF_FRAME.</span>
+<span class="n">orbit_to_oem</span><span class="p">(</span>
+    <span class="n">propagated</span><span class="p">,</span>
+    <span class="s2">"states_cov_vnc_rotating.oem"</span><span class="p">,</span>
+    <span class="n">version</span><span class="o">=</span><span class="s2">"3.0"</span><span class="p">,</span>
+    <span class="n">object_name</span><span class="o">=</span><span class="s2">"99942 Apophis"</span><span class="p">,</span>
+    <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">,</span>
 <span class="p">)</span>
 
-<span class="c1"># One file: states plus a covariance block per epoch in VNC_ROTATING, a SANA</span>
-<span class="c1"># frame CCSDS 502.0-B-3 admits through annex B5. TNW, RSW (RTN, RIC) and</span>
-<span class="c1"># "ICRF" (the state covariance) work the same way.</span>
-<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states_cov_vnc_rotating.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span>
-
 <span class="c1"># Table 5-4 frames only (RSW, RTN, TNW), for readers that know just that list.</span>
-<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states_cov_tnw.oem"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"TNW"</span><span class="p">,</span> <span class="n">table_frames_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">orbit_to_oem</span><span class="p">(</span>
+    <span class="n">propagated</span><span class="p">,</span>
+    <span class="s2">"states_cov_tnw.oem"</span><span class="p">,</span>
+    <span class="n">version</span><span class="o">=</span><span class="s2">"3.0"</span><span class="p">,</span>
+    <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"TNW"</span><span class="p">,</span>
+    <span class="n">table_frames_only</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
 
 <span class="c1"># Or states only, with the covariance as a separate full precision product.</span>
-<span class="n">message</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"states.oem"</span><span class="p">)</span>
+<span class="n">orbit_to_oem</span><span class="p">(</span><span class="n">propagated</span><span class="p">,</span> <span class="s2">"states.oem"</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">"3.0"</span><span class="p">,</span> <span class="n">include_covariance</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
 <span class="n">LocalFrameCovariances</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span><span class="n">propagated</span><span class="p">,</span> <span class="n">frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span>
     <span class="s2">"covariance_vnc_rotating.parquet"</span>
 <span class="p">)</span>

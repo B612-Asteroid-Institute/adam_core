@@ -482,13 +482,9 @@
             <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">defaults</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
                 <span class="n">metadata</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">value</span><span class="p">)</span>
             <span class="n">table</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">replace_schema_metadata</span><span class="p">(</span><span class="n">metadata</span><span class="p">)</span>
-        <span class="n">batches</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">to_batches</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">batches</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">batches</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
-        <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">RecordBatch</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span>
-            <span class="p">[</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([],</span> <span class="nb">type</span><span class="o">=</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="p">],</span>
-            <span class="n">schema</span><span class="o">=</span><span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="p">,</span>
-        <span class="p">)</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">contiguous_record_batch</span>
+
+        <span class="k">return</span> <span class="n">contiguous_record_batch</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
 
 <div class="viewcode-block" id="Trajectory.coverage_start_mjd">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbits.trajectory.html#adam_core.orbits.Trajectory.coverage_start_mjd">[docs]</a>
