@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Literal
 
 import numpy as np
@@ -13,10 +14,10 @@ import scipy.optimize
 from ..dynamics.propagation import propagate_2body
 from ..observers.observers import Observers
 from .bandpasses.api import bandpass_delta_mag, map_to_canonical_filter_bands
-from .hg12star import hg12star_correction
+from .hg12star import _hg12star_correction_dg12star, hg12star_correction
 from .lightcurve import reduced_magnitude
 from .magnitude import observing_geometry
-from .magnitude_common import hg_phase_correction
+from .magnitude_common import _hg_phase_correction_dg, hg_phase_correction
 
 if TYPE_CHECKING:
     # mpcq is an optional dependency (install via `adam_core[mpc]`); it is only
@@ -41,6 +42,26 @@ _MIN_RETAINED_FRACTION = 0.5
 # (Bowell et al. 1989) and G12* (Penttilä 2016) are defined on [0, 1].
 _G_BOUNDS = (0.0, 1.0)
 _G_LABELS = {"HG12star": "G12*", "HG": "G"}
+# A parameter combination counts as non-fittable once its component along the
+# weighted Jacobian's null space exceeds this fraction of its own norm.  The
+# Jacobian is analytic (see `_hg12star_correction_dg12star`), so an exactly
+# degenerate direction leaks at rounding level and a determined one at zero.
+_FITABILITY_TOL = 1e-8
+# A 3-sigma clip is meaningless once the model reproduces every included
+# magnitude to a rounding-level fraction of its quoted uncertainty: the observed
+# "scatter" is then pure floating-point noise, and clipping against it runs away,
+# rejecting good observations until the residuals are identically zero. Below
+# this reduced chi-square the data are treated as exactly fit and nothing is
+# clipped.
+_MIN_CLIP_REDUCED_CHI2 = 1e-12
+# The two nonlinear phase models, each paired with its analytic slope derivative.
+# "c1c2" is absent because it is linear: its phase terms are design-matrix
+# columns rather than a nonlinear parameter (see `_design_matrix`).
+_PhaseCorrection = Callable[[np.ndarray, float], np.ndarray]
+_PHASE_MODELS: dict[str, tuple[_PhaseCorrection, _PhaseCorrection]] = {
+    "HG12star": (hg12star_correction, _hg12star_correction_dg12star),
+    "HG": (hg_phase_correction, _hg_phase_correction_dg),
+}
 
 
 def _validate_g_bounds(
@@ -78,7 +99,8 @@ class ColorFit(qv.Table):
     r_mag = qv.Float64Column(nullable=True)
     u_mag = qv.Float64Column(nullable=True)
     # 1-sigma formal uncertainties on the per-band absolute magnitudes, rescaled
-    # to the observed scatter (see `_fit_per_band_h`). NaN for unobserved bands.
+    # to the observed scatter (see `_fit_per_band_h`). NaN for a band that was not
+    # observed or whose magnitude the data cannot determine on its own.
     g_mag_sigma = qv.Float64Column(nullable=True)
     i_mag_sigma = qv.Float64Column(nullable=True)
     r_mag_sigma = qv.Float64Column(nullable=True)
@@ -88,6 +110,8 @@ class ColorFit(qv.Table):
     r_i = qv.Float64Column(nullable=True)
     # Color uncertainties, propagated from the full parameter covariance (so the
     # H_x/H_y correlation through the shared phase parameter is accounted for).
+    # A color is reported whenever the contrast is fitable, which can be the
+    # case even when neither absolute magnitude individually is.
     g_r_sigma = qv.Float64Column(nullable=True)
     g_i_sigma = qv.Float64Column(nullable=True)
     r_i_sigma = qv.Float64Column(nullable=True)
@@ -95,11 +119,16 @@ class ColorFit(qv.Table):
     # "c1c2") and its 1-sigma uncertainty.
     phase_param = qv.Float64Column(nullable=True)
     phase_param_sigma = qv.Float64Column(nullable=True)
-    # Fit-quality diagnostics over the finally-included observations.
+    # Fit-quality diagnostics over the finally-included observations.  `dof` is
+    # the number of included observations minus the rank of the weighted
+    # Jacobian, and `num_params` counts the parameters actually fitted (phase
+    # terms plus one magnitude per observed band).  `rank < num_params` flags a
+    # rank-deficient fit, whose non-fitable parameters are reported as NaN.
     chi2 = qv.Float64Column(nullable=True)
     reduced_chi2 = qv.Float64Column(nullable=True)
     dof = qv.Int64Column(nullable=True)
     rank = qv.Int64Column(nullable=True)
+    num_params = qv.Int64Column(nullable=True)
     converged = qv.BooleanColumn(nullable=True)
     num_obs = qv.Int64Column(nullable=True)
     num_outliers = qv.Int64Column(nullable=True)
@@ -230,9 +259,66 @@ def _prepare_geometry(
     return mag, rmsmag, channels, filter_ids, r, delta, alpha_deg, valid
 
 
-def _band_selector_matrix(channels: np.ndarray) -> np.ndarray:
-    """N×4 selector matrix for H_g, H_i, H_r, H_u columns."""
-    return np.column_stack([(channels == b).astype(float) for b in _BANDS])
+def _active_bands(channels: np.ndarray, included: np.ndarray) -> list[str]:
+    """Bands with at least one included observation, in `_BANDS` order."""
+    return [b for b in _BANDS if np.any(channels[included] == b)]
+
+
+def _design_matrix(
+    phi_type: str,
+    alpha_rad: np.ndarray,
+    channels: np.ndarray,
+    active_bands: list[str],
+) -> np.ndarray:
+    """
+    Linear design matrix for the currently active parameters, all rows.
+
+    Columns follow the parameter order: the ``c1``/``c2`` polynomial terms for
+    "c1c2" (the nonlinear models contribute their slope column through the
+    Jacobian instead), then one selector column per observed band. A band with
+    no observations gets no column at all. An all-zero column would inflate the
+    nominal parameter count without constraining anything, which would corrupt
+    the degrees of freedom.
+    """
+    cols = [alpha_rad, alpha_rad**2] if phi_type == "c1c2" else []
+    cols += [(channels == b).astype(float) for b in active_bands]
+    return np.column_stack(cols)
+
+
+def _rank_and_null_space(J: np.ndarray) -> tuple[int, np.ndarray]:
+    """
+    Numerical rank of ``J`` and an orthonormal basis for its null space.
+
+    Both are read off a single SVD using the same singular-value threshold as
+    ``numpy.linalg.matrix_rank``, so the rank plus the number of returned null
+    directions always equals the number of columns (parameters).
+    """
+    n_rows, n_cols = J.shape
+    if J.size == 0:
+        return 0, np.eye(n_cols)
+    _, sv, Vt = np.linalg.svd(J, full_matrices=True)
+    tol = float(sv[0]) * max(n_rows, n_cols) * np.finfo(np.float64).eps
+    rank = int(np.count_nonzero(sv > tol))
+    return rank, Vt[rank:].T
+
+
+def _is_fitable(null_basis: np.ndarray, vector: np.ndarray) -> bool:
+    """
+    Whether the parameter combination ``vector`` is determined by the data.
+
+    A combination is fitable only if it lies in the row space of the weighted
+    Jacobian, i.e. has no component along a direction the data leaves free.
+    Individual parameters can be non-fitable while contrasts between them (the
+    colors) are perfectly well determined: with every band observed at a single
+    common phase angle, for instance, the slope trades off against all the
+    absolute magnitudes by the same amount, which cancels in ``H_x - H_y``. The
+    pseudoinverse would otherwise hand back a finite, arbitrary number for every
+    parameter and imply they were all identified.
+    """
+    if null_basis.shape[1] == 0:
+        return True
+    leak = float(np.linalg.norm(null_basis.T @ vector))
+    return leak <= _FITABILITY_TOL * float(np.linalg.norm(vector))
 
 
 def _fit_per_band_h(
@@ -260,16 +346,33 @@ def _fit_per_band_h(
 
     In all cases the fit is solved with iterative 3-sigma outlier rejection.
 
+    Only bands that actually have included observations become parameters, and the
+    active set is recomputed on every iteration (clipping can empty a band). The
+    scatter driving the clip, the final degrees of freedom and the reported
+    uncertainties are all based on the rank of the weighted Jacobian rather than
+    on a nominal parameter count, so a sparse or single-band fit still gets a
+    finite scatter estimate and a working outlier clip.
+
+    Rank alone is not sufficient, though: a full set of active parameters can still
+    be individually non-identifiable (e.g. a single phase angle leaves the slope
+    and the absolute magnitudes free to trade off). Every reported quantity is
+    therefore checked for fitability against the Jacobian's null space and
+    reported as NaN when the data do not determine it, separately for the
+    absolute magnitudes, the slope, and each color contrast, since a contrast can
+    be well determined when neither of its magnitudes is.
+
     Returns a dict of fit results and diagnostics:
 
     - "H_g"/"H_i"/"H_r"/"H_u" and their "_sigma": per-band absolute magnitudes and
-      1-sigma uncertainties (NaN for an unobserved band).
-    - "g_r_sigma"/"g_i_sigma"/"r_i_sigma": color uncertainties, propagated from the
-      full parameter covariance so the H_x/H_y correlation is included.
+      1-sigma uncertainties (NaN for an unobserved or non-fitable band).
+    - "g_r"/"g_i"/"r_i" and their "_sigma": colors and their uncertainties,
+      propagated from the full parameter covariance so the H_x/H_y correlation is
+      included.
     - "G"/"G_sigma": fitted slope parameter (G for "HG", G12* for "HG12star"; NaN
       for "c1c2") and its uncertainty.
-    - "chi2"/"reduced_chi2"/"dof"/"rank": goodness-of-fit over the finally-included
-      rows and the design-matrix rank.
+    - "chi2"/"reduced_chi2"/"dof"/"rank"/"num_params": goodness of fit over the
+      finally-included rows, the Jacobian rank and the number of parameters
+      actually fitted. ``rank < num_params`` flags a rank-deficient fit.
     - "converged": whether the (nonlinear) optimizer reported success; always True
       for the linear "c1c2" solve.
     - "num_obs"/"num_outliers".
@@ -279,70 +382,85 @@ def _fit_per_band_h(
     the absolute rmsmag calibration.
     """
     n = len(m_red)
-    H_sel = _band_selector_matrix(channels)
+    m_red = np.asarray(m_red, dtype=np.float64)
+    alpha_deg = np.asarray(alpha_deg, dtype=np.float64)
+    alpha_rad = np.deg2rad(alpha_deg)
+    root_weights = np.asarray(root_weights, dtype=np.float64)
     full_weights = root_weights**2
+    Bw = m_red * root_weights
 
     # Rows whose (station, band) did not resolve to a color channel are already
     # logged in `_resolve_channels`; here they are simply excluded from the fit.
-    known_band_mask = np.isin(channels, _BANDS)
-    included = known_band_mask.copy()
+    included = np.isin(channels, _BANDS)
+    if not np.any(included):
+        raise ValueError(
+            f"None of the {n} observations resolve to a g/i/r/u color channel; "
+            "there is nothing to fit."
+        )
 
-    if phi_type == "c1c2":
-        alpha_rad = np.deg2rad(alpha_deg)
-        A = np.column_stack([alpha_rad, alpha_rad**2, H_sel])
-        H_idx = 2
-    else:
-        A = H_sel
-        correction_fn = (
-            hg12star_correction if phi_type == "HG12star" else hg_phase_correction
-        )
-        H_init = np.array(
-            [
-                float(np.mean(m_red[channels == b])) if np.any(channels == b) else 0.0
-                for b in _BANDS
-            ]
-        )
-        params0 = np.concatenate([[0.15], H_init])
-        H_idx = 1
-        # Loop-invariant: A, root_weights, and m_red never change across
-        # outlier-rejection iterations, only the `included` mask does.
+    # Parameters preceding the per-band magnitudes: (c1, c2) for the polynomial
+    # model, the single slope for H-G / HG12*.  The nonlinear models also need
+    # d(correction)/d(slope); supplying it analytically keeps the Jacobian (and
+    # so the rank and fitability tests below) exact.
+    n_phase = 2 if phi_type == "c1c2" else 1
+    correction_fn, correction_dg = _PHASE_MODELS.get(phi_type, (None, None))
+
+    slope_guess = 0.15
+    while True:
+        active = _active_bands(channels, included)
+        A = _design_matrix(phi_type, alpha_rad, channels, active)
         Aw = A * root_weights[:, None]
-        Bw = m_red * root_weights
 
-    num_params = A.shape[1] + (0 if phi_type == "c1c2" else 1)
-    values = np.zeros(num_params)
-    converged = False
-    while not converged:
         if phi_type == "c1c2":
-            Aw = A[included] * root_weights[included, None]
-            Bw = m_red[included] * root_weights[included]
-            values, _, _, _ = np.linalg.lstsq(Aw, Bw, rcond=None)
-            res = (A @ values - m_red) ** 2 * full_weights
+            values, _, _, _ = np.linalg.lstsq(Aw[included], Bw[included], rcond=None)
+            model = A @ values
+            J = Aw[included]
+            optimizer_converged = True
         else:
+            assert correction_fn is not None and correction_dg is not None
+            H_init = [float(np.mean(m_red[included & (channels == b)])) for b in active]
+            params0 = np.concatenate([[slope_guess], H_init])
 
-            def func(par):
-                corr = correction_fn(alpha_deg, par[0])
-                return (
-                    Aw[included] @ par[1:]
-                    + (corr * root_weights)[included]
-                    - Bw[included]
+            def residual(par: np.ndarray) -> np.ndarray:
+                corr_w = correction_fn(alpha_deg, par[0]) * root_weights
+                return np.asarray(
+                    Aw[included] @ par[1:] + corr_w[included] - Bw[included]
                 )
 
-            result = scipy.optimize.least_squares(func, params0, verbose=0)
-            values = result.x
-            corr = correction_fn(alpha_deg, values[0])
-            res = (A @ values[1:] + corr - m_red) ** 2 * full_weights
-            params0 = values
+            def residual_jac(par: np.ndarray) -> np.ndarray:
+                # d(weighted residual)/d(params): the slope column, then the
+                # (parameter-independent) weighted band selectors.
+                dcorr_w = correction_dg(alpha_deg, par[0]) * root_weights
+                return np.column_stack([dcorr_w[included], Aw[included]])
 
+            result = scipy.optimize.least_squares(
+                residual, params0, jac=residual_jac, verbose=0
+            )
+            values = result.x
+            # Warm-start the next iteration's slope; the band parameters are
+            # re-seeded above because the active set may have shrunk.
+            slope_guess = float(values[0])
+            model = A @ values[1:] + correction_fn(alpha_deg, values[0])
+            J = np.asarray(result.jac, dtype=np.float64)
+            optimizer_converged = bool(result.success)
+
+        res = (model - m_red) ** 2 * full_weights
         n_incl = int(np.sum(included))
-        sigma2 = (
-            np.dot(res, included) / (n_incl - num_params)
-            if n_incl > num_params
-            else np.inf
-        )
+        rank, null_basis = _rank_and_null_space(J)
+        chi2 = float(np.dot(res, included))
+        dof = n_incl - rank
+        # `res` and `sigma2` are both squared, so `9 *` is a 3-sigma clip. Using
+        # the Jacobian rank keeps the scatter finite for small, few-band fits
+        # where a nominal five-parameter count would give dof <= 0 and silently
+        # disable clipping altogether.
+        sigma2 = chi2 / dof if dof > 0 else np.inf
+        if sigma2 < _MIN_CLIP_REDUCED_CHI2:
+            # No usable scatter estimate (dof <= 0, or an exact fit); clip nothing.
+            sigma2 = np.inf
         outliers = res > 9 * sigma2
-        new_outliers = outliers & included
-        converged = not np.any(new_outliers)
+        # if no new outliers, we have converged
+        if not np.any(outliers & included):
+            break
         included &= ~outliers
 
     num_outliers = int(np.sum(~included))
@@ -354,67 +472,95 @@ def _fit_per_band_h(
 
     # Fit diagnostics: goodness of fit and parameter covariance.
     #
-    # chi2 is the weighted sum of squared residuals over the finally-included
-    # rows; dof = n_incl - num_params. `J` is the weighted design matrix (c1c2)
-    # or the optimizer's residual Jacobian (nonlinear), both equal
-    # d(weighted residual)/d(params), so cov = (J'J)^-1, rescaled by the reduced
-    # chi-square to match the observed scatter. pinv keeps this well-defined when
-    # an unobserved band leaves its H column at zero (rank-deficient normal
-    # matrix); those bands are then masked out to NaN below.
-    n_incl = int(np.sum(included))
-    dof = n_incl - num_params
-    chi2 = float(np.dot(res, included))
+    # `J` is the weighted design matrix (c1c2) or the optimizer's residual
+    # Jacobian (nonlinear), both equal d(weighted residual)/d(params), so
+    # cov = (J'J)^-1 rescaled by the reduced chi-square to match the observed
+    # scatter. pinv keeps that well-defined when the Jacobian is rank deficient;
+    # the parameters it cannot actually determine are masked to NaN below.
+    num_params = int(J.shape[1])
     reduced_chi2 = chi2 / dof if dof > 0 else float("nan")
-
-    if phi_type == "c1c2":
-        J = A[included] * root_weights[included, None]
-        optimizer_converged = True
-    else:
-        J = np.asarray(result.jac, dtype=np.float64)
-        optimizer_converged = bool(result.success)
-    rank = int(np.linalg.matrix_rank(J)) if J.size else 0
-
     if dof > 0:
         cov = np.linalg.pinv(J.T @ J) * reduced_chi2
-        param_sigma = np.sqrt(np.clip(np.diag(cov), 0.0, np.inf))
     else:
         cov = np.full((num_params, num_params), np.nan)
-        param_sigma = np.full(num_params, np.nan)
 
-    band_present = [bool(np.any(channels[known_band_mask] == b)) for b in _BANDS]
-    H_values = [
-        float(values[H_idx + i]) if band_present[i] else float("nan")
-        for i in range(len(_BANDS))
-    ]
-    H_sigma = [
-        float(param_sigma[H_idx + i]) if band_present[i] else float("nan")
-        for i in range(len(_BANDS))
-    ]
+    def _unit(index: int) -> np.ndarray:
+        vector = np.zeros(num_params)
+        vector[index] = 1.0
+        return vector
 
-    def _color_sigma(i: int, j: int) -> float:
-        if not (band_present[i] and band_present[j]):
-            return float("nan")
-        a, b = H_idx + i, H_idx + j
-        var = float(cov[a, a] + cov[b, b] - 2.0 * cov[a, b])
-        return float(np.sqrt(var)) if var > 0 else float("nan")
+    band_param = {b: n_phase + i for i, b in enumerate(active)}
 
-    # _BANDS order is (g, i, r, u) -> indices g=0, i=1, r=2, u=3.
-    g_r_sigma = _color_sigma(0, 2)
-    g_i_sigma = _color_sigma(0, 1)
-    r_i_sigma = _color_sigma(2, 1)
+    if rank < num_params:
+        labels = (["c1", "c2"] if phi_type == "c1c2" else [_G_LABELS[phi_type]]) + [
+            f"H_{b}" for b in active
+        ]
+        non_fit = ", ".join(
+                        label
+                        for i, label in enumerate(labels)
+                        if not _is_fitable(null_basis, _unit(i)))
+        logger.warning(f"Weighted Jacobian for the {phi_type} fit is rank deficient "
+                       f"(rank {rank} of {num_params} parameters from {n_incl} observation(s)"
+                       f" in band(s) {''.join(active)}); reporting the "
+                       f"non-fitable parameter(s) {non_fit} as NaN")
 
-    G_fit = float(values[0]) if phi_type != "c1c2" else float("nan")
-    G_sigma = float(param_sigma[0]) if phi_type != "c1c2" else float("nan")
+    def _param(index: int) -> tuple[float, float]:
+        """(value, 1-sigma) for one fitted parameter; NaN when non-fitable."""
+        if not _is_fitable(null_basis, _unit(index)):
+            return float("nan"), float("nan")
+        if dof <= 0:
+            return float(values[index]), float("nan")
+        var = float(cov[index, index])
+        return float(values[index]), (float(np.sqrt(var)) if var > 0 else float("nan"))
+
+    def _color(band_a: str, band_b: str) -> tuple[float, float]:
+        """
+        (H_a - H_b, 1-sigma) for one color, read off the raw solution.
+
+        Taken from `values`/`cov` rather than from the per-band results below, so
+        a fitable contrast survives even when neither absolute magnitude
+        individually is.
+        """
+        if band_a not in band_param or band_b not in band_param:
+            return float("nan"), float("nan")
+        i, j = band_param[band_a], band_param[band_b]
+        if not _is_fitable(null_basis, _unit(i) - _unit(j)):
+            return float("nan"), float("nan")
+        color = float(values[i] - values[j])
+        if dof <= 0:
+            return color, float("nan")
+        var = float(cov[i, i] + cov[j, j] - 2.0 * cov[i, j])
+        return color, (float(np.sqrt(var)) if var > 0 else float("nan"))
+
+    H_fit: dict[str, tuple[float, float]] = {}
+    for band in _BANDS:
+        H_fit[band] = (
+            _param(band_param[band])
+            if band in band_param
+            else (float("nan"), float("nan"))
+        )
+
+    g_r, g_r_sigma = _color("g", "r")
+    g_i, g_i_sigma = _color("g", "i")
+    r_i, r_i_sigma = _color("r", "i")
+
+    if phi_type == "c1c2":
+        G_fit, G_sigma = float("nan"), float("nan")
+    else:
+        G_fit, G_sigma = _param(0)
 
     return {
-        "H_g": H_values[0],
-        "H_i": H_values[1],
-        "H_r": H_values[2],
-        "H_u": H_values[3],
-        "H_g_sigma": H_sigma[0],
-        "H_i_sigma": H_sigma[1],
-        "H_r_sigma": H_sigma[2],
-        "H_u_sigma": H_sigma[3],
+        "H_g": H_fit["g"][0],
+        "H_i": H_fit["i"][0],
+        "H_r": H_fit["r"][0],
+        "H_u": H_fit["u"][0],
+        "H_g_sigma": H_fit["g"][1],
+        "H_i_sigma": H_fit["i"][1],
+        "H_r_sigma": H_fit["r"][1],
+        "H_u_sigma": H_fit["u"][1],
+        "g_r": g_r,
+        "g_i": g_i,
+        "r_i": r_i,
         "g_r_sigma": g_r_sigma,
         "g_i_sigma": g_i_sigma,
         "r_i_sigma": r_i_sigma,
@@ -424,6 +570,7 @@ def _fit_per_band_h(
         "reduced_chi2": reduced_chi2,
         "dof": dof,
         "rank": rank,
+        "num_params": num_params,
         "converged": optimizer_converged,
         "num_obs": n,
         "num_outliers": num_outliers,
@@ -533,6 +680,7 @@ def estimate_colors(
             "reduced_chi2": None,
             "dof": None,
             "rank": None,
+            "num_params": None,
             "converged": None,
             "num_obs": len(obs),
             "num_outliers": None,
@@ -567,9 +715,9 @@ def estimate_colors(
                     i_mag_sigma=fit["H_i_sigma"],
                     r_mag_sigma=fit["H_r_sigma"],
                     u_mag_sigma=fit["H_u_sigma"],
-                    g_r=fit["H_g"] - fit["H_r"],
-                    g_i=fit["H_g"] - fit["H_i"],
-                    r_i=fit["H_r"] - fit["H_i"],
+                    g_r=fit["g_r"],
+                    g_i=fit["g_i"],
+                    r_i=fit["r_i"],
                     g_r_sigma=fit["g_r_sigma"],
                     g_i_sigma=fit["g_i_sigma"],
                     r_i_sigma=fit["r_i_sigma"],
@@ -579,6 +727,7 @@ def estimate_colors(
                     reduced_chi2=fit["reduced_chi2"],
                     dof=fit["dof"],
                     rank=fit["rank"],
+                    num_params=fit["num_params"],
                     converged=fit["converged"],
                     num_outliers=n_invalid + int(fit["num_outliers"]),
                 )
@@ -616,6 +765,7 @@ def estimate_colors(
         reduced_chi2=_col("reduced_chi2"),
         dof=_col("dof"),
         rank=_col("rank"),
+        num_params=_col("num_params"),
         converged=_col("converged"),
         num_obs=_col("num_obs"),
         num_outliers=_col("num_outliers"),

@@ -25,6 +25,17 @@ _HG_PHI2_SCALE, _HG_PHI2_EXP = 1.87, 1.22
 _HG_PHASE_FLOOR = 1.0e-12
 
 
+def _hg_phase_basis(
+    alpha_deg: npt.NDArray[np.float64] | float,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """The two IAU basis functions ``phi_i = exp(-A_i * tan(alpha/2) ** B_i)``."""
+    alpha_rad = np.radians(np.asarray(alpha_deg, dtype=np.float64))
+    tan_half = np.tan(0.5 * alpha_rad)
+    phi1 = np.exp(-_HG_PHI1_SCALE * np.power(tan_half, _HG_PHI1_EXP))
+    phi2 = np.exp(-_HG_PHI2_SCALE * np.power(tan_half, _HG_PHI2_EXP))
+    return phi1, phi2
+
+
 def hg_phase_correction(
     alpha_deg: npt.NDArray[np.float64] | float,
     G: float,
@@ -36,12 +47,33 @@ def hg_phase_correction(
     ``phi_i = exp(-A_i * tan(alpha/2) ** B_i)``.  Zero at opposition (alpha = 0) and
     positive (fainter) for larger phase angles.  NumPy implementation for CPU callers.
     """
-    alpha_rad = np.radians(np.asarray(alpha_deg, dtype=np.float64))
-    tan_half = np.tan(0.5 * alpha_rad)
-    phi1 = np.exp(-_HG_PHI1_SCALE * np.power(tan_half, _HG_PHI1_EXP))
-    phi2 = np.exp(-_HG_PHI2_SCALE * np.power(tan_half, _HG_PHI2_EXP))
+    phi1, phi2 = _hg_phase_basis(alpha_deg)
     phase = np.clip((1.0 - G) * phi1 + G * phi2, _HG_PHASE_FLOOR, None)
     return -2.5 * np.log10(phase)
+
+
+def _hg_phase_correction_dg(
+    alpha_deg: npt.NDArray[np.float64] | float,
+    G: float,
+) -> npt.NDArray[np.float64]:
+    """
+    Analytic ``d(hg_phase_correction)/dG`` at ``alpha_deg``.
+
+    Supplying this to a least-squares fit makes the residual Jacobian exact,
+    which is what lets a rank test distinguish a genuinely degenerate fit (e.g.
+    a single phase angle, where ``G`` trades off against the absolute magnitude
+    exactly) from a merely ill-conditioned one; a finite-difference Jacobian
+    blurs that distinction at the ~1e-8 level.  Zero wherever
+    `hg_phase_correction` clips at ``_HG_PHASE_FLOOR``, so the two agree on the
+    flat region.
+    """
+    phi1, phi2 = _hg_phase_basis(alpha_deg)
+    phase = (1.0 - G) * phi1 + G * phi2
+    return np.where(
+        phase > _HG_PHASE_FLOOR,
+        -2.5 / np.log(10.0) * (phi2 - phi1) / np.clip(phase, _HG_PHASE_FLOOR, None),
+        0.0,
+    )
 
 
 @lru_cache(maxsize=1)

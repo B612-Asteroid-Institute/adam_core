@@ -13,6 +13,7 @@ from ..magnitude import (
     convert_magnitude,
     predict_magnitudes,
 )
+from ..magnitude_common import _hg_phase_correction_dg, hg_phase_correction
 
 
 def _as_scalar(x) -> float:
@@ -245,3 +246,23 @@ def test_predict_magnitudes_requires_composition(monkeypatch):
     with pytest.raises(TypeError):
         # composition is required keyword-only
         predict_magnitudes(15.0, obj, exposures)  # type: ignore[misc]
+
+
+@pytest.mark.parametrize("G", [0.0, 0.15, 0.4, 0.9])
+def test_hg_analytic_slope_derivative_matches_central_difference(G: float) -> None:
+    """
+    `_hg_phase_correction_dg` is the exact d(hg_phase_correction)/dG.
+
+    The color fit feeds it to the optimizer as the slope column of the residual
+    Jacobian, and the rank test there only tells true degeneracy from mere
+    ill-conditioning if that column is exact, so it is checked against a central
+    difference of `hg_phase_correction` itself.
+    """
+    alpha = np.array([0.0, 1.0, 5.0, 20.0, 45.0, 90.0, 120.0])
+    h = 1e-6
+    numerical = (
+        hg_phase_correction(alpha, G + h) - hg_phase_correction(alpha, G - h)
+    ) / (2 * h)
+    np.testing.assert_allclose(
+        _hg_phase_correction_dg(alpha, G), numerical, rtol=1e-6, atol=1e-8
+    )
