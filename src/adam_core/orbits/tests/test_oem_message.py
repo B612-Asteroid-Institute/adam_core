@@ -180,6 +180,28 @@ def test_matches_legacy_writer_formatting(history, tmp_path):
         "REF_FRAME = EME2000", "REF_FRAME = ICRF"
     )
     assert (
-        open(message.write(tmp_path / "new.oem", covariance_frame="ICRF")).read()
+        open(
+            message.write(
+                tmp_path / "new.oem", covariance_frame="ICRF", significant_digits=15
+            )
+        ).read()
         == expected
     )
+
+
+def test_significant_digits(history, tmp_path):
+    message = OrbitEphemerisMessage.from_orbits(history, ORIGINATOR)
+    text = open(message.write(tmp_path / "default.oem", covariance_frame="VNC")).read()
+    numbers = [
+        t for line in text.split("\n") if line[:2] == "20" for t in line.split()[1:]
+    ]
+    numbers += [
+        t
+        for line in text.split("COVARIANCE_START")[1].split("\n")
+        if line and "=" not in line and line != "COVARIANCE_STOP"
+        for t in line.split()
+    ]
+    # 16 significant digits by default, the most CCSDS 502.0-B-3 7.5.7 allows
+    assert numbers and all(re.fullmatch(r"-?\d\.\d{15}e[+-]\d{2}", t) for t in numbers)
+    with pytest.raises(ValueError, match="between 1 and 16"):
+        message.write(tmp_path / "too_many.oem", significant_digits=17)

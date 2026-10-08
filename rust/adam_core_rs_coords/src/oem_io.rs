@@ -5,7 +5,8 @@
 //! optional lower-triangle covariance blocks) and parsing KVN files back into
 //! per-segment arrays. Formatting replicates the `oem` package byte-for-byte:
 //!
-//! * floats via Python `f"{v:.14e}"` (two-digit signed exponent);
+//! * floats via Python `f"{v:.{d}e}"` with 15 significant digits for the legacy
+//!   product and up to 16 (CCSDS 7.5.7) for the message writer (two-digit signed exponent);
 //! * state/covariance epochs via astropy `Time.strftime("%Y-%m-%dT%H:%M:%S.%f")`
 //!   (legacy astropy default millisecond precision through ERFA `d2dtf`, with
 //!   astropy's `day_frac` two-sum jd splitting replicated exactly);
@@ -35,15 +36,16 @@ fn invalid(message: String) -> SchemaError {
 
 // --- float / epoch formatting ---------------------------------------------------
 
-/// Python `f"{value:.14e}"`.
-fn py_sci14(value: f64) -> String {
+/// Python `f"{value:.{decimals}e}"`: a mantissa of `decimals + 1` significant
+/// digits and a two digit signed exponent.
+fn py_sci(value: f64, decimals: usize) -> String {
     if value.is_nan() {
         return "nan".to_string();
     }
     if value.is_infinite() {
         return if value < 0.0 { "-inf" } else { "inf" }.to_string();
     }
-    let raw = format!("{value:.14e}");
+    let raw = format!("{value:.prec$e}", prec = decimals);
     let (mantissa, exponent) = raw.split_once('e').expect("exponent");
     let exponent: i32 = exponent.parse().expect("exponent digits");
     format!(
@@ -202,7 +204,15 @@ pub fn oem_to_kvn(
     nanos: &[i64],
     states_km: &[f64],
     covariances: &[OemCovarianceRecord],
+    significant_digits: usize,
 ) -> SchemaResult<String> {
+    // CCSDS 502.0-B-3 7.5.7 allows a mantissa of at most 16 digits.
+    if !(1..=16).contains(&significant_digits) {
+        return Err(invalid(format!(
+            "significant_digits must be between 1 and 16, got {significant_digits}"
+        )));
+    }
+    let decimals = significant_digits - 1;
     let header: serde_json::Map<String, serde_json::Value> = serde_json::from_str(header_json)
         .map_err(|err| invalid(format!("invalid OEM header payload: {err}")))?;
     let metadata: serde_json::Map<String, serde_json::Value> = serde_json::from_str(metadata_json)
@@ -249,7 +259,7 @@ pub fn oem_to_kvn(
         let epoch = format_epoch(days[row], nanos[row], time_scale)?;
         let _ = write!(out, "{epoch} ");
         let state = &states_km[row * 6..row * 6 + 6];
-        let rendered: Vec<String> = state.iter().map(|&value| py_sci14(value)).collect();
+        let rendered: Vec<String> = state.iter().map(|&value| py_sci(value, decimals)).collect();
         out.push_str(&rendered.join(" "));
         out.push('\n');
     }
@@ -274,7 +284,8 @@ pub fn oem_to_kvn(
                 &cov[15..21],
             ];
             for row in rows {
-                let rendered: Vec<String> = row.iter().map(|&value| py_sci14(value)).collect();
+                let rendered: Vec<String> =
+                    row.iter().map(|&value| py_sci(value, decimals)).collect();
                 out.push_str(&rendered.join(" "));
                 out.push('\n');
             }
@@ -296,6 +307,7 @@ pub fn oem_write_kvn(
     nanos: &[i64],
     states_km: &[f64],
     covariances: &[OemCovarianceRecord],
+    significant_digits: usize,
 ) -> SchemaResult<()> {
     let text = oem_to_kvn(
         header_json,
@@ -305,6 +317,7 @@ pub fn oem_write_kvn(
         nanos,
         states_km,
         covariances,
+        significant_digits,
     )?;
     std::fs::write(path, text)
         .map_err(|err| invalid(format!("failed to write {}: {err}", path.display())))
@@ -856,6 +869,7 @@ pub fn oem_render_orbits_kvn(
         }
     }
 
+    // The legacy product keeps its 15 significant digits.
     oem_to_kvn(
         &header_json,
         &metadata_json,
@@ -864,6 +878,7 @@ pub fn oem_render_orbits_kvn(
         &nanos,
         &states_km,
         &covariances,
+        15,
     )
 }
 
@@ -996,11 +1011,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn py_sci14_matches_python_format() {
-        assert_eq!(py_sci14(0.0), "0.00000000000000e+00");
-        assert_eq!(py_sci14(123456.789), "1.23456789000000e+05");
-        assert_eq!(py_sci14(-1.5e-7), "-1.50000000000000e-07");
-        assert_eq!(py_sci14(std::f64::consts::TAU), "6.28318530717959e+00");
+    fn py_sci_matches_python_format() {
+        assert_eq!(py_sci(0.0, 14), "0.00000000000000e+00");
+        assert_eq!(py_sci(123456.789, 14), "1.23456789000000e+05");
+        assert_eq!(py_sci(-1.5e-7, 14), "-1.50000000000000e-07");
+        assert_eq!(py_sci(std::f64::consts::TAU, 14), "6.28318530717959e+00");
+        assert_eq!(py_sci(std::f64::consts::TAU, 15), "6.283185307179586e+00");
     }
 
     #[test]
@@ -1031,6 +1047,7 @@ mod tests {
             &[0],
             &[1.0, 2.0, 3.0, 4.0, 5.0, 6.0],
             &[],
+            15,
         )
         .unwrap();
         let expected = "CCSDS_OEM_VERS = 3.0\nCREATION_DATE = 2026-01-01T00:00:00\nORIGINATOR = TEST\n\nMETA_START\nOBJECT_NAME = X\nOBJECT_ID = X\nCENTER_NAME = SUN\nREF_FRAME = EME2000\nTIME_SYSTEM = TDB\nSTART_TIME = t0\nSTOP_TIME = t1\nMETA_STOP\n\n2023-02-25T00:00:00.000 1.00000000000000e+00 2.00000000000000e+00 3.00000000000000e+00 4.00000000000000e+00 5.00000000000000e+00 6.00000000000000e+00\n\n";

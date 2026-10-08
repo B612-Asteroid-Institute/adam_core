@@ -2993,6 +2993,7 @@ fn ades_parse_obs_contexts(ades_string: &str) -> PyResult<String> {
 /// structures. `covariances` is a list of (days, nanos, frame, 21
 /// lower-triangle km values).
 #[pyfunction]
+#[pyo3(signature = (path, header_json, metadata_json, time_scale, days, nanos, states_km, covariances, significant_digits = 15))]
 #[allow(clippy::too_many_arguments)]
 fn oem_write_kvn<'py>(
     _py: Python<'py>,
@@ -3004,6 +3005,7 @@ fn oem_write_kvn<'py>(
     nanos: numpy::PyReadonlyArray1<'py, i64>,
     states_km: numpy::PyReadonlyArray1<'py, f64>,
     covariances: Vec<(i64, i64, String, Vec<f64>)>,
+    significant_digits: usize,
 ) -> PyResult<()> {
     let scale = adam_core_rs_coords::TimeScale::parse(time_scale).map_err(time_value_error)?;
     let covariances: Vec<adam_core_rs_coords::OemCovarianceRecord> = covariances
@@ -3033,6 +3035,7 @@ fn oem_write_kvn<'py>(
         nanos.as_slice()?,
         states_km.as_slice()?,
         &covariances,
+        significant_digits,
     )
     .map_err(time_value_error)
 }

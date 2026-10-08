@@ -383,12 +383,15 @@ class OrbitEphemerisMessage:
         path: Union[str, os.PathLike],
         covariance_frame: Optional[str] = None,
         table_frames_only: bool = False,
+        significant_digits: int = 16,
     ) -> str:
         """
         Write the KVN file and return its path. ``covariance_frame`` None, the
         REF_FRAME label, or a local orbital frame name writes no block, the state
         covariance, or the rotated covariance under that label.
         ``table_frames_only`` refuses frames outside RSW, RTN, TNW (table 5-4).
+        ``significant_digits`` is the mantissa length of states and covariances,
+        at most 16 (CCSDS 502.0-B-3 7.5.7); the legacy writer uses 15.
         """
         from adam_core import _rust_native as _rn
 
@@ -427,6 +430,7 @@ class OrbitEphemerisMessage:
             coords.time.nanos.to_numpy(zero_copy_only=False),
             convert_cartesian_values_au_to_km(coords.values).ravel(),
             covariance_records,
+            significant_digits,
         )
         if comments:
             lines = Path(path).read_text().split("\n")
