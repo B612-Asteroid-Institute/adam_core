@@ -8,8 +8,6 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pytest
 import quivr as qv
-from mpcq import MPCObservations
-from mpcq.orbits import MPCOrbits
 
 from adam_core.time import Timestamp
 
@@ -32,14 +30,15 @@ HG_TOLERANCE = 0.06
 C1C2_TOLERANCE = 0.06
 
 
-def _load_fixture_observations(fx: np.lib.npyio.NpzFile) -> MPCObservations:
+def _load_fixture_observations(fx: np.lib.npyio.NpzFile):
+    mpcq = pytest.importorskip("mpcq")
     n = int(fx["mag_obs"].shape[0])
     obstime = Timestamp.from_kwargs(
         days=pa.array(fx["obstime_days"].tolist(), type=pa.int64()),
         nanos=pa.array(fx["obstime_nanos"].tolist(), type=pa.int64()),
         scale="utc",
     )
-    return MPCObservations.from_kwargs(
+    return mpcq.MPCObservations.from_kwargs(
         requested_provid=[str(fx["object_id"][0])] * n,
         primary_designation=[None] * n,
         obsid=fx["obsid"].astype(str).tolist(),
@@ -66,14 +65,15 @@ def _load_fixture_observations(fx: np.lib.npyio.NpzFile) -> MPCObservations:
     )
 
 
-def _load_fixture_orbits(fx: np.lib.npyio.NpzFile) -> MPCOrbits:
+def _load_fixture_orbits(fx: np.lib.npyio.NpzFile):
+    orbits =  pytest.importorskip("mpcq.orbits")
     obj_id = str(fx["object_id"][0])
     epoch = Timestamp.from_kwargs(
         days=pa.array([int(fx["epoch_days"][0])], type=pa.int64()),
         nanos=pa.array([int(fx["epoch_nanos"][0])], type=pa.int64()),
         scale="tdb",
     )
-    return MPCOrbits.from_kwargs(
+    return orbits.MPCOrbits.from_kwargs(
         requested_provid=[obj_id],
         primary_designation=[None],
         id=[None],
@@ -267,7 +267,7 @@ def test_estimate_colors_multi_object() -> None:
 _OUT_OF_BOUNDS_FIXTURE = "color_fixture_2025_MN25.npz"
 
 
-def _load_out_of_bounds_case() -> tuple[MPCObservations, MPCOrbits, str]:
+def _load_out_of_bounds_case():
     fixture_path = DATA_DIR / _OUT_OF_BOUNDS_FIXTURE
     if not fixture_path.exists():
         pytest.skip(f"Missing fixture {_OUT_OF_BOUNDS_FIXTURE}")
