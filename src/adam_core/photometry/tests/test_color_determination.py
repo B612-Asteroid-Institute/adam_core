@@ -462,7 +462,31 @@ def test_fit_diagnostics_are_populated(
     num_params = len(present) + phase_cols
     assert row.num_params[0].as_py() == num_params
     assert row.rank[0].as_py() == num_params
-    assert dof == row.num_obs[0].as_py() - row.num_outliers[0].as_py() - num_params
+    assert dof == row.num_used[0].as_py() - num_params
+
+    # The four buckets account for every observation of the object exactly
+    # once, and the per-band retained counts add up to the total used.
+    counts = {
+        name: row.column(name)[0].as_py()
+        for name in (
+            "num_obs",
+            "num_invalid",
+            "num_unsupported_filter",
+            "num_clipped",
+            "num_used",
+        )
+    }
+    assert counts["num_obs"] == (
+        counts["num_invalid"]
+        + counts["num_unsupported_filter"]
+        + counts["num_clipped"]
+        + counts["num_used"]
+    )
+    assert counts["num_used"] > 0
+    per_band = {b: row.column(f"num_used_{b}")[0].as_py() for b in "giru"}
+    assert sum(per_band.values()) == counts["num_used"]
+    # A band is used exactly when it carries one of the fitted magnitudes.
+    assert {b for b, n in per_band.items() if n > 0} == set(present)
 
     # Phase slope parameter: fitted (with an uncertainty) for HG/HG12star, and
     # NaN for c1c2 which has no such parameter.
