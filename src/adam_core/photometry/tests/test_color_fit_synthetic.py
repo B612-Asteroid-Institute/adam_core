@@ -17,6 +17,7 @@ from typing import Literal
 import numpy as np
 import pytest
 
+from .. import color_determination
 from ..color_determination import _BANDS, _fit_per_band_h
 from ..hg12star import hg12star_correction
 from ..magnitude_common import hg_phase_correction
@@ -84,7 +85,7 @@ def test_fit_recovers_known_colors_and_phase(
     assert fit["H_r"] - fit["H_i"] == pytest.approx(0.2, abs=1e-4)
     assert fit["G"] == pytest.approx(phase_param, abs=1e-4)
     assert fit["converged"] is True
-    assert fit["num_outliers"] == 0
+    assert fit["num_clipped"] == 0
 
 
 def test_fit_recovers_known_colors_c1c2() -> None:
@@ -105,7 +106,7 @@ def test_fit_rejects_injected_outlier() -> None:
     m_red[0] += 2.0  # 2-magnitude blunder on a g-band point
 
     fit = _fit_per_band_h(m_red, alpha, channels, rw, "HG12star")
-    assert fit["num_outliers"] >= 1
+    assert fit["num_clipped"] >= 1
     assert fit["H_g"] - fit["H_r"] == pytest.approx(0.6, abs=1e-3)
 
 
@@ -206,7 +207,7 @@ def test_dof_counts_only_observed_bands(bands: tuple[str, ...]) -> None:
     expected = 1 + len(bands)
     assert fit["num_params"] == expected
     assert fit["rank"] == expected
-    assert fit["dof"] == len(m_red) - fit["num_outliers"] - expected
+    assert fit["dof"] == fit["num_used"] - expected
     assert fit["reduced_chi2"] == pytest.approx(1.0, abs=0.4)
     assert fit["chi2"] == pytest.approx(fit["reduced_chi2"] * fit["dof"])
 
@@ -230,7 +231,7 @@ def test_c1c2_dof_counts_only_observed_bands(bands: tuple[str, ...]) -> None:
     expected = 2 + len(bands)
     assert fit["num_params"] == expected
     assert fit["rank"] == expected
-    assert fit["dof"] == len(m_red) - fit["num_outliers"] - expected
+    assert fit["dof"] == fit["num_used"] - expected
     assert fit["reduced_chi2"] == pytest.approx(1.0, abs=0.4)
 
 
@@ -271,7 +272,7 @@ def test_rank_based_scatter_keeps_outlier_clipping_alive() -> None:
     m_red[6] += 50 * 0.02  # 50-sigma blunder
 
     fit = _fit_per_band_h(m_red, alpha, channels, rw, "HG12star")
-    assert fit["num_outliers"] == 1
+    assert fit["num_clipped"] == 1
     assert fit["dof"] == 11 - 2
     assert fit["G"] == pytest.approx(0.4, abs=1e-4)
     assert fit["H_g"] == pytest.approx(_H_TRUE["g"], abs=1e-4)
@@ -291,11 +292,13 @@ def test_emptied_band_drops_out_of_the_parameter_set(kept: str, emptied: str) ->
     on top of both.
     """
     fit = _fit_per_band_h(*_emptied_band_dataset(kept, emptied), "HG12star")
-    assert fit["num_outliers"] == 2
+    assert fit["num_clipped"] == 2
     assert fit["num_params"] == 2  # G12* and the kept band's H only
     assert fit["rank"] == 2
     assert fit["dof"] == 30 - 2
 
+    assert fit[f"num_used_{emptied}"] == 0
+    assert fit[f"num_used_{kept}"] == 30
     assert np.isnan(fit[f"H_{emptied}"]) and np.isnan(fit[f"H_{emptied}_sigma"])
     # Every color involving the emptied band goes with it.
     for color in ("g_r", "g_i", "r_i"):
@@ -397,4 +400,131 @@ def test_uncertainties_shrink_as_the_root_of_the_sample_size(
     for band in bands:
         assert many[f"H_{band}_sigma"] == pytest.approx(
             0.5 * few[f"H_{band}_sigma"], rel=0.25
+        )
+
+
+def _with_unsupported(
+    dataset: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray], count: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Append ``count`` rows whose channel is ``None`` to an existing dataset.
+
+    These stand in for valid photometry taken through a filter outside the
+    g/i/r/u set (V, PS1_w, unfiltered reports): `_resolve_channels` hands them
+    back as ``None`` and they can never enter the fit.
+    """
+    m_red, alpha, channels, rw = dataset
+    return (
+        np.concatenate([m_red, np.full(count, float(np.mean(m_red)))]),
+        np.concatenate([alpha, np.full(count, 10.0)]),
+        np.concatenate([channels, np.array([None] * count, dtype=object)]),
+        np.concatenate([rw, np.full(count, float(rw[0]))]),
+    )
+
+
+def _clean_two_band_dataset(
+    n_per_band: int = 10,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """A noiseless, well-sampled g/r dataset that must always fit."""
+    alpha = np.tile(np.linspace(2.0, 32.0, n_per_band), 2)
+    return _constant_phase(["g"] * n_per_band + ["r"] * n_per_band, alpha)
+
+
+def test_unsupported_filters_do_not_block_a_clean_fit() -> None:
+    """
+    A clean g/r fit survives being accompanied by unsupported-filter rows.
+
+    Those rows were previously seeded into the same mask as the statistical
+    clip, so they counted as rejections on both sides of the retention
+    threshold: 40 unfiltered reports alongside 20 perfectly good g/r
+    observations pushed the retained fraction to 1/3 and the fit was refused
+    outright, even though nothing about it was unreliable.
+    """
+    fit = _fit_per_band_h(*_with_unsupported(_clean_two_band_dataset(), 40), "HG12star")
+
+    assert fit["num_unsupported_filter"] == 40
+    assert fit["num_clipped"] == 0
+    assert fit["num_used"] == 20
+    assert fit["g_r"] == pytest.approx(0.6, abs=1e-6)
+    assert fit["G"] == pytest.approx(0.4, abs=1e-6)
+
+
+def test_disposal_counts_partition_the_input() -> None:
+    """
+    The reported counts account for every row exactly once, and per band.
+
+    The dataset mixes all three buckets `_fit_per_band_h` can report: 30 clean
+    g points, 2 r points that are both clipped, and 15 unsupported-filter rows.
+    """
+    dataset = _with_unsupported(_emptied_band_dataset("g", "r"), 15)
+    fit = _fit_per_band_h(*dataset, "HG12star")
+
+    assert fit["num_obs"] == 47
+    assert fit["num_unsupported_filter"] == 15
+    assert fit["num_clipped"] == 2
+    assert fit["num_used"] == 30
+    assert (
+        fit["num_obs"]
+        == fit["num_unsupported_filter"] + fit["num_clipped"] + fit["num_used"]
+    )
+    assert sum(fit[f"num_used_{b}"] for b in _BANDS) == fit["num_used"]
+    assert fit["num_used_g"] == 30
+    assert all(fit[f"num_used_{b}"] == 0 for b in ("i", "r", "u"))
+
+
+def _over_clipped_dataset() -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """
+    A g-only dataset with a tight core and a geometrically escalating tail.
+
+    Each clip pass shrinks the scatter estimate and exposes the next rung, so
+    rejection cascades far enough to exercise the retention threshold.
+    """
+    n_core, n_tail = 10, 14
+    alpha = np.linspace(2.0, 32.0, n_core + n_tail)
+    m_red, alpha, channels, rw = _constant_phase(["g"] * (n_core + n_tail), alpha)
+    m_red = m_red.copy()
+    rungs = 0.1 * 2.0 ** np.arange(n_tail)
+    m_red[n_core:] += rungs * np.where(np.arange(n_tail) % 2, 1.0, -1.0)
+    return m_red, alpha, channels, rw
+
+
+def test_retention_threshold_is_measured_among_eligible_observations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Unsupported-filter rows move neither the threshold nor what it reports.
+
+    The threshold is raised here so the cascade in `_over_clipped_dataset`
+    trips it; the point is that padding the same data with rows that could never
+    have been fit leaves the verdict, the counts and the quoted denominator
+    untouched. Before, each added row relaxed the threshold, the padding was
+    charged to both the numerator and the denominator.
+    """
+    monkeypatch.setattr(color_determination, "_MIN_RETAINED_FRACTION", 0.9)
+    dataset = _over_clipped_dataset()
+
+    with pytest.raises(ValueError, match=r"removed 8 of the 24 observation\(s\)"):
+        _fit_per_band_h(*dataset, "HG12star")
+
+    # Same 24 eligible observations, now alongside 100 unsupported ones.
+    with pytest.raises(ValueError, match=r"removed 8 of the 24 observation\(s\)"):
+        _fit_per_band_h(*_with_unsupported(dataset, 100), "HG12star")
+
+
+def test_retention_threshold_still_fires_on_genuine_over_clipping(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Clipping most of the eligible data is still refused rather than reported."""
+    monkeypatch.setattr(color_determination, "_MIN_RETAINED_FRACTION", 0.9)
+    with pytest.raises(ValueError, match="fit is unreliable"):
+        _fit_per_band_h(*_over_clipped_dataset(), "HG12star")
+
+
+def test_all_unsupported_filters_is_reported_as_nothing_to_fit() -> None:
+    """With no eligible observation at all there is no fit to attempt."""
+    n = 12
+    channels = np.array([None] * n, dtype=object)
+    with pytest.raises(ValueError, match="resolve to a g/i/r/u color channel"):
+        _fit_per_band_h(
+            np.full(n, 18.0), np.full(n, 10.0), channels, np.full(n, 50.0), "HG12star"
         )
