@@ -1,3 +1,6 @@
+use adam_core_rs_coords::local_frames::{
+    local_frame_covariances, local_frame_jacobians, LocalFrame,
+};
 use adam_core_rs_coords::propagation::{
     generate_ephemeris_barycentric, CovariancePropagation, EphemerisFailureCode, EphemerisOptions,
     EphemerisPhotometryOptions, EpochPolicy, PropagationDiagnostics, PropagationFailureCode,
@@ -2988,55 +2991,6 @@ fn ades_parse_obs_contexts(ades_string: &str) -> PyResult<String> {
     })
 }
 
-/// OEM KVN writer (bead personal-cmy.28): writes a single-segment CCSDS OEM
-/// file byte-identically to the Python `oem` package for adam-core's
-/// structures. `covariances` is a list of (days, nanos, frame, 21
-/// lower-triangle km values).
-#[pyfunction]
-#[allow(clippy::too_many_arguments)]
-fn oem_write_kvn<'py>(
-    _py: Python<'py>,
-    path: &str,
-    header_json: &str,
-    metadata_json: &str,
-    time_scale: &str,
-    days: numpy::PyReadonlyArray1<'py, i64>,
-    nanos: numpy::PyReadonlyArray1<'py, i64>,
-    states_km: numpy::PyReadonlyArray1<'py, f64>,
-    covariances: Vec<(i64, i64, String, Vec<f64>)>,
-) -> PyResult<()> {
-    let scale = adam_core_rs_coords::TimeScale::parse(time_scale).map_err(time_value_error)?;
-    let covariances: Vec<adam_core_rs_coords::OemCovarianceRecord> = covariances
-        .into_iter()
-        .map(|(days, nanos, frame, lower)| {
-            let mut lower_triangle = [0.0f64; 21];
-            if lower.len() != 21 {
-                return Err(PyValueError::new_err(
-                    "covariance lower triangle must have 21 values",
-                ));
-            }
-            lower_triangle.copy_from_slice(&lower);
-            Ok(adam_core_rs_coords::OemCovarianceRecord {
-                days,
-                nanos,
-                frame,
-                lower_triangle,
-            })
-        })
-        .collect::<PyResult<_>>()?;
-    adam_core_rs_coords::oem_write_kvn(
-        std::path::Path::new(path),
-        header_json,
-        metadata_json,
-        scale,
-        days.as_slice()?,
-        nanos.as_slice()?,
-        states_km.as_slice()?,
-        &covariances,
-    )
-    .map_err(time_value_error)
-}
-
 /// OEM KVN parser (bead personal-cmy.28): parse a KVN OEM file into a JSON
 /// payload of header/segments with legacy-exact epoch integer splits.
 #[pyfunction]
@@ -3049,22 +3003,45 @@ fn oem_parse_kvn(path: &str) -> PyResult<String> {
 /// AU->km conversion, covariance extraction, KVN rendering, and file write.
 /// The Python veneer keeps the legacy assertions, the single-time warning,
 /// the nondeterministic CREATION_DATE input, and the SPICE-dependent ITRF93
-/// pre-transform.
+/// pre-transform. The keywords are those of `OemWriteOptions`; returns the
+/// number of epochs OEM 3.0 rounded to the millisecond.
 #[pyfunction]
+#[pyo3(signature = (
+    path, orbits_ipc, originator, creation_date, *, version, object_name=None, object_id=None,
+    comments=Vec::new(), include_covariance=true, covariance_frame=None, table_frames_only=false
+))]
+#[allow(clippy::too_many_arguments)]
 fn oem_write_orbits_kvn(
     path: &str,
     orbits_ipc: &Bound<'_, PyBytes>,
     originator: &str,
     creation_date: &str,
-) -> PyResult<()> {
+    version: String,
+    object_name: Option<String>,
+    object_id: Option<String>,
+    comments: Vec<String>,
+    include_covariance: bool,
+    covariance_frame: Option<String>,
+    table_frames_only: bool,
+) -> PyResult<usize> {
     let orbits =
         DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbits_ipc.as_bytes())?)
             .map_err(ades_error)?;
+    let options = adam_core_rs_coords::oem_io::OemWriteOptions {
+        version,
+        object_name,
+        object_id,
+        comments,
+        include_covariance,
+        covariance_frame,
+        table_frames_only,
+    };
     adam_core_rs_coords::oem_io::oem_write_orbits_kvn(
         std::path::Path::new(path),
         &orbits,
         originator,
         creation_date,
+        &options,
     )
     .map_err(ades_error)
 }
@@ -3084,11 +3061,76 @@ fn benchmark_oem_write_orbits_kvn(
     let orbits =
         DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbits_ipc.as_bytes())?)
             .map_err(ades_error)?;
-    let path = std::path::Path::new(path);
+    let (path, options) = (std::path::Path::new(path), Default::default());
     benchmark_trials(reps, trials, warmup_reps, || {
-        adam_core_rs_coords::oem_io::oem_write_orbits_kvn(path, &orbits, originator, creation_date)
-            .map_err(ades_error)
+        adam_core_rs_coords::oem_io::oem_write_orbits_kvn(
+            path,
+            &orbits,
+            originator,
+            creation_date,
+            &options,
+        )
+        .map_err(ades_error)
     })
+}
+
+/// The local orbital frame kernels on numpy: (N, 6) states (AU, AU/day), (N,)
+/// `mu` (AU^3/day^2, read for `_ROTATING` frames) and, for `J C J^T`, (N, 6, 6)
+/// covariances; returns (N, 6, 6).
+fn local_frame_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray2<'py, f64>,
+    covariances: Option<PyReadonlyArray3<'py, f64>>,
+    mu: PyReadonlyArray1<'py, f64>,
+    frame: &str,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    let frame = LocalFrame::parse(frame).map_err(ades_error)?;
+    if values.as_array().ncols() != 6 {
+        return Err(PyValueError::new_err("values must have shape (N, 6)"));
+    }
+    let (values, mu) = (values.as_slice()?, mu.as_slice()?);
+    let matrices = match covariances {
+        Some(covariances) if covariances.as_array().shape()[1..] != [6, 6] => {
+            return Err(PyValueError::new_err(
+                "covariances must have shape (N, 6, 6)",
+            ));
+        }
+        Some(covariances) => local_frame_covariances(values, covariances.as_slice()?, mu, frame),
+        None => local_frame_jacobians(values, mu, frame),
+    }
+    .map_err(ades_error)?;
+    ndarray::Array3::from_shape_vec((matrices.len() / 36, 6, 6), matrices)
+        .map(|array| array.into_pyarray(py))
+        .map_err(|err| PyValueError::new_err(err.to_string()))
+}
+
+#[pyfunction]
+fn local_frame_jacobians_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray2<'py, f64>,
+    mu: PyReadonlyArray1<'py, f64>,
+    frame: &str,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    local_frame_numpy(py, values, None, mu, frame)
+}
+
+#[pyfunction]
+fn local_frame_covariances_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray2<'py, f64>,
+    covariances: PyReadonlyArray3<'py, f64>,
+    mu: PyReadonlyArray1<'py, f64>,
+    frame: &str,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    local_frame_numpy(py, values, Some(covariances), mu, frame)
+}
+
+/// Canonical registry name of a local orbital frame name, e.g. `rtn` -> `RSW_INERTIAL`.
+#[pyfunction]
+fn local_frame_canonical_name(frame: &str) -> PyResult<String> {
+    LocalFrame::parse(frame)
+        .map(|frame| frame.canonical_name().to_string())
+        .map_err(ades_error)
 }
 
 /// Fused OEM product reader (bead personal-cmy.37.4.4): one crossing owns
@@ -7370,6 +7412,9 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(python_float_repr, m)?)?;
     m.add_function(wrap_pyfunction!(oem_write_orbits_kvn, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_oem_write_orbits_kvn, m)?)?;
+    m.add_function(wrap_pyfunction!(local_frame_jacobians_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(local_frame_covariances_numpy, m)?)?;
+    m.add_function(wrap_pyfunction!(local_frame_canonical_name, m)?)?;
     m.add_function(wrap_pyfunction!(oem_read_orbits_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_oem_read_orbits, m)?)?;
     m.add_function(wrap_pyfunction!(exposures_drop_duplicate_ids_ipc, m)?)?;
@@ -7441,7 +7486,6 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(unpack_mpc_date_isot, m)?)?;
     m.add_function(wrap_pyfunction!(unpack_mpc_dates_isot, m)?)?;
     m.add_function(wrap_pyfunction!(benchmark_unpack_mpc_dates_isot, m)?)?;
-    m.add_function(wrap_pyfunction!(oem_write_kvn, m)?)?;
     m.add_function(wrap_pyfunction!(oem_parse_kvn, m)?)?;
     m.add_function(wrap_pyfunction!(openspace_pascal_case, m)?)?;
     m.add_function(wrap_pyfunction!(openspace_lua_to_string, m)?)?;

@@ -2,6 +2,11 @@
 
 This file contains notable changes in adam-core
 
+## [Unreleased]
+
+- `orbit_to_oem` writes OEM 3.0 (`version="3.0"`) with labels, comments and local orbital frame covariance blocks (`covariance_frame`), and writes the state block of 9x9 covariances.
+- `LocalFrameCovariances` and `local_frame_jacobians` rotate covariances into RSW, TNW and VNC frames; `orbit_from_oem` reads ICRF, J2000 and GCRF.
+
 ## [0.5.8] - 2026-10-05
 
 ### Added

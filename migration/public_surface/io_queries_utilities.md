@@ -142,7 +142,8 @@ nondeterministic CREATION_DATE input, then performs everything else in one
 `oem_write_orbits_kvn` crossing: ecliptic->equatorial rotation, stable time
 sort, metadata/frame/center mapping with exact legacy errors, AU->km state
 and covariance conversion in legacy IEEE order, `np.tril_indices` extraction,
-KVN rendering, and the file write. ITRF93 input pre-transforms on the
+KVN rendering, and the file write, plus the OEM 3.0 keywords (validation,
+millisecond rounding, local orbital frame covariances). ITRF93 input pre-transforms on the
 Rust-owned `transform_coordinates` crossing (SPICE/time-dependent), then
 writes through the same fused crossing. `orbit_from_oem` is one
 `oem_read_orbits_ipc` crossing owning parsing, frame/center mapping with

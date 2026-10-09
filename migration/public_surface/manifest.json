@@ -12,19 +12,19 @@
     "plotting_policy": "plotting/display may remain Python; all other symbols require review"
   },
   "summary": {
-    "symbols": 643,
+    "symbols": 646,
     "by_kind": {
-      "class": 88,
-      "classmethod": 32,
+      "class": 89,
+      "classmethod": 33,
       "constant": 78,
       "constructor": 4,
-      "function": 226,
+      "function": 227,
       "method": 148,
       "property": 67
     },
     "by_domain": {
       "constants": 4,
-      "coordinates": 172,
+      "coordinates": 175,
       "dynamics": 59,
       "missions": 16,
       "observations": 41,
@@ -37,11 +37,11 @@
       "utils": 70
     },
     "by_implementation_class": {
-      "compatibility_data_or_external_generic": 164,
+      "compatibility_data_or_external_generic": 165,
       "mixed_rust_python_gap": 95,
       "plotting_exemption_candidate": 16,
       "python_gap_or_external_boundary": 237,
-      "rust_veneer_candidate_see_domain_audit": 131
+      "rust_veneer_candidate_see_domain_audit": 133
     },
     "plotting_exemption_candidates": 16,
     "unreviewed": 0
@@ -49,7 +49,7 @@
   "frozen_updated_upstream_reconciliation": {
     "commit": "757c09fca86adf9e3d5899952db3d379e09413f6",
     "upstream_symbols": 600,
-    "current_symbols": 643,
+    "current_symbols": 646,
     "upstream_only_symbols": 22,
     "all_upstream_only_symbols_classified": true,
     "disposition": "The listed upstream implementation helpers are intentionally retired; their useful public workflows are Rust-backed or are explicit provider boundaries in the referenced domain audit.",
@@ -3330,6 +3330,90 @@
       "rust_entrypoint": null,
       "parity_coverage": "see_domain_audit",
       "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "tracking_issue": "personal-cmy.37.2",
+      "audit_document": "migration/public_surface/coordinates_time_observers.md"
+    },
+    {
+      "id": "adam_core.coordinates.local_orbital_frames:LocalFrameCovariances",
+      "module": "adam_core.coordinates.local_orbital_frames",
+      "qualname": "LocalFrameCovariances",
+      "name": "LocalFrameCovariances",
+      "kind": "class",
+      "domain": "coordinates",
+      "source": "src/adam_core/coordinates/local_orbital_frames.py",
+      "line": 39,
+      "explicit_export": null,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": true,
+        "python_loop": false,
+        "numpy_reference": true,
+        "pyarrow_reference": false,
+        "quivr_reference": true,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "compatibility_data_or_external_generic",
+      "rust_entrypoint": null,
+      "parity_coverage": "compatibility_or_schema_see_domain_audit",
+      "native_timing": "not_applicable_data_or_generic",
+      "tracking_issue": "personal-cmy.37.2",
+      "audit_document": "migration/public_surface/coordinates_time_observers.md"
+    },
+    {
+      "id": "adam_core.coordinates.local_orbital_frames:LocalFrameCovariances.from_orbits",
+      "module": "adam_core.coordinates.local_orbital_frames",
+      "qualname": "LocalFrameCovariances.from_orbits",
+      "name": "from_orbits",
+      "kind": "classmethod",
+      "domain": "coordinates",
+      "source": "src/adam_core/coordinates/local_orbital_frames.py",
+      "line": 51,
+      "explicit_export": null,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": true,
+        "python_loop": false,
+        "numpy_reference": true,
+        "pyarrow_reference": false,
+        "quivr_reference": false,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
+      "rust_entrypoint": null,
+      "parity_coverage": "see_domain_audit",
+      "native_timing": "see_domain_audit",
+      "tracking_issue": "personal-cmy.37.2",
+      "audit_document": "migration/public_surface/coordinates_time_observers.md"
+    },
+    {
+      "id": "adam_core.coordinates.local_orbital_frames:local_frame_jacobians",
+      "module": "adam_core.coordinates.local_orbital_frames",
+      "qualname": "local_frame_jacobians",
+      "name": "local_frame_jacobians",
+      "kind": "function",
+      "domain": "coordinates",
+      "source": "src/adam_core/coordinates/local_orbital_frames.py",
+      "line": 32,
+      "explicit_export": null,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": true,
+        "python_loop": false,
+        "numpy_reference": true,
+        "pyarrow_reference": false,
+        "quivr_reference": false,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "rust_veneer_candidate_see_domain_audit",
+      "rust_entrypoint": null,
+      "parity_coverage": "see_domain_audit",
+      "native_timing": "see_domain_audit",
       "tracking_issue": "personal-cmy.37.2",
       "audit_document": "migration/public_surface/coordinates_time_observers.md"
     },
@@ -10593,7 +10677,7 @@
       "kind": "constant",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 45,
+      "line": 46,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10621,7 +10705,7 @@
       "kind": "constant",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 29,
+      "line": 30,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10649,7 +10733,7 @@
       "kind": "constant",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 31,
+      "line": 32,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10677,7 +10761,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 416,
+      "line": 468,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10705,7 +10789,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 300,
+      "line": 304,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10733,7 +10817,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/oem_io.py",
-      "line": 371,
+      "line": 423,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

@@ -68,6 +68,26 @@ Generate OEM from a Seed Orbit (Propagation Included)
        originator="ADAM CORE USER",
    )
 
+OEM 3.0 with Local Frame Covariances
+------------------------------------
+
+``version="3.0"`` writes ``REF_FRAME = ICRF``, 16 significant digits and millisecond
+epochs. ``covariance_frame`` writes the covariance blocks in RSW, RTN or TNW, or in
+3.0 in any SANA registry frame such as ``VNC_ROTATING``, which a COMMENT notes.
+
+.. code-block:: python
+
+   from adam_core.coordinates import LocalFrameCovariances
+   from adam_core.orbits.oem_io import orbit_to_oem
+
+   # One object_id with multiple epochs, as above.
+   orbits = propagated_orbits
+   orbit_to_oem(orbits, "vnc.oem", version="3.0", covariance_frame="VNC_ROTATING")
+   orbit_to_oem(
+       orbits, "tnw.oem", version="3.0", covariance_frame="TNW", table_frames_only=True
+   )
+   LocalFrameCovariances.from_orbits(orbits, "VNC_ROTATING").to_parquet("vnc.parquet")
+
 Read OEM Back into ``Orbits``
 -----------------------------
 
