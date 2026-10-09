@@ -517,8 +517,11 @@ origin and <code class="docutils literal notranslate"><span class="pre">TIME_SYS
 <span class="c1"># propagated: Orbits of one object, frame "equatorial", origin SUN, scale "tdb"</span>
 <span class="c1"># States plus a covariance block per epoch in VNC_ROTATING, a SANA frame</span>
 <span class="c1"># CCSDS 502.0-B-3 admits through annex B5 (the file says so in a COMMENT).</span>
-<span class="c1"># RSW (RTN, RIC), TNW and their _INERTIAL or _ROTATING variants work the same</span>
-<span class="c1"># way; covariance_frame=None writes the state covariance in REF_FRAME.</span>
+<span class="c1"># covariance_frame also takes RSW, RTN and TNW (table 5-4, also on 2.0), the</span>
+<span class="c1"># registry names RSW, TNW and VNC with _INERTIAL or _ROTATING (RTN or RIC in</span>
+<span class="c1"># place of RSW), and the bare names RIC and VNC, written as RSW_INERTIAL and</span>
+<span class="c1"># VNC_INERTIAL. Names are case insensitive; None writes the state covariance</span>
+<span class="c1"># in REF_FRAME.</span>
 <span class="n">orbit_to_oem</span><span class="p">(</span>
     <span class="n">propagated</span><span class="p">,</span>
     <span class="s2">"states_cov_vnc_rotating.oem"</span><span class="p">,</span>
@@ -686,7 +689,7 @@ propagator backend and force model choices.</p></li>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-08</div>
+              Last updated on 2026-10-09</div>
           </div>
           <div class="right-details">
             

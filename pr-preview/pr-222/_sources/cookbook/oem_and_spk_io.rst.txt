@@ -84,8 +84,11 @@ origin and ``TIME_SYSTEM`` from the Timestamp scale in both versions.
    # propagated: Orbits of one object, frame "equatorial", origin SUN, scale "tdb"
    # States plus a covariance block per epoch in VNC_ROTATING, a SANA frame
    # CCSDS 502.0-B-3 admits through annex B5 (the file says so in a COMMENT).
-   # RSW (RTN, RIC), TNW and their _INERTIAL or _ROTATING variants work the same
-   # way; covariance_frame=None writes the state covariance in REF_FRAME.
+   # covariance_frame also takes RSW, RTN and TNW (table 5-4, also on 2.0), the
+   # registry names RSW, TNW and VNC with _INERTIAL or _ROTATING (RTN or RIC in
+   # place of RSW), and the bare names RIC and VNC, written as RSW_INERTIAL and
+   # VNC_INERTIAL. Names are case insensitive; None writes the state covariance
+   # in REF_FRAME.
    orbit_to_oem(
        propagated,
        "states_cov_vnc_rotating.oem",
