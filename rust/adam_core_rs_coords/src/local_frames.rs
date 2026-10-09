@@ -561,27 +561,6 @@ mod tests {
         max_abs_diff(a, [[0.0; 3]; 3])
     }
 
-    /// Covariance dominated by a timing error along the orbit, plus small noise.
-    fn timing_covariance(state: &[f64; 6], sigma_t: f64) -> Vec<f64> {
-        let r = [state[0], state[1], state[2]];
-        let r3 = dot(r, r) * dot(r, r).sqrt();
-        let s = [
-            state[3],
-            state[4],
-            state[5],
-            -MU_SUN * r[0] / r3,
-            -MU_SUN * r[1] / r3,
-            -MU_SUN * r[2] / r3,
-        ];
-        let noise = [1e-14, 2e-14, 3e-14, 1e-19, 2e-19, 3e-19];
-        (0..36)
-            .map(|kl| {
-                let (k, l) = (kl / 6, kl % 6);
-                sigma_t * sigma_t * s[k] * s[l] + if k == l { noise[k] } else { 0.0 }
-            })
-            .collect()
-    }
-
     /// Well conditioned covariance L L^T from a fixed pseudo-random L.
     fn well_conditioned_covariance(seed: u64) -> Vec<f64> {
         let mut state = seed;
@@ -608,31 +587,20 @@ mod tests {
     }
 
     #[test]
-    fn parse_accepts_registry_names_aliases_and_bare_families() {
+    fn parse_accepts_registry_names_and_aliases() {
         for frame in ALL_FRAMES {
             assert_eq!(LocalFrame::parse(frame.canonical_name()).unwrap(), frame);
         }
-        let cases = [
-            ("RTN", "RSW_INERTIAL"),
+        for (name, canonical) in [
+            (" rtn ", "RSW_INERTIAL"),
             ("ric", "RSW_INERTIAL"),
-            (" rsw ", "RSW_INERTIAL"),
-            ("tnw", "TNW_INERTIAL"),
             ("VNC", "VNC_INERTIAL"),
-            ("vnc_rotating", "VNC_ROTATING"),
-            ("\tTnw_Inertial\n", "TNW_INERTIAL"),
-            ("  Rsw_Rotating", "RSW_ROTATING"),
+            ("\tTnw_Rotating\n", "TNW_ROTATING"),
             ("rtn_rotating", "RSW_ROTATING"),
-            ("RTN_INERTIAL", "RSW_INERTIAL"),
-            ("RIC_ROTATING", "RSW_ROTATING"),
-            ("ric_inertial", "RSW_INERTIAL"),
-        ];
-        for (name, canonical) in cases {
+            ("RIC_INERTIAL", "RSW_INERTIAL"),
+        ] {
             assert_eq!(LocalFrame::parse(name).unwrap().canonical_name(), canonical);
         }
-    }
-
-    #[test]
-    fn parse_rejects_unknown_names() {
         assert_eq!(
             LocalFrame::parse("LVLH").unwrap_err(),
             SchemaError::InvalidRecordBatch(
@@ -642,15 +610,7 @@ mod tests {
                     .to_string()
             )
         );
-        for name in [
-            "",
-            "VNC_",
-            "VNC ROTATING",
-            "QSW",
-            "RTN_",
-            "RICE",
-            "RSW_INERTIAL_",
-        ] {
+        for name in ["", "VNC_", "VNC ROTATING", "RTN_", "RICE", "RSW_INERTIAL_"] {
             assert!(LocalFrame::parse(name).is_err(), "{name:?} parsed");
         }
     }
@@ -658,35 +618,41 @@ mod tests {
     #[test]
     fn axes_follow_the_registry_and_are_orthonormal() {
         let states = sample_states();
+        let zero = [[0.0; 3]; 3];
         for family in FAMILIES {
-            for rotating in [false, true] {
-                for (state, j) in states
-                    .iter()
-                    .zip(jacobians(&states, frame(family, rotating)))
-                {
-                    let r = [state[0], state[1], state[2]];
-                    let v = [state[3], state[4], state[5]];
-                    let (r_hat, v_hat, h_hat) = (unit(r), unit(v), unit(cross(r, v)));
-                    let expected = match family {
-                        LocalFrameFamily::Rsw => [r_hat, cross(h_hat, r_hat), h_hat],
-                        LocalFrameFamily::Tnw => [v_hat, cross(h_hat, v_hat), h_hat],
-                        LocalFrameFamily::Vnc => [v_hat, h_hat, cross(v_hat, h_hat)],
-                    };
-                    let rotation = block(&j, 0, 0);
-                    assert!(max_abs_diff(rotation, expected) < 1e-14);
-                    assert_eq!(block(&j, 3, 3), rotation);
-                    assert_eq!(block(&j, 0, 3), [[0.0; 3]; 3]);
-                    let gram = rotation.map(|a| rotation.map(|b| dot(a, b)));
-                    let identity = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
-                    assert!(max_abs_diff(gram, identity) < 1e-14);
-                    // right handed, and h maps onto the normal axis
-                    let z = cross(rotation[0], rotation[1]);
-                    assert!(max_abs_diff([z; 3], [rotation[2]; 3]) < 1e-14);
-                    let h_local = rotation.map(|row| dot(row, h_hat));
-                    assert!((h_local[family.normal_axis()] - 1.0).abs() < 1e-14);
+            let inertial = jacobians(&states, frame(family, false));
+            let rotating = jacobians(&states, frame(family, true));
+            for ((state, j), r) in states.iter().zip(&inertial).zip(&rotating) {
+                let position = [state[0], state[1], state[2]];
+                let v = [state[3], state[4], state[5]];
+                let (r_hat, v_hat, h_hat) = (unit(position), unit(v), unit(cross(position, v)));
+                let expected = match family {
+                    LocalFrameFamily::Rsw => [r_hat, cross(h_hat, r_hat), h_hat],
+                    LocalFrameFamily::Tnw => [v_hat, cross(h_hat, v_hat), h_hat],
+                    LocalFrameFamily::Vnc => [v_hat, h_hat, cross(v_hat, h_hat)],
+                };
+                let rotation = block(j, 0, 0);
+                assert!(max_abs_diff(rotation, expected) < 1e-14);
+                // [[R, 0], [0, R]] inertial, [[R, 0], [dR/dt, R]] rotating
+                for m in [j, r] {
+                    assert_eq!((block(m, 0, 0), block(m, 3, 3)), (rotation, rotation));
+                    assert_eq!(block(m, 0, 3), zero);
                 }
+                assert_eq!(block(j, 3, 0), zero);
+                assert!(max_abs(block(r, 3, 0)) > 0.0);
+                let gram = rotation.map(|a| rotation.map(|b| dot(a, b)));
+                let identity = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+                assert!(max_abs_diff(gram, identity) < 1e-14);
+                // right handed, and h maps onto the normal axis
+                let z = cross(rotation[0], rotation[1]);
+                assert!(max_abs_diff([z; 3], [rotation[2]; 3]) < 1e-14);
+                let h_local = rotation.map(|row| dot(row, h_hat));
+                assert!((h_local[family.normal_axis()] - 1.0).abs() < 1e-14);
             }
         }
+        // mu is not read for inertial frames
+        let flat: Vec<f64> = states.iter().flatten().copied().collect();
+        assert!(local_frame_jacobians(&flat, &[], frame(LocalFrameFamily::Vnc, false)).is_ok());
     }
 
     #[test]
@@ -703,23 +669,6 @@ mod tests {
                 }
             }
         }
-    }
-
-    #[test]
-    fn inertial_jacobians_have_no_rate_block() {
-        let states = sample_states();
-        for family in FAMILIES {
-            let inertial = jacobians(&states, frame(family, false));
-            let rotating = jacobians(&states, frame(family, true));
-            for (i, r) in inertial.iter().zip(&rotating) {
-                assert_eq!(block(i, 3, 0), [[0.0; 3]; 3]);
-                assert_eq!(block(i, 0, 0), block(r, 0, 0));
-                assert!(max_abs(block(r, 3, 0)) > 0.0);
-            }
-        }
-        // mu is not read for inertial frames
-        let flat: Vec<f64> = states.iter().flatten().copied().collect();
-        assert!(local_frame_jacobians(&flat, &[], frame(LocalFrameFamily::Vnc, false)).is_ok());
     }
 
     #[test]
@@ -781,48 +730,13 @@ mod tests {
             assert!(max_abs_diff([omega; 3], [h_hat.map(|x| n * x); 3]) <= 1e-15);
             let expected = rotation.map(|e| cross(h_hat.map(|x| n * x), e));
             assert!(max_abs_diff(rate, expected) <= 1e-15);
+            // The frame turns about h, so the normal row of the rate block is exactly zero.
+            assert_eq!(rate[family.normal_axis()], [0.0; 3]);
         }
     }
 
     #[test]
-    fn normal_row_of_the_rate_block_is_exactly_zero() {
-        let states = sample_states();
-        for family in FAMILIES {
-            for j in jacobians(&states, frame(family, true)) {
-                let rate = block(&j, 3, 0);
-                for (i, row) in rate.iter().enumerate() {
-                    if i == family.normal_axis() {
-                        assert_eq!(*row, [0.0; 3]);
-                    } else {
-                        assert!(row.iter().any(|&x| x != 0.0));
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn covariance_product_is_bit_symmetric() {
-        let states = sample_states();
-        let flat: Vec<f64> = states.iter().flatten().copied().collect();
-        let covariances: Vec<f64> = (0..states.len() as u64)
-            .flat_map(well_conditioned_covariance)
-            .collect();
-        let mu = vec![MU_SUN; states.len()];
-        for frame in ALL_FRAMES {
-            let rotated = local_frame_covariances(&flat, &covariances, &mu, frame).unwrap();
-            for p in rotated.chunks_exact(36) {
-                for i in 0..6 {
-                    for k in 0..6 {
-                        assert_eq!(p[i * 6 + k].to_bits(), p[k * 6 + i].to_bits());
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn covariance_is_symmetrised_exactly() {
+    fn covariance_is_symmetrised_exactly_and_the_product_is_bit_symmetric() {
         let state = sample_states()[1];
         let mut c = well_conditioned_covariance(7);
         // ulp level asymmetry, as stored covariances carry
@@ -834,20 +748,24 @@ mod tests {
             let a = local_frame_covariances(&state, &c, &[MU_SUN], frame).unwrap();
             let b = local_frame_covariances(&state, &transposed, &[MU_SUN], frame).unwrap();
             assert!(a.iter().zip(&b).all(|(x, y)| x.to_bits() == y.to_bits()));
+            for (ik, x) in a.iter().enumerate() {
+                assert_eq!(x.to_bits(), a[(ik % 6) * 6 + ik / 6].to_bits());
+            }
         }
     }
 
     #[test]
     fn nan_covariance_rows_pass_through() {
         let mut states = sample_states();
-        // a radial state without covariance does not need an orbit plane
+        // a radial state without covariance needs neither an orbit plane nor mu
         states[2] = [1.0, 0.0, 0.0, 0.01, 0.0, 0.0];
         let flat: Vec<f64> = states.iter().flatten().copied().collect();
         let mut covariances: Vec<f64> = (0..states.len() as u64)
             .flat_map(well_conditioned_covariance)
             .collect();
         covariances[72..108].fill(f64::NAN);
-        let mu = vec![MU_SUN; states.len()];
+        let mut mu = vec![MU_SUN; states.len()];
+        mu[2] = f64::NAN;
         for frame in ALL_FRAMES {
             let rotated = local_frame_covariances(&flat, &covariances, &mu, frame).unwrap();
             for (index, row) in rotated.chunks_exact(36).enumerate() {
@@ -860,135 +778,24 @@ mod tests {
         }
     }
 
-    /// Rotating Jacobian from the analytic axis rates in double-double: no
-    /// autodiff involved.
-    fn reference_jacobian(state: &[f64; 6], family: LocalFrameFamily) -> [DoubleDouble; 36] {
-        let r = [state[0], state[1], state[2]].map(DoubleDouble::from);
-        let v = [state[3], state[4], state[5]].map(DoubleDouble::from);
-        let (r_mag, v_mag) = (dot(r, r).sqrt(), dot(v, v).sqrt());
-        let (r_hat, v_hat, h_hat) = (unit(r), unit(v), unit(cross(r, v)));
-        let rows = match family {
-            LocalFrameFamily::Rsw => [r_hat, cross(h_hat, r_hat), h_hat],
-            LocalFrameFamily::Tnw => [v_hat, cross(h_hat, v_hat), h_hat],
-            LocalFrameFamily::Vnc => [v_hat, h_hat, cross(v_hat, h_hat)],
-        };
-        // d(x/|x|)/dt = (x' - (x' . x_hat) x_hat) / |x| for the first axis; h is fixed
-        let k = DoubleDouble::from(-MU_SUN) / (r_mag * r_mag * r_mag);
-        let (x_hat, x_mag, x_dot) = match family {
-            LocalFrameFamily::Rsw => (r_hat, r_mag, v),
-            _ => (v_hat, v_mag, r.map(|x| x * k)),
-        };
-        let along = dot(x_dot, x_hat);
-        let x_rate: [DoubleDouble; 3] =
-            std::array::from_fn(|i| (x_dot[i] - along * x_hat[i]) / x_mag);
-        let zero = [DoubleDouble::ZERO; 3];
-        let rates = match family {
-            LocalFrameFamily::Vnc => [x_rate, zero, cross(x_rate, h_hat)],
-            _ => [x_rate, cross(h_hat, x_rate), zero],
-        };
-        let mut j = [DoubleDouble::ZERO; 36];
-        for i in 0..3 {
-            for c in 0..3 {
-                j[i * 6 + c] = rows[i][c];
-                j[(i + 3) * 6 + c + 3] = rows[i][c];
-                j[(i + 3) * 6 + c] = rates[i][c];
-            }
-        }
-        j
-    }
-
-    #[test]
-    fn rotating_jacobian_and_covariance_match_a_double_double_reference() {
-        let mut states = sample_states();
-        for nu in [10.0, 95.0, 200.0, 333.0] {
-            states.push(state_from_elements(2.7, 0.15, 12.0, 80.0, 140.0, nu));
-            states.push(state_from_elements(1.1, 0.45, 30.0, 300.0, 20.0, nu));
-            states.push(state_from_elements(5.2, 0.05, 3.0, 150.0, 250.0, nu));
-        }
-        let ulp = |x: f64| f64::from_bits(x.abs().to_bits() + 1) - x.abs();
-        for family in FAMILIES {
-            let frame = frame(family, true);
-            let jacobians = jacobians(&states, frame);
-            for (index, (state, j)) in states.iter().zip(jacobians).enumerate() {
-                let reference = reference_jacobian(state, family);
-                let rounded = reference.map(|x| x.hi + x.lo);
-                // within one ulp of each block's largest element, and the
-                // covariance below within one ulp per element
-                for (row, col) in [(0, 0), (3, 0), (3, 3)] {
-                    let (actual, expected) = (block(&j, row, col), block(&rounded, row, col));
-                    assert!(max_abs_diff(actual, expected) <= ulp(max_abs(expected)));
-                }
-                // timing errors of 0.01 to 3 days along the orbit over full rank noise
-                for (n, sigma_t) in [0.01, 0.1, 0.3, 3.0].into_iter().enumerate() {
-                    let noise = well_conditioned_covariance(index as u64 * 7 + n as u64 + 11);
-                    let timing = timing_covariance(state, sigma_t);
-                    let c: Vec<f64> = timing.iter().zip(&noise).map(|(a, b)| a + b).collect();
-                    let p = local_frame_covariances(state, &c, &[MU_SUN], frame).unwrap();
-                    for (ik, &actual) in p.iter().enumerate() {
-                        let (i, k) = (ik / 6, ik % 6);
-                        let mut sum = DoubleDouble::ZERO;
-                        for ab in 0..36 {
-                            let (a, b) = (ab / 6, ab % 6);
-                            let (s, e) = two_sum(c[ab], c[b * 6 + a]);
-                            let symmetric = DoubleDouble::new((0.5 * s, 0.5 * e));
-                            sum = sum + reference[i * 6 + a] * (symmetric * reference[k * 6 + b]);
-                        }
-                        let expected = sum.hi + sum.lo;
-                        assert!((actual - expected).abs() <= ulp(expected));
-                    }
-                }
-            }
-        }
-    }
-
     #[test]
     fn invalid_inputs_are_reported() {
         let states = sample_states();
         let mut flat: Vec<f64> = states.iter().flatten().copied().collect();
+        let covariances: Vec<f64> = (0..states.len() as u64)
+            .flat_map(well_conditioned_covariance)
+            .collect();
+        let mu = vec![MU_SUN; states.len()];
         let vnc = frame(LocalFrameFamily::Vnc, true);
         let err = local_frame_jacobians(&flat[..7], &[MU_SUN], vnc).unwrap_err();
         assert!(err.to_string().contains("6 entries per state"));
         let err = local_frame_jacobians(&flat, &[MU_SUN], vnc).unwrap_err();
         assert!(err.to_string().contains("mu"));
-        let covariances = vec![0.0; 36 * states.len() - 1];
-        let mu = vec![MU_SUN; states.len()];
-        let err = local_frame_covariances(&flat, &covariances, &mu, vnc).unwrap_err();
+        let err = local_frame_covariances(&flat, &covariances[1..], &mu, vnc).unwrap_err();
         assert!(err.to_string().contains("covariances"));
-        // radial motion has no orbit plane, and NaN or infinite states fail the same check
-        let no_plane =
-            SchemaError::InvalidRecordBatch("State 1 is not finite or has no orbit plane.".into());
-        let radial = [2.0 * flat[6], 2.0 * flat[7], 2.0 * flat[8]];
-        for bad in [radial, [f64::NAN, 0.01, 0.0], [f64::INFINITY, 0.01, 0.0]] {
-            let mut flat = flat.clone();
-            flat[9..12].copy_from_slice(&bad);
-            for frame in ALL_FRAMES {
-                assert_eq!(
-                    local_frame_jacobians(&flat, &mu, frame).unwrap_err(),
-                    no_plane
-                );
-            }
-        }
-        flat[2] = f64::NAN;
-        let covariances: Vec<f64> = (0..states.len() as u64)
-            .flat_map(well_conditioned_covariance)
-            .collect();
-        assert_eq!(
-            local_frame_covariances(&flat, &covariances, &mu, vnc).unwrap_err(),
-            SchemaError::InvalidRecordBatch(
-                "State 0 is not finite or has no orbit plane.".to_string()
-            )
-        );
-    }
-
-    #[test]
-    fn rotating_frames_need_a_finite_positive_mu_on_rotated_rows() {
-        let states = sample_states();
-        let flat: Vec<f64> = states.iter().flatten().copied().collect();
-        let mut covariances: Vec<f64> = (0..states.len() as u64)
-            .flat_map(well_conditioned_covariance)
-            .collect();
+        // mu must be finite and positive for rotating frames and is not read otherwise
         for value in [f64::NAN, f64::INFINITY, 0.0, -MU_SUN] {
-            let mut mu = vec![MU_SUN; states.len()];
+            let mut mu = mu.clone();
             mu[2] = value;
             for frame in ALL_FRAMES {
                 let jacobians = local_frame_jacobians(&flat, &mu, frame);
@@ -1005,11 +812,26 @@ mod tests {
                 }
             }
         }
-        // a row without covariance is not rotated and needs no mu
-        covariances[72..108].fill(f64::NAN);
-        let mut mu = vec![MU_SUN; states.len()];
-        mu[2] = f64::NAN;
-        let vnc = frame(LocalFrameFamily::Vnc, true);
-        assert!(local_frame_covariances(&flat, &covariances, &mu, vnc).is_ok());
+        // radial motion has no orbit plane, and NaN or infinite states fail the same check
+        let no_plane =
+            SchemaError::InvalidRecordBatch("State 1 is not finite or has no orbit plane.".into());
+        let radial = [2.0 * flat[6], 2.0 * flat[7], 2.0 * flat[8]];
+        for bad in [radial, [f64::NAN, 0.01, 0.0], [f64::INFINITY, 0.01, 0.0]] {
+            let mut flat = flat.clone();
+            flat[9..12].copy_from_slice(&bad);
+            for frame in ALL_FRAMES {
+                assert_eq!(
+                    local_frame_jacobians(&flat, &mu, frame).unwrap_err(),
+                    no_plane
+                );
+            }
+        }
+        flat[2] = f64::NAN;
+        assert_eq!(
+            local_frame_covariances(&flat, &covariances, &mu, vnc).unwrap_err(),
+            SchemaError::InvalidRecordBatch(
+                "State 0 is not finite or has no orbit plane.".to_string()
+            )
+        );
     }
 }

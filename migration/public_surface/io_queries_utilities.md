@@ -138,15 +138,17 @@ Public module functions:
 - `orbit_from_oem`
 
 `orbit_to_oem` keeps the legacy Python assertions, single-time warning, and
-the OEM 2.0 local-time CREATION_DATE, builds the options JSON (version, labels,
-comments, covariance frame, digits), and performs everything else in one
-`oem_write_orbits_kvn(path, orbits_ipc, options_json, mu)` crossing:
-validation, ecliptic->equatorial rotation, millisecond rounding (the returned
-count drives a Python warning), stable time sort, metadata/frame/center mapping
-with exact legacy errors, AU->km state and covariance conversion in legacy IEEE
-order, local orbital frame covariance rotation (`mu` from the origin for
-`_ROTATING` frames), KVN rendering, and the file write. ITRF93 input
-pre-transforms on the Rust-owned `transform_coordinates` crossing
+the nondeterministic CREATION_DATE default (local time for OEM 2.0, UTC for
+3.0), then performs everything else in one `oem_write_orbits_kvn(path,
+orbits_ipc, *, version, originator, creation_date, object_name, object_id,
+comments, include_covariance, covariance_frame, table_frames_only)` crossing
+with keyword arguments: validation, ecliptic->equatorial rotation, millisecond
+rounding (the returned count drives a Python warning), stable time sort,
+metadata/frame/center mapping with exact legacy errors, AU->km state and
+covariance conversion in legacy IEEE order, local orbital frame covariance
+rotation (`mu` from the Rust origin table for `_ROTATING` frames), KVN
+rendering at 15 (2.0) or 16 (3.0) significant digits, and the file write.
+ITRF93 input pre-transforms on the Rust-owned `transform_coordinates` crossing
 (SPICE/time-dependent), then writes through the same fused crossing.
 `orbit_from_oem` is one `oem_read_orbits_ipc` crossing owning parsing,
 frame/center mapping with exact legacy errors, km->AU conversion,

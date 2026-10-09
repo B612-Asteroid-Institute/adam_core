@@ -2,7 +2,7 @@ import datetime
 import json
 import logging
 import warnings
-from typing import Optional, Sequence, Type
+from typing import Any, Optional, Sequence, Type
 
 import numpy as np
 import pyarrow.compute as pc
@@ -24,9 +24,9 @@ from . import Orbits
 
 logger = logging.getLogger(__name__)
 
-# CCSDS OEM version written by this module. Matches the Python `oem`
-# package's CURRENT_VERSION ('2.0'), which this module's Rust KVN engine
-# replaced (bead personal-cmy.28).
+# Default CCSDS OEM version of orbit_to_oem, the Python `oem` package's
+# CURRENT_VERSION ('2.0'), which this module's Rust KVN engine replaced
+# (bead personal-cmy.28).
 OEM_VERSION = "2.0"
 
 REF_FRAME_VALUES = (
@@ -306,7 +306,7 @@ def orbit_to_oem(
     output_file: str,
     originator: str = "ADAM CORE USER",
     *,
-    version: str = "2.0",
+    version: str = OEM_VERSION,
     object_name: Optional[str] = None,
     object_id: Optional[str] = None,
     creation_date: Optional[str] = None,
@@ -314,8 +314,6 @@ def orbit_to_oem(
     include_covariance: bool = True,
     covariance_frame: Optional[str] = None,
     table_frames_only: bool = False,
-    significant_digits: Optional[int] = None,
-    ref_frame_label: Optional[str] = None,
 ) -> str:
     """
     Convert Orbit object to an OEM file.
@@ -331,11 +329,12 @@ def orbit_to_oem(
     originator : str
         ORIGINATOR header value.
     version : str
-        "2.0" (REF_FRAME EME2000) or "3.0" (REF_FRAME ICRF, CREATION_DATE in UTC).
+        "2.0" (REF_FRAME EME2000, 15 significant digits) or "3.0" (REF_FRAME
+        ICRF, 16 digits, epochs rounded to the millisecond with a warning).
     object_name, object_id : str, optional
         OBJECT_NAME and OBJECT_ID, default the orbits' object_id.
     creation_date : str, optional
-        CREATION_DATE, default the write time.
+        CREATION_DATE, default the write time (local for 2.0, UTC for 3.0).
     comments : sequence of str
         COMMENT lines written right after META_START.
     include_covariance : bool
@@ -350,11 +349,6 @@ def orbit_to_oem(
         name with an annex B5 COMMENT. Names are case insensitive.
     table_frames_only : bool
         Refuse covariance frames outside RSW, RTN, TNW (always on for 2.0).
-    significant_digits : int, optional
-        Mantissa digits of states and covariances, 1 to 16, default 15 for 2.0
-        and 16 for 3.0.
-    ref_frame_label : str, optional
-        REF_FRAME label of equatorial states, default EME2000 (2.0) or ICRF (3.0).
 
     Returns
     -------
@@ -388,22 +382,23 @@ def orbit_to_oem(
         include_covariance=include_covariance,
         covariance_frame=covariance_frame,
         table_frames_only=table_frames_only,
-        significant_digits=significant_digits,
-        ref_frame_label=ref_frame_label,
     )
 
     return output_file
 
 
 def _write_oem_fused(
-    orbits: Orbits, output_file: str, originator: str, **options
+    orbits: Orbits,
+    output_file: str,
+    originator: str,
+    *,
+    version: str = OEM_VERSION,
+    creation_date: Optional[str] = None,
+    **options: Any,
 ) -> None:
-    """One fused Rust crossing owns validation, the equatorial rotation
-    (ecliptic input), millisecond rounding, stable time sort, labels, AU->km
-    conversion, the covariance block, KVN rendering, and file write. The
-    SPICE/time-dependent ITRF93 transform stays on the Rust-owned
-    ``transform_coordinates`` crossing; the 2.0 CREATION_DATE stays the legacy
-    local time, Rust writes UTC for 3.0."""
+    """One Rust call writes the file (see ``orbit_to_oem``). The SPICE dependent
+    ITRF93 transform runs first, and the CREATION_DATE default stays a Python
+    input: local time for 2.0, as the legacy writer wrote, UTC for 3.0."""
     from adam_core import _rust_native as _rn
 
     from .arrow_bridge import orbits_to_ipc
@@ -418,23 +413,19 @@ def _write_oem_fused(
             transform_coordinates(orbits.coordinates, frame_out="equatorial"),
         )
 
-    options["originator"] = originator
-    if options.get("creation_date") is None and options.get("version", "2.0") == "2.0":
-        options["creation_date"] = datetime.datetime.now().isoformat()
-    mu = None
-    covariance_frame = options.get("covariance_frame")
-    if covariance_frame is not None and options.get("include_covariance", True):
-        try:
-            canonical = _rn.local_frame_canonical_name(covariance_frame)
-        except ValueError:  # the REF_FRAME label, or a name Rust reports
-            canonical = ""
-        if canonical.endswith("_ROTATING"):
-            mu = np.asarray(orbits.coordinates.origin.mu(), dtype=np.float64)
-
+    if creation_date is None:
+        now = datetime.datetime.now
+        utc = now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        creation_date = now().isoformat() if version == "2.0" else utc
     rounded = _rn.oem_write_orbits_kvn(
-        str(output_file), orbits_to_ipc(orbits), json.dumps(options), mu
+        str(output_file),
+        orbits_to_ipc(orbits),
+        version=version,
+        originator=originator,
+        creation_date=creation_date,
+        **options,
     )
-    if rounded and options.get("version") == "3.0":  # the 2.0 writer never warned
+    if rounded:
         warnings.warn(
             f"{rounded} of {len(orbits)} epochs rounded to the millisecond grid."
         )

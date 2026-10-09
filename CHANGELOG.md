@@ -6,15 +6,20 @@ This file contains notable changes in adam-core
 
 ### Added
 
-- `orbit_to_oem` writes OEM 3.0 (`version="3.0"`, REF_FRAME ICRF) with explicit
-  labels, comments, digits and covariance blocks in local orbital frames (`covariance_frame`).
-- `LocalFrameCovariances` rotates covariances into RSW, TNW or VNC frames with an exact,
-  once-rounded `J C J^T` evaluated in Rust.
+- `orbit_to_oem` writes OEM 3.0 (`version="3.0"`: REF_FRAME ICRF, 16 significant
+  digits, millisecond epochs) and takes `object_name`, `object_id`,
+  `creation_date`, `comments`, `include_covariance`, `covariance_frame` and
+  `table_frames_only`. `covariance_frame` writes the covariance blocks in a
+  local orbital frame (RSW, RTN, TNW, or a SANA registry name in 3.0).
+- `LocalFrameCovariances` and `local_frame_jacobians` rotate covariances into
+  RSW, TNW or VNC frames with an exact, once-rounded `J C J^T` evaluated in Rust.
+- `orbit_from_oem` reads REF_FRAME ICRF, J2000 and GCRF as equatorial.
 
 ### Changed
 
-- `orbit_to_oem` writes the top left 6x6 block of 9x9 covariances (orbits with
-  non-gravitational parameters) instead of dropping them, in OEM 2.0 too.
+- `orbit_to_oem` writes the top left 6x6 block of covariances wider than 6x6
+  (9x9 for orbits with non-gravitational parameters) instead of dropping them,
+  in OEM 2.0 too.
 
 ## [0.5.8] - 2026-10-05
 

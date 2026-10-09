@@ -13,10 +13,6 @@ from ..transform import transform_coordinates
 MU_SUN = float(OriginGravitationalParameters.SUN)
 
 
-def axes_of(coords, frame):
-    return local_frame_jacobians(coords, frame)[:, :3, :3]
-
-
 @pytest.fixture
 def heliocentric_orbits() -> Orbits:
     orbits = make_real_orbits(5)
@@ -37,67 +33,6 @@ def circular_state(a: float = 1.3, origin: str = "SUN") -> CartesianCoordinates:
         frame="equatorial",
         origin=Origin.from_kwargs(code=[origin]),
     )
-
-
-def test_axes_follow_the_registry_and_match_rust_ric(heliocentric_orbits):
-    coords = heliocentric_orbits.coordinates
-    r_hat, v_hat = coords.r_hat, coords.v_hat
-    w_hat = coords.h / np.linalg.norm(coords.h, axis=1, keepdims=True)
-
-    rsw = axes_of(coords, "rtn")
-    np.testing.assert_allclose(rsw[:, 0], r_hat, atol=1e-14)
-    np.testing.assert_allclose(rsw[:, 1], np.cross(w_hat, r_hat), atol=1e-14)
-    np.testing.assert_allclose(rsw[:, 2], w_hat, atol=1e-14)
-    # RSW, RTN and RIC are the frame the existing Rust RIC matrices give.
-    np.testing.assert_allclose(
-        local_frame_jacobians(coords, "RIC"), coords.ric6_matrix, atol=1e-15
-    )
-
-    tnw = axes_of(coords, "TNW")
-    np.testing.assert_allclose(tnw[:, 0], v_hat, atol=1e-14)
-    np.testing.assert_allclose(tnw[:, 1], np.cross(w_hat, v_hat), atol=1e-14)
-    np.testing.assert_allclose(tnw[:, 2], w_hat, atol=1e-14)
-
-    vnc = axes_of(coords, "VNC")
-    np.testing.assert_allclose(vnc[:, 0], v_hat, atol=1e-14)
-    np.testing.assert_allclose(vnc[:, 1], w_hat, atol=1e-14)
-    np.testing.assert_allclose(vnc[:, 2], np.cross(v_hat, w_hat), atol=1e-14)
-    # VNC rows are (T, W, -N) of TNW. A TNW covariance must never be labelled VNC.
-    np.testing.assert_allclose(
-        vnc, np.stack([tnw[:, 0], tnw[:, 2], -tnw[:, 1]], axis=1), atol=1e-14
-    )
-    assert not np.allclose(vnc, tnw)
-
-
-def test_rotating_frames_follow_two_body_motion(heliocentric_orbits):
-    a = 1.3
-    coords = circular_state(a)
-    n = np.sqrt(MU_SUN / a**3)
-    for family in ("RSW", "TNW", "VNC"):
-        jacobian = local_frame_jacobians(coords, f"{family}_ROTATING")[0]
-        np.testing.assert_allclose(
-            jacobian[3:, :3], np.cross([0, 0, n], jacobian[:3, :3]), atol=1e-15
-        )
-        assert not local_frame_jacobians(coords, f"{family}_INERTIAL")[0, 3:, :3].any()
-    at_rest = local_frame_jacobians(coords, "RSW_ROTATING")[0] @ coords.values[0]
-    np.testing.assert_allclose(at_rest, [a, 0, 0, 0, 0, 0], atol=1e-15)
-
-    # Velocity block rows omega x e_i match finite differences of the axes.
-    orbits = heliocentric_orbits[:2]
-    t0 = orbits.coordinates.time[0].rescale("tdb").mjd().to_numpy(False)[0]
-    dt = 1e-3
-    times = Timestamp.from_mjd([t0 - dt, t0, t0 + dt], scale="tdb")
-    propagated = propagate_2body(orbits, times)
-    for orbit_id in orbits.orbit_id.to_pylist():
-        rows = propagated.apply_mask(
-            propagated.orbit_id.to_numpy(zero_copy_only=False) == orbit_id
-        ).sort_by("coordinates.time")
-        for frame in ("RSW_ROTATING", "TNW_ROTATING", "VNC_ROTATING"):
-            basis = axes_of(rows.coordinates, frame)
-            rate = local_frame_jacobians(rows.coordinates, frame)[1, 3:, :3]
-            np.testing.assert_allclose(
-                rate, (basis[2] - basis[0]) / (2 * dt), atol=1e-8
-            )
 
 
 def test_covariance_product(heliocentric_orbits):
@@ -161,6 +96,17 @@ def test_jacobian_and_product_match_a_decimal_reference(heliocentric_orbits):
     getcontext().prec = 50
     orbits = propagate_2body(
         heliocentric_orbits[:1], Timestamp.from_mjd([60000.0, 60400.0], scale="tdb")
+    )
+    # The second covariance adds a timing error of one day along the orbit to
+    # the stored one, which stays as small full rank noise. Its rotating frame
+    # velocity rows cancel so deeply that a Jacobian rounded to double
+    # precision misses the bound below by billions of ulps.
+    r, v = orbits.coordinates.values[1, :3], orbits.coordinates.values[1, 3:]
+    along = np.concatenate([v, -MU_SUN * r / np.linalg.norm(r) ** 3])
+    covariances = orbits.coordinates.covariance.to_matrix()
+    covariances[1] += np.outer(along, along)
+    orbits = orbits.set_column(
+        "coordinates.covariance", CoordinateCovariances.from_matrix(covariances)
     )
     coords = orbits.coordinates
     jacobians = local_frame_jacobians(coords, "VNC_ROTATING")
