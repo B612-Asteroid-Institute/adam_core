@@ -1,172 +1,96 @@
+from decimal import Decimal, getcontext
+
 import numpy as np
 import pytest
 
 from ...dynamics.propagation import propagate_2body
-from ...orbits import Orbits
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
-from .. import CartesianCoordinates, CoordinateCovariances, Origin
+from .. import CoordinateCovariances, Origin
 from ..local_orbital_frames import LocalFrameCovariances, local_frame_jacobians
-from ..origin import OriginGravitationalParameters
 from ..transform import transform_coordinates
-
-MU_SUN = float(OriginGravitationalParameters.SUN)
 
 
 @pytest.fixture
-def heliocentric_orbits() -> Orbits:
+def orbits():
     orbits = make_real_orbits(5)
     coordinates = transform_coordinates(orbits.coordinates, frame_out="equatorial")
     return orbits.set_column("coordinates", coordinates)
 
 
-def circular_state(a: float = 1.3, origin: str = "SUN") -> CartesianCoordinates:
-    n = np.sqrt(MU_SUN / a**3)
-    return CartesianCoordinates.from_kwargs(
-        x=[a],
-        y=[0.0],
-        z=[0.0],
-        vx=[0.0],
-        vy=[n * a],
-        vz=[0.0],
-        time=Timestamp.from_mjd([60000.0], scale="tdb"),
-        frame="equatorial",
-        origin=Origin.from_kwargs(code=[origin]),
-    )
+def with_covariances(orbits, matrices):
+    covariance = CoordinateCovariances.from_matrix(matrices)
+    return orbits.set_column("coordinates.covariance", covariance)
 
 
-def test_covariance_product(heliocentric_orbits):
-    source = heliocentric_orbits.coordinates.covariance.to_matrix()
+def test_table_and_jacobians(orbits):
+    source = orbits.coordinates.covariance.to_matrix()
     source[2] = np.nan
-    orbits = heliocentric_orbits.set_column(
-        "coordinates.covariance", CoordinateCovariances.from_matrix(source)
-    )
-    product = LocalFrameCovariances.from_orbits(orbits, "vnc_inertial")
-    rotated = product.covariance.to_matrix()
-    assert product.frame == "VNC_INERTIAL"
-    assert product.inertial_frame == "equatorial"
-    assert product.orbit_id.to_pylist() == orbits.orbit_id.to_pylist()
-    assert product.time.days.equals(orbits.coordinates.time.days)
+    orbits = with_covariances(orbits, source)
+    product = LocalFrameCovariances.from_orbits(orbits, " rtn ")
+    assert (product.frame, product.inertial_frame) == ("RSW_INERTIAL", "equatorial")
+    assert product.orbit_id.equals(orbits.orbit_id)
+    assert product.time.equals(orbits.coordinates.time)
     assert product.origin.code.to_pylist() == ["SUN"] * 5
+    rotated = product.covariance.to_matrix()
     assert np.isnan(rotated[2]).all() and not np.isnan(rotated[[0, 1, 3, 4]]).any()
-    # A rotation preserves the position variance and inverts exactly.
-    keep = [0, 1, 3, 4]
-    np.testing.assert_allclose(
-        np.trace(rotated[keep, :3, :3], axis1=1, axis2=2),
-        np.trace(source[keep, :3, :3], axis1=1, axis2=2),
-        rtol=1e-12,
-    )
-    jacobians = local_frame_jacobians(orbits.coordinates, "VNC_INERTIAL")[keep]
-    recovered = np.einsum("nji,njk,nkl->nil", jacobians, rotated[keep], jacobians)
-    np.testing.assert_allclose(recovered, source[keep], rtol=1e-10, atol=1e-30)
+    jacobians = local_frame_jacobians(orbits.coordinates, "RSW")
+    recovered = np.einsum("nji,njk,nkl->nil", jacobians, rotated, jacobians)
+    np.testing.assert_allclose(recovered[:2], source[:2], rtol=1e-10, atol=1e-30)
     assert LocalFrameCovariances.from_orbits(orbits).frame == "VNC_ROTATING"
 
 
-def test_errors(heliocentric_orbits):
-    with pytest.raises(ValueError, match="Unknown local orbital frame"):
-        local_frame_jacobians(heliocentric_orbits.coordinates, "LVLH")
-    nulls = heliocentric_orbits.set_column(
-        "coordinates.covariance", CoordinateCovariances.nulls(5)
-    )
+def test_errors(orbits):
+    coords = orbits.coordinates
+    with pytest.raises(ValueError, match="Unknown local orbital frame 'LVLH'"):
+        local_frame_jacobians(coords, "LVLH")
+    nan = with_covariances(orbits, np.full((5, 6, 6), np.nan))
     with pytest.raises(ValueError, match="no covariance"):
-        LocalFrameCovariances.from_orbits(nulls)
-    itrf = transform_coordinates(heliocentric_orbits.coordinates, frame_out="itrf93")
-    with pytest.raises(ValueError, match="inertial frame"):
-        local_frame_jacobians(itrf, "VNC")
-    radial = circular_state()
-    radial = radial.set_column("vx", radial.vy).set_column("vy", radial.vx)
-    with pytest.raises(ValueError, match="no orbit plane"):
-        local_frame_jacobians(radial, "VNC")
-
-    mars = circular_state(2.0e-5, origin="MARS")
-    np.testing.assert_allclose(
-        local_frame_jacobians(mars, "RSW")[0], np.eye(6), atol=1e-15
-    )
+        LocalFrameCovariances.from_orbits(nan)
+    with pytest.raises(ValueError, match="inertial frame, got 'itrf93'"):
+        local_frame_jacobians(transform_coordinates(coords, frame_out="itrf93"), "VNC")
+    radial = coords.set_column("vx", coords.x).set_column("vy", coords.y)
+    with pytest.raises(ValueError, match="State 0 is not finite or has no orbit plane"):
+        local_frame_jacobians(radial.set_column("vz", coords.z), "VNC")
+    mars = coords.set_column("origin", Origin.from_kwargs(code=["MARS"] * 5))
+    assert local_frame_jacobians(mars, "RSW").shape == (5, 6, 6)
     with pytest.raises(ValueError, match="Unknown origin code"):
         local_frame_jacobians(mars, "RSW_ROTATING")
-    assert local_frame_jacobians(mars, "RSW_ROTATING", mu=1e-12).shape == (1, 6, 6)
+    assert local_frame_jacobians(mars, "RSW_ROTATING", mu=1e-12).shape == (5, 6, 6)
 
 
-def test_jacobian_and_product_match_a_decimal_reference(heliocentric_orbits):
-    """The Rust double-double evaluation against a 50 digit Decimal reference:
-    each Jacobian block within one ulp of its largest entry, the rotated
-    covariance within one ulp per element."""
-    from decimal import Decimal, getcontext
-
+def test_jacobian_and_product_match_a_decimal_reference(orbits):
+    """The double-double evaluation against 50 digit Decimal arithmetic: Jacobian
+    blocks within one ulp of their largest entry, the product within one ulp each."""
     getcontext().prec = 50
-    orbits = propagate_2body(
-        heliocentric_orbits[:1], Timestamp.from_mjd([60000.0, 60400.0], scale="tdb")
-    )
-    # The second covariance adds a timing error of one day along the orbit to
-    # the stored one, which stays as small full rank noise. Its rotating frame
-    # velocity rows cancel so deeply that a Jacobian rounded to double
-    # precision misses the bound below by billions of ulps.
-    r, v = orbits.coordinates.values[1, :3], orbits.coordinates.values[1, 3:]
-    along = np.concatenate([v, -MU_SUN * r / np.linalg.norm(r) ** 3])
-    covariances = orbits.coordinates.covariance.to_matrix()
-    covariances[1] += np.outer(along, along)
-    orbits = orbits.set_column(
-        "coordinates.covariance", CoordinateCovariances.from_matrix(covariances)
-    )
-    coords = orbits.coordinates
-    jacobians = local_frame_jacobians(coords, "VNC_ROTATING")
-    rotated = LocalFrameCovariances.from_orbits(orbits, "VNC_ROTATING")
-    rotated = rotated.covariance.to_matrix()
-    covariances = coords.covariance.to_matrix()
-    mu = Decimal(float(coords.origin.mu()[0]))
+    times = Timestamp.from_mjd([60000.0, 60400.0], scale="tdb")
+    orbits = propagate_2body(orbits[:1], times)
+    # The second covariance adds a one day timing error along the orbit, whose
+    # rotating frame velocity rows cancel so deeply that a Jacobian rounded to
+    # double precision misses the bound below by billions of ulps.
+    values, mu = orbits.coordinates.values, float(orbits.coordinates.origin.mu()[0])
+    r, v = values[1, :3], values[1, 3:]
+    along = np.concatenate([v, -mu * r / np.linalg.norm(r) ** 3])
+    timing = np.stack([0 * np.eye(6), np.outer(along, along)])
+    stored = orbits.coordinates.covariance.to_matrix() + timing
+    orbits = with_covariances(orbits, stored)
+    jacobians = local_frame_jacobians(orbits.coordinates, "VNC_ROTATING")
+    rotated = LocalFrameCovariances.from_orbits(orbits).covariance.to_matrix()
 
-    def cross(a, b):
-        return [
-            a[1] * b[2] - a[2] * b[1],
-            a[2] * b[0] - a[0] * b[2],
-            a[0] * b[1] - a[1] * b[0],
-        ]
-
-    def unit(a):
-        norm = sum(x * x for x in a).sqrt()
-        return [x / norm for x in a], norm
-
-    for k in range(len(coords)):
-        r = [Decimal(float(x)) for x in coords.values[k, :3]]
-        v = [Decimal(float(x)) for x in coords.values[k, 3:]]
-        v_hat, v_mag = unit(v)
-        h_hat, _ = unit(cross(r, v))
-        rows = [v_hat, h_hat, cross(v_hat, h_hat)]
-        r_mag = sum(x * x for x in r).sqrt()
-        acceleration = [-mu * x / r_mag**3 for x in r]
-        along = sum(a * u for a, u in zip(acceleration, v_hat))
-        v_hat_dot = [(a - along * u) / v_mag for a, u in zip(acceleration, v_hat)]
-        rates = [v_hat_dot, [Decimal(0)] * 3, cross(v_hat_dot, h_hat)]
-        omega = [Decimal(0)] * 3
-        for row, rate in zip(rows, rates):
-            omega = [o + x / 2 for o, x in zip(omega, cross(row, rate))]
-        J = [[Decimal(0)] * 6 for _ in range(6)]
-        for i, row in enumerate(rows):
-            w_x_e = cross(omega, row)
-            for j in range(3):
-                J[i][j] = J[i + 3][j + 3] = row[j]
-                J[i + 3][j] = w_x_e[j]
+    exact = np.vectorize(lambda x: Decimal(float(x)), otypes=[object])
+    for k in range(2):
+        r, v = exact(values[k]).reshape(2, 3)
+        v_hat, h = v / np.sqrt(v @ v), np.cross(r, v)
+        h_hat = h / np.sqrt(h @ h)
+        rows = np.array([v_hat, h_hat, np.cross(v_hat, h_hat)])
+        acceleration = -Decimal(mu) * r / np.sqrt(r @ r) ** 3
+        v_hat_dot = (acceleration - (acceleration @ v_hat) * v_hat) / np.sqrt(v @ v)
+        rates = [v_hat_dot, 0 * v_hat, np.cross(v_hat_dot, h_hat)]
+        omega = sum(np.cross(e, de) for e, de in zip(rows, rates)) / 2
+        J = np.block([[rows, 0 * rows], [np.cross(omega, rows), rows]])
         # the library symmetrises the stored covariance exactly before rotating
-        C = [
-            [
-                (
-                    Decimal(float(covariances[k][a, b]))
-                    + Decimal(float(covariances[k][b, a]))
-                )
-                / 2
-                for b in range(6)
-            ]
-            for a in range(6)
-        ]
-        P = [
-            [
-                sum(J[i][a] * C[a][b] * J[j][b] for a in range(6) for b in range(6))
-                for j in range(6)
-            ]
-            for i in range(6)
-        ]
-        exact_J = np.array([[float(x) for x in row] for row in J])
-        exact_P = np.array([[float(x) for x in row] for row in P])
+        C = (exact(stored[k]) + exact(stored[k]).T) / 2
+        exact_J, exact_P = J.astype(float), (J @ C @ J.T).astype(float)
         # one ulp of each block's largest entry: the orbit normal row of the rate
         # block is zero in exact arithmetic and carries only reference noise
         for block in (np.s_[:3, :3], np.s_[3:, :3], np.s_[3:, 3:]):

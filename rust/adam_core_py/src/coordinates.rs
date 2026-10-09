@@ -2998,23 +2998,25 @@ fn oem_parse_kvn(path: &str) -> PyResult<String> {
     adam_core_rs_coords::oem_parse_kvn(std::path::Path::new(path)).map_err(time_value_error)
 }
 
-/// Fused OEM writer: validation, the ecliptic->equatorial rotation,
-/// millisecond rounding, time sort, labels, AU->km conversion, the covariance
-/// block (REF_FRAME or a local orbital frame), KVN rendering and the file
-/// write, with the keywords of `OemWriteOptions`. Returns the number of
-/// epochs rounded onto the millisecond grid.
+/// Fused OEM product writer (bead personal-cmy.37.4.4): one crossing owns
+/// the ecliptic->equatorial rotation, stable time sort, metadata assembly,
+/// AU->km conversion, covariance extraction, KVN rendering, and file write.
+/// The Python veneer keeps the legacy assertions, the single-time warning,
+/// the nondeterministic CREATION_DATE input, and the SPICE-dependent ITRF93
+/// pre-transform. The keywords are those of `OemWriteOptions`; returns the
+/// number of epochs OEM 3.0 rounded to the millisecond.
 #[pyfunction]
 #[pyo3(signature = (
-    path, orbits_ipc, *, version, originator, creation_date, object_name=None, object_id=None,
+    path, orbits_ipc, originator, creation_date, *, version, object_name=None, object_id=None,
     comments=Vec::new(), include_covariance=true, covariance_frame=None, table_frames_only=false
 ))]
 #[allow(clippy::too_many_arguments)]
 fn oem_write_orbits_kvn(
     path: &str,
     orbits_ipc: &Bound<'_, PyBytes>,
+    originator: &str,
+    creation_date: &str,
     version: String,
-    originator: String,
-    creation_date: String,
     object_name: Option<String>,
     object_id: Option<String>,
     comments: Vec<String>,
@@ -3027,8 +3029,6 @@ fn oem_write_orbits_kvn(
             .map_err(ades_error)?;
     let options = adam_core_rs_coords::oem_io::OemWriteOptions {
         version,
-        originator,
-        creation_date,
         object_name,
         object_id,
         comments,
@@ -3036,8 +3036,14 @@ fn oem_write_orbits_kvn(
         covariance_frame,
         table_frames_only,
     };
-    adam_core_rs_coords::oem_io::oem_write_kvn_file(std::path::Path::new(path), &orbits, &options)
-        .map_err(ades_error)
+    adam_core_rs_coords::oem_io::oem_write_orbits_kvn(
+        std::path::Path::new(path),
+        &orbits,
+        originator,
+        creation_date,
+        &options,
+    )
+    .map_err(ades_error)
 }
 
 #[pyfunction]
@@ -3055,28 +3061,49 @@ fn benchmark_oem_write_orbits_kvn(
     let orbits =
         DataOrbitBatch::try_from_nested_record_batch(&read_orbit_ipc(orbits_ipc.as_bytes())?)
             .map_err(ades_error)?;
-    let path = std::path::Path::new(path);
-    let options = adam_core_rs_coords::oem_io::OemWriteOptions::legacy(originator, creation_date);
+    let (path, options) = (std::path::Path::new(path), Default::default());
     benchmark_trials(reps, trials, warmup_reps, || {
-        adam_core_rs_coords::oem_io::oem_write_kvn_file(path, &orbits, &options).map_err(ades_error)
+        adam_core_rs_coords::oem_io::oem_write_orbits_kvn(
+            path,
+            &orbits,
+            originator,
+            creation_date,
+            &options,
+        )
+        .map_err(ades_error)
     })
 }
 
-fn local_frame_states<'a>(values: &'a PyReadonlyArray2<'_, f64>) -> PyResult<&'a [f64]> {
+/// The local orbital frame kernels on numpy: (N, 6) states (AU, AU/day), (N,)
+/// `mu` (AU^3/day^2, read for `_ROTATING` frames) and, for `J C J^T`, (N, 6, 6)
+/// covariances; returns (N, 6, 6).
+fn local_frame_numpy<'py>(
+    py: Python<'py>,
+    values: PyReadonlyArray2<'py, f64>,
+    covariances: Option<PyReadonlyArray3<'py, f64>>,
+    mu: PyReadonlyArray1<'py, f64>,
+    frame: &str,
+) -> PyResult<Bound<'py, PyArray3<f64>>> {
+    let frame = LocalFrame::parse(frame).map_err(ades_error)?;
     if values.as_array().ncols() != 6 {
         return Err(PyValueError::new_err("values must have shape (N, 6)"));
     }
-    Ok(values.as_slice()?)
-}
-
-fn local_frame_matrices(py: Python<'_>, values: Vec<f64>) -> PyResult<Bound<'_, PyArray3<f64>>> {
-    ndarray::Array3::from_shape_vec((values.len() / 36, 6, 6), values)
+    let (values, mu) = (values.as_slice()?, mu.as_slice()?);
+    let matrices = match covariances {
+        Some(covariances) if covariances.as_array().shape()[1..] != [6, 6] => {
+            return Err(PyValueError::new_err(
+                "covariances must have shape (N, 6, 6)",
+            ));
+        }
+        Some(covariances) => local_frame_covariances(values, covariances.as_slice()?, mu, frame),
+        None => local_frame_jacobians(values, mu, frame),
+    }
+    .map_err(ades_error)?;
+    ndarray::Array3::from_shape_vec((matrices.len() / 36, 6, 6), matrices)
         .map(|array| array.into_pyarray(py))
         .map_err(|err| PyValueError::new_err(err.to_string()))
 }
 
-/// (N, 6, 6) Jacobians from inertial (N, 6) states (AU, AU/day) to a local
-/// orbital frame; `mu` (N,) in AU^3/day^2 is read for `_ROTATING` frames.
 #[pyfunction]
 fn local_frame_jacobians_numpy<'py>(
     py: Python<'py>,
@@ -3084,14 +3111,9 @@ fn local_frame_jacobians_numpy<'py>(
     mu: PyReadonlyArray1<'py, f64>,
     frame: &str,
 ) -> PyResult<Bound<'py, PyArray3<f64>>> {
-    let frame = LocalFrame::parse(frame).map_err(ades_error)?;
-    let states = local_frame_states(&values)?;
-    let jacobians = local_frame_jacobians(states, mu.as_slice()?, frame).map_err(ades_error)?;
-    local_frame_matrices(py, jacobians)
+    local_frame_numpy(py, values, None, mu, frame)
 }
 
-/// (N, 6, 6) covariances `J C J^T` in a local orbital frame from inertial
-/// (N, 6) states and (N, 6, 6) covariances in AU and AU/day.
 #[pyfunction]
 fn local_frame_covariances_numpy<'py>(
     py: Python<'py>,
@@ -3100,16 +3122,7 @@ fn local_frame_covariances_numpy<'py>(
     mu: PyReadonlyArray1<'py, f64>,
     frame: &str,
 ) -> PyResult<Bound<'py, PyArray3<f64>>> {
-    let frame = LocalFrame::parse(frame).map_err(ades_error)?;
-    if covariances.as_array().shape()[1..] != [6, 6] {
-        return Err(PyValueError::new_err(
-            "covariances must have shape (N, 6, 6)",
-        ));
-    }
-    let states = local_frame_states(&values)?;
-    let rotated = local_frame_covariances(states, covariances.as_slice()?, mu.as_slice()?, frame)
-        .map_err(ades_error)?;
-    local_frame_matrices(py, rotated)
+    local_frame_numpy(py, values, Some(covariances), mu, frame)
 }
 
 /// Canonical registry name of a local orbital frame name, e.g. `rtn` -> `RSW_INERTIAL`.

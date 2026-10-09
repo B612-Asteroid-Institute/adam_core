@@ -68,49 +68,25 @@ Generate OEM from a Seed Orbit (Propagation Included)
        originator="ADAM CORE USER",
    )
 
-OEM 3.0 with Explicit Labels and Local Frame Covariances
----------------------------------------------------------
+OEM 3.0 with Local Frame Covariances
+------------------------------------
 
-``orbit_to_oem`` writes OEM 2.0 with ``REF_FRAME = EME2000`` by default. With
-``version="3.0"`` it writes ``REF_FRAME = ICRF`` for equatorial states, 16
-significant digits and a UTC ``CREATION_DATE``. ``CENTER_NAME`` comes from the
-origin and ``TIME_SYSTEM`` from the Timestamp scale in both versions.
+``version="3.0"`` writes ``REF_FRAME = ICRF``, 16 significant digits and millisecond
+epochs. ``covariance_frame`` writes the covariance blocks in RSW, RTN or TNW, or in
+3.0 in any SANA registry frame such as ``VNC_ROTATING``, which a COMMENT notes.
 
 .. code-block:: python
 
    from adam_core.coordinates import LocalFrameCovariances
    from adam_core.orbits.oem_io import orbit_to_oem
 
-   # propagated: Orbits of one object, frame "equatorial", origin SUN, scale "tdb"
-   # States plus a covariance block per epoch in VNC_ROTATING, a SANA frame
-   # CCSDS 502.0-B-3 admits through annex B5 (the file says so in a COMMENT).
-   # covariance_frame also takes RSW, RTN and TNW (table 5-4, also on 2.0), the
-   # registry names RSW, TNW and VNC with _INERTIAL or _ROTATING (RTN or RIC in
-   # place of RSW), and the bare names RIC and VNC, written as RSW_INERTIAL and
-   # VNC_INERTIAL. Names are case insensitive; None writes the state covariance
-   # in REF_FRAME.
+   # One object_id with multiple epochs, as above.
+   orbits = propagated_orbits
+   orbit_to_oem(orbits, "vnc.oem", version="3.0", covariance_frame="VNC_ROTATING")
    orbit_to_oem(
-       propagated,
-       "states_cov_vnc_rotating.oem",
-       version="3.0",
-       object_name="99942 Apophis",
-       covariance_frame="VNC_ROTATING",
+       orbits, "tnw.oem", version="3.0", covariance_frame="TNW", table_frames_only=True
    )
-
-   # Table 5-4 frames only (RSW, RTN, TNW), for readers that know just that list.
-   orbit_to_oem(
-       propagated,
-       "states_cov_tnw.oem",
-       version="3.0",
-       covariance_frame="TNW",
-       table_frames_only=True,
-   )
-
-   # Or states only, with the covariance as a separate full precision product.
-   orbit_to_oem(propagated, "states.oem", version="3.0", include_covariance=False)
-   LocalFrameCovariances.from_orbits(propagated, frame="VNC_ROTATING").to_parquet(
-       "covariance_vnc_rotating.parquet"
-   )
+   LocalFrameCovariances.from_orbits(orbits, "VNC_ROTATING").to_parquet("vnc.parquet")
 
 Read OEM Back into ``Orbits``
 -----------------------------

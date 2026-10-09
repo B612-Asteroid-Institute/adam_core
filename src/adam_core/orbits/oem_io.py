@@ -24,9 +24,9 @@ from . import Orbits
 
 logger = logging.getLogger(__name__)
 
-# Default CCSDS OEM version of orbit_to_oem, the Python `oem` package's
-# CURRENT_VERSION ('2.0'), which this module's Rust KVN engine replaced
-# (bead personal-cmy.28).
+# Default CCSDS OEM version of orbit_to_oem. Matches the Python `oem`
+# package's CURRENT_VERSION ('2.0'), which this module's Rust KVN engine
+# replaced (bead personal-cmy.28).
 OEM_VERSION = "2.0"
 
 REF_FRAME_VALUES = (
@@ -326,29 +326,16 @@ def orbit_to_oem(
         The Orbit object to convert, must be pre-propagated to the desired times.
     output_file : str
         Path to the output OEM file
-    originator : str
-        ORIGINATOR header value.
     version : str
-        "2.0" (REF_FRAME EME2000, 15 significant digits) or "3.0" (REF_FRAME
-        ICRF, 16 digits, epochs rounded to the millisecond with a warning).
-    object_name, object_id : str, optional
-        OBJECT_NAME and OBJECT_ID, default the orbits' object_id.
-    creation_date : str, optional
-        CREATION_DATE, default the write time (local for 2.0, UTC for 3.0).
-    comments : sequence of str
-        COMMENT lines written right after META_START.
-    include_covariance : bool
-        False writes no covariance block.
-    covariance_frame : str, optional
-        None or the REF_FRAME label writes the state covariance in REF_FRAME.
-        RSW, RTN and TNW (table 5-4 of CCSDS 502.0-B-3) write the rotated
-        covariance under that COV_REF_FRAME. Version 3.0 also takes the SANA
-        registry names RSW_INERTIAL, RSW_ROTATING, TNW_INERTIAL, TNW_ROTATING,
-        VNC_INERTIAL and VNC_ROTATING, RTN or RIC in place of RSW, and the bare
-        names RIC and VNC (meaning _INERTIAL); these are written as the registry
-        name with an annex B5 COMMENT. Names are case insensitive.
-    table_frames_only : bool
-        Refuse covariance frames outside RSW, RTN, TNW (always on for 2.0).
+        "2.0" (REF_FRAME EME2000) or "3.0" (REF_FRAME ICRF, 16 significant
+        digits, epochs rounded to the millisecond with a warning).
+    object_name, object_id, creation_date, comments : optional
+        OBJECT_NAME and OBJECT_ID (default the object_id), CREATION_DATE
+        (default now, UTC for 3.0) and COMMENT lines after META_START.
+    include_covariance, covariance_frame, table_frames_only : optional
+        Write covariance blocks in REF_FRAME (None) or a local orbital frame:
+        RSW, RTN, TNW, or in 3.0 any name ``LocalFrameCovariances`` accepts,
+        unless table_frames_only.
 
     Returns
     -------
@@ -374,10 +361,10 @@ def orbit_to_oem(
         orbits,
         output_file,
         originator,
-        version=version,
+        version,
+        creation_date,
         object_name=object_name,
         object_id=object_id,
-        creation_date=creation_date,
         comments=comments,
         include_covariance=include_covariance,
         covariance_frame=covariance_frame,
@@ -391,14 +378,16 @@ def _write_oem_fused(
     orbits: Orbits,
     output_file: str,
     originator: str,
-    *,
     version: str = OEM_VERSION,
     creation_date: Optional[str] = None,
     **options: Any,
 ) -> None:
-    """One Rust call writes the file (see ``orbit_to_oem``). The SPICE dependent
-    ITRF93 transform runs first, and the CREATION_DATE default stays a Python
-    input: local time for 2.0, as the legacy writer wrote, UTC for 3.0."""
+    """One fused Rust crossing owns the equatorial rotation (ecliptic input),
+    stable time sort, metadata assembly, AU->km conversion, covariance
+    extraction, KVN rendering, and file write (bead personal-cmy.37.4.4).
+    The SPICE/time-dependent ITRF93 transform stays on the Rust-owned
+    ``transform_coordinates`` crossing; the nondeterministic CREATION_DATE
+    stays a Python input like other nondeterministic inputs."""
     from adam_core import _rust_native as _rn
 
     from .arrow_bridge import orbits_to_ipc
@@ -420,9 +409,9 @@ def _write_oem_fused(
     rounded = _rn.oem_write_orbits_kvn(
         str(output_file),
         orbits_to_ipc(orbits),
+        originator,
+        creation_date,
         version=version,
-        originator=originator,
-        creation_date=creation_date,
         **options,
     )
     if rounded:
