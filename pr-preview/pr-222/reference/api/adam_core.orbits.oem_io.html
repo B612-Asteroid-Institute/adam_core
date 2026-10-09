@@ -452,22 +452,25 @@
 <dd class="field-odd"><ul class="simple">
 <li><p><strong>orbit</strong> (<em>Orbit</em>) – The Orbit object to convert, must be pre-propagated to the desired times.</p></li>
 <li><p><strong>output_file</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – Path to the output OEM file</p></li>
-<li><p><strong>originator</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – ORIGINATOR header value.</p></li>
-<li><p><strong>version</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – “2.0” (REF_FRAME EME2000, 15 significant digits) or “3.0” (REF_FRAME
-ICRF, 16 digits, epochs rounded to the millisecond with a warning).</p></li>
-<li><p><strong>object_name</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – OBJECT_NAME and OBJECT_ID, default the orbits’ object_id.</p></li>
-<li><p><strong>object_id</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – OBJECT_NAME and OBJECT_ID, default the orbits’ object_id.</p></li>
-<li><p><strong>creation_date</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – CREATION_DATE, default the write time (local for 2.0, UTC for 3.0).</p></li>
-<li><p><strong>comments</strong> (<em>sequence</em><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – COMMENT lines written right after META_START.</p></li>
-<li><p><strong>include_covariance</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – False writes no covariance block.</p></li>
-<li><p><strong>covariance_frame</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a><em>, </em><em>optional</em>) – None or the REF_FRAME label writes the state covariance in REF_FRAME.
-RSW, RTN and TNW (table 5-4 of CCSDS 502.0-B-3) write the rotated
-covariance under that COV_REF_FRAME. Version 3.0 also takes the SANA
-registry names RSW_INERTIAL, RSW_ROTATING, TNW_INERTIAL, TNW_ROTATING,
-VNC_INERTIAL and VNC_ROTATING, RTN or RIC in place of RSW, and the bare
-names RIC and VNC (meaning _INERTIAL); these are written as the registry
-name with an annex B5 COMMENT. Names are case insensitive.</p></li>
-<li><p><strong>table_frames_only</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a>) – Refuse covariance frames outside RSW, RTN, TNW (always on for 2.0).</p></li>
+<li><p><strong>version</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – “2.0” (REF_FRAME EME2000) or “3.0” (REF_FRAME ICRF, 16 significant
+digits, epochs rounded to the millisecond with a warning).</p></li>
+<li><p><strong>object_name</strong> (<em>optional</em>) – OBJECT_NAME and OBJECT_ID (default the object_id), CREATION_DATE
+(default now, UTC for 3.0) and COMMENT lines after META_START.</p></li>
+<li><p><strong>object_id</strong> (<em>optional</em>) – OBJECT_NAME and OBJECT_ID (default the object_id), CREATION_DATE
+(default now, UTC for 3.0) and COMMENT lines after META_START.</p></li>
+<li><p><strong>creation_date</strong> (<em>optional</em>) – OBJECT_NAME and OBJECT_ID (default the object_id), CREATION_DATE
+(default now, UTC for 3.0) and COMMENT lines after META_START.</p></li>
+<li><p><strong>comments</strong> (<em>optional</em>) – OBJECT_NAME and OBJECT_ID (default the object_id), CREATION_DATE
+(default now, UTC for 3.0) and COMMENT lines after META_START.</p></li>
+<li><p><strong>include_covariance</strong> (<em>optional</em>) – Write covariance blocks in REF_FRAME (None) or a local orbital frame:
+RSW, RTN, TNW, or in 3.0 any name <code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances</span></code> accepts,
+unless table_frames_only.</p></li>
+<li><p><strong>covariance_frame</strong> (<em>optional</em>) – Write covariance blocks in REF_FRAME (None) or a local orbital frame:
+RSW, RTN, TNW, or in 3.0 any name <code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances</span></code> accepts,
+unless table_frames_only.</p></li>
+<li><p><strong>table_frames_only</strong> (<em>optional</em>) – Write covariance blocks in REF_FRAME (None) or a local orbital frame:
+RSW, RTN, TNW, or in 3.0 any name <code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances</span></code> accepts,
+unless table_frames_only.</p></li>
 </ul>
 </dd>
 <dt class="field-even">Returns<span class="colon">:</span></dt>

@@ -430,15 +430,7 @@
         </div>
         <article role="main" id="furo-main-content">
           <h1>Source code for adam_core.coordinates.local_orbital_frames</h1><div class="highlight"><pre>
-<span></span><span class="sd">"""Local orbital frames (SANA orbit-relative registry names) for covariances.</span>
-
-<span class="sd">RSW (RTN, RIC): x along position, z along the orbital angular momentum h.</span>
-<span class="sd">TNW: x along velocity, z along h. VNC: x along velocity, y along h. Bare names</span>
-<span class="sd">resolve to ``_INERTIAL``, ``_ROTATING`` adds the two-body frame rate to the</span>
-<span class="sd">velocity rows. The Jacobians and the exact covariance product live in Rust.</span>
-<span class="sd">"""</span>
-
-<span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
+<span></span><span class="sd">"""Covariances in the local orbital frames RSW (RTN, RIC), TNW and VNC."""</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
@@ -446,21 +438,18 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
-
+<span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoordinateCovariances</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
 
+<span class="n">_Mu</span> <span class="o">=</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">]]</span>
 <span class="k">if</span> <span class="n">TYPE_CHECKING</span><span class="p">:</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 
-<span class="n">_Mu</span> <span class="o">=</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Union</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="n">npt</span><span class="o">.</span><span class="n">ArrayLike</span><span class="p">]]</span>
-
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_kernel_inputs</span><span class="p">(</span><span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mu</span><span class="p">:</span> <span class="n">_Mu</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""Canonical frame name, (N, 6) values and (N,) mu for the Rust kernels."""</span>
     <span class="k">if</span> <span class="n">coords</span><span class="o">.</span><span class="n">frame</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"equatorial"</span><span class="p">,</span> <span class="s2">"ecliptic"</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="sa">f</span><span class="s2">"Local orbital frames need an inertial frame, got </span><span class="si">{</span><span class="n">coords</span><span class="o">.</span><span class="n">frame</span><span class="si">!r}</span><span class="s2">."</span>
@@ -469,8 +458,7 @@
     <span class="k">if</span> <span class="n">mu</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">mu</span> <span class="o">=</span> <span class="n">coords</span><span class="o">.</span><span class="n">origin</span><span class="o">.</span><span class="n">mu</span><span class="p">()</span> <span class="k">if</span> <span class="n">canonical</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">"_ROTATING"</span><span class="p">)</span> <span class="k">else</span> <span class="mf">0.0</span>
     <span class="n">mu</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">broadcast_to</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">mu</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">),))</span>
-    <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">canonical</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">mu</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">values</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">mu</span><span class="p">),</span> <span class="n">canonical</span>
 
 
 <div class="viewcode-block" id="local_frame_jacobians">
@@ -478,30 +466,21 @@
 <span class="k">def</span><span class="w"> </span><span class="nf">local_frame_jacobians</span><span class="p">(</span>
     <span class="n">coords</span><span class="p">:</span> <span class="n">CartesianCoordinates</span><span class="p">,</span> <span class="n">frame</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mu</span><span class="p">:</span> <span class="n">_Mu</span> <span class="o">=</span> <span class="kc">None</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">]:</span>
-<span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    (N, 6, 6) Jacobians from inertial position and velocity to a local orbital</span>
-<span class="sd">    frame (name or alias), so a covariance there is ``J @ C @ J.T``. ``mu``</span>
-<span class="sd">    (AU^3/day^2, default the origin's) sets the ``_ROTATING`` frame rate.</span>
-<span class="sd">    """</span>
-    <span class="n">canonical</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">mu</span> <span class="o">=</span> <span class="n">_kernel_inputs</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">mu</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">local_frame_jacobians_numpy</span><span class="p">(</span><span class="n">values</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">canonical</span><span class="p">)</span></div>
+<span class="w">    </span><span class="sd">"""(N, 6, 6) Jacobians J into ``frame``; mu (AU^3/day^2) defaults to the origin's."""</span>
+    <span class="k">return</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">local_frame_jacobians_numpy</span><span class="p">(</span><span class="o">*</span><span class="n">_kernel_inputs</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">mu</span><span class="p">))</span></div>
 
 
 
 <div class="viewcode-block" id="LocalFrameCovariances">
 <a class="viewcode-back" href="../../../reference/api/adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">LocalFrameCovariances</span><span class="p">(</span><span class="n">qv</span><span class="o">.</span><span class="n">Table</span><span class="p">):</span>
-<span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    Per epoch covariances in a local orbital frame (AU, AU/day), one row per</span>
-<span class="sd">    source orbit. Rows without a source covariance stay NaN.</span>
-<span class="sd">    """</span>
+<span class="w">    </span><span class="sd">"""Covariances in a local orbital frame (AU, AU/day), one row per orbit."""</span>
 
     <span class="n">orbit_id</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">()</span>
     <span class="n">object_id</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">time</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">as_column</span><span class="p">()</span>
     <span class="n">covariance</span> <span class="o">=</span> <span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">as_column</span><span class="p">()</span>
     <span class="n">origin</span> <span class="o">=</span> <span class="n">Origin</span><span class="o">.</span><span class="n">as_column</span><span class="p">()</span>
-    <span class="c1">#: Canonical local frame name, and the inertial frame its axes were built from.</span>
     <span class="n">frame</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">StringAttribute</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="s2">"unspecified"</span><span class="p">)</span>
     <span class="n">inertial_frame</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">StringAttribute</span><span class="p">(</span><span class="n">default</span><span class="o">=</span><span class="s2">"unspecified"</span><span class="p">)</span>
 
@@ -511,16 +490,13 @@
     <span class="k">def</span><span class="w"> </span><span class="nf">from_orbits</span><span class="p">(</span>
         <span class="bp">cls</span><span class="p">,</span> <span class="n">orbits</span><span class="p">:</span> <span class="s2">"Orbits"</span><span class="p">,</span> <span class="n">frame</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"VNC_ROTATING"</span><span class="p">,</span> <span class="n">mu</span><span class="p">:</span> <span class="n">_Mu</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="s2">"LocalFrameCovariances"</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Rotate the covariances of ``orbits`` into ``frame`` (name or alias)."""</span>
+<span class="w">        </span><span class="sd">"""Rotate the covariances of ``orbits`` into ``frame``, e.g. ``TNW_INERTIAL``."""</span>
         <span class="n">coords</span> <span class="o">=</span> <span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span>
         <span class="k">if</span> <span class="n">coords</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">is_all_nan</span><span class="p">():</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"The orbits carry no covariance."</span><span class="p">)</span>
-        <span class="n">canonical</span><span class="p">,</span> <span class="n">values</span><span class="p">,</span> <span class="n">mu</span> <span class="o">=</span> <span class="n">_kernel_inputs</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">mu</span><span class="p">)</span>
+        <span class="n">values</span><span class="p">,</span> <span class="n">mu</span><span class="p">,</span> <span class="n">canonical</span> <span class="o">=</span> <span class="n">_kernel_inputs</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="n">frame</span><span class="p">,</span> <span class="n">mu</span><span class="p">)</span>
         <span class="n">rotated</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">local_frame_covariances_numpy</span><span class="p">(</span>
-            <span class="n">values</span><span class="p">,</span>
-            <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">(),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-            <span class="n">mu</span><span class="p">,</span>
-            <span class="n">canonical</span><span class="p">,</span>
+            <span class="n">values</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">coords</span><span class="o">.</span><span class="n">covariance</span><span class="o">.</span><span class="n">to_matrix</span><span class="p">()),</span> <span class="n">mu</span><span class="p">,</span> <span class="n">canonical</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="bp">cls</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
             <span class="n">orbit_id</span><span class="o">=</span><span class="n">orbits</span><span class="o">.</span><span class="n">orbit_id</span><span class="p">,</span>

@@ -456,9 +456,9 @@
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
-<span class="c1"># Default CCSDS OEM version of orbit_to_oem, the Python `oem` package's</span>
-<span class="c1"># CURRENT_VERSION ('2.0'), which this module's Rust KVN engine replaced</span>
-<span class="c1"># (bead personal-cmy.28).</span>
+<span class="c1"># Default CCSDS OEM version of orbit_to_oem. Matches the Python `oem`</span>
+<span class="c1"># package's CURRENT_VERSION ('2.0'), which this module's Rust KVN engine</span>
+<span class="c1"># replaced (bead personal-cmy.28).</span>
 <span class="n">OEM_VERSION</span> <span class="o">=</span> <span class="s2">"2.0"</span>
 
 <span class="n">REF_FRAME_VALUES</span> <span class="o">=</span> <span class="p">(</span>
@@ -760,29 +760,16 @@
 <span class="sd">        The Orbit object to convert, must be pre-propagated to the desired times.</span>
 <span class="sd">    output_file : str</span>
 <span class="sd">        Path to the output OEM file</span>
-<span class="sd">    originator : str</span>
-<span class="sd">        ORIGINATOR header value.</span>
 <span class="sd">    version : str</span>
-<span class="sd">        "2.0" (REF_FRAME EME2000, 15 significant digits) or "3.0" (REF_FRAME</span>
-<span class="sd">        ICRF, 16 digits, epochs rounded to the millisecond with a warning).</span>
-<span class="sd">    object_name, object_id : str, optional</span>
-<span class="sd">        OBJECT_NAME and OBJECT_ID, default the orbits' object_id.</span>
-<span class="sd">    creation_date : str, optional</span>
-<span class="sd">        CREATION_DATE, default the write time (local for 2.0, UTC for 3.0).</span>
-<span class="sd">    comments : sequence of str</span>
-<span class="sd">        COMMENT lines written right after META_START.</span>
-<span class="sd">    include_covariance : bool</span>
-<span class="sd">        False writes no covariance block.</span>
-<span class="sd">    covariance_frame : str, optional</span>
-<span class="sd">        None or the REF_FRAME label writes the state covariance in REF_FRAME.</span>
-<span class="sd">        RSW, RTN and TNW (table 5-4 of CCSDS 502.0-B-3) write the rotated</span>
-<span class="sd">        covariance under that COV_REF_FRAME. Version 3.0 also takes the SANA</span>
-<span class="sd">        registry names RSW_INERTIAL, RSW_ROTATING, TNW_INERTIAL, TNW_ROTATING,</span>
-<span class="sd">        VNC_INERTIAL and VNC_ROTATING, RTN or RIC in place of RSW, and the bare</span>
-<span class="sd">        names RIC and VNC (meaning _INERTIAL); these are written as the registry</span>
-<span class="sd">        name with an annex B5 COMMENT. Names are case insensitive.</span>
-<span class="sd">    table_frames_only : bool</span>
-<span class="sd">        Refuse covariance frames outside RSW, RTN, TNW (always on for 2.0).</span>
+<span class="sd">        "2.0" (REF_FRAME EME2000) or "3.0" (REF_FRAME ICRF, 16 significant</span>
+<span class="sd">        digits, epochs rounded to the millisecond with a warning).</span>
+<span class="sd">    object_name, object_id, creation_date, comments : optional</span>
+<span class="sd">        OBJECT_NAME and OBJECT_ID (default the object_id), CREATION_DATE</span>
+<span class="sd">        (default now, UTC for 3.0) and COMMENT lines after META_START.</span>
+<span class="sd">    include_covariance, covariance_frame, table_frames_only : optional</span>
+<span class="sd">        Write covariance blocks in REF_FRAME (None) or a local orbital frame:</span>
+<span class="sd">        RSW, RTN, TNW, or in 3.0 any name ``LocalFrameCovariances`` accepts,</span>
+<span class="sd">        unless table_frames_only.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -808,10 +795,10 @@
         <span class="n">orbits</span><span class="p">,</span>
         <span class="n">output_file</span><span class="p">,</span>
         <span class="n">originator</span><span class="p">,</span>
-        <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
+        <span class="n">version</span><span class="p">,</span>
+        <span class="n">creation_date</span><span class="p">,</span>
         <span class="n">object_name</span><span class="o">=</span><span class="n">object_name</span><span class="p">,</span>
         <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
-        <span class="n">creation_date</span><span class="o">=</span><span class="n">creation_date</span><span class="p">,</span>
         <span class="n">comments</span><span class="o">=</span><span class="n">comments</span><span class="p">,</span>
         <span class="n">include_covariance</span><span class="o">=</span><span class="n">include_covariance</span><span class="p">,</span>
         <span class="n">covariance_frame</span><span class="o">=</span><span class="n">covariance_frame</span><span class="p">,</span>
@@ -826,14 +813,16 @@
     <span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
     <span class="n">output_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">originator</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
-    <span class="o">*</span><span class="p">,</span>
     <span class="n">version</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">OEM_VERSION</span><span class="p">,</span>
     <span class="n">creation_date</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""One Rust call writes the file (see ``orbit_to_oem``). The SPICE dependent</span>
-<span class="sd">    ITRF93 transform runs first, and the CREATION_DATE default stays a Python</span>
-<span class="sd">    input: local time for 2.0, as the legacy writer wrote, UTC for 3.0."""</span>
+<span class="w">    </span><span class="sd">"""One fused Rust crossing owns the equatorial rotation (ecliptic input),</span>
+<span class="sd">    stable time sort, metadata assembly, AU-&gt;km conversion, covariance</span>
+<span class="sd">    extraction, KVN rendering, and file write (bead personal-cmy.37.4.4).</span>
+<span class="sd">    The SPICE/time-dependent ITRF93 transform stays on the Rust-owned</span>
+<span class="sd">    ``transform_coordinates`` crossing; the nondeterministic CREATION_DATE</span>
+<span class="sd">    stays a Python input like other nondeterministic inputs."""</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
     <span class="kn">from</span><span class="w"> </span><span class="nn">.arrow_bridge</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbits_to_ipc</span>
@@ -855,9 +844,9 @@
     <span class="n">rounded</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">oem_write_orbits_kvn</span><span class="p">(</span>
         <span class="nb">str</span><span class="p">(</span><span class="n">output_file</span><span class="p">),</span>
         <span class="n">orbits_to_ipc</span><span class="p">(</span><span class="n">orbits</span><span class="p">),</span>
+        <span class="n">originator</span><span class="p">,</span>
+        <span class="n">creation_date</span><span class="p">,</span>
         <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
-        <span class="n">originator</span><span class="o">=</span><span class="n">originator</span><span class="p">,</span>
-        <span class="n">creation_date</span><span class="o">=</span><span class="n">creation_date</span><span class="p">,</span>
         <span class="o">**</span><span class="n">options</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">if</span> <span class="n">rounded</span><span class="p">:</span>
