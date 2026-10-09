@@ -452,7 +452,6 @@
     <span class="n">spherical_to_cartesian_numpy</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
-    <span class="n">contiguous_record_batch</span><span class="p">,</span>
     <span class="n">ensure_spice_backend</span><span class="p">,</span>
     <span class="n">stamp_adam_core_metadata</span><span class="p">,</span>
     <span class="n">table_from_record_batch</span><span class="p">,</span>
@@ -560,7 +559,13 @@
         <span class="n">scale</span><span class="o">=</span><span class="n">coords</span><span class="o">.</span><span class="n">time</span><span class="o">.</span><span class="n">scale</span><span class="p">,</span>
         <span class="n">schema_name</span><span class="o">=</span><span class="s2">"CoordinateBatch.cartesian.nested.quivr.v1"</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="k">return</span> <span class="n">contiguous_record_batch</span><span class="p">(</span><span class="n">table</span><span class="p">)</span>
+    <span class="n">batches</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">to_batches</span><span class="p">(</span><span class="n">max_chunksize</span><span class="o">=</span><span class="nb">max</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="k">if</span> <span class="n">batches</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">batches</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">pa</span><span class="o">.</span><span class="n">RecordBatch</span><span class="o">.</span><span class="n">from_arrays</span><span class="p">(</span>
+        <span class="p">[</span><span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">([],</span> <span class="nb">type</span><span class="o">=</span><span class="n">field</span><span class="o">.</span><span class="n">type</span><span class="p">)</span> <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="p">],</span>
+        <span class="n">schema</span><span class="o">=</span><span class="n">table</span><span class="o">.</span><span class="n">schema</span><span class="p">,</span>
+    <span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_transform_coordinates_native</span><span class="p">(</span>
