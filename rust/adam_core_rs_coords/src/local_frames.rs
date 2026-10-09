@@ -73,17 +73,19 @@ const ALL_FRAMES: [LocalFrame; 6] = [
 ];
 
 impl LocalFrame {
-    /// Parse a registry name (`VNC_ROTATING`, `TNW_INERTIAL`, ...), an alias
-    /// (`RTN`, `RIC` mean RSW) or a bare family name (meaning `_INERTIAL`),
-    /// case-insensitively and ignoring surrounding whitespace.
+    /// Parse a registry name (`VNC_ROTATING`, `TNW_INERTIAL`, ...) or a bare
+    /// family name (meaning `_INERTIAL`), case-insensitively and ignoring
+    /// surrounding whitespace. RTN and RIC are aliases of RSW.
     pub fn parse(name: &str) -> SchemaResult<Self> {
         let upper = name.trim().to_ascii_uppercase();
-        // Aliases are bare names only: RTN_ROTATING is not a registry name.
+        let family = upper.split('_').next().unwrap_or_default();
+        let upper = match family {
+            "RTN" | "RIC" => format!("RSW{}", &upper[3..]),
+            _ => upper,
+        };
         let canonical = match upper.as_str() {
-            "RSW" | "RTN" | "RIC" => "RSW_INERTIAL",
-            "TNW" => "TNW_INERTIAL",
-            "VNC" => "VNC_INERTIAL",
-            other => other,
+            "RSW" | "TNW" | "VNC" => format!("{upper}_INERTIAL"),
+            _ => upper,
         };
         ALL_FRAMES
             .into_iter()
@@ -619,6 +621,10 @@ mod tests {
             ("vnc_rotating", "VNC_ROTATING"),
             ("\tTnw_Inertial\n", "TNW_INERTIAL"),
             ("  Rsw_Rotating", "RSW_ROTATING"),
+            ("rtn_rotating", "RSW_ROTATING"),
+            ("RTN_INERTIAL", "RSW_INERTIAL"),
+            ("RIC_ROTATING", "RSW_ROTATING"),
+            ("ric_inertial", "RSW_INERTIAL"),
         ];
         for (name, canonical) in cases {
             assert_eq!(LocalFrame::parse(name).unwrap().canonical_name(), canonical);
@@ -641,7 +647,8 @@ mod tests {
             "VNC_",
             "VNC ROTATING",
             "QSW",
-            "RTN_ROTATING",
+            "RTN_",
+            "RICE",
             "RSW_INERTIAL_",
         ] {
             assert!(LocalFrame::parse(name).is_err(), "{name:?} parsed");

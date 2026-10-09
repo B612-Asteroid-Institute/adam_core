@@ -11,6 +11,11 @@ This file contains notable changes in adam-core
 - `LocalFrameCovariances` rotates covariances into RSW, TNW or VNC frames with an exact,
   once-rounded `J C J^T` evaluated in Rust.
 
+### Changed
+
+- `orbit_to_oem` writes the top left 6x6 block of 9x9 covariances (orbits with
+  non-gravitational parameters) instead of dropping them, in OEM 2.0 too.
+
 ## [0.5.8] - 2026-10-05
 
 ### Added

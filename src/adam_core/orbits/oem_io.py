@@ -190,6 +190,9 @@ def _oem_to_adam_frame(frame: str) -> str:
     """
     frame_map = {
         "EME2000": "equatorial",  # Earth Mean Equator and Equinox of J2000
+        "ICRF": "equatorial",  # International Celestial Reference Frame
+        "J2000": "equatorial",
+        "GCRF": "equatorial",  # Geocentric Celestial Reference Frame
         "ITRF-93": "itrf93",  # International Terrestrial Reference Frame
     }
 
@@ -338,12 +341,15 @@ def orbit_to_oem(
     include_covariance : bool
         False writes no covariance block.
     covariance_frame : str, optional
-        None writes the state covariance in REF_FRAME. A local orbital frame name
-        (RSW, RTN, TNW, VNC, with _INERTIAL or _ROTATING) writes the rotated
-        covariance under that COV_REF_FRAME. Names outside table 5-4 of
-        CCSDS 502.0-B-3 get an annex B5 COMMENT.
+        None or the REF_FRAME label writes the state covariance in REF_FRAME.
+        RSW, RTN and TNW (table 5-4 of CCSDS 502.0-B-3) write the rotated
+        covariance under that COV_REF_FRAME. Version 3.0 also takes the SANA
+        registry names RSW_INERTIAL, RSW_ROTATING, TNW_INERTIAL, TNW_ROTATING,
+        VNC_INERTIAL and VNC_ROTATING, RTN or RIC in place of RSW, and the bare
+        names RIC and VNC (meaning _INERTIAL); these are written as the registry
+        name with an annex B5 COMMENT. Names are case insensitive.
     table_frames_only : bool
-        Refuse covariance frames outside RSW, RTN, TNW.
+        Refuse covariance frames outside RSW, RTN, TNW (always on for 2.0).
     significant_digits : int, optional
         Mantissa digits of states and covariances, 1 to 16, default 15 for 2.0
         and 16 for 3.0.
@@ -378,7 +384,7 @@ def orbit_to_oem(
         object_name=object_name,
         object_id=object_id,
         creation_date=creation_date,
-        comments=list(comments),
+        comments=comments,
         include_covariance=include_covariance,
         covariance_frame=covariance_frame,
         table_frames_only=table_frames_only,

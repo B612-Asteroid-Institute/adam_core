@@ -765,9 +765,8 @@ pub struct OemWriteOptions {
     pub table_frames_only: bool,
     /// Mantissa digits of states and covariances, 1 to 16.
     pub significant_digits: usize,
-    /// `REF_FRAME`, trimmed and uppercased: EME2000, ICRF, J2000 or GCRF for
-    /// equatorial states and ITRF-93 for itrf93 states. None or empty means
-    /// EME2000 (2.0) or ICRF (3.0) for equatorial states.
+    /// `REF_FRAME`, trimmed and uppercased: EME2000, ICRF, J2000 or GCRF.
+    /// None or empty means EME2000 (2.0) or ICRF (3.0).
     pub ref_frame_label: Option<String>,
 }
 
@@ -919,10 +918,13 @@ fn py_list<'a>(items: impl IntoIterator<Item = Option<&'a str>>) -> String {
     format!("[{}]", items.join(", "))
 }
 
-/// Covariance of `row` when it is a valid 6x6 that is not all NaN (legacy rule).
-fn state_covariance(covariance: Option<&CovarianceBatch>, row: usize) -> Option<&[f64]> {
-    let covariance = covariance.filter(|covariance| covariance.dimension == 6)?;
-    let matrix = covariance.row_values(row);
+/// Top left 6x6 block of the covariance of `row` (9x9 rows carry the
+/// non-gravitational parameters after the state) when the row is valid and
+/// the block is not all NaN (legacy rule).
+fn state_covariance(covariance: Option<&CovarianceBatch>, row: usize) -> Option<[f64; 36]> {
+    let covariance = covariance.filter(|covariance| covariance.dimension >= 6)?;
+    let (values, dimension) = (covariance.row_values(row), covariance.dimension);
+    let matrix: [f64; 36] = std::array::from_fn(|index| values[index / 6 * dimension + index % 6]);
     (covariance.is_row_valid(row) && !matrix.iter().all(|value| value.is_nan())).then_some(matrix)
 }
 
@@ -946,8 +948,7 @@ fn covariance_record(epoch: Epoch, frame: &str, matrix_au: &[f64]) -> OemCovaria
 /// the epochs to the millisecond first), and the covariance is written in
 /// REF_FRAME or rotated into a local orbital frame. `mu` (AU^3/day^2, one
 /// entry per input row) is required for `_ROTATING` covariance frames.
-/// itrf93 states are written as ITRF-93; the SPICE-dependent transform to
-/// equatorial stays with the caller. Errors name states by their input row.
+/// Errors name states by their input row.
 pub fn oem_render_kvn(
     orbits: &OrbitBatch,
     options: &OemWriteOptions,
@@ -964,19 +965,18 @@ pub fn oem_render_kvn(
     };
     let rotated;
     let orbits = match orbits.coordinates.frame {
-        Frame::Equatorial | Frame::Itrf93 => orbits,
+        Frame::Equatorial => orbits,
         Frame::Ecliptic => {
             rotated = orbits.rotate_frame(Frame::Equatorial)?;
             &rotated
         }
         other => {
             return Err(invalid(format!(
-                "OEM writer requires equatorial, ecliptic or itrf93 coordinates, got {other:?}; \
+                "OEM writer requires equatorial or ecliptic coordinates, got {other:?}; \
                  transform first"
             )))
         }
     };
-    let frame = orbits.coordinates.frame;
     let times = orbits
         .coordinates
         .times
@@ -995,8 +995,8 @@ pub fn oem_render_kvn(
     }
     let scale = times.scale;
 
-    // One object about one center (CCSDS 502.0-B-3 5.1.3); 2.0 writes the
-    // first center, as the legacy writer did.
+    // One object about one center (CCSDS 502.0-B-3 5.1.3); 2.0 without a
+    // covariance frame writes the first center, as the legacy writer did.
     let object_ids = distinct(
         orbits
             .object_id
@@ -1011,8 +1011,9 @@ pub fn oem_render_kvn(
             .iter()
             .map(OriginId::code),
     );
+    let one_center = origins.len() == 1 || !(version_3 || options.covariance_frame.is_some());
     let object_id = match object_ids.as_slice() {
-        [Some(object_id)] if origins.len() == 1 || !version_3 => object_id.to_string(),
+        [Some(object_id)] if one_center => object_id.to_string(),
         _ => {
             return Err(invalid(format!(
                 "An OEM needs an object_id and carries one object about one center per file, \
@@ -1064,27 +1065,28 @@ pub fn oem_render_kvn(
             .map(str::to_string)
     };
     let ref_frame = match non_empty(&options.ref_frame_label) {
-        None => match frame {
-            Frame::Itrf93 => "ITRF-93",
-            _ if version_3 => "ICRF",
-            _ => "EME2000",
-        }
-        .to_string(),
+        None if version_3 => "ICRF".to_string(),
+        None => "EME2000".to_string(),
         Some(label) => {
-            let allowed: &[&str] = match frame {
-                Frame::Itrf93 => &["ITRF-93"],
-                _ => &["EME2000", "ICRF", "J2000", "GCRF"],
-            };
+            let allowed = ["EME2000", "ICRF", "J2000", "GCRF"];
             let upper = label.trim().to_uppercase();
             if !allowed.contains(&upper.as_str()) {
                 return Err(invalid(format!(
-                    "ref_frame_label {label} is not valid for {} states, expected one of {}",
-                    frame.as_str(),
+                    "ref_frame_label {label} is not valid for equatorial states, expected one of {}",
                     py_list(allowed.iter().map(|name| Some(*name)))
                 )));
             }
             upper
         }
+    };
+    // Parsed whenever given, so a bad name fails without a covariance block too.
+    let local_frame = match options
+        .covariance_frame
+        .as_deref()
+        .map(|label| label.trim().to_uppercase())
+    {
+        Some(label) if label != ref_frame => Some((LocalFrame::parse(&label)?, label)),
+        _ => None,
     };
     let center = adam_to_oem_center(&orbits.coordinates.origins.origins[0].code())?;
     let first = epochs[order[0]];
@@ -1117,48 +1119,37 @@ pub fn oem_render_kvn(
     if options.include_covariance {
         let covariance = orbits.coordinates.covariance.as_ref();
         // Input row order, so kernel errors name the caller's rows.
-        let rows: Vec<Option<&[f64]>> = (0..n).map(|i| state_covariance(covariance, i)).collect();
-        let label = options
-            .covariance_frame
-            .as_deref()
-            .map(|label| label.trim().to_uppercase())
-            .filter(|label| *label != ref_frame);
-        let (label, local) = match label {
+        let rows: Vec<Option<[f64; 36]>> =
+            (0..n).map(|i| state_covariance(covariance, i)).collect();
+        let (label, local) = match local_frame {
             None => (ref_frame.clone(), None),
-            Some(label) => {
-                let local_frame = LocalFrame::parse(&label)?;
-                if frame == Frame::Itrf93 {
-                    return Err(invalid(
-                        "Local orbital frames need an inertial frame, got itrf93.".to_string(),
-                    ));
+            Some((local_frame, label)) => {
+                if rows.iter().all(Option::is_none) {
+                    return Err(invalid("The states carry no covariance.".to_string()));
                 }
-                match covariance {
-                    Some(covariance) if covariance.dimension != 6 => {
-                        return Err(invalid(format!(
-                            "The states carry a {}-dimensional covariance; only 6x6 \
-                             covariances can be rotated.",
-                            covariance.dimension
-                        )))
-                    }
-                    _ if rows.iter().all(Option::is_none) => {
-                        return Err(invalid("The states carry no covariance.".to_string()))
-                    }
-                    _ => {}
-                }
-                if !TABLE_COVARIANCE_FRAMES.contains(&label.as_str()) {
+                // Table 5-4 labels are written as given, any other as its registry name.
+                let label = if TABLE_COVARIANCE_FRAMES.contains(&label.as_str()) {
+                    label
+                } else {
+                    let name = local_frame.canonical_name();
                     let note = format!(
-                        "COV_REF_FRAME {label} follows the SANA orbit-relative reference frames \
+                        "COV_REF_FRAME {name} follows the SANA orbit-relative reference frames \
                          registry (CCSDS 502.0-B-3 annex B5)."
                     );
-                    if options.table_frames_only {
+                    if !version_3 || options.table_frames_only {
+                        let remedy = if version_3 {
+                            "Pass table_frames_only=False to write it anyway."
+                        } else {
+                            "Annex B5 is an OEM 3.0 provision, pass version=\"3.0\" to write it."
+                        };
                         return Err(invalid(format!(
-                            "{note} It is outside the {} set of table 5-4. \
-                             Pass table_frames_only=False to write it anyway.",
+                            "{note} It is outside the {} set of table 5-4. {remedy}",
                             TABLE_COVARIANCE_FRAMES.join(", ")
                         )));
                     }
                     comments.push(note);
-                }
+                    name.to_string()
+                };
                 let mu = match mu {
                     Some(mu) if mu.len() != n => {
                         return Err(invalid(format!(
@@ -1177,20 +1168,18 @@ pub fn oem_render_kvn(
                 let flat_values: Vec<f64> = values.iter().flatten().copied().collect();
                 let flat_covariances: Vec<f64> = rows
                     .iter()
-                    .flat_map(|row| row.unwrap_or(&[f64::NAN; 36]))
-                    .copied()
+                    .flat_map(|row| row.unwrap_or([f64::NAN; 36]))
                     .collect();
                 let local =
                     local_frame_covariances(&flat_values, &flat_covariances, mu, local_frame)?;
-                // TNW parses as TNW_INERTIAL and is written as TNW.
                 (label, Some(local))
             }
         };
         for &i in &order {
-            if let Some(matrix) = rows[i] {
+            if let Some(matrix) = &rows[i] {
                 let matrix = local
                     .as_ref()
-                    .map_or(matrix, |local| &local[i * 36..(i + 1) * 36]);
+                    .map_or(&matrix[..], |local| &local[i * 36..(i + 1) * 36]);
                 records.push(covariance_record(epochs[i], &label, matrix));
             }
         }
@@ -1207,13 +1196,23 @@ pub fn oem_render_kvn(
         }
     }
 
-    // CCSDS 502.0-B-3 7.3.4 for every comment, and for header and metadata
-    // values in 3.0; 2.0 writes those verbatim, as the legacy writer did.
+    // CCSDS 502.0-B-3 7.3.4 for comments and the caller's names, and for every
+    // header and metadata value in 3.0; 2.0 writes the rest verbatim, as the
+    // legacy writer did.
+    let names = [
+        ("OBJECT_NAME", non_empty(&options.object_name)),
+        ("OBJECT_ID", non_empty(&options.object_id)),
+    ];
     let kvn_values = header
         .iter()
         .chain(&metadata)
         .filter(|_| version_3)
         .map(|(key, value)| (key.as_str(), value.as_str()))
+        .chain(
+            names
+                .iter()
+                .filter_map(|(key, value)| Some((*key, value.as_deref()?))),
+        )
         .chain(comments.iter().map(|comment| ("COMMENT", comment.as_str())));
     for (key, value) in kvn_values {
         if value.trim().is_empty() || !value.bytes().all(|byte| (b' '..=b'~').contains(&byte)) {
@@ -1596,14 +1595,13 @@ mod tests {
         assert_eq!(text.matches("EPOCH = ").count(), 1);
         assert!(!text.contains("COV_REF_FRAME"));
 
-        // include_covariance false writes no block; itrf93 states keep ITRF-93.
+        // include_covariance false writes no block, but the frame name is still checked.
         let mut options = options_3();
         options.include_covariance = false;
-        let mut itrf93 = orbits.clone();
-        itrf93.coordinates.frame = Frame::Itrf93;
-        let text = oem_render_kvn(&itrf93, &options, None).unwrap().text;
-        assert!(text.contains("REF_FRAME = ITRF-93\n"));
+        let text = oem_render_kvn(&orbits, &options, None).unwrap().text;
         assert!(!text.contains("COVARIANCE_START"));
+        options.covariance_frame = Some("lvlh".to_string());
+        assert!(render_error(&orbits, &options).starts_with("Unknown local orbital frame 'LVLH'"));
     }
 
     #[test]
@@ -1632,9 +1630,13 @@ mod tests {
             "An OEM needs an object_id and carries one object about one center per file, \
              got object_ids ['TEST OBJECT'] and origins ['SUN', 'SOLAR_SYSTEM_BARYCENTER']."
         );
-        // 2.0 writes the first center, as the legacy writer did.
+        // 2.0 writes the first center, as the legacy writer did, unless a
+        // covariance frame is given.
         let text = oem_render_kvn(&two_origins, &legacy, None).unwrap().text;
         assert!(text.contains("\nCENTER_NAME = SUN\n"));
+        let mut options = legacy_options();
+        options.covariance_frame = Some("TNW".to_string());
+        assert!(render_error(&two_origins, &options).contains("one object about one center"));
 
         // 400 microseconds apart round to the same millisecond.
         let mut duplicates = orbits.clone();
@@ -1701,6 +1703,15 @@ mod tests {
         assert_eq!(
             render_error(&fixture(Frame::Equatorial, TimeScale::Tdb, false), &options),
             "The states carry no covariance."
+        );
+        // 2.0 takes the table 5-4 frames only.
+        let mut options = legacy_options();
+        options.covariance_frame = Some("VNC".to_string());
+        assert_eq!(
+            render_error(&orbits, &options),
+            "COV_REF_FRAME VNC_INERTIAL follows the SANA orbit-relative reference frames \
+             registry (CCSDS 502.0-B-3 annex B5). It is outside the RSW, RTN, TNW set of \
+             table 5-4. Annex B5 is an OEM 3.0 provision, pass version=\"3.0\" to write it."
         );
     }
 
@@ -2047,27 +2058,13 @@ mod tests {
             oem_render_kvn(&orbits, &options, None).unwrap().text
         );
 
-        let mut itrf93 = orbits.clone();
-        itrf93.coordinates.frame = Frame::Itrf93;
-        assert_eq!(
-            render_error(&itrf93, &options),
-            "Local orbital frames need an inertial frame, got itrf93."
-        );
-
-        let mut three = orbits.clone();
-        three.coordinates.covariance = Some(
-            CovarianceBatch::new(
-                3,
-                3,
-                vec![1.0; 27],
-                CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
-            )
-            .unwrap(),
-        );
-        assert_eq!(
-            render_error(&three, &options),
-            "The states carry a 3-dimensional covariance; only 6x6 covariances can be rotated."
-        );
+        // Labels outside table 5-4 are written as their registry names.
+        let mut options = options_3();
+        options.covariance_frame = Some("VNC".to_string());
+        let text = oem_render_kvn(&orbits, &options, None).unwrap().text;
+        assert!(text.contains("\nCOV_REF_FRAME = VNC_INERTIAL\n"));
+        options.covariance_frame = Some("TNW".to_string());
+        options.table_frames_only = true;
 
         // Kernel errors name the input row; row 0 is written last.
         let mut radial = orbits.clone();
@@ -2104,16 +2101,6 @@ mod tests {
             "ref_frame_label TOD is not valid for equatorial states, expected one of \
              ['EME2000', 'ICRF', 'J2000', 'GCRF']"
         );
-        let mut itrf93 = orbits.clone();
-        itrf93.coordinates.frame = Frame::Itrf93;
-        options.ref_frame_label = Some("ICRF".to_string());
-        assert_eq!(
-            render_error(&itrf93, &options),
-            "ref_frame_label ICRF is not valid for itrf93 states, expected one of ['ITRF-93']"
-        );
-        options.ref_frame_label = Some("itrf-93".to_string());
-        let text = oem_render_kvn(&itrf93, &options, None).unwrap().text;
-        assert!(text.contains("\nREF_FRAME = ITRF-93\n"));
     }
 
     #[test]
@@ -2134,10 +2121,13 @@ mod tests {
         let mut options = options_3();
         options.comments = vec![" ".to_string()];
         assert_eq!(render_error(&orbits, &options), error("COMMENT"));
-        // 2.0 writes header and metadata values verbatim, as the legacy writer did.
-        let legacy = OemWriteOptions::legacy("TEST ORIGINATOR", "");
+        // 2.0 writes the other header and metadata values verbatim, as the
+        // legacy writer did, but checks the caller's names.
+        let mut legacy = OemWriteOptions::legacy("TEST ORIGINATOR", "");
         let text = oem_render_kvn(&orbits, &legacy, None).unwrap().text;
         assert!(text.contains("\nCREATION_DATE = \n"));
+        legacy.object_name = Some("A\nCENTER_NAME = MOON".to_string());
+        assert_eq!(render_error(&orbits, &legacy), error("OBJECT_NAME"));
     }
 
     #[test]

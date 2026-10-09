@@ -164,6 +164,8 @@ def test_input_rules(history, tmp_path):
         write(nulls, path, covariance_frame="VNC_ROTATING")
     with pytest.raises(ValueError, match="between 1 and 16, got 17"):
         write(history, path, significant_digits=17)
+    with pytest.raises(ValueError, match="'comments' must be a list of strings"):
+        write(history, path, comments="abc")
 
     # Epochs off the millisecond grid are moved onto it with a warning.
     time = history.coordinates.time
@@ -176,6 +178,19 @@ def test_input_rules(history, tmp_path):
     with pytest.warns(UserWarning, match="1 of 6 epochs rounded to the millisecond"):
         write(shifted, path)
     assert orbit_from_oem(str(path)).coordinates.time.equals(time)
+
+
+def test_nine_by_nine_covariances_write_their_state_block(history, tmp_path):
+    # Orbits with non-gravitational parameters carry 9x9 covariances.
+    full = np.full((6, 9, 9), 1e-22)
+    full[:, :6, :6] = history.coordinates.covariance.to_matrix()
+    nongrav = history.set_column(
+        "coordinates.covariance", CoordinateCovariances.from_matrix(full)
+    )
+    for options in ({}, {"covariance_frame": "VNC_ROTATING"}):
+        text = write(nongrav, tmp_path / "nongrav.oem", **options)
+        assert text.count("EPOCH = ") == 6
+        assert text == write(history, tmp_path / "states.oem", **options)
 
 
 def test_comments_follow_meta_start(history, tmp_path):
