@@ -34,9 +34,14 @@ logger = logging.getLogger(__name__)
 # reduce to the "g" channel); see `_resolve_channels`.
 _BANDS = ("g", "i", "r", "u")
 _PHI_TYPES = ("HG12star", "HG", "c1c2")
-# If fewer than this fraction of an object's observations survive validity
-# filtering, band-recognition filtering, and outlier rejection, the fit is
-# not trustworthy enough to report silently.
+# If fewer than this fraction of an object's eligible observations survive
+# outlier rejection, the fit is not trustworthy enough to report silently.
+# Eligible means it could have entered the fit at all: finite magnitude and
+# uncertainty, through a filter that resolves to a g/i/r/u color channel.
+# Observations dropped for being invalid or for coming through an unsupported
+# filter say nothing about the quality of the fit (an object observed cleanly
+# in g and r alongside a pile of unfiltered reports is still cleanly fit) so
+# they are reported separately and kept out of this denominator.
 _MIN_RETAINED_FRACTION = 0.5
 # Physically meaningful range of the H-G / HG12* slope parameter.  Both G
 # (Bowell et al. 1989) and G12* (Penttilä 2016) are defined on [0, 1].
@@ -130,8 +135,25 @@ class ColorFit(qv.Table):
     rank = qv.Int64Column(nullable=True)
     num_params = qv.Int64Column(nullable=True)
     converged = qv.BooleanColumn(nullable=True)
+    # Where this object's observations went.  These partition `num_obs` exactly:
+    # num_obs = num_invalid + num_unsupported_filter + num_clipped + num_used.
     num_obs = qv.Int64Column(nullable=True)
-    num_outliers = qv.Int64Column(nullable=True)
+    # Non-finite magnitude, or a missing/non-positive reported uncertainty.
+    num_invalid = qv.Int64Column(nullable=True)
+    # Valid photometry whose (station, band) does not resolve to a g/i/r/u
+    # channel: V, PS1_w, unfiltered reports.  Never entered the fit, and so is
+    # not a statement about its quality (see `_MIN_RETAINED_FRACTION`). Invalid
+    # takes precedence, so this can be smaller than the count `_resolve_channels`
+    # logs: a row with no magnitude is unfittable whatever its filter.
+    num_unsupported_filter = qv.Int64Column(nullable=True)
+    # Eligible observations rejected by the iterative 3-sigma clip.
+    num_clipped = qv.Int64Column(nullable=True)
+    # Observations the reported fit is actually based on, in total and per band.
+    num_used = qv.Int64Column(nullable=True)
+    num_used_g = qv.Int64Column(nullable=True)
+    num_used_i = qv.Int64Column(nullable=True)
+    num_used_r = qv.Int64Column(nullable=True)
+    num_used_u = qv.Int64Column(nullable=True)
 
 
 def _resolve_channels(
@@ -375,7 +397,11 @@ def _fit_per_band_h(
       actually fitted. ``rank < num_params`` flags a rank-deficient fit.
     - "converged": whether the (nonlinear) optimizer reported success; always True
       for the linear "c1c2" solve.
-    - "num_obs"/"num_outliers".
+    - "num_obs"/"num_unsupported_filter"/"num_clipped"/"num_used": where the rows
+      passed in ended up; these three partition "num_obs". (Rows that
+      failed validity filtering never reach this function, so `estimate_colors`
+      adds the invalid count itself.)
+    - "num_used_*": per-band retained counts, summing to "num_used".
 
     Uncertainties come from the (J'*W*J)^-1 covariance rescaled by the reduced
     chi-square, i.e. errors are matched to the observed scatter rather than trusting
@@ -391,12 +417,17 @@ def _fit_per_band_h(
 
     # Rows whose (station, band) did not resolve to a color channel are already
     # logged in `_resolve_channels`; here they are simply excluded from the fit.
-    included = np.isin(channels, _BANDS)
-    if not np.any(included):
+    # They are ineligible rather than rejected: they are counted and reported
+    # apart from the statistical clip, and kept out of its retention threshold.
+    eligible = np.isin(channels, _BANDS)
+    n_eligible = int(np.sum(eligible))
+    n_unsupported = n - n_eligible
+    if n_eligible == 0:
         raise ValueError(
             f"None of the {n} observations resolve to a g/i/r/u color channel; "
             "there is nothing to fit."
         )
+    included = eligible.copy()
 
     # Parameters preceding the per-band magnitudes: (c1, c2) for the polynomial
     # model, the single slope for H-G / HG12*.  The nonlinear models also need
@@ -463,11 +494,14 @@ def _fit_per_band_h(
             break
         included &= ~outliers
 
-    num_outliers = int(np.sum(~included))
-    if n - num_outliers < _MIN_RETAINED_FRACTION * n:
+    num_clipped = n_eligible - n_incl
+    if n_incl < _MIN_RETAINED_FRACTION * n_eligible:
         raise ValueError(
-            f"Outlier/band rejection removed {num_outliers}/{n} observations "
-            f"(more than {1 - _MIN_RETAINED_FRACTION:.0%} of the data); fit is unreliable."
+            f"Outlier rejection removed {num_clipped} of the {n_eligible} "
+            f"observation(s) eligible for the color fit (more than "
+            f"{1 - _MIN_RETAINED_FRACTION:.0%} of them); fit is unreliable. "
+            f"A further {n_unsupported} observation(s) had no g/i/r/u filter and "
+            "are excluded from this threshold."
         )
 
     # Fit diagnostics: goodness of fit and parameter covariance.
@@ -535,6 +569,8 @@ def _fit_per_band_h(
         var = float(cov[i, i] + cov[j, j] - 2.0 * cov[i, j])
         return color, (float(np.sqrt(var)) if var > 0 else float("nan"))
 
+    num_used = {b: int(np.sum(channels[included] == b)) for b in _BANDS}
+
     H_fit: dict[str, tuple[float, float]] = {}
     for band in _BANDS:
         H_fit[band] = (
@@ -576,7 +612,13 @@ def _fit_per_band_h(
         "num_params": num_params,
         "converged": optimizer_converged,
         "num_obs": n,
-        "num_outliers": num_outliers,
+        "num_unsupported_filter": n_unsupported,
+        "num_clipped": num_clipped,
+        "num_used": n_incl,
+        "num_used_g": num_used["g"],
+        "num_used_i": num_used["i"],
+        "num_used_r": num_used["r"],
+        "num_used_u": num_used["u"],
     }
 
 
@@ -686,7 +728,14 @@ def estimate_colors(
             "num_params": None,
             "converged": None,
             "num_obs": len(obs),
-            "num_outliers": None,
+            "num_invalid": None,
+            "num_unsupported_filter": None,
+            "num_clipped": None,
+            "num_used": None,
+            "num_used_g": None,
+            "num_used_i": None,
+            "num_used_r": None,
+            "num_used_u": None,
         }
         G_fit: float = float("nan")
 
@@ -732,10 +781,30 @@ def estimate_colors(
                     rank=fit["rank"],
                     num_params=fit["num_params"],
                     converged=fit["converged"],
-                    num_outliers=n_invalid + int(fit["num_outliers"]),
+                    # `fit` only ever saw the valid rows, so the invalid count is
+                    # added here to keep the partitioning of num_obs.
+                    num_invalid=n_invalid,
+                    num_unsupported_filter=int(fit["num_unsupported_filter"]),
+                    num_clipped=int(fit["num_clipped"]),
+                    num_used=int(fit["num_used"]),
+                    num_used_g=int(fit["num_used_g"]),
+                    num_used_i=int(fit["num_used_i"]),
+                    num_used_r=int(fit["num_used_r"]),
+                    num_used_u=int(fit["num_used_u"]),
                 )
             else:
-                row["num_outliers"] = n_invalid
+                # No valid photometry at all: every observation is accounted for
+                # as invalid, and no fit was attempted.
+                row.update(
+                    num_invalid=n_invalid,
+                    num_unsupported_filter=0,
+                    num_clipped=0,
+                    num_used=0,
+                    num_used_g=0,
+                    num_used_i=0,
+                    num_used_r=0,
+                    num_used_u=0,
+                )
         except Exception:
             logger.exception("Problem when fitting colors for %s", obj_id)
             raise
@@ -771,5 +840,12 @@ def estimate_colors(
         num_params=_col("num_params"),
         converged=_col("converged"),
         num_obs=_col("num_obs"),
-        num_outliers=_col("num_outliers"),
+        num_invalid=_col("num_invalid"),
+        num_unsupported_filter=_col("num_unsupported_filter"),
+        num_clipped=_col("num_clipped"),
+        num_used=_col("num_used"),
+        num_used_g=_col("num_used_g"),
+        num_used_i=_col("num_used_i"),
+        num_used_r=_col("num_used_r"),
+        num_used_u=_col("num_used_u"),
     )
