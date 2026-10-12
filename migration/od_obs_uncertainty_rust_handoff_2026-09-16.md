@@ -219,6 +219,35 @@ table-shaped crossing (`arrow_bridge._to_record_batch`,
 fix (apply `ArrayData::offset()` in the nested decode) would make the Python
 step redundant. The former strict-xfail pins are now regression tests.
 
+## 2026-10-12 follow-up: review round 2, phase 1
+
+Bead `od_experiments_setup-5jq`, plan `migration/pr217_review2_plan_2026-10-12.md`
+section 3 phase 1, brief `migration/agent_briefs/phase1_rust_2026-10-12.md`.
+Four correctness fixes, no contract change (public signatures and existing
+dict keys unchanged; keys and `IodOutput` fields were added).
+
+1. **CMC2003 statistic never makes a bad row look acceptable**
+   (`cmc2003.rs` `cmc2003_expected_residual_chi2`, `cmc2003_select`). A
+   non-finite statistic (NaN residual, NaN Jacobian rows, overflow) is
+   `+inf` with `NonFiniteChi2`; a singular expected covariance is `+inf`
+   with `SingularResidualCovariance` unless both residual components are
+   exactly zero (then `0`). Both used to be `0.0`, below `chi2_recover`.
+   `cmc2003_select`: when the worst selected chi2 is infinite the batch
+   threshold is the infinite value itself (`inf * chi2_frac` would be NaN
+   for `chi2_frac == 0`), so that pass rejects exactly the infinite rows;
+   sorting already used `total_cmp`; the minimum-sample, rejected-fraction
+   and apparition guards are unchanged and still apply to infinite rows
+   (an infinite row that is the last of its apparition is kept and
+   flagged, as before). Rule documented in the Rust doc comments and the
+   `rejection.py` module / `_expected_residual_chi2` docstrings (the rst
+   use case lists only the constants, so it was left alone). Tests:
+   `cmc2003::tests::{non_finite_statistic_is_infinite_rejected_and_never_recovered,
+   infinite_worst_row_with_zero_chi2_frac_is_still_rejected,
+   singular_expected_covariance_rejects_nonzero_and_keeps_zero_residuals}`;
+   `tests/test_cmc2003_guards.py` (kernel pins + `cmc2003_fit_detailed` on
+   the two-body callback route with one NaN-position observation: flagged,
+   rejected, truth recovered).
+
 ## Correctness gates
 
 * **HEALPix RING order.** `efcc18::tests::ring_order_matches_jpl_tiles_dat`

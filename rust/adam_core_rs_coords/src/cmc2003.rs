@@ -115,6 +115,18 @@ fn symmetric_eigen_2x2(a: f64, b: f64, d: f64) -> ([f64; 2], [[f64; 2]; 2]) {
 /// prediction uncertainty (chi2 reduces to the plain residual chi2) and raises
 /// `NoFitCovariance`. Returns the non-negative chi2 per observation and the
 /// diagnostic flags raised.
+///
+/// A row whose statistic cannot be established never looks acceptable:
+///
+/// * a non-finite statistic (NaN residual from a failed prediction, NaN
+///   Jacobian rows, overflow) is `+inf` with `NonFiniteChi2`;
+/// * a singular expected covariance (`det == 0` after the eigenvalue floor)
+///   is `+inf` with `SingularResidualCovariance`, except when both residual
+///   components are exactly zero, where the statistic is `0`.
+///
+/// `+inf` exceeds every rejection threshold and no recovery threshold, so
+/// [`cmc2003_select`] rejects such a row when it is selected (subject to the
+/// minimum-sample and apparition guards) and never re-includes it.
 pub fn cmc2003_expected_residual_chi2(
     residuals: &[f64],
     jacobian: &[f64],
@@ -185,21 +197,28 @@ pub fn cmc2003_expected_residual_chi2(
                 + floored[1] * vectors[1][1] * vectors[1][1];
         }
         let det = a * d - b * b;
-        let value = if det == 0.0 {
+        let value = if !(r[0].is_finite() && r[1].is_finite() && det.is_finite()) {
+            flags.insert(Cmc2003Flag::NonFiniteChi2);
+            f64::INFINITY
+        } else if det == 0.0 {
             flags.insert(Cmc2003Flag::SingularResidualCovariance);
-            0.0
+            if r[0] == 0.0 && r[1] == 0.0 {
+                0.0
+            } else {
+                f64::INFINITY
+            }
         } else {
             // r^T expected^-1 r with the explicit 2x2 inverse.
             let inv00 = d / det;
             let inv01 = -b / det;
             let inv11 = a / det;
-            r[0] * (inv00 * r[0] + inv01 * r[1]) + r[1] * (inv01 * r[0] + inv11 * r[1])
-        };
-        let value = if value.is_finite() {
-            value
-        } else {
-            flags.insert(Cmc2003Flag::NonFiniteChi2);
-            0.0
+            let value = r[0] * (inv00 * r[0] + inv01 * r[1]) + r[1] * (inv01 * r[0] + inv11 * r[1]);
+            if value.is_finite() {
+                value
+            } else {
+                flags.insert(Cmc2003Flag::NonFiniteChi2);
+                f64::INFINITY
+            }
         };
         chi2[i] = value.max(0.0);
     }
@@ -248,6 +267,12 @@ pub struct Cmc2003Selection {
 /// and the small-sample fudge is `400 * 3**(-n_selected)`. Guards: never below
 /// `max(ceil(n * (1 - max_rejected_fraction)), min_obs + 1)` selected, and the
 /// last selected observation of an apparition is never rejected.
+///
+/// An infinite chi2 (see [`cmc2003_expected_residual_chi2`]) is a rejection
+/// candidate whenever it is selected and is never re-included: when the
+/// worst selected chi2 is infinite the batch threshold is infinite too, so
+/// that pass rejects exactly the infinite rows (finite offenders wait for the
+/// next pass), whatever `chi2_frac` is.
 pub fn cmc2003_select(
     chi2: &[f64],
     selected: &[bool],
@@ -271,7 +296,9 @@ pub fn cmc2003_select(
     } else {
         0.0
     };
-    let threshold = if options.one_at_a_time {
+    let threshold = if options.one_at_a_time || chi2_max.is_infinite() {
+        // `inf * chi2_frac` would be NaN for `chi2_frac == 0`, which no row
+        // compares against; an infinite worst row is its own batch.
         chi2_max
     } else {
         chi2_max * options.chi2_frac
@@ -474,5 +501,121 @@ mod tests {
         for v in vectors {
             assert!((v[0] * v[0] + v[1] * v[1] - 1.0).abs() < 1e-12);
         }
+    }
+
+    /// Identity whitened-residual Jacobian rows for `n` observations: row
+    /// `2i` -> parameter 0, row `2i + 1` -> parameter 1.
+    fn identity_jacobian(n: usize) -> Vec<f64> {
+        let mut jacobian = vec![0.0; 12 * n];
+        for i in 0..n {
+            jacobian[(2 * i) * 6] = 1.0;
+            jacobian[(2 * i + 1) * 6 + 1] = 1.0;
+        }
+        jacobian
+    }
+
+    #[test]
+    fn non_finite_statistic_is_infinite_rejected_and_never_recovered() {
+        // Row 1 has a NaN residual (a failed prediction); row 2 a NaN
+        // Jacobian row (which makes the expected covariance NaN).
+        let residuals = [1.0, 0.5, f64::NAN, 0.0, 1.0, 0.0];
+        let mut jacobian = identity_jacobian(3);
+        jacobian[4 * 6] = f64::NAN;
+        let mut covariance = [0.0; 36];
+        covariance[0] = 0.5;
+        covariance[7] = 0.5;
+        let (chi2, flags) = cmc2003_expected_residual_chi2(
+            &residuals,
+            &jacobian,
+            Some(&covariance),
+            &[true; 3],
+            0.05,
+        )
+        .unwrap();
+        assert!(chi2[0].is_finite());
+        assert_eq!(chi2[1], f64::INFINITY);
+        assert_eq!(chi2[2], f64::INFINITY);
+        assert!(flags.contains(&Cmc2003Flag::NonFiniteChi2));
+
+        // Selected: rejected in the batch pass alongside the other infinite
+        // row and ahead of a finite gross outlier, which waits.
+        let mut chi2 = vec![1.0; 30];
+        chi2[5] = f64::INFINITY;
+        chi2[6] = 100.0;
+        chi2[7] = f64::INFINITY;
+        let out = select(&chi2, &[true; 30], None, false);
+        assert!(!out.selected[5] && !out.selected[7] && out.selected[6]);
+        assert_eq!(out.n_rejected, 2);
+        // One at a time: the infinite rows go first, the finite one waits.
+        let out = select(&chi2, &[true; 30], None, true);
+        assert!(!out.selected[5] && !out.selected[7] && out.selected[6]);
+        // Excluded on a later pass: never recovered, whatever the fudge.
+        let mut selected = vec![true; 30];
+        selected[5] = false;
+        let out = select(&chi2, &selected, None, false);
+        assert!(!out.selected[5]);
+        assert_eq!(out.n_recovered, 0);
+        let chi2 = [f64::INFINITY, 1.0, 1.0, 1.0];
+        let out = select(&chi2, &[false, true, true, true], None, false);
+        assert!(!out.selected[0] && out.n_recovered == 0);
+    }
+
+    #[test]
+    fn infinite_worst_row_with_zero_chi2_frac_is_still_rejected() {
+        // chi2_frac = 0 would make the batch threshold `inf * 0 = NaN`.
+        let mut chi2 = vec![1.0; 30];
+        chi2[3] = f64::INFINITY;
+        chi2[4] = 50.0;
+        let options = Cmc2003SelectionOptions {
+            chi2_frac: 0.0,
+            ..Cmc2003SelectionOptions::default()
+        };
+        let out = cmc2003_select(&chi2, &[true; 30], &[0; 30], &options).unwrap();
+        assert!(!out.selected[3]);
+        assert!(out.selected[4]);
+        assert_eq!(out.n_rejected, 1);
+        // The next pass (no infinite row left) applies the plain rule.
+        let mut selected = vec![true; 30];
+        selected[3] = false;
+        let out = cmc2003_select(&chi2, &selected, &[0; 30], &options).unwrap();
+        assert!(!out.selected[3] && !out.selected[4]);
+    }
+
+    #[test]
+    fn singular_expected_covariance_rejects_nonzero_and_keeps_zero_residuals() {
+        // P = I for a selected row makes I - P singular; a zero floor keeps
+        // it singular. Row 0 has a residual, row 1 has none.
+        let residuals = [0.3, 0.0, 0.0, 0.0];
+        let jacobian = identity_jacobian(2);
+        let mut covariance = [0.0; 36];
+        covariance[0] = 1.0;
+        covariance[7] = 1.0;
+        let (chi2, flags) = cmc2003_expected_residual_chi2(
+            &residuals,
+            &jacobian,
+            Some(&covariance),
+            &[true, true],
+            0.0,
+        )
+        .unwrap();
+        assert_eq!(chi2, vec![f64::INFINITY, 0.0]);
+        assert_eq!(
+            flags,
+            BTreeSet::from([Cmc2003Flag::SingularResidualCovariance])
+        );
+        // The minimum-sample guard still holds: 2 observations cannot drop
+        // one (min_obs + 1 = 4 must stay selected), so the row is kept and
+        // flagged rather than rejected.
+        let out = select(&chi2, &[true, true], None, false);
+        assert!(out.selected[0] && out.selected[1]);
+        assert_eq!(out.n_rejected, 0);
+        assert!(out.flags.contains(&Cmc2003Flag::MaxRejectedFraction));
+        // With enough observations the singular row is rejected, the zero
+        // residual row kept.
+        let mut chi2 = vec![1.0; 10];
+        chi2[0] = f64::INFINITY;
+        chi2[1] = 0.0;
+        let out = select(&chi2, &[true; 10], None, false);
+        assert!(!out.selected[0] && out.selected[1] && out.n_rejected == 1);
     }
 }

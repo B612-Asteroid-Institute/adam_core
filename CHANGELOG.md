@@ -137,6 +137,7 @@ This file contains notable changes in adam-core
 - `run_od` returns the same `object_id` column on the fused and the composed
   route: the caller's `object_id` on every row, null when none was given. The
   fused route previously leaked the opaque backend identifier into it.
+- CMC2003: a row whose rejection statistic cannot be established (NaN residual or Jacobian, singular expected residual covariance with a nonzero residual) now scores `+inf` with the `non_finite_chi2` / `singular_residual_covariance` flag, so it is rejected when selected and never re-included; previously it scored `0` and looked acceptable.
 
 ### Compatibility
 

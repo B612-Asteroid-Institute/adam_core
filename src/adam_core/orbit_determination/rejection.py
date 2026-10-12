@@ -25,7 +25,17 @@ Algorithm (one pass; passes repeat until no observation changes state)
    evaluated with central differences through the full propagator at the
    fitted state. The selected rows of this same whitened Jacobian determine
    ``C``; all rows are retained for rejection and recovery. ``jacobian``
-   controls optimizer steps only in this rejection loop.
+   controls optimizer steps only in this rejection loop. A row whose
+   statistic cannot be established never looks acceptable: a non-finite
+   statistic (NaN residual from a failed prediction, NaN Jacobian rows) is
+   ``+inf`` with the ``"non_finite_chi2"`` flag, and a singular expected
+   covariance is ``+inf`` with ``"singular_residual_covariance"`` unless
+   both residual components are exactly zero (then ``0``). ``+inf`` exceeds
+   every rejection threshold and no recovery threshold, so such a row is
+   rejected when selected (subject to the guards of step 4) and never
+   re-included; when the worst selected row is infinite the batch
+   threshold is infinite too, so that pass rejects exactly the infinite
+   rows.
 3. Re-include an excluded observation when ``chi2_i <= chi2_recover +
    0.75 * fudge``; reject a selected one when ``chi2_i >= threshold`` and
    ``chi2_i > chi2_reject + fudge``, where ``threshold`` is ``chi2_frac`` times
@@ -184,7 +194,11 @@ def _expected_residual_chi2(
     Returns
     -------
     chi2 : (N,)
-        Expected-covariance chi2 per observation (non-negative).
+        Expected-covariance chi2 per observation (non-negative). ``+inf``
+        where the statistic is non-finite (``"non_finite_chi2"``) or the
+        expected covariance is singular with a nonzero residual
+        (``"singular_residual_covariance"``); such rows are rejected when
+        selected and never recovered.
     flags : set of str
         Diagnostic flags raised while computing.
     """
