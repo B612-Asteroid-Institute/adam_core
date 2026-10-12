@@ -189,6 +189,22 @@ def attach_observation_provenance(
     )
 
 
+def _stamp_object_id(
+    fitted_orbits: FittedOrbits, object_id: str | None
+) -> FittedOrbits:
+    """
+    The ``object_id`` column every `run_od` route returns: the caller's
+    ``object_id`` on every row, null when none was given. The backend
+    identifier handed to the fitter is opaque and never leaks into it.
+    """
+    if len(fitted_orbits) == 0:
+        return fitted_orbits
+    return fitted_orbits.set_column(
+        "object_id",
+        pa.array([object_id] * len(fitted_orbits), type=pa.large_string()),
+    )
+
+
 def _fused_run_od(
     observations: OrbitDeterminationObservations,
     fitter: OrbitFitter,
@@ -231,6 +247,7 @@ def _fused_run_od(
     fitted_orbits, members = tables_from_native_full_od(
         backend_object_id, observations, output
     )
+    fitted_orbits = _stamp_object_id(fitted_orbits, object_id)
     if len(members) == 0:
         return fitted_orbits, members
     snapshots = {}
@@ -298,10 +315,11 @@ def run_od(
     propagator : `~adam_core.propagator.Propagator`
         Propagator used by the backend during refinement.
     object_id : str, optional
-        Object identifier passed to the fitter and stamped on the returned
-        orbits when the backend leaves ``object_id`` null. If None, an opaque
-        identifier is generated for the backend and the orbits' ``object_id``
-        is left as the backend returned it.
+        Object identifier stamped on the returned orbits. If None, the
+        orbits' ``object_id`` is null. Either way the fitter receives an
+        opaque backend identifier, never the object id, and whatever the
+        backend wrote in ``object_id`` is replaced, so both the fused and the
+        composed route return the same column.
 
     Returns
     -------
@@ -413,15 +431,7 @@ def run_od(
         backend_object_id, used, propagator
     )
 
-    if (
-        object_id is not None
-        and len(fitted_orbits) > 0
-        and fitted_orbits.object_id.null_count == len(fitted_orbits)
-    ):
-        fitted_orbits = fitted_orbits.set_column(
-            "object_id",
-            pa.array([object_id] * len(fitted_orbits), type=pa.large_string()),
-        )
+    fitted_orbits = _stamp_object_id(fitted_orbits, object_id)
 
     fitted_orbit_members = attach_observation_provenance(
         fitted_orbit_members, observations, used

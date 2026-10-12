@@ -134,6 +134,9 @@ This file contains notable changes in adam-core
   previously a failed first pass was kept over a later converged fit.
 - `NativeOrbitFitter` copies `propagator_kwargs` instead of sharing one
   mutable default dictionary across instances.
+- `run_od` returns the same `object_id` column on the fused and the composed
+  route: the caller's `object_id` on every row, null when none was given. The
+  fused route previously leaked the opaque backend identifier into it.
 
 ### Compatibility
 

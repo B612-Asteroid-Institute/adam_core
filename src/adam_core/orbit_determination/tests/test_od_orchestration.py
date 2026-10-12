@@ -890,6 +890,26 @@ class TestFusedRunOd:
                     atol=1e-15,
                 )
 
+    def test_object_id_none_is_null_on_both_routes(self, two_body_observations) -> None:
+        """Neither route leaks the opaque backend identifier into object_id."""
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            composed, _ = run_od(
+                two_body_observations,
+                self._fitter(),
+                None,
+                propagator=TwoBodyPropagator(),
+            )
+            fused, _ = run_od(
+                two_body_observations,
+                self._fitter(),
+                None,
+                propagator=NativeTwoBodyPropagator(),
+            )
+        assert len(composed) == len(fused) == 1
+        assert composed.object_id.to_pylist() == [None]
+        assert fused.object_id.to_pylist() == [None]
+
     def test_models_and_cmc2003_refinement(self, two_body_observations) -> None:
         models = self._models(two_body_observations)
         expected, fused = self._run(two_body_observations, models)
