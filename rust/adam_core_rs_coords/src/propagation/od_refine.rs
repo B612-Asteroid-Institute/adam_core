@@ -772,6 +772,13 @@ fn weak_direction_delta_cost(
 /// `_validated_covariance`: the weak-direction consistency check with the
 /// central-difference fallback for the analytic Jacobian; every diagnostic
 /// is appended to `warnings` with the Python message text.
+///
+/// Only the in-band probe outcomes (no positive eigenvalue, a rejected
+/// trial prediction, non-finite probe residuals) are warnings that leave
+/// the covariance unvalidated. A backend error (`PropagationError`) raised
+/// while predicting the probe displacement propagates like one raised by
+/// any other prediction: on the callback route it carries the Python
+/// exception, which the next prediction would otherwise clear.
 fn validated_covariance(
     problem: &WhitenedProblem<'_>,
     covariance: [f64; 36],
@@ -783,8 +790,7 @@ fn validated_covariance(
     warnings: &mut Vec<String>,
 ) -> PropagationResultValue<[f64; 36]> {
     let (lower, upper) = DELTA_CHI2_WINDOW;
-    let delta = match weak_direction_delta_cost(problem, state, &covariance, cost_solution, config)
-        .unwrap_or_else(|err| Err(err.to_string()))
+    let delta = match weak_direction_delta_cost(problem, state, &covariance, cost_solution, config)?
     {
         Ok(delta) => delta,
         Err(message) => {
@@ -1104,11 +1110,10 @@ pub fn validate_fit_covariance_with<T: OriginTranslationProvider>(
     let state = problem.geometry.state;
     let residuals = problem.residuals_one(&state)?;
     let cost = robust_cost(&residuals, config.loss, config.f_scale);
-    let delta_cost =
-        match weak_direction_delta_cost(&problem, &state, &covariance, cost, &probe_config) {
-            Ok(Ok(delta)) => delta,
-            _ => f64::NAN,
-        };
+    // In-band probe failures are reported as NaN (and as a warning by the
+    // validation below); a backend error propagates.
+    let delta_cost = weak_direction_delta_cost(&problem, &state, &covariance, cost, &probe_config)?
+        .unwrap_or(f64::NAN);
     let mut warnings = Vec::new();
     let validated = validated_covariance(
         &problem,
@@ -2479,6 +2484,117 @@ mod tests {
         assert_eq!(warnings.len(), 1, "{warnings:?}");
         assert!(warnings[0].contains("Falling back to a central-difference Jacobian"));
         assert!(validated[0] > 1e-15, "fallback covariance was not adopted");
+    }
+
+    /// Fails with a backend error only on the probe: with the analytic
+    /// Jacobian every solver call predicts one candidate, the probe is the
+    /// only two-candidate batch. `in_band` makes it a rejected trial
+    /// prediction instead of a backend error.
+    struct FailsOnProbe<'a> {
+        inner: &'a dyn SphericalPredictor,
+        in_band: bool,
+        probes: std::cell::Cell<usize>,
+    }
+
+    impl SphericalPredictor for FailsOnProbe<'_> {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            geometry: &OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            if states.len() == 2 {
+                self.probes.set(self.probes.get() + 1);
+                if self.in_band {
+                    return Ok(Err("probe prediction rejected".to_string()));
+                }
+                return Err(PropagationError::Backend(
+                    "backend failed at the probe displacement".to_string(),
+                ));
+            }
+            self.inner.predict_spherical(states, geometry, observers)
+        }
+    }
+
+    #[test]
+    fn probe_backend_error_propagates_and_in_band_failure_warns() {
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let observed = synthetic_observations(None);
+        let config = WhitenedFitConfig::default();
+        let run = |predictor: &dyn SphericalPredictor| {
+            fit_orbit_whitened_with(
+                predictor,
+                &perturbed_start(),
+                &observed,
+                &observers(),
+                &[false; NUM_OBS],
+                &config,
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+        };
+
+        let failing = FailsOnProbe {
+            inner: &inner,
+            in_band: false,
+            probes: std::cell::Cell::new(0),
+        };
+        match run(&failing) {
+            Err(PropagationError::Backend(message)) => {
+                assert!(message.contains("probe displacement"), "{message}")
+            }
+            other => panic!("expected the probe backend error, got {other:?}"),
+        }
+        assert_eq!(failing.probes.get(), 1);
+
+        let rejected = FailsOnProbe {
+            inner: &inner,
+            in_band: true,
+            probes: std::cell::Cell::new(0),
+        };
+        let output = run(&rejected).unwrap();
+        assert!(output.converged);
+        assert_eq!(output.warnings.len(), 1, "{:?}", output.warnings);
+        assert!(output.warnings[0].contains("could not be validated"));
+        assert!(output.warnings[0].contains("probe prediction rejected"));
+        assert!(output.covariance.iter().all(|v| v.is_finite()));
+
+        // The standalone validation entry point follows the same rule.
+        let validation = validate_fit_covariance_with(
+            &failing,
+            &orbit(output.state),
+            &observed,
+            &observers(),
+            &[false; NUM_OBS],
+            output.covariance,
+            JacobianMethod::Analytic,
+            &config,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        );
+        assert!(matches!(validation, Err(PropagationError::Backend(_))));
+        let validation = validate_fit_covariance_with(
+            &rejected,
+            &orbit(output.state),
+            &observed,
+            &observers(),
+            &[false; NUM_OBS],
+            output.covariance,
+            JacobianMethod::Analytic,
+            &config,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(validation.delta_cost.is_nan());
+        assert_eq!(validation.warnings.len(), 1);
     }
 
     #[test]

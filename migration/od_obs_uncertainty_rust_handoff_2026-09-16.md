@@ -248,6 +248,28 @@ dict keys unchanged; keys and `IodOutput` fields were added).
    the two-body callback route with one NaN-position observation: flagged,
    rejected, truth recovered).
 
+2. **The covariance probe does not swallow backend errors** (`od_refine.rs`
+   `validated_covariance`, `validate_fit_covariance_with`). The outer
+   `PropagationError` of `weak_direction_delta_cost` now propagates with `?`
+   (previously `.unwrap_or_else(|err| Err(err.to_string()))` turned it into
+   a warning and returned the unvalidated covariance; on the callback route
+   the next prediction then cleared the stored Python exception). The
+   in-band `Err(String)` outcomes (no positive eigenvalue, rejected trial
+   prediction, non-finite probe residuals) remain warnings. The CMC
+   finalisation path reaches the probe through `fit_orbit_whitened_impl`
+   and already propagated with `?`. Tests:
+   `od_refine::tests::probe_backend_error_propagates_and_in_band_failure_warns`
+   (a `SphericalPredictor` double failing only on the two-candidate probe
+   batch: `fit_orbit_whitened_with` and `validate_fit_covariance_with`
+   return `Err`, the in-band variant warns); `tests/test_probe_errors.py`
+   (a `TwoBodyPropagator` subclass raising only on the probe batch:
+   `fit_least_squares` raises that exception type, no warning; a subclass
+   raising on its second call, i.e. a solver step, does the same; a clean
+   control fit). Deviation from the brief: the Python probe double keys on
+   the probe's two-candidate batch rather than "its second call", because
+   on the analytic route the second prediction is a solver trial step (that
+   case is covered by the second test and already propagated).
+
 ## Correctness gates
 
 * **HEALPix RING order.** `efcc18::tests::ring_order_matches_jpl_tiles_dat`

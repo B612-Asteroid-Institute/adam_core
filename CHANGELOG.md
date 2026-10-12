@@ -138,6 +138,7 @@ This file contains notable changes in adam-core
   route: the caller's `object_id` on every row, null when none was given. The
   fused route previously leaked the opaque backend identifier into it.
 - CMC2003: a row whose rejection statistic cannot be established (NaN residual or Jacobian, singular expected residual covariance with a nonzero residual) now scores `+inf` with the `non_finite_chi2` / `singular_residual_covariance` flag, so it is rejected when selected and never re-included; previously it scored `0` and looked acceptable.
+- The weak-direction covariance probe no longer converts a backend error raised while predicting the probe displacement into a "covariance could not be validated" warning: it propagates like any other prediction failure (on the callback route the Python exception reaches the caller unchanged); only the in-band probe outcomes (no positive eigenvalue, rejected trial prediction, non-finite probe residuals) remain warnings.
 
 ### Compatibility
 
