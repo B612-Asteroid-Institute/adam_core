@@ -270,6 +270,31 @@ dict keys unchanged; keys and `IodOutput` fields were added).
    on the analytic route the second prediction is a solver trial step (that
    case is covered by the second test and already propagated).
 
+3. **Fused `run_od` runs the models before requiring a covariance**
+   (`od_refine.rs` `run_od_with`, `od.rs` `observed_covariance_flat`).
+   `run_od_with` called `observed_covariance_flat` (which errors on a
+   `None` covariance) before the models ran, so `SigmaFillModel` could not
+   fill it on the fused route while the composed route applies the models
+   first. Now a `None` covariance becomes an `n x 36` NaN-filled covariance
+   for the models (units: spherical coordinate covariance, no row
+   validity); after the models every observation must have finite,
+   positive lon/lat variances, else `InvalidRequest` whose message ends
+   with `MISSING_COVARIANCE_REMEDY` (names `SigmaFillModel`). The same
+   remedy text replaced the bare "orbit determination requires observed
+   covariance" of `observed_covariance_flat`, which is what the composed
+   route (`apply_observation_models` -> `NativeOrbitFitter.full_od` ->
+   `iod` -> `iod_fit` -> `evaluate_orbit`) raised as `ValueError` for the
+   same input (verified before the change: both routes raised that exact
+   message), so both routes now raise `ValueError` naming the model without
+   touching the coordinator-owned Python files. Tests:
+   `od_refine::tests::{run_od_lets_a_sigma_model_fill_a_missing_covariance,
+   run_od_without_covariance_or_a_filling_model_is_refused}`;
+   `tests/test_run_od_null_covariance.py` (fused and composed routes with
+   `CoordinateCovariances.nulls` observations: `SigmaFillModel` with a
+   global row yields a fit with the filled sigmas recorded as used
+   astrometry, no filling model raises `ValueError` matching
+   `SigmaFillModel`, both routes agree on the fit).
+
 ## Correctness gates
 
 * **HEALPix RING order.** `efcc18::tests::ring_order_matches_jpl_tiles_dat`

@@ -1809,6 +1809,13 @@ pub struct RunOdOutput {
 /// snapshots for the members' provenance columns. `obs_code`, `band` and
 /// `astcat` are the per-observation station, photometric band and star
 /// catalog the models consult.
+///
+/// The models run before a covariance is required: observations without
+/// one (`None`) start as NaN-filled covariance rows, so that a
+/// `SigmaFillModel` among `models` can supply the missing sigmas exactly as
+/// it does on the composed Python route. After the models every observation
+/// must have finite, positive lon/lat variances, else `InvalidRequest`
+/// names that model as the remedy.
 #[allow(clippy::too_many_arguments)]
 pub fn run_od_barycentric<P, T>(
     propagator: &P,
@@ -1868,7 +1875,11 @@ pub fn run_od_with<T: OriginTranslationProvider>(
         ));
     }
     let observed_flat = spherical_flat(observed, "observed")?;
-    let covariance = observed_covariance_flat(observed)?;
+    // No covariance yet: the models get NaN rows to fill (see above).
+    let covariance = match &observed.covariance {
+        Some(source) => source.values_row_major.clone(),
+        None => vec![f64::NAN; n * 36],
+    };
     let lon: Vec<f64> = (0..n).map(|row| observed_flat[row * 6 + 1]).collect();
     let lat: Vec<f64> = (0..n).map(|row| observed_flat[row * 6 + 2]).collect();
     let original = AstrometrySnapshot::from_columns(&lon, &lat, &covariance);
@@ -1908,17 +1919,40 @@ pub fn run_od_with<T: OriginTranslationProvider>(
     let used_snapshot =
         AstrometrySnapshot::from_columns(&astrometry.lon, &astrometry.lat, &astrometry.covariance);
 
-    let used = if models_changed {
+    let missing: Vec<usize> = (0..n)
+        .filter(|&row| {
+            let var_lon = astrometry.covariance[row * 36 + 7];
+            let var_lat = astrometry.covariance[row * 36 + 14];
+            !(var_lon.is_finite() && var_lon > 0.0 && var_lat.is_finite() && var_lat > 0.0)
+        })
+        .collect();
+    if !missing.is_empty() {
+        return Err(PropagationError::InvalidRequest(format!(
+            "{} of {n} observations (first: row {}) have no finite, positive lon/lat \
+             variance after the observation models; {}",
+            missing.len(),
+            missing[0],
+            super::od::MISSING_COVARIANCE_REMEDY
+        )));
+    }
+
+    let used = if models_changed || observed.covariance.is_none() {
         let mut values = observed.values.raw_values().to_vec();
         for (row, value) in values.iter_mut().enumerate() {
             value[1] = astrometry.lon[row];
             value[2] = astrometry.lat[row];
         }
-        let source = observed.covariance.as_ref().expect("checked above");
+        let (units, row_validity) = match &observed.covariance {
+            Some(source) => (source.units.clone(), source.row_validity.clone()),
+            None => (
+                crate::CovarianceUnits::Coordinate(crate::CoordinateRepresentation::Spherical),
+                None,
+            ),
+        };
         let mut used_covariance =
-            crate::CovarianceBatch::new(n, 6, astrometry.covariance.clone(), source.units.clone())?;
-        if let Some(validity) = &source.row_validity {
-            used_covariance = used_covariance.with_row_validity(validity.clone())?;
+            crate::CovarianceBatch::new(n, 6, astrometry.covariance.clone(), units)?;
+        if let Some(validity) = row_validity {
+            used_covariance = used_covariance.with_row_validity(validity)?;
         }
         CoordinateBatch::new(
             crate::CoordinateValues::Spherical(values),
@@ -2872,6 +2906,87 @@ mod tests {
         let refined = output.full_od.refined.expect("refined orbit");
         assert!(refined.fit.converged);
         assert_eq!(refined.passes, 1);
+    }
+
+    /// `synthetic_observations_spaced(1, None)` without any covariance.
+    fn observations_without_covariance() -> CoordinateBatch {
+        let observed = synthetic_observations_spaced(1, None);
+        CoordinateBatch::new(
+            observed.values.clone(),
+            observed.frame,
+            observed.origins.clone(),
+            observed.times.clone(),
+            None,
+        )
+        .unwrap()
+    }
+
+    fn run_od_without_covariance(
+        models: Vec<Box<dyn ObservationUncertaintyModel>>,
+    ) -> PropagationResultValue<RunOdOutput> {
+        let obs_code: Vec<String> = (0..NUM_OBS).map(|_| "T00".to_string()).collect();
+        run_od_barycentric(
+            &TwoBodyPropagator::default(),
+            &observations_without_covariance(),
+            &observers_spaced(1),
+            &obs_code,
+            &vec![None; NUM_OBS],
+            &vec![None; NUM_OBS],
+            models,
+            &full_od_config(RefinementConfig::Cmc2003(Cmc2003FitConfig::default())),
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+    }
+
+    #[test]
+    fn run_od_lets_a_sigma_model_fill_a_missing_covariance() {
+        let lookup = crate::veres2017::VeresSigmaLookup::new(
+            &[crate::veres2017::VeresSigmaRow {
+                obs_code: None,
+                astcat: None,
+                sigma_ra_arcsec: SIGMA_DEG * 3600.0,
+                sigma_dec_arcsec: SIGMA_DEG * 3600.0,
+            }],
+            None,
+        )
+        .unwrap();
+        let output =
+            run_od_without_covariance(vec![Box::new(crate::veres2017::SigmaFillModel { lookup })])
+                .unwrap();
+        assert!(output.models_changed);
+        assert!(output.original.sigma_lon.iter().all(|s| s.is_nan()));
+        assert!(output.original.sigma_lat.iter().all(|s| s.is_nan()));
+        assert!(output
+            .used
+            .sigma_lat
+            .iter()
+            .all(|s| (s - SIGMA_DEG).abs() < 1e-15));
+        assert!(output.used.sigma_lon.iter().all(|s| s.is_finite()));
+        assert!(output.full_od.iod.found);
+        let refined = output.full_od.refined.expect("refined orbit");
+        assert!(refined.fit.converged);
+        assert_eq!(refined.n_rejected, 0);
+    }
+
+    #[test]
+    fn run_od_without_covariance_or_a_filling_model_is_refused() {
+        match run_od_without_covariance(Vec::new()) {
+            Err(PropagationError::InvalidRequest(message)) => {
+                assert!(message.contains("SigmaFillModel"), "{message}");
+                assert!(message.contains("12 of 12"), "{message}");
+            }
+            other => panic!("expected InvalidRequest, got {other:?}"),
+        }
+        // A model that does not touch the covariance does not help either.
+        let models: Vec<Box<dyn ObservationUncertaintyModel>> = vec![Box::new(
+            crate::observation_uncertainty::NightBatchDeweightingModel::new(2).unwrap(),
+        )];
+        assert!(matches!(
+            run_od_without_covariance(models),
+            Err(PropagationError::InvalidRequest(_))
+        ));
     }
 
     #[test]

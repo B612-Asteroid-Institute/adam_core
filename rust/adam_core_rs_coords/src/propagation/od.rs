@@ -1542,17 +1542,20 @@ pub(super) fn spherical_flat(
     Ok(values.iter().flat_map(|row| row.iter().copied()).collect())
 }
 
+/// The message of every "no observed covariance" refusal: names the
+/// remedy for observations without reported uncertainties.
+pub(super) const MISSING_COVARIANCE_REMEDY: &str = "orbit determination requires an \
+observed covariance with finite, positive lon/lat variances; observations without \
+reported uncertainties need a SigmaFillModel among the run_od observation models to \
+supply them";
+
 pub(super) fn observed_covariance_flat(
     observed: &CoordinateBatch,
 ) -> PropagationResultValue<Vec<f64>> {
     Ok(observed
         .covariance
         .as_ref()
-        .ok_or_else(|| {
-            PropagationError::InvalidRequest(
-                "orbit determination requires observed covariance".to_string(),
-            )
-        })?
+        .ok_or_else(|| PropagationError::InvalidRequest(MISSING_COVARIANCE_REMEDY.to_string()))?
         .values_row_major
         .clone())
 }

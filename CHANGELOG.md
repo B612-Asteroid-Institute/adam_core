@@ -139,6 +139,7 @@ This file contains notable changes in adam-core
   fused route previously leaked the opaque backend identifier into it.
 - CMC2003: a row whose rejection statistic cannot be established (NaN residual or Jacobian, singular expected residual covariance with a nonzero residual) now scores `+inf` with the `non_finite_chi2` / `singular_residual_covariance` flag, so it is rejected when selected and never re-included; previously it scored `0` and looked acceptable.
 - The weak-direction covariance probe no longer converts a backend error raised while predicting the probe displacement into a "covariance could not be validated" warning: it propagates like any other prediction failure (on the callback route the Python exception reaches the caller unchanged); only the in-band probe outcomes (no positive eigenvalue, rejected trial prediction, non-finite probe residuals) remain warnings.
+- The fused `run_od` route (a Rust-backed propagator's `run_od` work unit) runs the observation models before requiring an observed covariance, so observations without reported uncertainties can be filled by a `SigmaFillModel` exactly as on the composed route; after the models every observation must carry finite, positive lon/lat variances, else `ValueError` names `SigmaFillModel` as the remedy (the same message every other OD entry point now gives for a missing covariance).
 
 ### Compatibility
 
