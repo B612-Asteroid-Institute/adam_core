@@ -16,3 +16,5 @@ adam_core_rs_coords = { version = "=0.1.0-rc.5", path = "../adam_core_rs_coords"
 adam_core_rs_kernel_data = { version = "=0.1.0-rc.5", path = "../adam_core_rs_kernel_data" }
 adam_core_rs_orbit_determination = { version = "=0.1.0-rc.5", path = "../adam_core_rs_orbit_determination" }
 adam_core_rs_spice = { version = "=0.1.0-rc.5", path = "../adam_core_rs_spice" }
+serde_json = { version = "1", features = ["preserve_order"] }
+ureq = { version = "2.12", default-features = false, features = ["tls"] }

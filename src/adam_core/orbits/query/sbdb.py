@@ -542,15 +542,10 @@ def _orbits_from_sbdb_payloads(
     ids: list[str],
     payloads: list[dict[str, Any]],
 ) -> Orbits:
-    """
-    Convert raw SBDB JSON payloads into an `Orbits` table.
-
-    The deterministic payload normalization (element selection, covariance
-    matrix/label handling, SBDB->ADAM covariance ordering, and physical
-    parameter extraction) is Rust-backed behind this canonical helper; Python
-    remains the thin table-construction facade.
-    """
+    """Build the canonical Rust SBDB product from recorded payloads."""
     from adam_core import _rust_native as _rn
+
+    from ..._rust.arrow import table_from_record_batch
 
     if len(ids) != len(payloads):
         raise ValueError("ids and payloads must have the same length.")
@@ -558,96 +553,18 @@ def _orbits_from_sbdb_payloads(
         if "object" not in payload:
             raise NotFoundError("object {} was not found", obj_id)
 
-    normalized = json.loads(
-        _rn.query_sbdb_normalize_payloads(json.dumps(ids), json.dumps(payloads))
+    batch, warnings = _rn.query_sbdb_arrow(
+        ids,
+        True,
+        60.0,
+        1,
+        False,
+        False,
+        [json.dumps(payload) for payload in payloads],
     )
-    for warning in normalized.get("warnings", []):
+    for warning in warnings:
         logger.warning("%s", warning)
-    coords_cometary = np.asarray(normalized["coords_cometary"], dtype=np.float64)
-    covariance_rows = normalized["covariances_cometary"]
-    covariance_validity = np.asarray(
-        normalized["covariance_validity"], dtype=np.bool_
-    )
-    covariance_axis_masks = normalized["nongrav_covariance_axis_mask"]
-    covariance_mask_values = pa.array(
-        [
-            int(mask) if valid else None
-            for valid, mask in zip(
-                covariance_validity, covariance_axis_masks, strict=True
-            )
-        ],
-        type=pa.uint8(),
-    )
-    covariance = CoordinateCovariances.from_kwargs(
-        values=pa.array(
-            [
-                row if valid else None
-                for valid, row in zip(
-                    covariance_validity, covariance_rows, strict=True
-                )
-            ],
-            type=pa.large_list(pa.float64()),
-        ),
-        nongrav_axis_mask=covariance_mask_values,
-    )
-    times = Timestamp.from_jd(
-        pa.array(normalized["times_jd"], type=pa.float64()), scale="tdb"
-    )
-    origin = Origin.from_kwargs(code=["SUN" for _ in range(len(times))])
-
-    coordinates = CometaryCoordinates.from_kwargs(
-        time=times,
-        q=coords_cometary[:, 0],
-        e=coords_cometary[:, 1],
-        i=coords_cometary[:, 2],
-        raan=coords_cometary[:, 3],
-        ap=coords_cometary[:, 4],
-        tp=coords_cometary[:, 5],
-        covariance=covariance,
-        origin=origin,
-        frame="ecliptic",
-    )
-    coordinates_cartesian = coordinates.to_cartesian()
-    # The legacy Python transform preserves the numerical covariance block but
-    # not canonical row validity or A-axis membership. Reattach only the
-    # explicit Rust-normalized metadata; never reconstruct it from values.
-    cartesian_covariance_values = coordinates_cartesian.covariance.values
-    if isinstance(cartesian_covariance_values, pa.ChunkedArray):
-        cartesian_covariance_values = cartesian_covariance_values.combine_chunks()
-    cartesian_covariance = CoordinateCovariances.from_kwargs(
-        values=pa.LargeListArray.from_arrays(
-            cartesian_covariance_values.offsets,
-            cartesian_covariance_values.values,
-            mask=pa.array(~covariance_validity),
-        ),
-        nongrav_axis_mask=covariance_mask_values,
-    )
-    coordinates_cartesian = coordinates_cartesian.set_column(
-        "covariance", cartesian_covariance
-    )
-
-    phys = normalized["physical_parameters"]
-    physical_parameters = PhysicalParameters.from_kwargs(
-        H_v=np.asarray(phys["H_v"], dtype=np.float64),
-        H_v_sigma=np.asarray(phys["H_v_sigma"], dtype=np.float64),
-        G=np.asarray(phys["G"], dtype=np.float64),
-        G_sigma=np.asarray(phys["G_sigma"], dtype=np.float64),
-    )
-    nongrav_rows = normalized["non_gravitational_parameters"]
-    nongrav_columns = {
-        field: [row.get(field) for row in nongrav_rows]
-        for field in ("source", "A1", "A2", "A3", "ALN", "NK", "NM", "NN", "R0")
-    }
-    non_gravitational_parameters = NonGravitationalParameters.from_kwargs(
-        **nongrav_columns
-    )
-    return Orbits.from_kwargs(
-        orbit_id=np.array(normalized["orbit_id"], dtype="object"),
-        object_id=np.array(normalized["object_id"], dtype="object"),
-        coordinates=coordinates_cartesian,
-        physical_parameters=physical_parameters,
-        non_gravitational_parameters=non_gravitational_parameters,
-    )
+    return table_from_record_batch(Orbits, batch)
 
 
 def _get_sbdb_payloads_new(
