@@ -512,6 +512,27 @@ def test_recorded_sbdb_complete_rust_product_matches_payload_facade() -> None:
     actual = table_from_record_batch(Orbits, batch)
     assert warnings == []
     _assert_orbits_equivalent(actual, expected, covariance_atol=3e-28)
+    assert (
+        actual.coordinates.covariance.nongrav_axis_mask.to_pylist()
+        == expected.coordinates.covariance.nongrav_axis_mask.to_pylist()
+    )
+
+
+def test_recorded_sbdb_payload_facade_preserves_mixed_covariance_validity() -> None:
+    valid = _load_sbdb_fixture_payload("67P_phys.json")
+    missing = copy.deepcopy(_load_sbdb_fixture_payload("2001VB.json"))
+    missing["orbit"].pop("covariance")
+    missing["orbit"]["elements"][0]["sigma"] = None
+
+    orbits = _orbits_from_sbdb_payloads(["67P", "2001VB"], [valid, missing])
+
+    assert np.isfinite(orbits.coordinates.values).all()
+    assert len(orbits.coordinates.covariance.values[0].as_py()) == 81
+    assert orbits.coordinates.covariance.values[1].as_py() is None
+    assert orbits.coordinates.covariance.nongrav_axis_mask.to_pylist() == [
+        0b111,
+        None,
+    ]
 
 
 def test_sbdb_complete_product_has_rust_owned_timing() -> None:
