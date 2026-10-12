@@ -1886,6 +1886,25 @@ fn non_null_f64(column: &Float64Array, field: &str, row: usize) -> SchemaResult<
 mod tests {
     use super::*;
 
+    fn labeled_9d_covariance_values(mask: NongravCovarianceAxes, scale: f64) -> Vec<f64> {
+        let mut values = vec![0.0; 81];
+        for axis in 0..6 {
+            values[axis * 9 + axis] = scale;
+        }
+        for (axis, axis_index) in [
+            (NongravCovarianceAxes::A1, 6),
+            (NongravCovarianceAxes::A2, 7),
+            (NongravCovarianceAxes::A3, 8),
+        ] {
+            if mask.contains(axis) {
+                values[axis_index * 9 + axis_index] = scale;
+                values[axis_index] = scale / 10.0;
+                values[axis_index * 9] = scale / 10.0;
+            }
+        }
+        values
+    }
+
     fn coordinate_batch_with_covariance() -> CoordinateBatch {
         let times =
             TimeArray::from_parts(TimeScale::Tdb, vec![60000, 60001], vec![10, 20]).unwrap();
@@ -2244,7 +2263,14 @@ mod tests {
         let covariance = CovarianceBatch::new(
             2,
             9,
-            (0..162).map(|value| value as f64).collect(),
+            [
+                labeled_9d_covariance_values(NongravCovarianceAxes::A2, 1.0),
+                labeled_9d_covariance_values(
+                    NongravCovarianceAxes::A1 | NongravCovarianceAxes::A3,
+                    2.0,
+                ),
+            ]
+            .concat(),
             CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
         )
         .unwrap()

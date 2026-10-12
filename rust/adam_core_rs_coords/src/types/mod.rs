@@ -373,7 +373,9 @@ pub enum CovarianceUnits {
 ///
 /// This mask is categorical numerical schema. It does not describe whether a
 /// provider fitted, fixed, estimated, or considered a parameter, and it must
-/// never be inferred from nominal values or covariance entries.
+/// never be inferred from nominal values or covariance entries. In a valid
+/// labeled physical-9D row, every axis absent from the mask is structural
+/// padding whose complete row and column are numerical zero.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[repr(transparent)]
 pub struct NongravCovarianceAxes(u8);
@@ -422,6 +424,8 @@ pub struct CovarianceBatch {
     pub row_validity: Option<Validity>,
     /// Optional canonical A-axis membership for every row. `None` means the
     /// batch is legacy/unlabeled; it never means that all A axes are inactive.
+    /// For labeled physical-9D rows, inactive A rows and columns are structural
+    /// zero padding; zeros inside the active state/A block remain real values.
     pub nongrav_axis_mask: Option<Vec<NongravCovarianceAxes>>,
     pub units: CovarianceUnits,
 }
@@ -501,14 +505,37 @@ impl CovarianceBatch {
                 ));
             }
             for (row, mask) in masks.iter().copied().enumerate() {
-                if !mask.is_empty()
-                    && (!self.is_row_valid(row)
-                        || self.dimension == 6
-                        || self.row_dimension(row) == 6)
+                let row_is_valid = self.is_row_valid(row);
+                let row_dimension = self.row_dimension(row);
+                if !mask.is_empty() && (!row_is_valid || self.dimension == 6 || row_dimension == 6)
                 {
                     return Err(SchemaError::InvalidRecordBatch(format!(
                         "covariance row {row} declares non-gravitational axes without stored A-axis covariance"
                     )));
+                }
+                if self.dimension == 9 && row_is_valid && row_dimension == 9 {
+                    let values = self.row_values(row);
+                    for (axis, axis_name, axis_index) in [
+                        (NongravCovarianceAxes::A1, "A1", 6),
+                        (NongravCovarianceAxes::A2, "A2", 7),
+                        (NongravCovarianceAxes::A3, "A3", 8),
+                    ] {
+                        if mask.contains(axis) {
+                            continue;
+                        }
+                        for element in 0..9 {
+                            for (matrix_row, matrix_column) in
+                                [(axis_index, element), (element, axis_index)]
+                            {
+                                let value = values[matrix_row * 9 + matrix_column];
+                                if value != 0.0 {
+                                    return Err(SchemaError::InvalidRecordBatch(format!(
+                                        "covariance row {row} inactive {axis_name} structural padding must be numerical zero; matrix[{matrix_row},{matrix_column}] is {value}"
+                                    )));
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -1351,6 +1378,25 @@ fn validate_optional_finite(field: &str, values: &[Option<f64>]) -> SchemaResult
 mod tests {
     use super::*;
 
+    fn labeled_9d_values(mask: NongravCovarianceAxes, scale: f64) -> Vec<f64> {
+        let mut values = vec![0.0; 81];
+        for axis in 0..6 {
+            values[axis * 9 + axis] = scale;
+        }
+        for (axis, axis_index) in [
+            (NongravCovarianceAxes::A1, 6),
+            (NongravCovarianceAxes::A2, 7),
+            (NongravCovarianceAxes::A3, 8),
+        ] {
+            if mask.contains(axis) {
+                values[axis_index * 9 + axis_index] = scale;
+                values[axis_index] = scale / 10.0;
+                values[axis_index * 9] = scale / 10.0;
+            }
+        }
+        values
+    }
+
     #[test]
     fn nongrav_covariance_axes_use_canonical_bits() {
         let axes = NongravCovarianceAxes::A1 | NongravCovarianceAxes::A3;
@@ -1362,20 +1408,99 @@ mod tests {
     }
 
     #[test]
-    fn covariance_mask_validation_is_explicit_and_never_inferred() {
-        let legacy = CovarianceBatch::new(
+    fn covariance_mask_accepts_valid_a2_only_structural_padding() {
+        CovarianceBatch::new(
+            1,
+            9,
+            labeled_9d_values(NongravCovarianceAxes::A2, 2.0),
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap()
+        .with_nongrav_axis_mask(vec![NongravCovarianceAxes::A2])
+        .unwrap();
+    }
+
+    #[test]
+    fn covariance_mask_allows_zero_values_inside_active_block() {
+        CovarianceBatch::new(
             1,
             9,
             vec![0.0; 81],
             CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
         )
+        .unwrap()
+        .with_nongrav_axis_mask(vec![NongravCovarianceAxes::A2])
+        .unwrap();
+    }
+
+    #[test]
+    fn covariance_mask_rejects_nonzero_inactive_state_cross_covariance() {
+        let mut values = labeled_9d_values(NongravCovarianceAxes::A2, 1.0);
+        values[6] = 1.0;
+        let err = CovarianceBatch::new(
+            1,
+            9,
+            values,
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap()
+        .with_nongrav_axis_mask(vec![NongravCovarianceAxes::A2])
+        .unwrap_err();
+        assert!(matches!(err, SchemaError::InvalidRecordBatch(_)));
+    }
+
+    #[test]
+    fn covariance_mask_rejects_nonzero_inactive_a_cross_covariance() {
+        let mut values = labeled_9d_values(NongravCovarianceAxes::A2, 1.0);
+        values[6 * 9 + 7] = 1.0;
+        let err = CovarianceBatch::new(
+            1,
+            9,
+            values,
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap()
+        .with_nongrav_axis_mask(vec![NongravCovarianceAxes::A2])
+        .unwrap_err();
+        assert!(matches!(err, SchemaError::InvalidRecordBatch(_)));
+    }
+
+    #[test]
+    fn covariance_mask_rejects_nonzero_inactive_diagonal() {
+        let mut values = labeled_9d_values(NongravCovarianceAxes::A2, 1.0);
+        values[6 * 9 + 6] = 1.0;
+        let err = CovarianceBatch::new(
+            1,
+            9,
+            values,
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap()
+        .with_nongrav_axis_mask(vec![NongravCovarianceAxes::A2])
+        .unwrap_err();
+        assert!(matches!(err, SchemaError::InvalidRecordBatch(_)));
+    }
+
+    #[test]
+    fn covariance_mask_validation_is_explicit_and_never_inferred() {
+        let legacy = CovarianceBatch::new(
+            1,
+            9,
+            vec![1.0; 81],
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
         .unwrap();
         assert!(legacy.nongrav_axis_mask.is_none());
 
-        let labeled = legacy
-            .clone()
-            .with_nongrav_axis_mask(vec![NongravCovarianceAxes::A2])
-            .unwrap();
+        let labeled = CovarianceBatch::new(
+            1,
+            9,
+            vec![0.0; 81],
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap()
+        .with_nongrav_axis_mask(vec![NongravCovarianceAxes::A2])
+        .unwrap();
         assert_eq!(
             labeled.nongrav_axis_mask,
             Some(vec![NongravCovarianceAxes::A2])
@@ -1423,7 +1548,12 @@ mod tests {
         let covariance = CovarianceBatch::new(
             3,
             9,
-            (0..243).map(|value| value as f64).collect(),
+            [
+                labeled_9d_values(NongravCovarianceAxes::A1, 1.0),
+                labeled_9d_values(NongravCovarianceAxes::NONE, 2.0),
+                labeled_9d_values(NongravCovarianceAxes::A1 | NongravCovarianceAxes::A3, 3.0),
+            ]
+            .concat(),
             CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
         )
         .unwrap()

@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn rotate_frame_preserves_nongrav_covariance_axis_mask() {
         let mut covariance_values = vec![0.0; 81];
-        for diagonal in 0..9 {
+        for diagonal in [0, 1, 2, 3, 4, 5, 7] {
             covariance_values[diagonal * 9 + diagonal] = 1.0;
         }
         let covariance = CovarianceBatch::new(
