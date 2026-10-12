@@ -426,7 +426,9 @@ fn fit_output_dict<'py>(
 }
 
 /// The dict contract of an IOD decision: ``found``, the accepted state and
-/// epoch, statistics, per-observation residuals and flags.
+/// epoch, statistics, per-observation residuals and flags, plus the search
+/// counters (``triplets_tried``, ``candidates_evaluated``,
+/// ``candidates_failed``) and ``not_found_reason`` (None when found).
 fn iod_dict<'py>(
     py: Python<'py>,
     iod: IodOutput,
@@ -457,6 +459,10 @@ fn iod_dict<'py>(
     out.set_item("residual_probability", iod.residual_probability)?;
     out.set_item("solution", iod.solution)?;
     out.set_item("outlier", iod.outlier)?;
+    out.set_item("triplets_tried", iod.triplets_tried)?;
+    out.set_item("candidates_evaluated", iod.candidates_evaluated)?;
+    out.set_item("candidates_failed", iod.candidates_failed)?;
+    out.set_item("not_found_reason", iod.not_found_reason)?;
     Ok(out)
 }
 

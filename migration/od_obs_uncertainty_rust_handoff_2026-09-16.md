@@ -295,6 +295,69 @@ dict keys unchanged; keys and `IodOutput` fields were added).
    astrometry, no filling model raises `ValueError` matching
    `SigmaFillModel`, both routes agree on the fit).
 
+4. **IOD: deterministic order, no early exit, failures stay local**
+   (`od.rs` `iod_fit`, `od_drivers.rs` `iod_dict`, `iod.py`
+   `tables_from_iod_output`). `iod_fit` now sorts the observations by
+   epoch (integer `Epoch` days, then nanos), station code, then input row
+   (`iod_observation_order`), runs the unchanged search
+   (`iod_fit_sorted`: same triplet ordering, same `3 * (max_outliers + 1)`
+   budget) on the sorted view (`take_coordinate_batch` /
+   `take_observer_batch`) and maps `residuals`, `residual_chi2`,
+   `residual_dof`, `residual_probability`, `solution` and `outlier` back to
+   the input order (`restore_input_order`); `iod_fit_linkages_barycentric`
+   inherits this. The `max_outliers == 0` early return is gone: zero
+   contamination only skips the outlier trials. A candidate whose
+   `evaluate_orbit` fails with `Backend` / `BackendProtocol` /
+   `ThreadPool` (including the in-band per-row failure, which
+   `evaluate_orbit` maps to `Backend`) is counted in `candidates_failed`
+   and skipped; `InvalidRequest` / `Schema` propagate. `IodOutput` gained
+   `triplets_tried`, `candidates_evaluated`, `candidates_failed`,
+   `not_found_reason` (`IodOutput::not_found(n)` kept; `not_found_because`
+   and `with_search_counters` added); every not-found path now states a
+   reason (fewer than `min_obs`, no distinct-epoch triplet, every candidate
+   prediction failed + last message, or "N candidates from M triplets
+   scored, none within rchi2_threshold" with the best reduced chi2). The
+   dict keys of the same names were added to `iod_dict` (so `iod_fit_ipc`
+   and the `iod` entry of `full_od` / `run_od` outputs carry them) and
+   `tables_from_iod_output` logs them at debug level when not found. On the
+   callback route a Python exception raised for one candidate is now a
+   skipped candidate (its stored exception is dropped once the search
+   moves on); if every candidate failed the not-found reason carries the
+   last message rather than raising. Tests (Rust, `od::tests`):
+   `iod_observation_order_sorts_by_epoch_then_code_then_row`,
+   `iod_fit_accepts_the_noise_free_arc_in_input_order`,
+   `iod_fit_is_invariant_to_input_order` (shuffled input, both
+   contaminations: identical state and member arrays in input order),
+   `iod_fit_zero_contamination_continues_past_a_rejected_triplet` (a
+   predictor displacing every finite candidate of the first triplet by half
+   a degree), `iod_fit_skips_a_candidate_whose_prediction_fails` (each
+   skippable error kind plus the in-band failure),
+   `iod_fit_reports_total_prediction_failure_as_not_found`,
+   `iod_fit_propagates_caller_errors_and_explains_rejections`. Python:
+   `tests/test_iod_determinism.py` (`iod()` on `TwoBodyPropagator` with a
+   shuffled copy: same state, epoch, chi2, and the same `solution` /
+   `outlier` flags per observation id, at 0 % and 20 % contamination).
+   Not done, by design: the plan's "Python `iod()` restores the legacy
+   time/code sort as belt-and-braces" (not in this brief; the Rust sort
+   makes it redundant). Follow-up for the coordinator-owned
+   `native_orbit_fitter.py`: `tables_from_native_full_od` returns empty
+   tables on an unfound IOD without passing through
+   `tables_from_iod_output`, so the fused `full_od` / `run_od` routes do
+   not log `not_found_reason` yet (the dict carries it).
+
+Gates run before each of the four commits (`cargo +1.87.0`): `fmt --all
+--check`, `clippy --workspace --all-targets -- -D warnings`, `test
+--workspace` (coords crate 255 -> 265 tests, all green); `maturin develop
+--release`; `pytest src/adam_core/orbit_determination src/adam_core/dynamics
+src/adam_core/observations` minus the three adam_assist-importing OD files:
+579 -> 589 passed, 14 skipped, plus the two pre-existing collection errors
+of this venv (`dynamics/tests/test_impact_viz_data.py` needs geopandas,
+`dynamics/tests/test_lambert.py` needs adam_assist); `ruff` / `black` /
+`isort` clean. No public signature changed, so
+`migration/public_surface/manifest.json` was not regenerated (its `line`
+fields for the touched `iod.py` / `rejection.py` symbols are a few lines
+stale).
+
 ## Correctness gates
 
 * **HEALPix RING order.** `efcc18::tests::ring_order_matches_jpl_tiles_dat`

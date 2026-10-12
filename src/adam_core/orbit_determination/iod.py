@@ -467,9 +467,21 @@ def tables_from_iod_output(
     """
     Wrap the dict of a Rust IOD decision (`iod_fit_ipc`, or the ``iod`` entry
     of a fused ``full_od`` output) into `FittedOrbits` / `FittedOrbitMembers`
-    in the observations' order; empty tables when no orbit was accepted.
+    in the observations' order; empty tables when no orbit was accepted, in
+    which case the search counters and the reason are logged at debug level.
     """
     if not output["found"]:
+        reason = output.get("not_found_reason")
+        if reason is not None:
+            logger.debug(
+                "IOD accepted no orbit for %d observations: %s "
+                "(triplets tried: %s, candidates evaluated: %s, failed: %s)",
+                len(observations),
+                reason,
+                output.get("triplets_tried"),
+                output.get("candidates_evaluated"),
+                output.get("candidates_failed"),
+            )
         return FittedOrbits.empty(), FittedOrbitMembers.empty()
     state = np.asarray(output["state"], dtype=np.float64)
     orbit = FittedOrbits.from_kwargs(

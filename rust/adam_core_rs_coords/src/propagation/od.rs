@@ -1130,7 +1130,9 @@ pub struct IodConfig {
 
 /// Product of the complete preliminary-IOD decision loop for one linkage.
 /// `state` is heliocentric/ecliptic at `epoch_mjd`; residual/member arrays
-/// retain the caller's observation order.
+/// retain the caller's observation order. The search counters describe the
+/// run whether or not an orbit was accepted; `not_found_reason` says why
+/// none was.
 #[derive(Debug, Clone)]
 pub struct IodOutput {
     pub found: bool,
@@ -1146,6 +1148,14 @@ pub struct IodOutput {
     pub residual_probability: Vec<f64>,
     pub solution: Vec<bool>,
     pub outlier: Vec<bool>,
+    /// Triplets for which Gauss candidates were generated.
+    pub triplets_tried: usize,
+    /// Candidates scored against the observations (successful predictions).
+    pub candidates_evaluated: usize,
+    /// Candidates skipped because their prediction failed (see [`iod_fit`]).
+    pub candidates_failed: usize,
+    /// Why no orbit was accepted; `None` when `found`.
+    pub not_found_reason: Option<String>,
 }
 
 impl IodOutput {
@@ -1164,14 +1174,47 @@ impl IodOutput {
             residual_probability: Vec::new(),
             solution: vec![false; n],
             outlier: vec![false; n],
+            triplets_tried: 0,
+            candidates_evaluated: 0,
+            candidates_failed: 0,
+            not_found_reason: None,
         }
     }
+
+    fn not_found_because(n: usize, reason: String) -> Self {
+        Self {
+            not_found_reason: Some(reason),
+            ..Self::not_found(n)
+        }
+    }
+
+    fn with_search_counters(mut self, counters: &SearchCounters) -> Self {
+        self.triplets_tried = counters.triplets_tried;
+        self.candidates_evaluated = counters.candidates_evaluated;
+        self.candidates_failed = counters.candidates_failed;
+        self
+    }
+}
+
+/// Running totals of one IOD search.
+#[derive(Debug, Default)]
+struct SearchCounters {
+    triplets_tried: usize,
+    candidates_evaluated: usize,
+    candidates_failed: usize,
+    /// Message of the last candidate prediction failure.
+    last_failure: Option<String>,
+    /// Lowest reduced chi2 among the scored candidates (before outlier
+    /// trials), for the not-found reason.
+    best_reduced_chi2: f64,
 }
 
 /// Complete legacy `iod()` work unit: triplet selection, fused Gauss
 /// candidate generation, backend ephemeris/residual scoring, outlier trials,
-/// and first-acceptable-candidate selection. The input rows must already be
-/// in the public IOD observation order; all output member arrays preserve it.
+/// and first-acceptable-candidate selection. Observations are searched in a
+/// canonical order (epoch, then station code, then input row) whatever
+/// order the caller supplies them in; all output member arrays keep the
+/// caller's order.
 #[allow(clippy::too_many_arguments)]
 pub fn iod_fit_barycentric<P, T>(
     propagator: &P,
@@ -1196,6 +1239,18 @@ where
 }
 
 /// [`iod_fit_barycentric`] over any [`SphericalPredictor`].
+///
+/// The search is deterministic in the caller's row order: observations are
+/// sorted by epoch (integer days and nanoseconds), then station code, then
+/// input row before triplets are selected, and every member array of the
+/// output is mapped back to the input order. A zero contamination
+/// percentage only disables outlier removal; a rejected candidate is
+/// followed by the next candidate and the next triplet. A candidate whose
+/// prediction fails (`PropagationError::Backend`, `BackendProtocol`,
+/// `ThreadPool`, including a per-row numerical failure) is counted in
+/// `candidates_failed` and skipped; `InvalidRequest` and `Schema` errors
+/// are caller errors and propagate. When every candidate failed the result
+/// is not found with the last failure message as `not_found_reason`.
 pub fn iod_fit(
     predictor: &dyn SphericalPredictor,
     observed: &CoordinateBatch,
@@ -1209,8 +1264,71 @@ pub fn iod_fit(
         ));
     }
     if n == 0 || n < config.min_obs {
-        return Ok(IodOutput::not_found(n));
+        return Ok(IodOutput::not_found_because(
+            n,
+            format!("{n} observations, fewer than min_obs = {}", config.min_obs),
+        ));
     }
+    let order = iod_observation_order(observed, observers)?;
+    let sorted_observed = take_coordinate_batch(observed, &order)?;
+    let sorted_observers = take_observer_batch(observers, &order)?;
+    let output = iod_fit_sorted(predictor, &sorted_observed, &sorted_observers, config)?;
+    Ok(restore_input_order(output, &order))
+}
+
+/// Permutation putting the observations in the canonical IOD search order:
+/// epoch (days, then nanoseconds), station code, input row.
+fn iod_observation_order(
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+) -> PropagationResultValue<Vec<usize>> {
+    let times = observed.times.as_ref().ok_or_else(|| {
+        PropagationError::InvalidRequest(
+            "orbit determination requires observation times".to_string(),
+        )
+    })?;
+    let mut order: Vec<usize> = (0..observed.len()).collect();
+    order.sort_by(|&a, &b| {
+        let (ea, eb) = (times.epochs[a], times.epochs[b]);
+        (ea.days, ea.nanos)
+            .cmp(&(eb.days, eb.nanos))
+            .then_with(|| observers.code[a].0.cmp(&observers.code[b].0))
+            .then(a.cmp(&b))
+    });
+    Ok(order)
+}
+
+/// Map the member arrays of an output computed on the sorted view
+/// (`order[k]` = input row of sorted row `k`) back to the input order.
+fn restore_input_order(mut output: IodOutput, order: &[usize]) -> IodOutput {
+    fn unpermute<T: Clone>(sorted: &[T], order: &[usize], width: usize) -> Vec<T> {
+        if sorted.is_empty() {
+            return Vec::new();
+        }
+        let mut out = sorted.to_vec();
+        for (k, &row) in order.iter().enumerate() {
+            out[row * width..(row + 1) * width]
+                .clone_from_slice(&sorted[k * width..(k + 1) * width]);
+        }
+        out
+    }
+    output.residuals = unpermute(&output.residuals, order, 6);
+    output.residual_chi2 = unpermute(&output.residual_chi2, order, 1);
+    output.residual_dof = unpermute(&output.residual_dof, order, 1);
+    output.residual_probability = unpermute(&output.residual_probability, order, 1);
+    output.solution = unpermute(&output.solution, order, 1);
+    output.outlier = unpermute(&output.outlier, order, 1);
+    output
+}
+
+/// [`iod_fit`] on observations already in the canonical search order.
+fn iod_fit_sorted(
+    predictor: &dyn SphericalPredictor,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &IodConfig,
+) -> PropagationResultValue<IodOutput> {
+    let n = observed.len();
     let observed_values = observed.values.spherical().ok_or_else(|| {
         PropagationError::InvalidRequest("IOD requires spherical observed coordinates".to_string())
     })?;
@@ -1227,10 +1345,18 @@ pub fn iod_fit(
     // `max_outliers + 1`: three candidate triplets per allowed outlier.
     triplets.truncate(3 * (max_outliers + 1));
     if triplets.is_empty() {
-        return Ok(IodOutput::not_found(n));
+        return Ok(IodOutput::not_found_because(
+            n,
+            "no triplet of observations with three distinct epochs".to_string(),
+        ));
     }
 
+    let mut counters = SearchCounters {
+        best_reduced_chi2: f64::INFINITY,
+        ..SearchCounters::default()
+    };
     for triplet in triplets {
+        counters.triplets_tried += 1;
         let ra = std::array::from_fn(|slot| observed_values[triplet[slot]][1]);
         let dec = std::array::from_fn(|slot| observed_values[triplet[slot]][2]);
         let triplet_times = std::array::from_fn(|slot| times[triplet[slot]]);
@@ -1270,7 +1396,7 @@ pub fn iod_fit(
                 vec![None],
                 candidate_coordinates,
             )?;
-            let evaluation = evaluate_orbit(
+            let evaluation = match evaluate_orbit(
                 predictor,
                 state,
                 &orbit,
@@ -1278,7 +1404,21 @@ pub fn iod_fit(
                 observers,
                 &vec![false; n],
                 6,
-            )?;
+            ) {
+                Ok(evaluation) => evaluation,
+                // A failed prediction is local to this candidate.
+                Err(
+                    err @ (PropagationError::Backend(_)
+                    | PropagationError::BackendProtocol(_)
+                    | PropagationError::ThreadPool(_)),
+                ) => {
+                    counters.candidates_failed += 1;
+                    counters.last_failure = Some(err.to_string());
+                    continue;
+                }
+                Err(err) => return Err(err),
+            };
+            counters.candidates_evaluated += 1;
 
             if evaluation.reduced_chi2 <= config.rchi2_threshold {
                 return Ok(iod_accepted_output(
@@ -1288,12 +1428,13 @@ pub fn iod_fit(
                     triplet,
                     Vec::new(),
                     evaluation,
-                ));
+                )
+                .with_search_counters(&counters));
             }
+            counters.best_reduced_chi2 = counters.best_reduced_chi2.min(evaluation.reduced_chi2);
             if max_outliers == 0 {
-                if candidate + 1 == candidate_count {
-                    return Ok(IodOutput::not_found(n));
-                }
+                // Zero contamination only disables outlier removal: the
+                // next candidate, then the next triplet, is tried.
                 continue;
             }
 
@@ -1325,12 +1466,36 @@ pub fn iod_fit(
                     accepted.reduced_chi2 = reduced;
                     accepted.num_obs = num_obs;
                     accepted.arc_length = arc_length;
-                    return Ok(accepted);
+                    return Ok(accepted.with_search_counters(&counters));
                 }
             }
         }
     }
-    Ok(IodOutput::not_found(n))
+    let reason = if counters.candidates_evaluated == 0 && counters.candidates_failed > 0 {
+        format!(
+            "every candidate prediction failed ({} candidates from {} triplets); last failure: {}",
+            counters.candidates_failed,
+            counters.triplets_tried,
+            counters.last_failure.as_deref().unwrap_or("unknown")
+        )
+    } else if counters.candidates_evaluated == 0 {
+        format!(
+            "no finite Gauss candidate from {} triplets",
+            counters.triplets_tried
+        )
+    } else {
+        format!(
+            "{} candidates from {} triplets scored, none within rchi2_threshold = {} \
+             (best reduced chi2 {:.4}, {} allowed outliers, {} candidate predictions failed)",
+            counters.candidates_evaluated,
+            counters.triplets_tried,
+            config.rchi2_threshold,
+            counters.best_reduced_chi2,
+            max_outliers,
+            counters.candidates_failed
+        )
+    };
+    Ok(IodOutput::not_found_because(n, reason).with_search_counters(&counters))
 }
 
 /// Batch the complete IOD work unit across linkage row selections without
@@ -1404,6 +1569,10 @@ fn iod_accepted_output(
         residual_probability: evaluation.probability,
         solution,
         outlier,
+        triplets_tried: 0,
+        candidates_evaluated: 0,
+        candidates_failed: 0,
+        not_found_reason: None,
     }
 }
 
@@ -2266,6 +2435,364 @@ mod tests {
         assert!(!output.found);
         assert_eq!(output.iterations, 0);
         assert!(output.residual_chi2.is_empty());
+    }
+
+    /// Gauss on the longest-arc triplets of this synthetic geometry seeds
+    /// coarsely (best reduced chi2 ~3e3 at 1" sigmas); the threshold gates
+    /// those candidates in while a half-degree displaced prediction (reduced
+    /// chi2 ~1e6) stays out.
+    fn iod_config(contamination_percentage: f64) -> IodConfig {
+        IodConfig {
+            min_obs: 6,
+            min_arc_length: 1.0,
+            contamination_percentage,
+            rchi2_threshold: 1e4,
+            observation_selection_method: ObservationSelectionMethod::Combinations,
+            light_time: true,
+            mu: crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap(),
+            speed_of_light: 173.144_632_674_240_3,
+        }
+    }
+
+    fn two_body_predictor<'a>(
+        propagator: &'a TwoBodyPropagator,
+        options: &'a EphemerisOptions,
+    ) -> PropagatorPredictor<'a, TwoBodyPropagator, ZeroTranslationProvider> {
+        PropagatorPredictor {
+            propagator,
+            options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        }
+    }
+
+    /// Fault injection around a predictor: `fail_calls` prediction calls
+    /// (counting from the first) return `failure`; `garbage_calls` return
+    /// the inner prediction displaced by half a degree in longitude (a
+    /// finite but hopeless candidate).
+    struct FaultyPredictor<'a> {
+        inner: &'a dyn SphericalPredictor,
+        calls: std::cell::Cell<usize>,
+        fail_calls: usize,
+        failure: Option<PropagationError>,
+        garbage_calls: usize,
+    }
+
+    impl SphericalPredictor for FaultyPredictor<'_> {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            geometry: &OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            let call = self.calls.get();
+            self.calls.set(call + 1);
+            if call < self.fail_calls {
+                return match &self.failure {
+                    Some(err) => Err(err.clone()),
+                    None => Ok(Err("light-time iteration failed".to_string())),
+                };
+            }
+            let mut predicted = self.inner.predict_spherical(states, geometry, observers)?;
+            if call < self.fail_calls + self.garbage_calls {
+                if let Ok(values) = predicted.as_mut() {
+                    for row in values.chunks_exact_mut(6) {
+                        row[1] += 0.5;
+                    }
+                }
+            }
+            Ok(predicted)
+        }
+    }
+
+    /// The accepted state sits at the Gauss epoch: compare with the truth
+    /// propagated there. Gauss on this geometry is coarse (see
+    /// `iod_config`), so the bound is loose.
+    fn assert_near_truth(output: &IodOutput) {
+        let mu = crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap();
+        let truth_at_epoch = crate::propagate_2body_row::<f64>(
+            TRUTH_STATE,
+            output.epoch_mjd - 60_000.0,
+            mu,
+            1000,
+            1e-14,
+        );
+        for index in 0..3 {
+            let error = (output.state[index] - truth_at_epoch[index]).abs();
+            assert!(error < 0.05, "axis {index}: {error}");
+        }
+    }
+
+    fn assert_same_orbit(a: &IodOutput, b: &IodOutput) {
+        assert!(a.found && b.found);
+        assert_eq!(a.state, b.state);
+        assert_eq!(a.epoch_mjd, b.epoch_mjd);
+        assert_eq!(a.num_obs, b.num_obs);
+        assert_eq!(a.chi2_total, b.chi2_total);
+        assert_eq!(a.arc_length, b.arc_length);
+    }
+
+    #[test]
+    fn iod_observation_order_sorts_by_epoch_then_code_then_row() {
+        let times = TimeArray::new(
+            TimeScale::Tdb,
+            vec![
+                Epoch::new(60_002, 5),
+                Epoch::new(60_001, 0),
+                Epoch::new(60_001, 0),
+                Epoch::new(60_001, 0),
+                Epoch::new(60_002, 0),
+            ],
+        )
+        .unwrap();
+        let observed = CoordinateBatch::cartesian(
+            vec![[0.0; 6]; 5],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::Named("SUN".to_string()), 5),
+            Some(times.clone()),
+            None,
+        )
+        .unwrap();
+        let observers = ObserverBatch::new(
+            ["X05", "I41", "F51", "F51", "X05"]
+                .iter()
+                .map(|code| ObservatoryCode(code.to_string()))
+                .collect(),
+            CoordinateBatch::cartesian(
+                vec![[0.0; 6]; 5],
+                Frame::Ecliptic,
+                OriginArray::repeat(OriginId::Named("SUN".to_string()), 5),
+                Some(times),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            iod_observation_order(&observed, &observers).unwrap(),
+            vec![2, 3, 1, 4, 0]
+        );
+    }
+
+    #[test]
+    fn iod_fit_accepts_the_noise_free_arc_in_input_order() {
+        let output = iod_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &synthetic_observations(),
+            &observers(),
+            &iod_config(0.0),
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(output.found, "{:?}", output.not_found_reason);
+        assert_eq!(output.num_obs, NUM_OBS);
+        assert_eq!(output.triplets_tried, 1);
+        assert_eq!(output.candidates_failed, 0);
+        assert!(output.candidates_evaluated >= 1);
+        assert!(output.not_found_reason.is_none());
+        assert_eq!(output.solution.iter().filter(|&&s| s).count(), 3);
+        assert_eq!(output.outlier, vec![false; NUM_OBS]);
+        assert_near_truth(&output);
+    }
+
+    #[test]
+    fn iod_fit_is_invariant_to_input_order() {
+        let observed = synthetic_observations();
+        let observers = observers();
+        let permutation = [5_usize, 2, 7, 0, 3, 6, 1, 4];
+        let shuffled_observed = take_coordinate_batch(&observed, &permutation).unwrap();
+        let shuffled_observers = take_observer_batch(&observers, &permutation).unwrap();
+        for contamination in [0.0, 20.0] {
+            let config = iod_config(contamination);
+            let run = |observed: &CoordinateBatch, observers: &ObserverBatch| {
+                iod_fit_barycentric(
+                    &TwoBodyPropagator::default(),
+                    observed,
+                    observers,
+                    &config,
+                    &ephemeris_options(),
+                    &NoopProvider,
+                    &ZeroTranslationProvider,
+                )
+                .unwrap()
+            };
+            let reference = run(&observed, &observers);
+            let shuffled = run(&shuffled_observed, &shuffled_observers);
+            assert_same_orbit(&reference, &shuffled);
+            assert_eq!(reference.triplets_tried, shuffled.triplets_tried);
+            assert_eq!(
+                reference.candidates_evaluated,
+                shuffled.candidates_evaluated
+            );
+            for (k, &row) in permutation.iter().enumerate() {
+                assert_eq!(shuffled.solution[k], reference.solution[row]);
+                assert_eq!(shuffled.outlier[k], reference.outlier[row]);
+                assert_eq!(shuffled.residual_chi2[k], reference.residual_chi2[row]);
+                assert_eq!(shuffled.residual_dof[k], reference.residual_dof[row]);
+                assert_eq!(
+                    shuffled.residuals[k * 6..(k + 1) * 6],
+                    reference.residuals[row * 6..(row + 1) * 6]
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn iod_fit_zero_contamination_continues_past_a_rejected_triplet() {
+        let observed = synthetic_observations();
+        let observers = observers();
+        let config = iod_config(0.0);
+        // Every finite candidate of the first triplet is made hopeless.
+        let times = observed_times_mjd(&observed).unwrap();
+        let first = select_observation_triplets(&times, config.observation_selection_method)[0];
+        let observed_values = observed.values.spherical().unwrap();
+        let observer_positions = observers.coordinates.values.cartesian().unwrap();
+        let (_, states_flat) = gauss_iod_fused(
+            std::array::from_fn(|slot| observed_values[first[slot]][1]),
+            std::array::from_fn(|slot| observed_values[first[slot]][2]),
+            std::array::from_fn(|slot| times[first[slot]]),
+            std::array::from_fn(|slot| {
+                let row = observer_positions[first[slot]];
+                [row[0], row[1], row[2]]
+            }),
+            1,
+            config.light_time,
+            config.mu,
+            config.speed_of_light,
+        );
+        let finite_candidates = states_flat
+            .chunks_exact(6)
+            .filter(|state| state.iter().all(|v| v.is_finite()))
+            .count();
+        assert!(finite_candidates >= 1);
+
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = two_body_predictor(&propagator, &options);
+        let predictor = FaultyPredictor {
+            inner: &inner,
+            calls: std::cell::Cell::new(0),
+            fail_calls: 0,
+            failure: None,
+            garbage_calls: finite_candidates,
+        };
+        let output = iod_fit(&predictor, &observed, &observers, &config).unwrap();
+        assert!(output.found, "{:?}", output.not_found_reason);
+        assert!(output.triplets_tried >= 2);
+        assert!(output.candidates_evaluated > finite_candidates);
+        assert_eq!(output.candidates_failed, 0);
+        assert_eq!(output.outlier, vec![false; NUM_OBS]);
+        assert_near_truth(&output);
+    }
+
+    #[test]
+    fn iod_fit_skips_a_candidate_whose_prediction_fails() {
+        let observed = synthetic_observations();
+        let observers = observers();
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = two_body_predictor(&propagator, &options);
+        for failure in [
+            Some(PropagationError::Backend(
+                "backend refused the candidate".to_string(),
+            )),
+            Some(PropagationError::BackendProtocol("short batch".to_string())),
+            Some(PropagationError::ThreadPool("no threads".to_string())),
+            None, // in-band per-row failure
+        ] {
+            let predictor = FaultyPredictor {
+                inner: &inner,
+                calls: std::cell::Cell::new(0),
+                fail_calls: 1,
+                failure,
+                garbage_calls: 0,
+            };
+            let output = iod_fit(&predictor, &observed, &observers, &iod_config(20.0)).unwrap();
+            assert!(output.found, "{:?}", output.not_found_reason);
+            assert_eq!(output.candidates_failed, 1);
+            assert!(output.candidates_evaluated >= 1);
+            assert_eq!(output.outlier, vec![false; NUM_OBS]);
+        }
+    }
+
+    #[test]
+    fn iod_fit_reports_total_prediction_failure_as_not_found() {
+        let observed = synthetic_observations();
+        let observers = observers();
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = two_body_predictor(&propagator, &options);
+        let predictor = FaultyPredictor {
+            inner: &inner,
+            calls: std::cell::Cell::new(0),
+            fail_calls: usize::MAX,
+            failure: Some(PropagationError::Backend(
+                "the Python propagator raised an exception: boom".to_string(),
+            )),
+            garbage_calls: 0,
+        };
+        let output = iod_fit(&predictor, &observed, &observers, &iod_config(20.0)).unwrap();
+        assert!(!output.found);
+        assert_eq!(output.candidates_evaluated, 0);
+        assert!(output.candidates_failed >= 1);
+        assert_eq!(output.triplets_tried, 3 * (1 + 1));
+        assert_eq!(output.solution, vec![false; NUM_OBS]);
+        assert_eq!(output.outlier, vec![false; NUM_OBS]);
+        let reason = output.not_found_reason.expect("reason");
+        assert!(
+            reason.contains("every candidate prediction failed"),
+            "{reason}"
+        );
+        assert!(reason.contains("boom"), "{reason}");
+    }
+
+    #[test]
+    fn iod_fit_propagates_caller_errors_and_explains_rejections() {
+        let observed = synthetic_observations();
+        let observers = observers();
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = two_body_predictor(&propagator, &options);
+        let predictor = FaultyPredictor {
+            inner: &inner,
+            calls: std::cell::Cell::new(0),
+            fail_calls: 1,
+            failure: Some(PropagationError::InvalidRequest("bad request".to_string())),
+            garbage_calls: 0,
+        };
+        assert!(matches!(
+            iod_fit(&predictor, &observed, &observers, &iod_config(20.0)),
+            Err(PropagationError::InvalidRequest(_))
+        ));
+
+        // Every candidate scored and rejected: the reason says so.
+        let config = IodConfig {
+            rchi2_threshold: 1e-30,
+            ..iod_config(0.0)
+        };
+        let output = iod_fit(&inner, &observed, &observers, &config).unwrap();
+        assert!(!output.found);
+        assert_eq!(output.triplets_tried, 3);
+        assert!(output.candidates_evaluated >= 3);
+        let reason = output.not_found_reason.expect("reason");
+        assert!(reason.contains("none within rchi2_threshold"), "{reason}");
+
+        let output = iod_fit(
+            &inner,
+            &observed,
+            &observers,
+            &IodConfig {
+                min_obs: NUM_OBS + 1,
+                ..iod_config(0.0)
+            },
+        )
+        .unwrap();
+        assert!(output
+            .not_found_reason
+            .unwrap()
+            .contains("fewer than min_obs"));
     }
 
     #[test]
