@@ -9,9 +9,9 @@ pub use types::{
     solar_system_barycenter_mu_au3_day2, ArrowSchemaExport, CoordinateBatch,
     CoordinateRepresentation, CoordinateValues, CovarianceBatch, CovarianceUnits, EphemerisBatch,
     Epoch, Frame as DataFrame, IntoNestedRecordBatch, IntoRecordBatch,
-    NonGravitationalParametersBatch, NonGravitationalParametersRow, ObjectId, ObservatoryCode,
-    ObserverBatch, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
-    PhysicalParametersBatch, SchemaError, TimeArray, TimeScale, TimeScaleProvider,
+    NonGravitationalParametersBatch, NonGravitationalParametersRow, NongravCovarianceAxes,
+    ObjectId, ObservatoryCode, ObserverBatch, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray,
+    OriginId, PhysicalParametersBatch, SchemaError, TimeArray, TimeScale, TimeScaleProvider,
     TryFromNestedRecordBatch, TryFromRecordBatch, Validity, VariantId, J2000_TDB_MJD, KM_PER_AU,
     NANOS_PER_DAY, SECONDS_PER_DAY, TAI_TT_NANOS,
 };

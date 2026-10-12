@@ -7,14 +7,14 @@
 
 use super::{
     CoordinateBatch, CoordinateRepresentation, CoordinateValues, CovarianceBatch, CovarianceUnits,
-    EphemerisBatch, Epoch, Frame, NonGravitationalParametersBatch, ObjectId, ObservatoryCode,
-    ObserverBatch, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
+    EphemerisBatch, Epoch, Frame, NonGravitationalParametersBatch, NongravCovarianceAxes, ObjectId,
+    ObservatoryCode, ObserverBatch, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
     PhysicalParametersBatch, SchemaError, SchemaResult, TimeArray, TimeScale, Validity, VariantId,
 };
 use arrow_array::builder::{Float64Builder, LargeListBuilder, LargeStringBuilder};
 use arrow_array::{
     Array, ArrayRef, Float64Array, Int64Array, LargeListArray, LargeStringArray, RecordBatch,
-    StructArray,
+    StructArray, UInt8Array,
 };
 use arrow_buffer::NullBuffer;
 use arrow_schema::{DataType, Field, Fields, Schema};
@@ -35,6 +35,14 @@ const ORBIT_NESTED_SCHEMA: &str = "OrbitBatch.cartesian.nested.quivr.v1";
 const ORBIT_VARIANT_NESTED_SCHEMA: &str = "OrbitVariantBatch.cartesian.nested.quivr.v1";
 const OBSERVER_NESTED_SCHEMA: &str = "ObserverBatch.cartesian.nested.quivr.v1";
 const EPHEMERIS_NESTED_SCHEMA: &str = "EphemerisBatch.spherical.nested.quivr.v1";
+const CARTESIAN_COORDINATE_SCHEMA_V2: &str = "CoordinateBatch.cartesian.flat.v2";
+const ORBIT_SCHEMA_V2: &str = "OrbitBatch.cartesian.flat.v2";
+const ORBIT_VARIANT_SCHEMA_V2: &str = "OrbitVariantBatch.cartesian.flat.v2";
+const CARTESIAN_NESTED_SCHEMA_V2: &str = "CoordinateBatch.cartesian.nested.quivr.v2";
+const ORBIT_NESTED_SCHEMA_V2: &str = "OrbitBatch.cartesian.nested.quivr.v2";
+const ORBIT_VARIANT_NESTED_SCHEMA_V2: &str = "OrbitVariantBatch.cartesian.nested.quivr.v2";
+const OBSERVER_NESTED_SCHEMA_V2: &str = "ObserverBatch.cartesian.nested.quivr.v2";
+const EPHEMERIS_NESTED_SCHEMA_V2: &str = "EphemerisBatch.spherical.nested.quivr.v2";
 
 pub trait ArrowSchemaExport {
     fn schema() -> Schema;
@@ -52,7 +60,9 @@ pub trait TryFromRecordBatch: Sized {
 /// personal-cmy.13). Emits/consumes the EXACT nested quivr layout: a `coordinates`
 /// struct (for orbits) or top-level coordinate columns (for coordinate batches) with
 /// nested `time`/`covariance`/`origin` structs and a `large_list` covariance, so a
-/// quivr table's Arrow buffers map to a Rust batch with no reshaping and no loss.
+/// legacy quivr table's Arrow buffers map to a Rust batch with no reshaping and no
+/// loss. Labeled covariance emits a versioned v2 extension containing the optional
+/// per-row non-gravitational covariance-axis mask.
 pub trait IntoNestedRecordBatch {
     fn into_nested_record_batch(self) -> SchemaResult<RecordBatch>;
 }
@@ -63,7 +73,7 @@ pub trait TryFromNestedRecordBatch: Sized {
 
 impl ArrowSchemaExport for CoordinateBatch {
     fn schema() -> Schema {
-        coordinate_schema(Frame::Unspecified, None, false)
+        coordinate_schema(Frame::Unspecified, None, false, false)
     }
 }
 
@@ -81,7 +91,7 @@ impl TryFromRecordBatch for CoordinateBatch {
 
 impl ArrowSchemaExport for OrbitBatch {
     fn schema() -> Schema {
-        orbit_schema(Frame::Unspecified, None, false)
+        orbit_schema(Frame::Unspecified, None, false, false)
     }
 }
 
@@ -99,7 +109,7 @@ impl TryFromRecordBatch for OrbitBatch {
 
 impl ArrowSchemaExport for OrbitVariantBatch {
     fn schema() -> Schema {
-        orbit_variant_schema(Frame::Unspecified, None, false)
+        orbit_variant_schema(Frame::Unspecified, None, false, false)
     }
 }
 
@@ -242,14 +252,37 @@ fn nested_covariance_struct(
             LargeListArray::new_null(Arc::new(Field::new("item", DataType::Float64, true)), rows)
         }
     };
+    // A legacy/unlabeled covariance keeps the exact v1 quivr layout. The
+    // optional mask extends only labeled products to the versioned v2 schema.
+    let (fields, arrays) = match coordinates
+        .covariance
+        .as_ref()
+        .and_then(|covariance| covariance.nongrav_axis_mask.as_ref())
+    {
+        Some(masks) => (
+            Fields::from(vec![
+                Field::new("values", list.data_type().clone(), true),
+                Field::new("nongrav_axis_mask", DataType::UInt8, true),
+            ]),
+            vec![
+                Arc::new(list) as ArrayRef,
+                Arc::new(UInt8Array::from(
+                    masks
+                        .iter()
+                        .map(|mask| Some(mask.bits()))
+                        .collect::<Vec<_>>(),
+                )) as ArrayRef,
+            ],
+        ),
+        None => (
+            Fields::from(vec![Field::new("values", list.data_type().clone(), true)]),
+            vec![Arc::new(list) as ArrayRef],
+        ),
+    };
     // quivr marks an absent covariance as a null struct row (not just a null list),
     // so mirror that with a struct-level null buffer for lossless round-trips.
-    StructArray::try_new(
-        Fields::from(vec![Field::new("values", list.data_type().clone(), true)]),
-        vec![Arc::new(list) as ArrayRef],
-        Some(NullBuffer::from_iter(validity)),
-    )
-    .map_err(|err| SchemaError::Arrow(err.to_string()))
+    StructArray::try_new(fields, arrays, Some(NullBuffer::from_iter(validity)))
+        .map_err(|err| SchemaError::Arrow(err.to_string()))
 }
 
 fn nested_origin_struct(coordinates: &CoordinateBatch) -> SchemaResult<StructArray> {
@@ -335,8 +368,13 @@ fn coordinate_to_nested_record_batch(coordinates: &CoordinateBatch) -> SchemaRes
         .into_iter()
         .map(|(_, array)| array)
         .collect::<Vec<_>>();
+    let has_mask = has_nongrav_axis_mask(coordinates);
     let mut metadata = coordinate_metadata(
-        CARTESIAN_NESTED_SCHEMA,
+        schema_name(
+            CARTESIAN_NESTED_SCHEMA,
+            CARTESIAN_NESTED_SCHEMA_V2,
+            has_mask,
+        ),
         coordinates.frame,
         time_scale,
         coordinates.covariance.is_some(),
@@ -395,7 +433,11 @@ fn orbit_to_nested_record_batch(orbits: &OrbitBatch) -> SchemaResult<RecordBatch
     let schema = Schema::new_with_metadata(
         fields,
         coordinate_metadata(
-            ORBIT_NESTED_SCHEMA,
+            schema_name(
+                ORBIT_NESTED_SCHEMA,
+                ORBIT_NESTED_SCHEMA_V2,
+                has_nongrav_axis_mask(&orbits.coordinates),
+            ),
             orbits.coordinates.frame,
             time_scale,
             orbits.coordinates.covariance.is_some(),
@@ -470,7 +512,11 @@ fn orbit_variant_to_nested_record_batch(variants: &OrbitVariantBatch) -> SchemaR
     let schema = Schema::new_with_metadata(
         fields,
         coordinate_metadata(
-            ORBIT_VARIANT_NESTED_SCHEMA,
+            schema_name(
+                ORBIT_VARIANT_NESTED_SCHEMA,
+                ORBIT_VARIANT_NESTED_SCHEMA_V2,
+                has_nongrav_axis_mask(&variants.coordinates),
+            ),
             variants.coordinates.frame,
             time_scale,
             variants.coordinates.covariance.is_some(),
@@ -508,7 +554,11 @@ fn observer_to_nested_record_batch(observers: &ObserverBatch) -> SchemaResult<Re
     let schema = Schema::new_with_metadata(
         fields,
         coordinate_metadata(
-            OBSERVER_NESTED_SCHEMA,
+            schema_name(
+                OBSERVER_NESTED_SCHEMA,
+                OBSERVER_NESTED_SCHEMA_V2,
+                has_nongrav_axis_mask(&observers.coordinates),
+            ),
             observers.coordinates.frame,
             time_scale,
             observers.coordinates.covariance.is_some(),
@@ -621,8 +671,17 @@ fn ephemeris_to_nested_record_batch(ephemeris: &EphemerisBatch) -> SchemaResult<
         Arc::new(light_time),
         Arc::new(aberrated_coordinates),
     ];
+    let has_mask = has_nongrav_axis_mask(&ephemeris.coordinates)
+        || ephemeris
+            .aberrated_coordinates
+            .as_ref()
+            .is_some_and(has_nongrav_axis_mask);
     let mut metadata = coordinate_metadata(
-        EPHEMERIS_NESTED_SCHEMA,
+        schema_name(
+            EPHEMERIS_NESTED_SCHEMA,
+            EPHEMERIS_NESTED_SCHEMA_V2,
+            has_mask,
+        ),
         ephemeris.coordinates.frame,
         time_scale,
         ephemeris.coordinates.covariance.is_some(),
@@ -904,7 +963,19 @@ fn parse_nested_covariance(
     representation: CoordinateRepresentation,
     rows: usize,
 ) -> SchemaResult<Option<CovarianceBatch>> {
+    let nongrav_axis_mask = covariance
+        .column_by_name("nongrav_axis_mask")
+        .map(|column| column.slice(covariance.offset(), covariance.len()))
+        .map(|column| parse_nongrav_axis_mask(&column, rows))
+        .transpose()?
+        .flatten();
     if covariance.null_count() == rows {
+        if nongrav_axis_mask.is_some() {
+            return Err(SchemaError::InvalidRecordBatch(
+                "non-gravitational covariance-axis mask is present without covariance values"
+                    .to_string(),
+            ));
+        }
         return Ok(None);
     }
     let values_col = sliced_struct_field(covariance, "values")?;
@@ -968,14 +1039,58 @@ fn parse_nested_covariance(
             }
         }
     }
-    CovarianceBatch::new(
+    let covariance = CovarianceBatch::new(
         rows,
         dimension,
         values,
         CovarianceUnits::Coordinate(representation),
-    )
-    .and_then(|covariance| covariance.with_row_validity(Validity::from_bools(&row_validity)))
-    .map(Some)
+    )?
+    .with_row_validity(Validity::from_bools(&row_validity))?;
+    let covariance = match nongrav_axis_mask {
+        Some(masks) => covariance.with_nongrav_axis_mask(masks)?,
+        None => covariance,
+    };
+    Ok(Some(covariance))
+}
+
+fn parse_nongrav_axis_mask(
+    column: &ArrayRef,
+    rows: usize,
+) -> SchemaResult<Option<Vec<NongravCovarianceAxes>>> {
+    let column = column
+        .as_any()
+        .downcast_ref::<UInt8Array>()
+        .ok_or_else(|| {
+            SchemaError::InvalidRecordBatch(
+                "covariance.nongrav_axis_mask must be UInt8".to_string(),
+            )
+        })?;
+    if column.len() != rows {
+        return Err(SchemaError::LengthMismatch {
+            field: "covariance.nongrav_axis_mask".to_string(),
+            expected: rows,
+            actual: column.len(),
+        });
+    }
+    if column.null_count() == rows {
+        return Ok(None);
+    }
+    if column.null_count() != 0 {
+        return Err(SchemaError::InvalidRecordBatch(
+            "covariance.nongrav_axis_mask must be fully present or fully null".to_string(),
+        ));
+    }
+    (0..rows)
+        .map(|row| {
+            NongravCovarianceAxes::from_bits(column.value(row)).ok_or_else(|| {
+                SchemaError::InvalidRecordBatch(format!(
+                    "covariance.nongrav_axis_mask row {row} has unsupported bits {:#010b}",
+                    column.value(row)
+                ))
+            })
+        })
+        .collect::<SchemaResult<Vec<_>>>()
+        .map(Some)
 }
 
 fn array_as_f64<'a>(array: &'a ArrayRef, name: &str) -> SchemaResult<&'a Float64Array> {
@@ -1187,7 +1302,7 @@ fn parse_nested_non_gravitational_parameters(
     }
 }
 
-fn coordinate_fields() -> Vec<Field> {
+fn coordinate_fields(has_nongrav_axis_mask: bool) -> Vec<Field> {
     let mut fields = vec![
         Field::new("x", DataType::Float64, false),
         Field::new("y", DataType::Float64, false),
@@ -1208,7 +1323,29 @@ fn coordinate_fields() -> Vec<Field> {
             ));
         }
     }
+    if has_nongrav_axis_mask {
+        fields.push(Field::new(
+            "covariance_nongrav_axis_mask",
+            DataType::UInt8,
+            true,
+        ));
+    }
     fields
+}
+
+fn has_nongrav_axis_mask(coordinates: &CoordinateBatch) -> bool {
+    coordinates
+        .covariance
+        .as_ref()
+        .is_some_and(|covariance| covariance.nongrav_axis_mask.is_some())
+}
+
+fn schema_name<'a>(legacy: &'a str, labeled: &'a str, has_mask: bool) -> &'a str {
+    if has_mask {
+        labeled
+    } else {
+        legacy
+    }
 }
 
 fn coordinate_metadata(
@@ -1219,7 +1356,15 @@ fn coordinate_metadata(
 ) -> HashMap<String, String> {
     let mut metadata = HashMap::new();
     metadata.insert(SCHEMA_METADATA_KEY.to_string(), schema_name.to_string());
-    metadata.insert(SCHEMA_VERSION_KEY.to_string(), "1".to_string());
+    metadata.insert(
+        SCHEMA_VERSION_KEY.to_string(),
+        if schema_name.ends_with(".v2") {
+            "2"
+        } else {
+            "1"
+        }
+        .to_string(),
+    );
     metadata.insert(
         REPRESENTATION_METADATA_KEY.to_string(),
         CoordinateRepresentation::Cartesian.as_str().to_string(),
@@ -1239,11 +1384,20 @@ fn coordinate_metadata(
     metadata
 }
 
-fn coordinate_schema(frame: Frame, time_scale: Option<TimeScale>, has_covariance: bool) -> Schema {
+fn coordinate_schema(
+    frame: Frame,
+    time_scale: Option<TimeScale>,
+    has_covariance: bool,
+    has_mask: bool,
+) -> Schema {
     Schema::new_with_metadata(
-        coordinate_fields(),
+        coordinate_fields(has_mask),
         coordinate_metadata(
-            CARTESIAN_COORDINATE_SCHEMA,
+            schema_name(
+                CARTESIAN_COORDINATE_SCHEMA,
+                CARTESIAN_COORDINATE_SCHEMA_V2,
+                has_mask,
+            ),
             frame,
             time_scale,
             has_covariance,
@@ -1251,15 +1405,25 @@ fn coordinate_schema(frame: Frame, time_scale: Option<TimeScale>, has_covariance
     )
 }
 
-fn orbit_schema(frame: Frame, time_scale: Option<TimeScale>, has_covariance: bool) -> Schema {
+fn orbit_schema(
+    frame: Frame,
+    time_scale: Option<TimeScale>,
+    has_covariance: bool,
+    has_mask: bool,
+) -> Schema {
     let mut fields = vec![
         Field::new("orbit_id", DataType::LargeUtf8, false),
         Field::new("object_id", DataType::LargeUtf8, true),
     ];
-    fields.extend(coordinate_fields());
+    fields.extend(coordinate_fields(has_mask));
     Schema::new_with_metadata(
         fields,
-        coordinate_metadata(ORBIT_SCHEMA, frame, time_scale, has_covariance),
+        coordinate_metadata(
+            schema_name(ORBIT_SCHEMA, ORBIT_SCHEMA_V2, has_mask),
+            frame,
+            time_scale,
+            has_covariance,
+        ),
     )
 }
 
@@ -1267,6 +1431,7 @@ fn orbit_variant_schema(
     frame: Frame,
     time_scale: Option<TimeScale>,
     has_covariance: bool,
+    has_mask: bool,
 ) -> Schema {
     let mut fields = vec![
         Field::new("orbit_id", DataType::LargeUtf8, false),
@@ -1275,10 +1440,15 @@ fn orbit_variant_schema(
         Field::new("weights", DataType::Float64, true),
         Field::new("weights_cov", DataType::Float64, true),
     ];
-    fields.extend(coordinate_fields());
+    fields.extend(coordinate_fields(has_mask));
     Schema::new_with_metadata(
         fields,
-        coordinate_metadata(ORBIT_VARIANT_SCHEMA, frame, time_scale, has_covariance),
+        coordinate_metadata(
+            schema_name(ORBIT_VARIANT_SCHEMA, ORBIT_VARIANT_SCHEMA_V2, has_mask),
+            frame,
+            time_scale,
+            has_covariance,
+        ),
     )
 }
 
@@ -1288,7 +1458,7 @@ fn coordinate_arrays(coordinates: &CoordinateBatch) -> SchemaResult<Vec<ArrayRef
         SchemaError::InvalidRecordBatch("expected Cartesian coordinates".to_string())
     })?;
     let rows = values.len();
-    let mut arrays: Vec<ArrayRef> = Vec::with_capacity(45);
+    let mut arrays: Vec<ArrayRef> = Vec::with_capacity(46);
     for column in 0..6 {
         arrays.push(Arc::new(Float64Array::from(
             values.iter().map(|row| row[column]).collect::<Vec<_>>(),
@@ -1349,6 +1519,16 @@ fn coordinate_arrays(coordinates: &CoordinateBatch) -> SchemaResult<Vec<ArrayRef
         };
         arrays.push(Arc::new(Float64Array::from(column)) as ArrayRef);
     }
+    if let Some(nongrav_axis_mask) =
+        covariance.and_then(|covariance| covariance.nongrav_axis_mask.as_ref())
+    {
+        arrays.push(Arc::new(UInt8Array::from(
+            nongrav_axis_mask
+                .iter()
+                .map(|mask| Some(mask.bits()))
+                .collect::<Vec<_>>(),
+        )) as ArrayRef);
+    }
 
     Ok(arrays)
 }
@@ -1359,6 +1539,7 @@ fn coordinate_to_record_batch(coordinates: &CoordinateBatch) -> SchemaResult<Rec
         coordinates.frame,
         time_scale,
         coordinates.covariance.is_some(),
+        has_nongrav_axis_mask(coordinates),
     );
     RecordBatch::try_new(Arc::new(schema), coordinate_arrays(coordinates)?)
         .map_err(|err| SchemaError::Arrow(err.to_string()))
@@ -1371,6 +1552,7 @@ fn orbit_to_record_batch(orbits: &OrbitBatch) -> SchemaResult<RecordBatch> {
         orbits.coordinates.frame,
         time_scale,
         orbits.coordinates.covariance.is_some(),
+        has_nongrav_axis_mask(&orbits.coordinates),
     );
     let mut arrays = orbit_metadata_arrays(&orbits.orbit_id, &orbits.object_id);
     arrays.extend(coordinate_arrays(&orbits.coordinates)?);
@@ -1386,6 +1568,7 @@ fn orbit_variant_to_record_batch(variants: &OrbitVariantBatch) -> SchemaResult<R
         variants.coordinates.frame,
         time_scale,
         variants.coordinates.covariance.is_some(),
+        has_nongrav_axis_mask(&variants.coordinates),
     );
     let mut arrays = orbit_metadata_arrays(&variants.orbit_id, &variants.object_id);
     arrays.push(Arc::new(LargeStringArray::from_iter(
@@ -1477,6 +1660,18 @@ fn coordinate_from_record_batch(batch: &RecordBatch) -> SchemaResult<CoordinateB
     let covariance = if has_covariance {
         Some(parse_covariance(batch, rows)?)
     } else {
+        if batch
+            .column_by_name("covariance_nongrav_axis_mask")
+            .map(|column| parse_nongrav_axis_mask(column, rows))
+            .transpose()?
+            .flatten()
+            .is_some()
+        {
+            return Err(SchemaError::InvalidRecordBatch(
+                "non-gravitational covariance-axis mask is present without covariance values"
+                    .to_string(),
+            ));
+        }
         None
     };
 
@@ -1620,13 +1815,22 @@ fn parse_covariance(batch: &RecordBatch, rows: usize) -> SchemaResult<Covariance
         }
     }
 
-    CovarianceBatch::new(
+    let covariance = CovarianceBatch::new(
         rows,
         6,
         values,
         CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
-    )
-    .and_then(|covariance| covariance.with_row_validity(Validity::from_bools(&row_validity)))
+    )?
+    .with_row_validity(Validity::from_bools(&row_validity))?;
+    let nongrav_axis_mask = batch
+        .column_by_name("covariance_nongrav_axis_mask")
+        .map(|column| parse_nongrav_axis_mask(column, rows))
+        .transpose()?
+        .flatten();
+    match nongrav_axis_mask {
+        Some(masks) => covariance.with_nongrav_axis_mask(masks),
+        None => Ok(covariance),
+    }
 }
 
 fn float64_column<'a>(batch: &'a RecordBatch, name: &str) -> SchemaResult<&'a Float64Array> {
@@ -1697,6 +1901,8 @@ mod tests {
         )
         .unwrap()
         .with_row_validity(Validity::from_bools(&[true, false]))
+        .unwrap()
+        .with_nongrav_axis_mask(vec![NongravCovarianceAxes::NONE; 2])
         .unwrap();
         CoordinateBatch::cartesian(
             vec![
@@ -1712,6 +1918,17 @@ mod tests {
     }
 
     #[test]
+    fn nongrav_axis_mask_arrow_parser_rejects_partial_or_unknown_values() {
+        let unknown: ArrayRef = Arc::new(UInt8Array::from(vec![Some(0b1000)]));
+        let err = parse_nongrav_axis_mask(&unknown, 1).unwrap_err();
+        assert!(matches!(err, SchemaError::InvalidRecordBatch(_)));
+
+        let partial: ArrayRef = Arc::new(UInt8Array::from(vec![Some(0b001), None]));
+        let err = parse_nongrav_axis_mask(&partial, 2).unwrap_err();
+        assert!(matches!(err, SchemaError::InvalidRecordBatch(_)));
+    }
+
+    #[test]
     fn coordinate_arrow_round_trip_preserves_schema_metadata() {
         let coordinates = coordinate_batch_with_covariance();
         let batch = coordinates.into_record_batch().unwrap();
@@ -1719,11 +1936,12 @@ mod tests {
         let metadata = schema.metadata();
         assert_eq!(
             metadata.get(SCHEMA_METADATA_KEY).unwrap(),
-            CARTESIAN_COORDINATE_SCHEMA
+            CARTESIAN_COORDINATE_SCHEMA_V2
         );
         assert_eq!(metadata.get(FRAME_METADATA_KEY).unwrap(), "ecliptic");
         assert_eq!(metadata.get(TIME_SCALE_METADATA_KEY).unwrap(), "tdb");
         assert_eq!(metadata.get(COVARIANCE_METADATA_KEY).unwrap(), "present");
+        assert_eq!(metadata.get(SCHEMA_VERSION_KEY).unwrap(), "2");
 
         let round_tripped = CoordinateBatch::try_from_record_batch(&batch).unwrap();
         assert_eq!(round_tripped.frame, Frame::Ecliptic);
@@ -1738,6 +1956,10 @@ mod tests {
         assert!(!covariance.is_row_valid(1));
         assert_eq!(covariance.row_values(0)[35], 35.0);
         assert!(covariance.row_values(1)[0].is_nan());
+        assert_eq!(
+            covariance.nongrav_axis_mask,
+            Some(vec![NongravCovarianceAxes::NONE; 2])
+        );
     }
 
     #[test]
@@ -1752,6 +1974,12 @@ mod tests {
         .unwrap();
         let batch = no_covariance.into_record_batch().unwrap();
         let schema = batch.schema();
+        assert_eq!(batch.num_columns(), 45);
+        assert_eq!(
+            schema.metadata().get(SCHEMA_METADATA_KEY).unwrap(),
+            CARTESIAN_COORDINATE_SCHEMA
+        );
+        assert_eq!(schema.metadata().get(SCHEMA_VERSION_KEY).unwrap(), "1");
         assert_eq!(
             schema.metadata().get(COVARIANCE_METADATA_KEY).unwrap(),
             "absent"
@@ -1776,6 +2004,12 @@ mod tests {
         .unwrap();
         let batch = with_nan_covariance.into_record_batch().unwrap();
         let schema = batch.schema();
+        assert_eq!(batch.num_columns(), 45);
+        assert_eq!(
+            schema.metadata().get(SCHEMA_METADATA_KEY).unwrap(),
+            CARTESIAN_COORDINATE_SCHEMA
+        );
+        assert_eq!(schema.metadata().get(SCHEMA_VERSION_KEY).unwrap(), "1");
         assert_eq!(
             schema.metadata().get(COVARIANCE_METADATA_KEY).unwrap(),
             "present"
@@ -1799,11 +2033,11 @@ mod tests {
         )
         .unwrap();
         let batch = orbits.into_record_batch().unwrap();
-        assert_eq!(batch.num_columns(), 47);
+        assert_eq!(batch.num_columns(), 48);
         let schema = batch.schema();
         assert_eq!(
             schema.metadata().get(SCHEMA_METADATA_KEY).unwrap(),
-            ORBIT_SCHEMA
+            ORBIT_SCHEMA_V2
         );
 
         let round_tripped = OrbitBatch::try_from_record_batch(&batch).unwrap();
@@ -1831,11 +2065,11 @@ mod tests {
         )
         .unwrap();
         let batch = variants.into_record_batch().unwrap();
-        assert_eq!(batch.num_columns(), 50);
+        assert_eq!(batch.num_columns(), 51);
         let schema = batch.schema();
         assert_eq!(
             schema.metadata().get(SCHEMA_METADATA_KEY).unwrap(),
-            ORBIT_VARIANT_SCHEMA
+            ORBIT_VARIANT_SCHEMA_V2
         );
 
         let round_tripped = OrbitVariantBatch::try_from_record_batch(&batch).unwrap();
@@ -1849,7 +2083,15 @@ mod tests {
         assert_eq!(round_tripped.coordinates.frame, Frame::Ecliptic);
     }
 
-    fn expected_quivr_coordinates_type() -> DataType {
+    fn expected_quivr_coordinates_type(has_mask: bool) -> DataType {
+        let mut covariance_fields = vec![Field::new(
+            "values",
+            DataType::LargeList(Arc::new(Field::new("item", DataType::Float64, true))),
+            true,
+        )];
+        if has_mask {
+            covariance_fields.push(Field::new("nongrav_axis_mask", DataType::UInt8, true));
+        }
         DataType::Struct(Fields::from(vec![
             Field::new("x", DataType::Float64, true),
             Field::new("y", DataType::Float64, true),
@@ -1867,11 +2109,7 @@ mod tests {
             ),
             Field::new(
                 "covariance",
-                DataType::Struct(Fields::from(vec![Field::new(
-                    "values",
-                    DataType::LargeList(Arc::new(Field::new("item", DataType::Float64, true))),
-                    true,
-                )])),
+                DataType::Struct(Fields::from(covariance_fields)),
                 true,
             ),
             Field::new(
@@ -1902,14 +2140,14 @@ mod tests {
         let schema = batch.schema();
         assert_eq!(
             schema.metadata().get(SCHEMA_METADATA_KEY).unwrap(),
-            ORBIT_NESTED_SCHEMA
+            ORBIT_NESTED_SCHEMA_V2
         );
-        // The `coordinates` column type must match quivr's nested struct exactly
-        // (W1 option (a): zero-reshape, lossless bridge).
+        // Labeled covariance uses the versioned v2 extension of the legacy
+        // quivr-compatible nested coordinate struct.
         let coords_index = schema.index_of("coordinates").unwrap();
         assert_eq!(
             schema.field(coords_index).data_type(),
-            &expected_quivr_coordinates_type()
+            &expected_quivr_coordinates_type(true)
         );
 
         let round_tripped = OrbitBatch::try_from_nested_record_batch(&batch).unwrap();
@@ -1935,6 +2173,43 @@ mod tests {
         assert_eq!(covariance.row_values(0)[35], 35.0);
         assert!(covariance.row_values(1)[0].is_nan());
         assert!(round_tripped.physical_parameters.is_none());
+    }
+
+    #[test]
+    fn orbit_nested_round_trip_preserves_legacy_missing_mask_schema() {
+        let mut coordinates = coordinate_batch_with_covariance();
+        coordinates.covariance.as_mut().unwrap().nongrav_axis_mask = None;
+        coordinates.validate().unwrap();
+        let orbits = OrbitBatch::new(
+            vec![
+                OrbitId("orbit-1".to_string()),
+                OrbitId("orbit-2".to_string()),
+            ],
+            vec![None, None],
+            coordinates,
+        )
+        .unwrap();
+
+        let batch = orbits.into_nested_record_batch().unwrap();
+        assert_eq!(
+            batch.schema().metadata().get(SCHEMA_METADATA_KEY).unwrap(),
+            ORBIT_NESTED_SCHEMA
+        );
+        assert_eq!(
+            batch
+                .schema()
+                .field_with_name("coordinates")
+                .unwrap()
+                .data_type(),
+            &expected_quivr_coordinates_type(false)
+        );
+        let decoded = OrbitBatch::try_from_nested_record_batch(&batch).unwrap();
+        assert!(decoded
+            .coordinates
+            .covariance
+            .unwrap()
+            .nongrav_axis_mask
+            .is_none());
     }
 
     #[test]
@@ -1972,6 +2247,11 @@ mod tests {
             (0..162).map(|value| value as f64).collect(),
             CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
         )
+        .unwrap()
+        .with_nongrav_axis_mask(vec![
+            NongravCovarianceAxes::A2,
+            NongravCovarianceAxes::A1 | NongravCovarianceAxes::A3,
+        ])
         .unwrap();
         let coordinates = CoordinateBatch::cartesian(
             vec![
@@ -2013,7 +2293,15 @@ mod tests {
         let round_tripped =
             OrbitBatch::try_from_nested_record_batch(&orbits.into_nested_record_batch().unwrap())
                 .unwrap();
-        assert_eq!(round_tripped.coordinates.covariance.unwrap().dimension, 9);
+        let covariance = round_tripped.coordinates.covariance.unwrap();
+        assert_eq!(covariance.dimension, 9);
+        assert_eq!(
+            covariance.nongrav_axis_mask,
+            Some(vec![
+                NongravCovarianceAxes::A2,
+                NongravCovarianceAxes::A1 | NongravCovarianceAxes::A3,
+            ])
+        );
         assert_eq!(round_tripped.non_gravitational_parameters, Some(nongrav));
     }
 

@@ -40,8 +40,7 @@ use crate::types::time::TimeScaleProvider;
 use crate::types::Frame;
 use crate::{
     bound_longitude_value, chi2_survival, compute_residuals_chi2_flat, CoordinateBatch,
-    CoordinateValues, CovarianceBatch, ObjectId, ObserverBatch, OrbitBatch, OrbitId, OriginArray,
-    TimeArray, Validity,
+    CoordinateValues, ObjectId, ObserverBatch, OrbitBatch, OrbitId, OriginArray, TimeArray,
 };
 use adam_core_rs_orbit_determination::gauss_iod_fused;
 
@@ -1833,26 +1832,7 @@ fn take_coordinate_batch(
         None => None,
     };
     let covariance = match &batch.covariance {
-        Some(covariance) => {
-            let stride = covariance.dimension * covariance.dimension;
-            let mut values = Vec::with_capacity(rows.len() * stride);
-            for &index in rows {
-                values.extend_from_slice(
-                    &covariance.values_row_major[index * stride..(index + 1) * stride],
-                );
-            }
-            let mut filtered = CovarianceBatch::new(
-                rows.len(),
-                covariance.dimension,
-                values,
-                covariance.units.clone(),
-            )?;
-            if let Some(validity) = &covariance.row_validity {
-                let bools: Vec<bool> = rows.iter().map(|&index| validity.is_valid(index)).collect();
-                filtered = filtered.with_row_validity(Validity::from_bools(&bools))?;
-            }
-            Some(filtered)
-        }
+        Some(covariance) => Some(covariance.take(rows)?),
         None => None,
     };
     CoordinateBatch::new(values, batch.frame, origins, times, covariance).map_err(Into::into)
@@ -1890,7 +1870,7 @@ mod tests {
         CovariancePropagation, EphemerisOptions, EpochPolicy, PropagationOptions, TwoBodyPropagator,
     };
     use crate::types::{Frame, SchemaError, SchemaResult};
-    use crate::{CovarianceUnits, Epoch, ObservatoryCode, OriginId, TimeScale};
+    use crate::{CovarianceBatch, CovarianceUnits, Epoch, ObservatoryCode, OriginId, TimeScale};
 
     struct NoopProvider;
 
