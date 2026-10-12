@@ -11,7 +11,7 @@
 //! * Horizons dataframe rows -> arrays consumed by existing Orbits/Ephemeris
 //!   table builders.
 
-use crate::types::{SchemaError, SchemaResult, TimeArray, TimeScale};
+use crate::types::{NongravCovarianceAxes, SchemaError, SchemaResult, TimeArray, TimeScale};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
@@ -391,17 +391,26 @@ fn convert_sbdb_full_covariance(
     matrix: &[f64],
     dimension: usize,
     labels: &[String],
-) -> (Option<Vec<f64>>, Vec<String>) {
+) -> (Option<Vec<f64>>, Vec<String>, NongravCovarianceAxes) {
     if dimension <= 6 || labels.len() != dimension {
-        return (None, Vec::new());
+        return (None, Vec::new(), NongravCovarianceAxes::NONE);
     }
     let coordinate_source = [1, 0, 5, 3, 4, 2];
     let mut source_indices = coordinate_source.to_vec();
     let mut target_indices = (0..6).collect::<Vec<_>>();
-    for (offset, parameter) in ["A1", "A2", "A3"].iter().enumerate() {
+    let mut axes = NongravCovarianceAxes::NONE;
+    for (offset, (parameter, axis)) in [
+        ("A1", NongravCovarianceAxes::A1),
+        ("A2", NongravCovarianceAxes::A2),
+        ("A3", NongravCovarianceAxes::A3),
+    ]
+    .iter()
+    .enumerate()
+    {
         if let Some(index) = labels[6..].iter().position(|label| label == parameter) {
             source_indices.push(6 + index);
             target_indices.push(6 + offset);
+            axes = axes | *axis;
         }
     }
     let dropped = labels[6..]
@@ -410,7 +419,7 @@ fn convert_sbdb_full_covariance(
         .cloned()
         .collect::<Vec<_>>();
     if source_indices.len() == 6 {
-        return (None, dropped);
+        return (None, dropped, NongravCovarianceAxes::NONE);
     }
     let mut full = vec![0.0; 81];
     for (&source_row, &target_row) in source_indices.iter().zip(&target_indices) {
@@ -418,7 +427,7 @@ fn convert_sbdb_full_covariance(
             full[target_row * 9 + target_column] = matrix[source_row * dimension + source_column];
         }
     }
-    (Some(full), dropped)
+    (Some(full), dropped, axes)
 }
 
 fn diagonal_covariance(sigmas: &[f64; 6]) -> Vec<f64> {
@@ -583,6 +592,8 @@ pub fn sbdb_normalize_payloads_json(ids_json: &str, payloads_json: &str) -> Sche
     let mut object_ids = Vec::with_capacity(payloads.len());
     let mut coords = Vec::with_capacity(payloads.len());
     let mut covariances = Vec::with_capacity(payloads.len());
+    let mut covariance_validity = Vec::with_capacity(payloads.len());
+    let mut nongrav_covariance_axis_mask = Vec::with_capacity(payloads.len());
     let mut times_jd = Vec::with_capacity(payloads.len());
     let mut h = Vec::with_capacity(payloads.len());
     let mut h_sigma = Vec::with_capacity(payloads.len());
@@ -619,6 +630,7 @@ pub fn sbdb_normalize_payloads_json(ids_json: &str, payloads_json: &str) -> Sche
         )?;
         let mut cov_matrix: Option<Vec<f64>> = None;
         let mut cov_matrix_full: Option<Vec<f64>> = None;
+        let mut covariance_axes = NongravCovarianceAxes::NONE;
 
         if let Some(cov) = orbit.get("covariance").and_then(Value::as_object) {
             if let Some(data) = cov.get("data") {
@@ -646,12 +658,13 @@ pub fn sbdb_normalize_payloads_json(ids_json: &str, payloads_json: &str) -> Sche
                             cov_matrix = Some(sbdb_coordinate_covariance(&matrix, dimension));
                             if dimension > 6 {
                                 if let Some(labels) = labels.as_ref().filter(|labels| labels.len() == dimension) {
-                                    let (full, dropped) = convert_sbdb_full_covariance(
+                                    let (full, dropped, axes) = convert_sbdb_full_covariance(
                                         &matrix,
                                         dimension,
                                         labels,
                                     );
                                     cov_matrix_full = full;
+                                    covariance_axes = axes;
                                     if !dropped.is_empty() {
                                         warnings.push(format!(
                                             "SBDB covariance for object {obj_id} includes estimated parameters {:?} that are not supported for storage (only A1, A2, A3); marginalizing them out.",
@@ -707,9 +720,17 @@ pub fn sbdb_normalize_payloads_json(ids_json: &str, payloads_json: &str) -> Sche
         let w = sbdb_element_value(&elements, "w")?;
         let tp_mjd = mjd_from_jd_legacy(sbdb_element_value(&elements, "tp")?)?;
         coords.push(vec![q, e, inc, om, w, tp_mjd]);
-        covariances.push(match cov_matrix_full {
+        let covariance = match cov_matrix_full {
             Some(covariance) => covariance,
             None => convert_sbdb_covariances(&cov_matrix),
+        };
+        let covariance_is_valid = covariance.iter().all(|value| value.is_finite());
+        covariances.push(covariance);
+        covariance_validity.push(covariance_is_valid);
+        nongrav_covariance_axis_mask.push(if covariance_is_valid {
+            covariance_axes.bits()
+        } else {
+            NongravCovarianceAxes::NONE.bits()
         });
         times_jd.push(epoch_jd);
         nongrav.push(sbdb_non_gravitational_parameters(payload));
@@ -726,6 +747,8 @@ pub fn sbdb_normalize_payloads_json(ids_json: &str, payloads_json: &str) -> Sche
         "object_id": object_ids,
         "coords_cometary": coords,
         "covariances_cometary": covariances,
+        "covariance_validity": covariance_validity,
+        "nongrav_covariance_axis_mask": nongrav_covariance_axis_mask,
         "times_jd": times_jd,
         "physical_parameters": {
             "H_v": h,
@@ -889,6 +912,99 @@ pub fn horizons_ephemeris_normalize_json(rows_json: &str) -> SchemaResult<String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn sbdb_test_payload(covariance_labels: Option<&[&str]>, missing_sigma: bool) -> Value {
+        let names = ["e", "q", "tp", "om", "w", "i"];
+        let values = [0.1, 1.0, 2_460_000.5, 10.0, 20.0, 5.0];
+        let elements = names
+            .iter()
+            .zip(values)
+            .enumerate()
+            .map(|(index, (name, value))| {
+                json!({
+                    "name": name,
+                    "value": value,
+                    "sigma": if missing_sigma && index == 5 { Value::Null } else { json!(0.01) },
+                })
+            })
+            .collect::<Vec<_>>();
+        let covariance = covariance_labels.map(|labels| {
+            let dimension = labels.len();
+            let data = (0..dimension)
+                .map(|row| {
+                    (0..dimension)
+                        .map(|column| if row == column { 1.0 } else { 0.0 })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            json!({
+                "labels": labels,
+                "data": data,
+                "epoch": 2_460_000.5,
+            })
+        });
+        let mut orbit = json!({
+            "epoch": 2_460_000.5,
+            "elements": elements,
+            "model_pars": [],
+        });
+        if let Some(covariance) = covariance {
+            orbit["covariance"] = covariance;
+        }
+        json!({
+            "object": {"fullname": "test object"},
+            "orbit": orbit,
+        })
+    }
+
+    #[test]
+    fn sbdb_normalizer_emits_authoritative_masks_and_explicit_covariance_validity() {
+        let state_labels = ["e", "q", "tp", "node", "peri", "i"];
+        let a2_labels = ["e", "q", "tp", "node", "peri", "i", "A2"];
+        let a1_a2_labels = ["e", "q", "tp", "node", "peri", "i", "A1", "A2"];
+        let payloads = vec![
+            sbdb_test_payload(Some(&state_labels), false),
+            sbdb_test_payload(Some(&a2_labels), false),
+            sbdb_test_payload(Some(&a1_a2_labels), false),
+            sbdb_test_payload(None, false),
+            sbdb_test_payload(None, true),
+        ];
+        let normalized = sbdb_normalize_payloads_json(
+            r#"["state","a2","a1a2","fallback","missing"]"#,
+            &serde_json::to_string(&payloads).unwrap(),
+        )
+        .unwrap();
+        let normalized: Value = serde_json::from_str(&normalized).unwrap();
+
+        assert_eq!(
+            normalized["covariance_validity"],
+            json!([true, true, true, true, false])
+        );
+        assert_eq!(
+            normalized["nongrav_covariance_axis_mask"],
+            json!([0, 0b010, 0b011, 0, 0])
+        );
+        let covariances = normalized["covariances_cometary"].as_array().unwrap();
+        assert_eq!(
+            covariances
+                .iter()
+                .map(|row| row.as_array().unwrap().len())
+                .collect::<Vec<_>>(),
+            vec![36, 81, 81, 36, 36]
+        );
+        assert_eq!(covariances[0][0], json!(1.0));
+        assert_eq!(covariances[1][7 * 9 + 7], json!(1.0));
+        assert_eq!(covariances[1][6 * 9 + 6], json!(0.0));
+        assert_eq!(
+            covariances[4]
+                .as_array()
+                .unwrap()
+                .iter()
+                .filter(|value| value.is_null())
+                .count(),
+            1
+        );
+    }
 
     #[test]
     fn neocc_upper_triangular_28_respects_solved_dimension() {

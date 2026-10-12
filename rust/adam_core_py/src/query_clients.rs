@@ -2,9 +2,9 @@ use crate::http::{get_text, get_text_with_status, percent_encode};
 use adam_core_rs_coords::{
     cometary_to_cartesian6, optical_obs80_record_batch, parse_optical_obs80_file,
     transform_with_covariance_flat, CoordinateBatch, CoordinateRepresentation, CovarianceBatch,
-    CovarianceUnits, DataFrame, IntoNestedRecordBatch, NonGravitationalParametersBatch, ObjectId,
-    OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId, PhysicalParametersBatch,
-    Representation, TimeArray, TimeScale, VariantId,
+    CovarianceUnits, DataFrame, IntoNestedRecordBatch, NonGravitationalParametersBatch,
+    NongravCovarianceAxes, ObjectId, OrbitBatch, OrbitId, OrbitVariantBatch, OriginArray, OriginId,
+    PhysicalParametersBatch, Representation, TimeArray, TimeScale, Validity, VariantId,
 };
 use arrow::pyarrow::{FromPyArrow, ToPyArrow};
 use arrow_array::{
@@ -70,6 +70,39 @@ fn number_array(value: &Value, name: &str) -> PyResult<Vec<f64>> {
             entry
                 .as_f64()
                 .ok_or_else(|| value_error(format!("{name} entries must be numeric")))
+        })
+        .collect()
+}
+
+fn bool_array(value: &Value, name: &str) -> PyResult<Vec<bool>> {
+    field(value, name)?
+        .as_array()
+        .ok_or_else(|| value_error(format!("field {name:?} must be an array")))?
+        .iter()
+        .map(|entry| {
+            entry
+                .as_bool()
+                .ok_or_else(|| value_error(format!("{name} entries must be booleans")))
+        })
+        .collect()
+}
+
+fn nongrav_covariance_axis_masks(
+    value: &Value,
+    name: &str,
+) -> PyResult<Vec<NongravCovarianceAxes>> {
+    field(value, name)?
+        .as_array()
+        .ok_or_else(|| value_error(format!("field {name:?} must be an array")))?
+        .iter()
+        .map(|entry| {
+            let bits = entry
+                .as_u64()
+                .and_then(|bits| u8::try_from(bits).ok())
+                .ok_or_else(|| value_error(format!("{name} entries must be uint8 values")))?;
+            NongravCovarianceAxes::from_bits(bits).ok_or_else(|| {
+                value_error(format!("{name} entry has unsupported bits {bits:#010b}"))
+            })
         })
         .collect()
 }
@@ -1298,6 +1331,9 @@ fn sbdb_orbits(
     let covariance_rows = field(&normalized, "covariances_cometary")?
         .as_array()
         .ok_or_else(|| value_error("covariances_cometary must be an array"))?;
+    let covariance_validity = bool_array(&normalized, "covariance_validity")?;
+    let nongrav_covariance_axis_mask =
+        nongrav_covariance_axis_masks(&normalized, "nongrav_covariance_axis_mask")?;
     let covariance_dimension = if covariance_rows
         .iter()
         .any(|row| row.as_array().is_some_and(|values| values.len() == 81))
@@ -1359,11 +1395,7 @@ fn sbdb_orbits(
         .chunks_exact(6)
         .map(|row| [row[0], row[1], row[2], row[3], row[4], row[5]])
         .collect();
-    let coordinates = CoordinateBatch::cartesian(
-        states,
-        DataFrame::Ecliptic,
-        OriginArray::repeat(OriginId::from_code("SUN"), rows),
-        Some(time_array),
+    let covariance = if covariance_validity.iter().any(|valid| *valid) {
         Some(
             CovarianceBatch::new(
                 rows,
@@ -1371,8 +1403,21 @@ fn sbdb_orbits(
                 covariance,
                 CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
             )
+            .and_then(|covariance| {
+                covariance.with_row_validity(Validity::from_bools(&covariance_validity))
+            })
+            .and_then(|covariance| covariance.with_nongrav_axis_mask(nongrav_covariance_axis_mask))
             .map_err(|err| value_error(err.to_string()))?,
-        ),
+        )
+    } else {
+        None
+    };
+    let coordinates = CoordinateBatch::cartesian(
+        states,
+        DataFrame::Ecliptic,
+        OriginArray::repeat(OriginId::from_code("SUN"), rows),
+        Some(time_array),
+        covariance,
     )
     .map_err(|err| value_error(err.to_string()))?;
     let physical = field(&normalized, "physical_parameters")?;
@@ -1575,4 +1620,119 @@ pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_function(wrap_pyfunction!(query_sbdb_arrow, module)?)?;
     module.add_function(wrap_pyfunction!(benchmark_query_client_processing, module)?)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use adam_core_rs_coords::TryFromNestedRecordBatch;
+    use serde_json::json;
+
+    fn sbdb_test_payload(covariance_labels: Option<&[&str]>, missing_sigma: bool) -> String {
+        let names = ["e", "q", "tp", "om", "w", "i"];
+        let values = [0.1, 1.0, 2_460_000.5, 10.0, 20.0, 5.0];
+        let elements = names
+            .iter()
+            .zip(values)
+            .enumerate()
+            .map(|(index, (name, value))| {
+                json!({
+                    "name": name,
+                    "value": value,
+                    "sigma": if missing_sigma && index == 5 { Value::Null } else { json!(0.01) },
+                })
+            })
+            .collect::<Vec<_>>();
+        let covariance = covariance_labels.map(|labels| {
+            let dimension = labels.len();
+            let data = (0..dimension)
+                .map(|row| {
+                    (0..dimension)
+                        .map(|column| if row == column { 1.0 } else { 0.0 })
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            json!({"labels": labels, "data": data, "epoch": 2_460_000.5})
+        });
+        let mut orbit = json!({
+            "epoch": 2_460_000.5,
+            "elements": elements,
+            "model_pars": [],
+        });
+        if let Some(covariance) = covariance {
+            orbit["covariance"] = covariance;
+        }
+        json!({
+            "object": {"fullname": "test object"},
+            "orbit": orbit,
+        })
+        .to_string()
+    }
+
+    #[test]
+    fn recorded_sbdb_product_preserves_masks_and_invalid_covariance_rows() {
+        let state_labels = ["e", "q", "tp", "node", "peri", "i"];
+        let a2_labels = ["e", "q", "tp", "node", "peri", "i", "A2"];
+        let ids = vec!["state".to_string(), "a2".to_string(), "missing".to_string()];
+        let recorded = vec![
+            sbdb_test_payload(Some(&state_labels), false),
+            sbdb_test_payload(Some(&a2_labels), false),
+            sbdb_test_payload(None, true),
+        ];
+
+        let (orbits, warnings) =
+            sbdb_orbits(&ids, false, 1.0, 1, false, true, Some(&recorded)).unwrap();
+        assert!(warnings.is_empty());
+        let covariance = orbits.coordinates.covariance.as_ref().unwrap();
+        assert_eq!(covariance.dimension, 9);
+        assert_eq!(covariance.row_dimension(0), 6);
+        assert_eq!(covariance.row_dimension(1), 9);
+        assert!(covariance.is_row_valid(0));
+        assert!(covariance.is_row_valid(1));
+        assert!(!covariance.is_row_valid(2));
+        assert_eq!(
+            covariance.nongrav_axis_mask,
+            Some(vec![
+                NongravCovarianceAxes::NONE,
+                NongravCovarianceAxes::A2,
+                NongravCovarianceAxes::NONE,
+            ])
+        );
+        assert!(covariance.row_values(0)[..6]
+            .iter()
+            .all(|value| value.is_finite()));
+        assert!(covariance.row_values(2).iter().all(|value| value.is_nan()));
+
+        let batch = orbits.clone().into_nested_record_batch().unwrap();
+        assert_eq!(
+            batch
+                .schema()
+                .metadata()
+                .get("adam_core_schema_version")
+                .map(String::as_str),
+            Some("2")
+        );
+        let round_trip = OrbitBatch::try_from_nested_record_batch(&batch).unwrap();
+        assert_eq!(round_trip, orbits);
+    }
+
+    #[test]
+    fn recorded_sbdb_product_omits_globally_unavailable_covariance() {
+        let ids = vec!["missing".to_string()];
+        let recorded = vec![sbdb_test_payload(None, true)];
+
+        let (orbits, warnings) =
+            sbdb_orbits(&ids, false, 1.0, 1, false, true, Some(&recorded)).unwrap();
+        assert!(warnings.is_empty());
+        assert!(orbits.coordinates.covariance.is_none());
+        let batch = orbits.into_nested_record_batch().unwrap();
+        assert_eq!(
+            batch
+                .schema()
+                .metadata()
+                .get("adam_core_schema_version")
+                .map(String::as_str),
+            Some("1")
+        );
+    }
 }

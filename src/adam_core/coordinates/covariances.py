@@ -6,6 +6,7 @@ import numpy.typing as npt
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
+from typing_extensions import Self
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,28 @@ class CoordinateCovariances(qv.Table):
     """Per-row 6D coordinate or 9D coordinate+A1/A2/A3 covariance."""
 
     values = qv.LargeListColumn(pa.float64(), nullable=True)
+    # Provider-independent A1/A2/A3 covariance membership. All-null means the
+    # covariance product is legacy/unlabeled; explicit products use bits 1/2/4.
+    nongrav_axis_mask = qv.UInt8Column(nullable=True)
+
+    @classmethod
+    def from_pyarrow(
+        cls,
+        table: pa.Table,
+        validate: bool = True,
+        permit_nulls: bool = False,
+        **kwargs: qv.AttributeValueType,
+    ) -> Self:
+        # Version-1 covariance tables predate the canonical A-axis mask. Add an
+        # all-null column so they remain explicitly legacy/unlabeled.
+        if "nongrav_axis_mask" not in table.column_names:
+            table = table.append_column(
+                "nongrav_axis_mask", pa.nulls(len(table), type=pa.uint8())
+            )
+        return super().from_pyarrow(
+            table, validate=validate, permit_nulls=permit_nulls, **kwargs
+        )
+
     # When fixed, we should revert to:
     # values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))
 

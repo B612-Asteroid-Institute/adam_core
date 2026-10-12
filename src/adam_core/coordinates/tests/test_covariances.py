@@ -1,4 +1,5 @@
 import numpy as np
+import pyarrow as pa
 import pytest
 
 from adam_core.coordinates.covariances import _upper_triangular_to_full
@@ -307,3 +308,20 @@ def test__upper_triangular_to_full():
 
     actual_array = _upper_triangular_to_full(triangular_array)
     np.testing.assert_array_equal(actual_array, expected_array)
+
+
+def test_coordinate_covariances_arrow_v1_and_v2_mask_compatibility():
+    values_6d = pa.array([[1.0] * 36], type=pa.large_list(pa.float64()))
+    legacy = CoordinateCovariances.from_pyarrow(pa.table({"values": values_6d}))
+    assert legacy.nongrav_axis_mask.to_pylist() == [None]
+
+    values_9d = pa.array([[1.0] * 81], type=pa.large_list(pa.float64()))
+    labeled = CoordinateCovariances.from_pyarrow(
+        pa.table(
+            {
+                "values": values_9d,
+                "nongrav_axis_mask": pa.array([0b010], type=pa.uint8()),
+            }
+        )
+    )
+    assert labeled.nongrav_axis_mask.to_pylist() == [0b010]

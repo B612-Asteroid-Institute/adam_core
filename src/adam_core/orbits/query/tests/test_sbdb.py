@@ -410,6 +410,9 @@ def test_query_sbdb_new_populates_nongrav_and_extended_covariance() -> None:
 
         assert orbits.non_gravitational_parameters.source[0].as_py() == "SBDB"
         assert orbits.coordinates.covariance.nongrav_block_mask().tolist() == [True]
+        assert orbits.coordinates.covariance.nongrav_axis_mask[0].as_py() == (
+            0b111 if object_id == "67P" else 0b011
+        )
         full = orbits.coordinates.covariance.to_full_matrix()[0]
         assert full.shape == (9, 9)
         assert np.isfinite(full).all()
@@ -452,8 +455,26 @@ def test_query_sbdb_new_degrades_bad_covariance_with_warning(
         for record in caplog.records
     )
     assert not orbits.coordinates.covariance.has_nongrav_block()
+    assert orbits.coordinates.covariance.nongrav_axis_mask[0].as_py() == 0
     assert orbits.non_gravitational_parameters.A2[0].as_py() is not None
     assert np.isfinite(orbits.coordinates.covariance.to_matrix()).all()
+
+
+def test_query_sbdb_new_marks_incomplete_sigma_fallback_covariance_absent() -> None:
+    payload = copy.deepcopy(_load_sbdb_fixture_payload("2001VB.json"))
+    payload["orbit"].pop("covariance")
+    payload["orbit"]["elements"][0]["sigma"] = None
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        orbits = query_sbdb_new(["2001VB"], timeout_s=1.0, max_attempts=1)
+
+    assert np.isfinite(orbits.coordinates.values[0]).all()
+    assert orbits.coordinates.covariance.values[0].as_py() is None
+    assert orbits.coordinates.covariance.nongrav_axis_mask[0].as_py() is None
 
 
 def test_query_sbdb_new_include_nongrav_false_strips_solution() -> None:
