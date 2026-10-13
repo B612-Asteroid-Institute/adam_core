@@ -706,6 +706,10 @@ def estimate_colors(
     Inputs can contain data for multiple objects, multiple observers, and
     multiple color bands.
 
+    The rotational period is NOT fit, and it is assumed that g(t)=0.
+    Observations in different bands taken at different rotational phases
+    can produce apparent color.
+
     Parameters
     ----------
     observations
