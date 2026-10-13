@@ -152,6 +152,13 @@ fn decode_opt_string(batch: &RecordBatch, name: &str) -> SchemaResult<Vec<Option
         .collect())
 }
 
+fn decode_opt_string_or_null(batch: &RecordBatch, name: &str) -> SchemaResult<Vec<Option<String>>> {
+    if batch.column_by_name(name).is_none() {
+        return Ok(vec![None; batch.num_rows()]);
+    }
+    decode_opt_string(batch, name)
+}
+
 fn decode_req_string(batch: &RecordBatch, name: &str) -> SchemaResult<Vec<String>> {
     decode_opt_string(batch, name)?
         .into_iter()
@@ -816,6 +823,8 @@ pub struct SourceCatalogBatch {
     pub exposure_depth_5sigma: Vec<Option<f64>>,
     pub object_id: Vec<Option<String>>,
     pub catalog_id: Vec<String>,
+    pub astcat: Vec<Option<String>>,
+    pub photcat: Vec<Option<String>>,
 }
 
 impl SourceCatalogBatch {
@@ -852,6 +861,8 @@ impl SourceCatalogBatch {
             ("exposure_depth_5sigma", self.exposure_depth_5sigma.len()),
             ("object_id", self.object_id.len()),
             ("catalog_id", self.catalog_id.len()),
+            ("astcat", self.astcat.len()),
+            ("photcat", self.photcat.len()),
         ] {
             validate_len(field, rows, len)?;
         }
@@ -915,6 +926,8 @@ impl IntoNestedRecordBatch for SourceCatalogBatch {
             float("exposure_depth_5sigma", &self.exposure_depth_5sigma),
             string("object_id", &self.object_id),
             req_string("catalog_id", &self.catalog_id),
+            string("astcat", &self.astcat),
+            string("photcat", &self.photcat),
         ];
         build_batch(
             SOURCE_CATALOG_NESTED_SCHEMA,
@@ -956,6 +969,8 @@ impl TryFromNestedRecordBatch for SourceCatalogBatch {
             exposure_depth_5sigma: decode_opt_f64(batch, "exposure_depth_5sigma")?,
             object_id: decode_opt_string(batch, "object_id")?,
             catalog_id: decode_req_string(batch, "catalog_id")?,
+            astcat: decode_opt_string_or_null(batch, "astcat")?,
+            photcat: decode_opt_string_or_null(batch, "photcat")?,
         };
         out.validate()?;
         Ok(out)
@@ -1169,11 +1184,60 @@ mod tests {
             exposure_depth_5sigma: vec![Some(24.0), None],
             object_id: vec![None, Some("object-9".to_string())],
             catalog_id: vec!["cat-1".to_string(), "cat-1".to_string()],
+            astcat: vec![Some("Gaia2".to_string()), None],
+            photcat: vec![None, Some("Gaia3".to_string())],
         };
         let batch = catalog.clone().into_nested_record_batch().unwrap();
-        assert_eq!(batch.num_columns(), 25);
+        assert_eq!(batch.num_columns(), 27);
         let round_tripped = SourceCatalogBatch::try_from_nested_record_batch(&batch).unwrap();
         assert_eq!(round_tripped, catalog);
+    }
+
+    #[test]
+    fn source_catalog_legacy_batch_uses_null_catalog_provenance() {
+        let catalog = SourceCatalogBatch {
+            id: vec!["src-1".to_string()],
+            exposure_id: vec![None],
+            time: utc_time(vec![60300], vec![0]),
+            ra: vec![15.0],
+            dec: vec![-15.0],
+            ra_sigma: vec![None],
+            dec_sigma: vec![None],
+            radec_corr: vec![None],
+            mag: vec![None],
+            mag_sigma: vec![None],
+            fwhm: vec![None],
+            a: vec![None],
+            a_sigma: vec![None],
+            b: vec![None],
+            b_sigma: vec![None],
+            pa: vec![None],
+            pa_sigma: vec![None],
+            observatory_code: vec!["X05".to_string()],
+            filter: vec![None],
+            exposure_start_time: TimeColumn {
+                scale: TimeScale::Utc,
+                days: vec![0],
+                nanos: vec![0],
+                validity: Some(vec![false]),
+            },
+            exposure_duration: vec![None],
+            exposure_seeing: vec![None],
+            exposure_depth_5sigma: vec![None],
+            object_id: vec![None],
+            catalog_id: vec!["cat-1".to_string()],
+            astcat: vec![Some("Gaia2".to_string())],
+            photcat: vec![Some("Gaia3".to_string())],
+        };
+        let batch = catalog.into_nested_record_batch().unwrap();
+        let legacy_batch = batch.project(&(0..25).collect::<Vec<_>>()).unwrap();
+
+        let current_batch = round_trip_nested(&legacy_batch).unwrap();
+        assert_eq!(current_batch.num_columns(), 27);
+        let restored = SourceCatalogBatch::try_from_nested_record_batch(&current_batch).unwrap();
+        assert_eq!(restored.astcat, vec![None]);
+        assert_eq!(restored.photcat, vec![None]);
+        assert_eq!(restored.catalog_id, vec!["cat-1".to_string()]);
     }
 
     #[test]
