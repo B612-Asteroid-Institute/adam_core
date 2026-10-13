@@ -375,6 +375,36 @@ dict keys unchanged; keys and `IodOutput` fields were added).
    `tables_from_native_full_od` now logs `not_found_reason` at debug level
    (the follow-up noted under item 4).
 
+6. **Fused routes honor the configured IOD propagator; fallback and
+   tie rules pinned** (coordinator). Review items "the configured IOD
+   propagator and settings are not consistently honored", "fallback
+   behavior differs depending on whether the initial batch attempt or a
+   later prediction fails" and the rejection section's "deterministic for
+   ... residual ranking, ties". `NativeOrbitFitter.fused_propagator_matches`
+   (`isinstance(propagator, propagator_class) and not propagator_kwargs`)
+   gates both `NativeOrbitFitter.full_od` and `run_od`'s `_fused_run_od`;
+   a mismatch runs the composition (IOD on `propagator_class`, as the
+   docstrings say). All native test doubles subclass the test
+   `TwoBodyPropagator`, so the existing fused tests keep their route. Test:
+   `test_od_orchestration.py::test_fused_route_requires_the_configured_iod_propagator`
+   (counting native propagator: fused used for the matching class, not for
+   another class or extra kwargs; results found either way). The callback
+   fallback was NOT changed: one rule is now pinned by
+   `test_native_callback.py::test_callback_fallback_rule_is_the_same_for_every_prediction`
+   (an exception from `generate_ephemeris` propagates unchanged and is never
+   retried per candidate; a batch returning too few rows is predicted one
+   candidate per call; a per-candidate result with the wrong row count is a
+   `ValueError`). A symmetric "retry per candidate on a raising batch" was
+   tried and rejected: it silently absorbed the probe-batch exception that
+   item 2 makes propagate. Worst-residual ties
+   (`od_refine.rs::lowest_probability_row`: lowest probability, then larger
+   residual norm, then first candidate row; NaN probability is an error) are
+   pinned by `worst_residual_selection_breaks_ties_deterministically`.
+   Not addressed, by instruction (contract or policy decisions): explicit
+   backend identity for dispatch, removal of the callback route, declared
+   Jacobian compatibility per backend, typed stage handoffs, defaults in
+   Rust `Default` impls, provenance records, API consolidation.
+
 Gates run before each of the four commits (`cargo +1.87.0`): `fmt --all
 --check`, `clippy --workspace --all-targets -- -D warnings`, `test
 --workspace` (coords crate 255 -> 265 tests, all green); `maturin develop

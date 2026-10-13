@@ -225,6 +225,10 @@ def _fused_run_od(
         return None
     if not fitter.supports_native_full_od():
         return None
+    if not fitter.fused_propagator_matches(propagator):
+        # The fitter is configured to run IOD on another propagator than
+        # the one refining; only the composition honors that.
+        return None
     if models is None:
         model_list: list[ObservationUncertaintyModel] = []
     elif isinstance(models, ObservationUncertaintyModel):

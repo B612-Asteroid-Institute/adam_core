@@ -120,6 +120,34 @@ def predict(propagator, orbits, observers):
     )
 
 
+class BatchRaisingPropagator(ReorderingPropagator):
+    """Model a backend that raises on a multi-orbit batch."""
+
+    def generate_ephemeris(self, orbits, observers, **kwargs):
+        if len(orbits) > 1:
+            self.calls += 1
+            raise RuntimeError("one orbit at a time")
+        return super().generate_ephemeris(orbits, observers, **kwargs)
+
+
+def test_callback_fallback_rule_is_the_same_for_every_prediction(callback_inputs):
+    """One rule whatever the call: an exception from ``generate_ephemeris``
+    propagates unchanged (never retried one candidate at a time), a batch
+    returning too few rows is predicted one candidate per call, and a
+    per-candidate result with the wrong row count is an error (see
+    ``test_callback_rejects_mismatched_observers``)."""
+    orbits, observers = callback_inputs
+    expected = predict(ReorderingPropagator(), orbits, observers)
+    short = ReorderingPropagator(single_candidate=True)
+    npt.assert_array_equal(predict(short, orbits, observers), expected)
+    assert short.calls == 3
+
+    raising = BatchRaisingPropagator()
+    with pytest.raises(RuntimeError, match="one orbit at a time"):
+        predict(raising, orbits, observers)
+    assert raising.calls == 1
+
+
 @pytest.mark.parametrize("single_candidate", [False, True])
 @pytest.mark.parametrize("output_scale", ["utc", "tai"])
 def test_callback_restores_candidate_and_observer_order(

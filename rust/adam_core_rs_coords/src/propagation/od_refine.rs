@@ -2632,6 +2632,34 @@ mod tests {
     }
 
     #[test]
+    fn worst_residual_selection_breaks_ties_deterministically() {
+        // Equal probabilities: the larger residual norm wins; equal norms
+        // too: the first candidate row wins. A NaN probability is an error.
+        let probability = [0.5, 0.1, 0.1, 0.9, 0.1, 0.1];
+        let mut residuals = vec![0.0; 6 * 6];
+        residuals[6 + 1] = 1.0;
+        residuals[2 * 6 + 1] = 2.0;
+        residuals[4 * 6 + 1] = 2.0;
+        residuals[5 * 6 + 1] = 2.0;
+        assert_eq!(
+            lowest_probability_row(&[0, 1, 2, 3, 4, 5], &probability, &residuals).unwrap(),
+            2
+        );
+        assert_eq!(
+            lowest_probability_row(&[5, 4, 2], &probability, &residuals).unwrap(),
+            5
+        );
+        assert_eq!(
+            lowest_probability_row(&[0, 1, 3], &probability, &residuals).unwrap(),
+            1
+        );
+        let mut with_nan = probability;
+        with_nan[4] = f64::NAN;
+        assert!(lowest_probability_row(&[0, 4], &with_nan, &residuals).is_err());
+        assert!(lowest_probability_row(&[], &probability, &residuals).is_err());
+    }
+
+    #[test]
     fn iterative_fit_rejects_the_worst_observation_until_converged() {
         let observed = synthetic_observations(Some(3));
         let config = IterativeFitConfig {

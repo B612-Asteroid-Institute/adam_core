@@ -256,6 +256,19 @@ class NativeOrbitFitter(OrbitFitter):
         }
         return set(self.rejection_kwargs) <= loop_keys | _FUSED_LOOP_KWARGS
 
+    def fused_propagator_matches(self, propagator: Propagator) -> bool:
+        """
+        Whether a fused work unit of ``propagator`` would run the IOD this
+        fitter is configured for. The composition runs IOD on a fresh
+        ``propagator_class(**propagator_kwargs)`` and refinement on
+        ``propagator``; a fused work unit runs both on ``propagator``, so it
+        only represents the composition when ``propagator`` is an instance
+        of ``propagator_class`` built without extra keyword arguments.
+        """
+        return (
+            isinstance(propagator, self.propagator_class) and not self.propagator_kwargs
+        )
+
     def full_od(
         self,
         object_id: str | pa.LargeStringScalar,
@@ -266,12 +279,18 @@ class NativeOrbitFitter(OrbitFitter):
         IOD followed by refinement. On a Rust-backed propagator exposing the
         fused ``full_od`` work unit the whole pipeline (Gauss IOD decision
         loop, differential correction, outlier rejection) runs natively in
-        one crossing when ``supports_native_full_od`` confirms compatibility;
-        otherwise `initial_fit` and `refine_fit` are chained, honoring subclass
-        overrides.
+        one crossing when ``supports_native_full_od`` confirms compatibility
+        and ``fused_propagator_matches`` confirms that ``propagator`` is the
+        configured IOD propagator; otherwise `initial_fit` and `refine_fit`
+        are chained, honoring subclass overrides and the configured
+        ``propagator_class`` for IOD.
         """
         fused = getattr(propagator, "full_od", None)
-        if fused is not None and self.supports_native_full_od():
+        if (
+            fused is not None
+            and self.supports_native_full_od()
+            and self.fused_propagator_matches(propagator)
+        ):
             iod_settings, refinement, fit_settings = self.native_settings()
             output = fused(
                 observations,

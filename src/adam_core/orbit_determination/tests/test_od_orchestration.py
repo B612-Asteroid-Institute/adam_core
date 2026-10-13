@@ -890,6 +890,62 @@ class TestFusedRunOd:
                     atol=1e-15,
                 )
 
+    def test_fused_route_requires_the_configured_iod_propagator(
+        self, two_body_observations
+    ) -> None:
+        """A fused work unit runs IOD and refinement on the same propagator,
+        so it only replaces the composition when that propagator is the
+        fitter's configured IOD propagator; otherwise IOD runs on the
+        configured class, as the composition does."""
+
+        class OtherTwoBodyPropagator(TwoBodyPropagator):
+            pass
+
+        class CountingNativePropagator(NativeTwoBodyPropagator):
+            def __init__(self) -> None:
+                super().__init__()
+                self.fused_run_od_calls = 0
+                self.fused_full_od_calls = 0
+
+            def run_od(self, *args, **kwargs):
+                self.fused_run_od_calls += 1
+                return super().run_od(*args, **kwargs)
+
+            def full_od(self, *args, **kwargs):
+                self.fused_full_od_calls += 1
+                return super().full_od(*args, **kwargs)
+
+        matching = NativeOrbitFitter(
+            propagator_class=TwoBodyPropagator, iod_rchi2_threshold=1e6
+        )
+        other_class = NativeOrbitFitter(
+            propagator_class=OtherTwoBodyPropagator, iod_rchi2_threshold=1e6
+        )
+        with_kwargs = NativeOrbitFitter(
+            propagator_class=TwoBodyPropagator,
+            propagator_kwargs={"chunk_size": 1},
+            iod_rchi2_threshold=1e6,
+        )
+        propagator = CountingNativePropagator()
+        assert matching.fused_propagator_matches(propagator)
+        assert not other_class.fused_propagator_matches(propagator)
+        assert not with_kwargs.fused_propagator_matches(propagator)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", RuntimeWarning)
+            fused, _ = run_od(
+                two_body_observations, matching, None, propagator=propagator
+            )
+            assert propagator.fused_run_od_calls == 1
+            composed, _ = run_od(
+                two_body_observations, other_class, None, propagator=propagator
+            )
+            assert propagator.fused_run_od_calls == 1
+            direct, _ = other_class.full_od("x", two_body_observations, propagator)
+            assert propagator.fused_full_od_calls == 0
+        assert len(fused) == len(composed) == len(direct) == 1
+        assert composed.success.to_pylist() == [True]
+
     def test_object_id_none_is_null_on_both_routes(self, two_body_observations) -> None:
         """Neither route leaks the opaque backend identifier into object_id."""
         with warnings.catch_warnings():
