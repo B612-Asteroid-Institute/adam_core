@@ -91,13 +91,18 @@ def test_Observers_from_codes_batch_spanning_earth_orientation_kernels() -> None
     although every single epoch resolved)."""
     code = _valid_mpc_code()
     assert code is not None
-    mjds = [55200.0, 64328.0]  # 2010-01-04 (pre predicted kernel), 2035-01-01 (predicted only)
+    mjds = [
+        55200.0,
+        64328.0,
+    ]  # 2010-01-04 (pre predicted kernel), 2035-01-01 (predicted only)
     times = Timestamp.from_mjd(mjds, scale="utc")
     batch = Observers.from_codes([code] * len(mjds), times)
     assert len(batch) == len(mjds)
     for i, mjd in enumerate(mjds):
         single = Observers.from_code(code, Timestamp.from_mjd([mjd], scale="utc"))
-        np.testing.assert_array_equal(batch.coordinates.values[i], single.coordinates.values[0])
+        np.testing.assert_array_equal(
+            batch.coordinates.values[i], single.coordinates.values[0]
+        )
 
 
 def test_Observers_from_codes_raises(codes_times) -> None:
