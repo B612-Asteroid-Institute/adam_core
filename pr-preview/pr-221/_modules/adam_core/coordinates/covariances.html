@@ -437,6 +437,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing_extensions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Self</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -479,6 +480,31 @@
 <span class="w">    </span><span class="sd">"""Per-row 6D coordinate or 9D coordinate+A1/A2/A3 covariance."""</span>
 
     <span class="n">values</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeListColumn</span><span class="p">(</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">(),</span> <span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1"># Provider-independent A1/A2/A3 covariance membership. All-null means the</span>
+    <span class="c1"># covariance product is legacy/unlabeled; explicit products use bits 1/2/4.</span>
+    <span class="n">nongrav_axis_mask</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">UInt8Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<div class="viewcode-block" id="CoordinateCovariances.from_pyarrow">
+<a class="viewcode-back" href="../../../reference/api/adam_core.coordinates.covariances.html#adam_core.coordinates.covariances.CoordinateCovariances.from_pyarrow">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">from_pyarrow</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span>
+        <span class="n">table</span><span class="p">:</span> <span class="n">pa</span><span class="o">.</span><span class="n">Table</span><span class="p">,</span>
+        <span class="n">validate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+        <span class="n">permit_nulls</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">kwargs</span><span class="p">:</span> <span class="n">qv</span><span class="o">.</span><span class="n">AttributeValueType</span><span class="p">,</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Self</span><span class="p">:</span>
+        <span class="c1"># Version-1 covariance tables predate the canonical A-axis mask. Add an</span>
+        <span class="c1"># all-null column so they remain explicitly legacy/unlabeled.</span>
+        <span class="k">if</span> <span class="s2">"nongrav_axis_mask"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">table</span><span class="o">.</span><span class="n">column_names</span><span class="p">:</span>
+            <span class="n">table</span> <span class="o">=</span> <span class="n">table</span><span class="o">.</span><span class="n">append_column</span><span class="p">(</span>
+                <span class="s2">"nongrav_axis_mask"</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">nulls</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">table</span><span class="p">),</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">uint8</span><span class="p">())</span>
+            <span class="p">)</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">from_pyarrow</span><span class="p">(</span>
+            <span class="n">table</span><span class="p">,</span> <span class="n">validate</span><span class="o">=</span><span class="n">validate</span><span class="p">,</span> <span class="n">permit_nulls</span><span class="o">=</span><span class="n">permit_nulls</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
+        <span class="p">)</span></div>
+
+
     <span class="c1"># When fixed, we should revert to:</span>
     <span class="c1"># values = Column(pa.fixed_shape_tensor(pa.float64(), (6, 6)))</span>
 
@@ -1190,7 +1216,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-07</div>
+              Last updated on 2026-10-13</div>
           </div>
           <div class="right-details">
             

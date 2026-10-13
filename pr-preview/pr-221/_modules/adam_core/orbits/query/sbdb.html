@@ -976,15 +976,10 @@
     <span class="n">ids</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span>
     <span class="n">payloads</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]],</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    Convert raw SBDB JSON payloads into an `Orbits` table.</span>
-
-<span class="sd">    The deterministic payload normalization (element selection, covariance</span>
-<span class="sd">    matrix/label handling, SBDB-&gt;ADAM covariance ordering, and physical</span>
-<span class="sd">    parameter extraction) is Rust-backed behind this canonical helper; Python</span>
-<span class="sd">    remains the thin table-construction facade.</span>
-<span class="sd">    """</span>
+<span class="w">    </span><span class="sd">"""Build the canonical Rust SBDB product from recorded payloads."""</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+    <span class="kn">from</span><span class="w"> </span><span class="nn">..._rust.arrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">table_from_record_batch</span>
 
     <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">payloads</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"ids and payloads must have the same length."</span><span class="p">)</span>
@@ -992,63 +987,18 @@
         <span class="k">if</span> <span class="s2">"object"</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">payload</span><span class="p">:</span>
             <span class="k">raise</span> <span class="n">NotFoundError</span><span class="p">(</span><span class="s2">"object </span><span class="si">{}</span><span class="s2"> was not found"</span><span class="p">,</span> <span class="n">obj_id</span><span class="p">)</span>
 
-    <span class="n">normalized</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span>
-        <span class="n">_rn</span><span class="o">.</span><span class="n">query_sbdb_normalize_payloads</span><span class="p">(</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">ids</span><span class="p">),</span> <span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">payloads</span><span class="p">))</span>
+    <span class="n">batch</span><span class="p">,</span> <span class="n">warnings</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">query_sbdb_arrow</span><span class="p">(</span>
+        <span class="n">ids</span><span class="p">,</span>
+        <span class="kc">True</span><span class="p">,</span>
+        <span class="mf">60.0</span><span class="p">,</span>
+        <span class="mi">1</span><span class="p">,</span>
+        <span class="kc">False</span><span class="p">,</span>
+        <span class="kc">False</span><span class="p">,</span>
+        <span class="p">[</span><span class="n">json</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">payload</span><span class="p">)</span> <span class="k">for</span> <span class="n">payload</span> <span class="ow">in</span> <span class="n">payloads</span><span class="p">],</span>
     <span class="p">)</span>
-    <span class="k">for</span> <span class="n">warning</span> <span class="ow">in</span> <span class="n">normalized</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"warnings"</span><span class="p">,</span> <span class="p">[]):</span>
+    <span class="k">for</span> <span class="n">warning</span> <span class="ow">in</span> <span class="n">warnings</span><span class="p">:</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">"</span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">warning</span><span class="p">)</span>
-    <span class="n">coords_cometary</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">normalized</span><span class="p">[</span><span class="s2">"coords_cometary"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="n">covariance_rows</span> <span class="o">=</span> <span class="n">normalized</span><span class="p">[</span><span class="s2">"covariances_cometary"</span><span class="p">]</span>
-    <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="o">==</span> <span class="mi">81</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">covariance_rows</span><span class="p">):</span>
-        <span class="n">covariances_cometary</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">full</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">payloads</span><span class="p">),</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">9</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-        <span class="k">for</span> <span class="n">row_index</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">covariance_rows</span><span class="p">):</span>
-            <span class="n">dimension</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">row</span><span class="p">)))</span>
-            <span class="n">values</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">dimension</span><span class="p">,</span> <span class="n">dimension</span><span class="p">)</span>
-            <span class="n">covariances_cometary</span><span class="p">[</span><span class="n">row_index</span><span class="p">,</span> <span class="p">:</span><span class="n">dimension</span><span class="p">,</span> <span class="p">:</span><span class="n">dimension</span><span class="p">]</span> <span class="o">=</span> <span class="n">values</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">covariances_cometary</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">covariance_rows</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span>
-            <span class="nb">len</span><span class="p">(</span><span class="n">payloads</span><span class="p">),</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span>
-        <span class="p">)</span>
-    <span class="n">times</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_jd</span><span class="p">(</span>
-        <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">normalized</span><span class="p">[</span><span class="s2">"times_jd"</span><span class="p">],</span> <span class="nb">type</span><span class="o">=</span><span class="n">pa</span><span class="o">.</span><span class="n">float64</span><span class="p">()),</span> <span class="n">scale</span><span class="o">=</span><span class="s2">"tdb"</span>
-    <span class="p">)</span>
-    <span class="n">origin</span> <span class="o">=</span> <span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">"SUN"</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">times</span><span class="p">))])</span>
-
-    <span class="n">coordinates</span> <span class="o">=</span> <span class="n">CometaryCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">time</span><span class="o">=</span><span class="n">times</span><span class="p">,</span>
-        <span class="n">q</span><span class="o">=</span><span class="n">coords_cometary</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
-        <span class="n">e</span><span class="o">=</span><span class="n">coords_cometary</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
-        <span class="n">i</span><span class="o">=</span><span class="n">coords_cometary</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
-        <span class="n">raan</span><span class="o">=</span><span class="n">coords_cometary</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
-        <span class="n">ap</span><span class="o">=</span><span class="n">coords_cometary</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
-        <span class="n">tp</span><span class="o">=</span><span class="n">coords_cometary</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
-        <span class="n">covariance</span><span class="o">=</span><span class="n">CoordinateCovariances</span><span class="o">.</span><span class="n">from_matrix</span><span class="p">(</span><span class="n">covariances_cometary</span><span class="p">),</span>
-        <span class="n">origin</span><span class="o">=</span><span class="n">origin</span><span class="p">,</span>
-        <span class="n">frame</span><span class="o">=</span><span class="s2">"ecliptic"</span><span class="p">,</span>
-    <span class="p">)</span>
-
-    <span class="n">phys</span> <span class="o">=</span> <span class="n">normalized</span><span class="p">[</span><span class="s2">"physical_parameters"</span><span class="p">]</span>
-    <span class="n">physical_parameters</span> <span class="o">=</span> <span class="n">PhysicalParameters</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">H_v</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">phys</span><span class="p">[</span><span class="s2">"H_v"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-        <span class="n">H_v_sigma</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">phys</span><span class="p">[</span><span class="s2">"H_v_sigma"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-        <span class="n">G</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">phys</span><span class="p">[</span><span class="s2">"G"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-        <span class="n">G_sigma</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">phys</span><span class="p">[</span><span class="s2">"G_sigma"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
-    <span class="p">)</span>
-    <span class="n">nongrav_rows</span> <span class="o">=</span> <span class="n">normalized</span><span class="p">[</span><span class="s2">"non_gravitational_parameters"</span><span class="p">]</span>
-    <span class="n">nongrav_columns</span> <span class="o">=</span> <span class="p">{</span>
-        <span class="n">field</span><span class="p">:</span> <span class="p">[</span><span class="n">row</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">field</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">nongrav_rows</span><span class="p">]</span>
-        <span class="k">for</span> <span class="n">field</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"source"</span><span class="p">,</span> <span class="s2">"A1"</span><span class="p">,</span> <span class="s2">"A2"</span><span class="p">,</span> <span class="s2">"A3"</span><span class="p">,</span> <span class="s2">"ALN"</span><span class="p">,</span> <span class="s2">"NK"</span><span class="p">,</span> <span class="s2">"NM"</span><span class="p">,</span> <span class="s2">"NN"</span><span class="p">,</span> <span class="s2">"R0"</span><span class="p">)</span>
-    <span class="p">}</span>
-    <span class="n">non_gravitational_parameters</span> <span class="o">=</span> <span class="n">NonGravitationalParameters</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="o">**</span><span class="n">nongrav_columns</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">Orbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
-        <span class="n">orbit_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">normalized</span><span class="p">[</span><span class="s2">"orbit_id"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">"object"</span><span class="p">),</span>
-        <span class="n">object_id</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">normalized</span><span class="p">[</span><span class="s2">"object_id"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="s2">"object"</span><span class="p">),</span>
-        <span class="n">coordinates</span><span class="o">=</span><span class="n">coordinates</span><span class="o">.</span><span class="n">to_cartesian</span><span class="p">(),</span>
-        <span class="n">physical_parameters</span><span class="o">=</span><span class="n">physical_parameters</span><span class="p">,</span>
-        <span class="n">non_gravitational_parameters</span><span class="o">=</span><span class="n">non_gravitational_parameters</span><span class="p">,</span>
-    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">table_from_record_batch</span><span class="p">(</span><span class="n">Orbits</span><span class="p">,</span> <span class="n">batch</span><span class="p">)</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_get_sbdb_payloads_new</span><span class="p">(</span>
@@ -1241,7 +1191,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-07</div>
+              Last updated on 2026-10-13</div>
           </div>
           <div class="right-details">
             
