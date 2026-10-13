@@ -11,6 +11,7 @@ import quivr as qv
 
 from adam_core.time import Timestamp
 
+from .. import color_determination
 from ..bandpasses.api import bandpass_delta_mag
 from ..color_determination import (
     _CHANNEL_FILTERS,
@@ -18,8 +19,9 @@ from ..color_determination import (
     _TARGET_FILTERS,
     ColorFit,
     _apply_color_terms,
+    _g_bounds_violation,
     _resolve_channels,
-    _validate_g_bounds,
+    _UnreliableFitError,
     estimate_colors,
 )
 
@@ -269,6 +271,105 @@ def test_estimate_colors_multi_object() -> None:
         _assert_colors_close(result, object_id, _paper_colors(fx), HG12STAR_TOLERANCE)
 
 
+def test_failed_objects_do_not_abort_the_batch() -> None:
+    """
+    Objects with no orbit, several orbits, or no usable photometry each get a row
+    with the matching status, and every other object in the batch is still fit.
+    """
+    fixtures = [
+        np.load(DATA_DIR / name, allow_pickle=True)
+        for name in COLOR_FIXTURES
+        if name != "__NO_FIXTURES__"
+    ]
+    if len(fixtures) < 4:
+        pytest.skip("Need at least four color fixtures to test batch failures.")
+    no_orbit, two_orbits, no_photometry, *good = fixtures
+    ids = {key: str(fx["object_id"][0]) for key, fx in zip("ABC", fixtures)}
+
+    unusable = _load_fixture_observations(no_photometry)
+    unusable = unusable.set_column(
+        "band", pa.array(["V"] * len(unusable), type=unusable.band.type)
+    )
+    observations = qv.concatenate(
+        [_load_fixture_observations(fx) for fx in (no_orbit, two_orbits)]
+        + [unusable]
+        + [_load_fixture_observations(fx) for fx in good]
+    )
+    orbits = qv.concatenate(
+        [_load_fixture_orbits(two_orbits)] * 2
+        + [_load_fixture_orbits(fx) for fx in [no_photometry, *good]]
+    )
+
+    result = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
+
+    assert len(result) == len(fixtures)
+    status = dict(zip(result.object_id.to_pylist(), result.status.to_pylist()))
+    error = dict(zip(result.object_id.to_pylist(), result.error.to_pylist()))
+    assert status[ids["A"]] == "no_orbit"
+    assert status[ids["B"]] == "multiple_orbits"
+    assert "got 2" in error[ids["B"]]
+    assert status[ids["C"]] == "no_usable_photometry"
+    failed = result.apply_mask(pc.not_equal(result.status, "ok"))
+    assert failed.g_r.to_pylist() == [None] * 3
+    # The unusable photometry is still accounted for.
+    c_row = result.apply_mask(pc.equal(result.object_id, ids["C"])).table.to_pylist()[0]
+    assert c_row["num_used"] == 0
+    assert c_row["num_invalid"] + c_row["num_unsupported_filter"] == c_row["num_obs"]
+
+    for fx in good:
+        object_id = str(fx["object_id"][0])
+        assert status[object_id] == "ok"
+        assert error[object_id] is None
+        _assert_colors_close(result, object_id, _paper_colors(fx), HG12STAR_TOLERANCE)
+
+
+@pytest.mark.parametrize(
+    "exc, expected_status, expected_error",
+    [
+        (_UnreliableFitError("fit is unreliable"), "too_many_outliers", "unreliable"),
+        (RuntimeError("boom"), "failed", "RuntimeError: boom"),
+    ],
+)
+def test_fit_errors_are_reported_per_object(
+    monkeypatch: pytest.MonkeyPatch,
+    exc: Exception,
+    expected_status: str,
+    expected_error: str,
+) -> None:
+    """An error while fitting one object is recorded on its row, not raised."""
+    fixtures = [
+        np.load(DATA_DIR / name, allow_pickle=True)
+        for name in COLOR_FIXTURES
+        if name != "__NO_FIXTURES__"
+    ]
+    if len(fixtures) < 2:
+        pytest.skip("Need at least two color fixtures.")
+    fixtures = fixtures[:2]
+    observations = qv.concatenate([_load_fixture_observations(fx) for fx in fixtures])
+    orbits = qv.concatenate([_load_fixture_orbits(fx) for fx in fixtures])
+
+    # Fail only the first object's fit; the second goes through the real one.
+    real_fit = color_determination._fit_per_band_h
+    calls = []
+
+    def flaky_fit(*args, **kwargs):
+        calls.append(None)
+        if len(calls) == 1:
+            raise exc
+        return real_fit(*args, **kwargs)
+
+    monkeypatch.setattr(color_determination, "_fit_per_band_h", flaky_fit)
+    result = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
+
+    assert len(calls) == 2
+    first, second = result.status.to_pylist()
+    assert first == expected_status
+    assert expected_error in result.error[0].as_py()
+    assert result.g_r[0].as_py() is None
+    assert second == "ok"
+    assert result.g_r[1].as_py() is not None
+
+
 # 2025 MN25 fits G12* well below 0 with the HG12* model, so it exercises the
 # out-of-range slope-parameter handling.
 _OUT_OF_BOUNDS_FIXTURE = "color_fixture_2025_MN25.npz"
@@ -286,12 +387,24 @@ def _load_out_of_bounds_case():
     )
 
 
-def test_force_g_bounds_true_raises_on_out_of_range() -> None:
-    """With force_g_bounds=True (default), an out-of-[0,1] slope fit raises."""
-    observations, orbits, _ = _load_out_of_bounds_case()
+def test_force_g_bounds_true_rejects_out_of_range_fit() -> None:
+    """
+    With force_g_bounds=True (default), an out-of-[0,1] slope fit is rejected:
+    flagged by status, with magnitudes and colors withheld but the slope and
+    diagnostics kept to show why.
+    """
+    observations, orbits, object_id = _load_out_of_bounds_case()
 
-    with pytest.raises(ValueError, match=r"G12\*.*outside the HG12star validity"):
-        estimate_colors(observations, orbits, "HG12star")
+    row = estimate_colors(observations, orbits, "HG12star")
+
+    assert row.object_id.to_pylist() == [object_id]
+    assert row.status.to_pylist() == ["phase_param_out_of_bounds"]
+    assert "G12*" in row.error[0].as_py()
+    assert "outside the HG12star validity" in row.error[0].as_py()
+    for field in ("g_mag", "r_mag", "i_mag", "g_mag_sigma", "g_r", "g_i", "r_i"):
+        assert getattr(row, field).to_pylist() == [None], field
+    assert row.phase_param[0].as_py() < 0.0
+    assert row.num_used[0].as_py() > 0
 
 
 def test_force_g_bounds_false_warns_and_returns(
@@ -306,6 +419,8 @@ def test_force_g_bounds_false_warns_and_returns(
     assert isinstance(result, ColorFit)
     row = result.apply_mask(pc.equal(result.object_id, object_id))
     assert len(row) == 1
+    assert row.status.to_pylist() == ["ok"]
+    assert row.error.to_pylist() == [None]
     assert any(
         "outside the HG12star validity" in record.message
         and "force_g_bounds=False" in record.message
@@ -332,11 +447,12 @@ def test_force_g_bounds_false_warns_and_returns(
 )
 def test_g_bounds_are_model_specific(phi_type: str, G: float, valid: bool) -> None:
     """Each phase model's slope parameter is checked against its own bounds."""
+    violation = _g_bounds_violation(G, phi_type, "obj")
     if valid:
-        _validate_g_bounds(G, phi_type, "obj", force_g_bounds=True)
+        assert violation is None
     else:
-        with pytest.raises(ValueError, match=f"outside the {phi_type} validity"):
-            _validate_g_bounds(G, phi_type, "obj", force_g_bounds=True)
+        assert violation is not None
+        assert f"outside the {phi_type} validity" in violation
 
 
 # ---------------------------------------------------------------------------
