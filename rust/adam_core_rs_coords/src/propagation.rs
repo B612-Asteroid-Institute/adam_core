@@ -32,7 +32,7 @@ pub use od::{
     vallado_least_squares_barycentric, EvaluatedLeastSquaresFit, FitEvaluation, IodConfig,
     IodOutput, ObservationSelectionMethod, OdConfig, OdMethod, OdOutput, OrbitGeometry,
     PropagatorPredictor, SphericalPredictor, ValladoConfig, ValladoIteration, ValladoResult,
-    ValladoStatus, INVALID_LIGHT_TIME_MESSAGE,
+    ValladoStatus, INVALID_LIGHT_TIME_MESSAGE, IOD_DEFAULT_MU, IOD_DEFAULT_SPEED_OF_LIGHT,
 };
 pub use od_refine::{
     cmc2003_fit_barycentric, cmc2003_fit_with, fit_orbit_whitened_barycentric,

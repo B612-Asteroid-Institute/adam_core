@@ -11,7 +11,10 @@ from ..coordinates.origin import Origin
 from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
 from ..time import Timestamp
-from ._native_dispatch import _has_compatible_native_spec
+from ._native_dispatch import (
+    _has_compatible_native_spec,
+    _warn_if_analytic_jacobian_mismatches,
+)
 from .differential_correction import (
     _FUSED_LOOP_KWARGS,
     HUBER_F_SCALE_DEFAULT,
@@ -57,8 +60,11 @@ def tables_from_native_full_od(
             vx=state[3:4],
             vy=state[4:5],
             vz=state[5:6],
-            time=Timestamp.from_mjd(
-                [float(iod["epoch_mjd"])], scale=iod["epoch_scale"]
+            # The IOD epoch crosses exactly (integer days and nanoseconds).
+            time=Timestamp.from_kwargs(
+                days=[int(iod["epoch_days"])],
+                nanos=[int(iod["epoch_nanos"])],
+                scale=iod["epoch_scale"],
             ),
             origin=Origin.from_kwargs(code=["SUN"]),
             frame="ecliptic",
@@ -292,6 +298,7 @@ class NativeOrbitFitter(OrbitFitter):
             and self.fused_propagator_matches(propagator)
         ):
             iod_settings, refinement, fit_settings = self.native_settings()
+            _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
             output = fused(
                 observations,
                 iod_settings=iod_settings,

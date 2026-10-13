@@ -15,6 +15,7 @@ from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
 from ..time.time import Timestamp
 from ..utils.spice import get_perturber_state
+from ._native_dispatch import _warn_if_analytic_jacobian_mismatches
 from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .observation_uncertainty import ObservationUncertaintyModel
@@ -844,6 +845,8 @@ def fit_least_squares(
             + ", ".join(f"{key}={kwargs[key]!r}" for key in sorted(unsupported))
         )
 
+    _warn_if_analytic_jacobian_mismatches(propagator, jacobian)
+
     # Rust-backed propagators expose the complete whitened fit as one native
     # crossing (``fit_least_squares_whitened``): every Jacobian option, both
     # losses, the validated covariance and the final evaluation.
@@ -1000,6 +1003,7 @@ def iterative_fit(
         kwargs.get("validate_covariance", True),
         kwargs,
     )
+    _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
     loop_settings = dict(
         rchi2_threshold=rchi2_threshold,
         min_obs=min_obs,

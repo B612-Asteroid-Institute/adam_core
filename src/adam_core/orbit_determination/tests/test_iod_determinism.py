@@ -118,3 +118,40 @@ def test_iod_search_budget_is_a_separate_setting(two_body_arc) -> None:  # noqa:
 
     with pytest.raises(ValueError, match="max_triplets"):
         run(max_triplets=0)
+
+
+def test_iod_epoch_crosses_as_exact_days_and_nanoseconds(
+    two_body_arc,  # noqa: F811
+) -> None:
+    """The accepted orbit's epoch leaves Rust as integer days and
+    nanoseconds in the observations' time scale, never as a float MJD, and
+    the Python tables carry exactly those values."""
+    _, observed_ipc, observers_ipc = _native_problem(
+        _placeholder_orbit(two_body_arc), two_body_arc
+    )
+
+    def run(**overrides):
+        settings = dict(min_obs=6, rchi2_threshold=1e4)
+        settings.update(overrides)
+        return _rust_native.iod_fit_ipc(
+            TwoBodyPropagator(), observed_ipc, observers_ipc, iod_settings=settings
+        )
+
+    output = run()
+    assert output["found"]
+    assert "epoch_mjd" not in output
+    assert type(output["epoch_days"]) is int
+    assert type(output["epoch_nanos"]) is int
+    assert 0 <= output["epoch_nanos"] < 86_400_000_000_000
+    assert output["epoch_scale"] == two_body_arc.coordinates.time.scale
+
+    fitted, _ = iod(two_body_arc, TwoBodyPropagator, min_obs=6, rchi2_threshold=1e4)
+    assert fitted.coordinates.time.scale == output["epoch_scale"]
+    assert fitted.coordinates.time.days[0].as_py() == output["epoch_days"]
+    assert fitted.coordinates.time.nanos[0].as_py() == output["epoch_nanos"]
+
+    not_found = run(rchi2_threshold=1e-30, max_triplets=1)
+    assert not not_found["found"]
+    assert not_found["epoch_days"] is None
+    assert not_found["epoch_nanos"] is None
+    assert not_found["epoch_scale"] == output["epoch_scale"]

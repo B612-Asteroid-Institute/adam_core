@@ -42,6 +42,7 @@ import pyarrow as pa
 import pyarrow.compute as pc
 
 from ..propagator.propagator import Propagator
+from ._native_dispatch import _warn_if_analytic_jacobian_mismatches
 from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, ObservationAstrometry
 from .observation_uncertainty import (
@@ -205,6 +206,41 @@ def _stamp_object_id(
     )
 
 
+def _default_models() -> list[ObservationUncertaintyModel]:
+    """
+    The shipped default stack of `run_od`, in application order (see its
+    Notes). Built here, not as a signature default, because the models load
+    their tables from data packages when constructed. Every model whose
+    data is missing is reported in one error, before any fit runs, so the
+    caller learns all of what to install at once.
+    """
+    constructors: list[tuple[str, type[ObservationUncertaintyModel]]] = [
+        ("SigmaFillModel", SigmaFillModel),
+        ("EFCC18DebiasModel", EFCC18DebiasModel),
+        ("EmpiricalCovarianceModel", EmpiricalCovarianceModel),
+        ("NightBatchDeweightingModel", NightBatchDeweightingModel),
+    ]
+    models: list[ObservationUncertaintyModel] = []
+    missing: dict[str, list[str]] = {}
+    package_missing = False
+    for name, constructor in constructors:
+        try:
+            models.append(constructor())
+        except (ImportError, FileNotFoundError) as error:
+            package_missing |= isinstance(error, ImportError)
+            missing.setdefault(str(error), []).append(name)
+    if missing:
+        details = "\n".join(
+            f"  {', '.join(names)}: {reason}" for reason, names in missing.items()
+        )
+        message = (
+            "run_od(models='default') needs data that is not installed; install "
+            "it, or pass models=None or an explicit list of models:\n" + details
+        )
+        raise (ImportError if package_missing else FileNotFoundError)(message)
+    return models
+
+
 def _fused_run_od(
     observations: OrbitDeterminationObservations,
     fitter: OrbitFitter,
@@ -240,6 +276,7 @@ def _fused_run_od(
         return None
 
     iod_settings, refinement, fit_settings = fitter.native_settings()
+    _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
     backend_object_id = object_id if object_id is not None else uuid.uuid4().hex
     output = fused(
         observations,
@@ -343,7 +380,10 @@ def run_od(
         ``"default"``.
     ImportError, FileNotFoundError
         If ``models="default"`` and the ``adam-observatory-uncertainties``
-        data package or JPL's EFCC18 ``bias.dat`` is not installed.
+        data package or JPL's EFCC18 ``bias.dat`` is not installed: one
+        error, raised before any fit runs, naming every missing input
+        (`ImportError` when a package is missing, `FileNotFoundError` when
+        only ``bias.dat`` is).
 
     Notes
     -----
@@ -411,15 +451,7 @@ def run_od(
                 "models must be observation models, None or 'default'; "
                 f"got {models!r}"
             )
-        # The shipped default stack, in application order (see Notes). Built
-        # here, not as a signature default, because the models load their
-        # tables from data packages when constructed.
-        models = [
-            SigmaFillModel(),
-            EFCC18DebiasModel(),
-            EmpiricalCovarianceModel(),
-            NightBatchDeweightingModel(),
-        ]
+        models = _default_models()
 
     # Rust-backed propagators run the whole step in one crossing (``run_od``
     # work unit): models, IOD, refinement and the provenance snapshots. The

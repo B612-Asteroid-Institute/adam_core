@@ -53,6 +53,8 @@ class TwoBodyPropagator(Propagator):
     relies on.
     """
 
+    two_body_dynamics = True
+
     def __getstate__(self):
         return self.__dict__.copy()
 

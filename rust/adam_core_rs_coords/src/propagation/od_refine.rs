@@ -1611,9 +1611,17 @@ pub enum RefinementConfig {
     Cmc2003(Cmc2003FitConfig),
 }
 
+impl Default for RefinementConfig {
+    /// `NativeOrbitFitter`'s default: CMC2003 rejection with OrbFit's
+    /// constants.
+    fn default() -> Self {
+        Self::Cmc2003(Cmc2003FitConfig::default())
+    }
+}
+
 /// Settings of the complete native orbit determination: Gauss IOD followed
 /// by differential correction with outlier treatment.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub struct FullOdConfig {
     pub iod: super::od::IodConfig,
     pub refinement: RefinementConfig,
@@ -1637,9 +1645,9 @@ pub struct RefinedOutput {
 /// order.
 #[derive(Debug, Clone)]
 pub struct FullOdOutput {
+    /// The IOD decision; `iod.epoch` / `iod.epoch_scale` is the epoch of
+    /// `refined` too.
     pub iod: super::od::IodOutput,
-    /// Time scale of `iod.epoch_mjd` (that of the observation epochs).
-    pub epoch_scale: TimeScale,
     pub refined: Option<RefinedOutput>,
 }
 
@@ -1686,31 +1694,20 @@ pub fn full_od_with<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<FullOdOutput> {
-    let epoch_scale = observed
-        .times
-        .as_ref()
-        .ok_or_else(|| {
-            PropagationError::InvalidRequest(
-                "orbit determination requires observation times".to_string(),
-            )
-        })?
-        .scale;
     let iod = super::od::iod_fit(predictor, observed, observers, &config.iod)?;
     if !iod.found {
-        return Ok(FullOdOutput {
-            iod,
-            epoch_scale,
-            refined: None,
-        });
+        return Ok(FullOdOutput { iod, refined: None });
     }
+    // The seed sits exactly at the IOD epoch (days and nanoseconds), not at
+    // a float MJD round trip of it.
+    let epoch = iod.epoch.ok_or_else(|| {
+        PropagationError::InvalidRequest("accepted IOD orbit carries no epoch".to_string())
+    })?;
     let seed_coordinates = CoordinateBatch::cartesian(
         vec![iod.state],
         Frame::Ecliptic,
         OriginArray::repeat(OriginId::from_code("SUN"), 1),
-        Some(crate::TimeArray::new(
-            epoch_scale,
-            vec![super::od::mjd_epoch(iod.epoch_mjd)],
-        )?),
+        Some(crate::TimeArray::new(iod.epoch_scale, vec![epoch])?),
         None,
     )?;
     let seed = OrbitBatch::new(
@@ -1758,7 +1755,6 @@ pub fn full_od_with<T: OriginTranslationProvider>(
     };
     Ok(FullOdOutput {
         iod,
-        epoch_scale,
         refined: Some(refined),
     })
 }
@@ -2717,6 +2713,182 @@ mod tests {
         assert!(output.fit.evaluation.outlier.iter().all(|&flag| !flag));
     }
 
+    fn iterative_fit_with(
+        observed: &CoordinateBatch,
+        config: &IterativeFitConfig,
+    ) -> IterativeFitOutput {
+        iterative_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &perturbed_start(),
+            observed,
+            &observers(),
+            config,
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn iterative_fit_min_obs_bounds_the_outlier_allowance() {
+        // One gross outlier and a threshold no pass can meet: with
+        // `min_obs` equal to the observation count nothing may be removed;
+        // one below it exactly one observation may be, whatever the
+        // contamination percentage allows.
+        let observed = synthetic_observations(Some(3));
+        let config = |min_obs: usize| IterativeFitConfig {
+            rchi2_threshold: 1e-6,
+            min_obs,
+            contamination_percentage: 50.0,
+            ..IterativeFitConfig::default()
+        };
+        let pinned = iterative_fit_with(&observed, &config(NUM_OBS));
+        assert_eq!(pinned.passes, 1);
+        assert!(pinned.fit.evaluation.outlier.iter().all(|&flag| !flag));
+        let one = iterative_fit_with(&observed, &config(NUM_OBS - 1));
+        assert_eq!(one.passes, 2);
+        let outlier = &one.fit.evaluation.outlier;
+        assert_eq!(
+            outlier.iter().filter(|&&flag| flag).count(),
+            1,
+            "{outlier:?}"
+        );
+        assert!(outlier[3], "{outlier:?}");
+    }
+
+    #[test]
+    fn iterative_fit_keeps_the_arc_above_min_arc_length() {
+        // The gross outlier is the last observation (day 44 of the arc):
+        // removing it would leave a 40-day arc. Above that `min_arc_length`
+        // the loop stops without removing it; below, it is removed as usual.
+        let observed = synthetic_observations(Some(NUM_OBS - 1));
+        let config = |min_arc_length: f64| IterativeFitConfig {
+            rchi2_threshold: 2.0,
+            min_arc_length,
+            ..IterativeFitConfig::default()
+        };
+        let kept = iterative_fit_with(&observed, &config(41.0));
+        assert_eq!(kept.passes, 1);
+        assert!(kept.fit.evaluation.outlier.iter().all(|&flag| !flag));
+        assert!(kept.fit.evaluation.reduced_chi2 > 2.0);
+        let removed = iterative_fit_with(&observed, &config(1.0));
+        assert_eq!(removed.passes, 2);
+        assert!(removed.fit.evaluation.outlier[NUM_OBS - 1]);
+        assert!(removed.fit.evaluation.reduced_chi2 <= 2.0);
+    }
+
+    #[test]
+    fn iterative_fit_returns_the_best_converged_pass() {
+        // A clean arc with a threshold no pass can meet: every pass
+        // converges and the loop spends its whole allowance. The returned
+        // fit is the pass with the lowest reduced chi2, reproduced here pass
+        // by pass with the loop's own worst-observation rule.
+        let observed = synthetic_observations(None);
+        let config = IterativeFitConfig {
+            rchi2_threshold: 1e-9,
+            ..IterativeFitConfig::default()
+        };
+        let output = iterative_fit_with(&observed, &config);
+        let limit = max_outliers(NUM_OBS, config.min_obs, config.contamination_percentage);
+        assert_eq!(limit, 2);
+        assert_eq!(output.passes, limit + 1);
+
+        let mut ignore = vec![false; NUM_OBS];
+        let mut best: Option<WhitenedFitOutput> = None;
+        for _ in 0..=limit {
+            let pass = fit(&observed, &ignore, &config.fit);
+            assert!(pass.converged);
+            if best.as_ref().is_none_or(|current| {
+                pass.evaluation.reduced_chi2 < current.evaluation.reduced_chi2
+            }) {
+                best = Some(pass.clone());
+            }
+            let solution: Vec<usize> = (0..NUM_OBS).filter(|&row| !ignore[row]).collect();
+            let worst = lowest_probability_row(
+                &solution,
+                &pass.evaluation.probability,
+                &pass.evaluation.residuals,
+            )
+            .unwrap();
+            ignore[worst] = true;
+        }
+        let best = best.unwrap();
+        assert_eq!(output.fit.state, best.state);
+        assert_eq!(
+            output.fit.evaluation.reduced_chi2,
+            best.evaluation.reduced_chi2
+        );
+        assert_eq!(output.fit.evaluation.outlier, best.evaluation.outlier);
+    }
+
+    #[test]
+    fn cmc2003_too_few_observations_fits_once_without_rejection() {
+        // At or below `CMC2003_MIN_OBS` observations the loop fits once,
+        // flags `too_few_observations` and rejects nothing, outlier or not.
+        use crate::cmc2003::CMC2003_MIN_OBS;
+        let rows: Vec<usize> = vec![0, 5, NUM_OBS - 1];
+        assert!(rows.len() <= CMC2003_MIN_OBS);
+        let observed =
+            super::super::od::take_coordinate_batch(&synthetic_observations(Some(5)), &rows)
+                .unwrap();
+        let observers = super::super::od::take_observer_batch(&observers(), &rows).unwrap();
+        let config = Cmc2003FitConfig {
+            fit: WhitenedFitConfig {
+                validate_covariance: false,
+                ..WhitenedFitConfig::default()
+            },
+            ..Cmc2003FitConfig::default()
+        };
+        let output = cmc2003_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &perturbed_start(),
+            &observed,
+            &observers,
+            &config,
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert_eq!(output.n_iterations, 1);
+        assert_eq!(output.n_rejected, 0);
+        assert_eq!(output.n_recovered, 0);
+        assert_eq!(output.flags, vec!["too_few_observations".to_string()]);
+        assert!(output.fit.evaluation.outlier.iter().all(|&flag| !flag));
+    }
+
+    #[test]
+    fn cmc2003_max_iterations_refits_on_the_final_selection() {
+        // A one-pass budget: the first pass rejects the gross outlier and
+        // the budget is spent, so the loop flags `max_iterations` and refits
+        // once more on the final selection rather than returning the
+        // pre-rejection fit.
+        let observed = synthetic_observations(Some(3));
+        let config = Cmc2003FitConfig {
+            max_iterations: 1,
+            ..Cmc2003FitConfig::default()
+        };
+        let output = cmc2003_fit_barycentric(
+            &TwoBodyPropagator::default(),
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &config,
+            &ephemeris_options(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert_eq!(output.n_iterations, 1);
+        assert_eq!(output.flags, vec!["max_iterations".to_string()]);
+        assert_eq!(output.n_rejected, 1);
+        assert!(output.fit.evaluation.outlier[3]);
+        assert_eq!(output.fit.weights[3], 0.0);
+        assert_eq!(output.fit.evaluation.num_obs, NUM_OBS - 1);
+        assert!(output.fit.evaluation.reduced_chi2 < 2.0);
+    }
+
     #[test]
     fn cmc2003_rejects_gross_outliers_and_recovers_truth() {
         let mut observed = synthetic_observations(Some(3));
@@ -2864,7 +3036,9 @@ mod tests {
         )
         .unwrap();
         assert!(output.iod.found);
-        assert_eq!(output.epoch_scale, TimeScale::Tdb);
+        assert_eq!(output.iod.epoch_scale, TimeScale::Tdb);
+        let iod_epoch = output.iod.epoch.expect("iod epoch");
+        assert_eq!(iod_epoch, super::super::od::mjd_epoch(iod_epoch.mjd()));
         let refined = output.refined.expect("refined orbit");
         assert!(refined.fit.converged);
         assert!(refined.fit.evaluation.outlier[3]);
@@ -2875,7 +3049,7 @@ mod tests {
         let mu = crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap();
         let truth_at_epoch = crate::propagate_2body_row::<f64>(
             TRUTH_STATE,
-            output.iod.epoch_mjd - 60_000.0,
+            iod_epoch.mjd() - 60_000.0,
             mu,
             1000,
             1e-14,

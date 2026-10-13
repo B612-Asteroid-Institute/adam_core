@@ -1116,6 +1116,28 @@ pub enum ObservationSelectionMethod {
     Thirds,
 }
 
+impl ObservationSelectionMethod {
+    /// The Python spelling of ``observation_selection_method``.
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "combinations" => Ok(Self::Combinations),
+            "first+middle+last" => Ok(Self::FirstMiddleLast),
+            "thirds" => Ok(Self::Thirds),
+            other => Err(format!(
+                "observation_selection_method must be one of 'combinations', \
+                 'first+middle+last', 'thirds'; got {other:?}"
+            )),
+        }
+    }
+}
+
+/// Heliocentric gravitational parameter (au³/day²) of [`IodConfig::default`]:
+/// adam-core's `Constants.MU`.
+pub const IOD_DEFAULT_MU: f64 = 0.000_295_912_208_284_119_56;
+/// Speed of light (au/day) of [`IodConfig::default`]: adam-core's
+/// `Constants.C`.
+pub const IOD_DEFAULT_SPEED_OF_LIGHT: f64 = 173.144_632_674_240_34;
+
 #[derive(Debug, Clone, Copy)]
 pub struct IodConfig {
     pub min_obs: usize,
@@ -1134,16 +1156,40 @@ pub struct IodConfig {
     pub max_triplets: Option<usize>,
 }
 
+impl Default for IodConfig {
+    /// `NativeOrbitFitter`'s IOD settings: at least six observations over a
+    /// day, 20 % contamination, reduced chi2 200, every combination triplet
+    /// with light-time correction and the legacy triplet budget.
+    fn default() -> Self {
+        Self {
+            min_obs: 6,
+            min_arc_length: 1.0,
+            contamination_percentage: 20.0,
+            rchi2_threshold: 200.0,
+            observation_selection_method: ObservationSelectionMethod::Combinations,
+            light_time: true,
+            mu: IOD_DEFAULT_MU,
+            speed_of_light: IOD_DEFAULT_SPEED_OF_LIGHT,
+            max_triplets: None,
+        }
+    }
+}
+
 /// Product of the complete preliminary-IOD decision loop for one linkage.
-/// `state` is heliocentric/ecliptic at `epoch_mjd`; residual/member arrays
-/// retain the caller's observation order. The search counters describe the
+/// `state` is heliocentric/ecliptic at `epoch` (exact days and nanoseconds
+/// in `epoch_scale`); residual/member arrays retain the caller's
+/// observation order. The search counters describe the
 /// run whether or not an orbit was accepted; `not_found_reason` says why
 /// none was.
 #[derive(Debug, Clone)]
 pub struct IodOutput {
     pub found: bool,
     pub state: [f64; 6],
-    pub epoch_mjd: f64,
+    /// Epoch of `state`: the Gauss epoch of the accepted candidate, exact to
+    /// the nanosecond in `epoch_scale`. `None` unless `found`.
+    pub epoch: Option<crate::Epoch>,
+    /// Time scale of `epoch`: that of the observation times.
+    pub epoch_scale: crate::TimeScale,
     pub arc_length: f64,
     pub num_obs: usize,
     pub chi2_total: f64,
@@ -1165,11 +1211,12 @@ pub struct IodOutput {
 }
 
 impl IodOutput {
-    fn not_found(n: usize) -> Self {
+    fn not_found(n: usize, epoch_scale: crate::TimeScale) -> Self {
         Self {
             found: false,
             state: [f64::NAN; 6],
-            epoch_mjd: f64::NAN,
+            epoch: None,
+            epoch_scale,
             arc_length: f64::NAN,
             num_obs: 0,
             chi2_total: f64::NAN,
@@ -1187,10 +1234,10 @@ impl IodOutput {
         }
     }
 
-    fn not_found_because(n: usize, reason: String) -> Self {
+    fn not_found_because(n: usize, epoch_scale: crate::TimeScale, reason: String) -> Self {
         Self {
             not_found_reason: Some(reason),
-            ..Self::not_found(n)
+            ..Self::not_found(n, epoch_scale)
         }
     }
 
@@ -1269,9 +1316,11 @@ pub fn iod_fit(
             "observed and observers must have equal length".to_string(),
         ));
     }
+    let epoch_scale = observation_time_scale(observed)?;
     if n == 0 || n < config.min_obs {
         return Ok(IodOutput::not_found_because(
             n,
+            epoch_scale,
             format!("{n} observations, fewer than min_obs = {}", config.min_obs),
         ));
     }
@@ -1280,6 +1329,19 @@ pub fn iod_fit(
     let sorted_observers = take_observer_batch(observers, &order)?;
     let output = iod_fit_sorted(predictor, &sorted_observed, &sorted_observers, config)?;
     Ok(restore_input_order(output, &order))
+}
+
+/// Time scale of the observation epochs (the scale of every IOD epoch).
+fn observation_time_scale(observed: &CoordinateBatch) -> PropagationResultValue<crate::TimeScale> {
+    Ok(observed
+        .times
+        .as_ref()
+        .ok_or_else(|| {
+            PropagationError::InvalidRequest(
+                "orbit determination requires observation times".to_string(),
+            )
+        })?
+        .scale)
 }
 
 /// Permutation putting the observations in the canonical IOD search order:
@@ -1339,6 +1401,7 @@ fn iod_fit_sorted(
         PropagationError::InvalidRequest("IOD requires spherical observed coordinates".to_string())
     })?;
     let times = observed_times_mjd(observed)?;
+    let epoch_scale = observation_time_scale(observed)?;
     let observer_positions = observers.coordinates.values.cartesian().ok_or_else(|| {
         PropagationError::InvalidRequest("IOD requires Cartesian observer coordinates".to_string())
     })?;
@@ -1363,6 +1426,7 @@ fn iod_fit_sorted(
     if triplets.is_empty() {
         return Ok(IodOutput::not_found_because(
             n,
+            epoch_scale,
             "no triplet of observations with three distinct epochs".to_string(),
         ));
     }
@@ -1401,10 +1465,7 @@ fn iod_fit_sorted(
                 vec![state],
                 Frame::Ecliptic,
                 OriginArray::repeat(crate::OriginId::from_code("SUN"), 1),
-                Some(TimeArray::new(
-                    observed.times.as_ref().unwrap().scale,
-                    vec![epoch],
-                )?),
+                Some(TimeArray::new(epoch_scale, vec![epoch])?),
                 None,
             )?;
             let orbit = OrbitBatch::new(
@@ -1439,7 +1500,8 @@ fn iod_fit_sorted(
             if evaluation.reduced_chi2 <= config.rchi2_threshold {
                 return Ok(iod_accepted_output(
                     state,
-                    epochs[candidate],
+                    epoch,
+                    epoch_scale,
                     &times,
                     triplet,
                     Vec::new(),
@@ -1472,7 +1534,8 @@ fn iod_fit_sorted(
                 if reduced <= config.rchi2_threshold && arc_length >= config.min_arc_length {
                     let mut accepted = iod_accepted_output(
                         state,
-                        epochs[candidate],
+                        epoch,
+                        epoch_scale,
                         &times,
                         triplet,
                         removed,
@@ -1511,7 +1574,7 @@ fn iod_fit_sorted(
             counters.candidates_failed
         )
     };
-    Ok(IodOutput::not_found_because(n, reason).with_search_counters(&counters))
+    Ok(IodOutput::not_found_because(n, epoch_scale, reason).with_search_counters(&counters))
 }
 
 /// Batch the complete IOD work unit across linkage row selections without
@@ -1563,7 +1626,8 @@ where
 
 fn iod_accepted_output(
     state: [f64; 6],
-    epoch_mjd: f64,
+    epoch: crate::Epoch,
+    epoch_scale: crate::TimeScale,
     times: &[f64],
     triplet: [usize; 3],
     removed: Vec<usize>,
@@ -1574,7 +1638,8 @@ fn iod_accepted_output(
     IodOutput {
         found: true,
         state,
-        epoch_mjd,
+        epoch: Some(epoch),
+        epoch_scale,
         arc_length: evaluation.arc_length,
         num_obs: evaluation.num_obs,
         chi2_total: evaluation.orbit_chi2,
@@ -2188,7 +2253,7 @@ pub(super) fn filter_coordinate_batch(
     take_coordinate_batch(batch, &rows)
 }
 
-fn take_coordinate_batch(
+pub(super) fn take_coordinate_batch(
     batch: &CoordinateBatch,
     rows: &[usize],
 ) -> PropagationResultValue<CoordinateBatch> {
@@ -2251,7 +2316,7 @@ pub(super) fn filter_observer_batch(
     take_observer_batch(observers, &rows)
 }
 
-fn take_observer_batch(
+pub(super) fn take_observer_batch(
     observers: &ObserverBatch,
     rows: &[usize],
 ) -> PropagationResultValue<ObserverBatch> {
@@ -2628,7 +2693,7 @@ mod tests {
         let mu = crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap();
         let truth_at_epoch = crate::propagate_2body_row::<f64>(
             TRUTH_STATE,
-            output.epoch_mjd - 60_000.0,
+            output.epoch.expect("accepted epoch").mjd() - 60_000.0,
             mu,
             1000,
             1e-14,
@@ -2642,7 +2707,8 @@ mod tests {
     fn assert_same_orbit(a: &IodOutput, b: &IodOutput) {
         assert!(a.found && b.found);
         assert_eq!(a.state, b.state);
-        assert_eq!(a.epoch_mjd, b.epoch_mjd);
+        assert_eq!(a.epoch, b.epoch);
+        assert_eq!(a.epoch_scale, b.epoch_scale);
         assert_eq!(a.num_obs, b.num_obs);
         assert_eq!(a.chi2_total, b.chi2_total);
         assert_eq!(a.arc_length, b.arc_length);

@@ -75,6 +75,7 @@ import numpy.typing as npt
 
 from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
+from ._native_dispatch import _warn_if_analytic_jacobian_mismatches
 from .differential_correction import (
     _FUSED_LOOP_KWARGS,
     _NATIVE_FIT_KWARGS,
@@ -362,6 +363,7 @@ def cmc2003_fit_detailed(
         validate_covariance,
         kwargs,
     )
+    _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
     loop_settings = dict(
         chi2_reject=chi2_reject,
         chi2_recover=chi2_recover,

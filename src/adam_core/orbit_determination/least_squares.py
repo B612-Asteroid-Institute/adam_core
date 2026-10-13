@@ -1,4 +1,5 @@
 import logging
+import warnings
 from abc import ABC
 from typing import Any, Dict, Optional
 
@@ -105,6 +106,14 @@ class LeastSquares(ABC):
         use_central_difference: bool
             if true, numerical differentiation uses central difference instead of one-sided
         """
+        warnings.warn(
+            "adam_core.orbit_determination.least_squares.LeastSquares is deprecated "
+            "and will be removed: it is the legacy finite-difference solver. Use "
+            "fit_least_squares, iterative_fit, cmc2003_fit_detailed or run_od, "
+            "which run the Rust solver.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         self._use_central_difference = use_central_difference
 
     def _update_orbit(

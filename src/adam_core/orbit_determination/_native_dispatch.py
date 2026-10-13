@@ -1,5 +1,7 @@
 """Keep native specifications paired with the Python behavior they describe."""
 
+import warnings
+
 
 def _has_compatible_native_spec(
     instance: object, spec_name: str, method_names: tuple[str, ...]
@@ -24,3 +26,26 @@ def _has_compatible_native_spec(
                     return False
             return True
     return False
+
+
+def _warn_if_analytic_jacobian_mismatches(propagator: object, jacobian: str) -> None:
+    """
+    Make the analytic two-body Jacobian audible on other dynamics.
+
+    ``jacobian="analytic"`` is the exact derivative of the Kepler two-body
+    model only. A propagator declares that it integrates exactly that model
+    with ``Propagator.two_body_dynamics = True``; with any other propagator
+    the solver still steps along the two-body derivative and only the
+    covariance probe checks the result, which this warning says out loud.
+    """
+    if jacobian != "analytic" or getattr(propagator, "two_body_dynamics", False):
+        return
+    warnings.warn(
+        "jacobian='analytic' is the Kepler two-body Jacobian, but "
+        f"{type(propagator).__name__} does not declare two-body dynamics "
+        "(Propagator.two_body_dynamics): the solver steps along the two-body "
+        "derivative and only the covariance probe checks the result. Pass "
+        "jacobian='central' to difference the propagator itself.",
+        UserWarning,
+        stacklevel=3,
+    )

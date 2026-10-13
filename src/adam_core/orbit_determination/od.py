@@ -1,5 +1,6 @@
 import logging
 import time
+import warnings
 from typing import Literal, Optional, Tuple, Type
 
 import numpy as np
@@ -23,6 +24,12 @@ from .outliers import calculate_max_outliers
 logger = logging.getLogger(__name__)
 
 __all__ = ["differential_correction"]
+
+_DEPRECATION_MESSAGE = (
+    "adam_core.orbit_determination.od.{name} is deprecated and will be removed: "
+    "it is the legacy finite-difference loop. Use fit_least_squares, "
+    "iterative_fit, cmc2003_fit_detailed or run_od, which run the Rust solver."
+)
 
 
 def od_worker(
@@ -200,6 +207,9 @@ def od(
     propagator_kwargs: dict = {},
     observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    warnings.warn(
+        _DEPRECATION_MESSAGE.format(name="od"), DeprecationWarning, stacklevel=2
+    )
     # Apply the observatory bias model (if any) before fitting: inflates the
     # observation uncertainties once at this entry point.
     if observatory_bias_model is not None:
@@ -673,6 +683,11 @@ def differential_correction(
         Observation uncertainty model applied to the observations once at this
         entry point before fitting. Default None leaves the observations unchanged.
     """
+    warnings.warn(
+        _DEPRECATION_MESSAGE.format(name="differential_correction"),
+        DeprecationWarning,
+        stacklevel=2,
+    )
     time_start = time.perf_counter()
     logger.info("Running differential correction...")
     if observatory_bias_model is not None:

@@ -108,29 +108,48 @@ fn setting<'py, T: FromPyObject<'py>>(
     }
 }
 
+/// `fit_settings` over the Rust defaults: `WhitenedFitConfig::default()` for
+/// the solver, `EphemerisOptions::default()` for the light-time /
+/// aberration settings and `TwoBodyPropagatorConfig::default()` for the
+/// Kepler solver. The dict only overrides them; no number lives here.
 fn parse_fit_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<FitSettings> {
-    let loss: String = setting(settings, "loss", "linear".to_string())?;
-    let f_scale: f64 = setting(settings, "f_scale", 1.345)?;
+    let fit_defaults = WhitenedFitConfig::default();
+    let ephemeris_defaults = EphemerisOptions::default();
+    let propagation_defaults = TwoBodyPropagatorConfig::default();
+    let loss: String = setting(settings, "loss", fit_defaults.loss.as_str().to_string())?;
+    let f_scale: f64 = setting(settings, "f_scale", fit_defaults.f_scale)?;
     let loss = validate_loss(&loss, f_scale).map_err(value_error)?;
-    let jacobian: String = setting(settings, "jacobian", "analytic".to_string())?;
+    let jacobian: String = setting(
+        settings,
+        "jacobian",
+        fit_defaults.jacobian.as_str().to_string(),
+    )?;
     let jacobian = JacobianMethod::parse(&jacobian).map_err(value_error)?;
-    let lt_tol: f64 = setting(settings, "lt_tol", 1.0e-12)?;
-    let eph_max_iter: usize = setting(settings, "eph_max_iter", 1000)?;
-    let eph_tol: f64 = setting(settings, "eph_tol", 1.0e-15)?;
-    let stellar_aberration: bool = setting(settings, "stellar_aberration", false)?;
-    let max_lt_iter: usize = setting(settings, "max_lt_iter", 10)?;
-    let prop_max_iter: usize = setting(settings, "prop_max_iter", 1000)?;
-    let prop_tol: f64 = setting(settings, "prop_tol", 1e-14)?;
+    let lt_tol: f64 = setting(settings, "lt_tol", ephemeris_defaults.lt_tol)?;
+    let eph_max_iter: usize = setting(settings, "eph_max_iter", ephemeris_defaults.max_iter)?;
+    let eph_tol: f64 = setting(settings, "eph_tol", ephemeris_defaults.tol)?;
+    let stellar_aberration: bool = setting(
+        settings,
+        "stellar_aberration",
+        ephemeris_defaults.stellar_aberration,
+    )?;
+    let max_lt_iter: usize = setting(settings, "max_lt_iter", ephemeris_defaults.max_lt_iter)?;
+    let prop_max_iter: usize = setting(settings, "prop_max_iter", propagation_defaults.max_iter)?;
+    let prop_tol: f64 = setting(settings, "prop_tol", propagation_defaults.tol)?;
     let config = WhitenedFitConfig {
         loss,
         f_scale,
         jacobian,
-        validate_covariance: setting(settings, "validate_covariance", true)?,
-        xtol: setting(settings, "xtol", 1e-12)?,
-        ftol: setting(settings, "ftol", 1e-12)?,
-        gtol: setting(settings, "gtol", 1e-12)?,
-        max_iterations: setting(settings, "max_iterations", 100)?,
-        max_nfev: setting(settings, "max_nfev", None::<usize>)?,
+        validate_covariance: setting(
+            settings,
+            "validate_covariance",
+            fit_defaults.validate_covariance,
+        )?,
+        xtol: setting(settings, "xtol", fit_defaults.xtol)?,
+        ftol: setting(settings, "ftol", fit_defaults.ftol)?,
+        gtol: setting(settings, "gtol", fit_defaults.gtol)?,
+        max_iterations: setting(settings, "max_iterations", fit_defaults.max_iterations)?,
+        max_nfev: setting(settings, "max_nfev", fit_defaults.max_nfev)?,
         two_body: TwoBodyModelConfig {
             propagation_max_iter: prop_max_iter,
             propagation_tol: prop_tol,
@@ -168,71 +187,75 @@ fn parse_fit_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<FitSetti
     })
 }
 
-/// `IodConfig` from the ``iod_settings`` dict (`NativeOrbitFitter` / `iod`
-/// defaults; ``mu`` and ``speed_of_light`` are adam-core's constants).
+/// `IodConfig` from the ``iod_settings`` dict over `IodConfig::default()`.
 fn parse_iod_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<IodConfig> {
-    let method: String = setting(
-        settings,
-        "observation_selection_method",
-        "combinations".to_string(),
-    )?;
-    let observation_selection_method = match method.as_str() {
-        "combinations" => ObservationSelectionMethod::Combinations,
-        "first+middle+last" => ObservationSelectionMethod::FirstMiddleLast,
-        "thirds" => ObservationSelectionMethod::Thirds,
-        other => {
-            return Err(value_error(format!(
-                "observation_selection_method must be one of 'combinations', \
-                 'first+middle+last', 'thirds'; got {other:?}"
-            )))
-        }
-    };
+    let defaults = IodConfig::default();
+    let observation_selection_method =
+        match setting::<Option<String>>(settings, "observation_selection_method", None)? {
+            Some(method) => ObservationSelectionMethod::parse(&method).map_err(value_error)?,
+            None => defaults.observation_selection_method,
+        };
     Ok(IodConfig {
-        min_obs: setting(settings, "min_obs", 6)?,
-        min_arc_length: setting(settings, "min_arc_length", 1.0)?,
-        contamination_percentage: setting(settings, "contamination_percentage", 20.0)?,
-        rchi2_threshold: setting(settings, "rchi2_threshold", 200.0)?,
+        min_obs: setting(settings, "min_obs", defaults.min_obs)?,
+        min_arc_length: setting(settings, "min_arc_length", defaults.min_arc_length)?,
+        contamination_percentage: setting(
+            settings,
+            "contamination_percentage",
+            defaults.contamination_percentage,
+        )?,
+        rchi2_threshold: setting(settings, "rchi2_threshold", defaults.rchi2_threshold)?,
         observation_selection_method,
-        light_time: setting(settings, "light_time", true)?,
-        mu: setting(settings, "mu", 0.000_295_912_208_284_119_56)?,
-        speed_of_light: setting(settings, "speed_of_light", 173.144_632_674_240_34)?,
-        max_triplets: setting(settings, "max_triplets", None::<usize>)?,
+        light_time: setting(settings, "light_time", defaults.light_time)?,
+        mu: setting(settings, "mu", defaults.mu)?,
+        speed_of_light: setting(settings, "speed_of_light", defaults.speed_of_light)?,
+        max_triplets: setting(settings, "max_triplets", defaults.max_triplets)?,
     })
 }
 
 /// `RefinementConfig` from the ``refinement`` dict: ``method`` is
-/// ``"cmc2003"`` or ``"worst_residual"`` with that loop's settings.
+/// ``"cmc2003"`` (the `RefinementConfig::default()` loop) or
+/// ``"worst_residual"``, each over that loop's `Default` settings.
 fn parse_refinement(
     settings: Option<&Bound<'_, PyDict>>,
     fit: WhitenedFitConfig,
 ) -> PyResult<RefinementConfig> {
     let method: String = setting(settings, "method", "cmc2003".to_string())?;
     match method.as_str() {
-        "cmc2003" => Ok(RefinementConfig::Cmc2003(Cmc2003FitConfig {
-            chi2_reject: setting(settings, "chi2_reject", CMC2003_CHI2_REJECT)?,
-            chi2_recover: setting(settings, "chi2_recover", CMC2003_CHI2_RECOVER)?,
-            chi2_frac: setting(settings, "chi2_frac", CMC2003_CHI2_FRAC)?,
-            max_iterations: setting(settings, "max_iterations", CMC2003_MAX_ITERATIONS)?,
-            max_rejected_fraction: setting(
-                settings,
-                "max_rejected_fraction",
-                CMC2003_MAX_REJECTED_FRACTION,
-            )?,
-            apparition_gap_days: setting(
-                settings,
-                "apparition_gap_days",
-                CMC2003_APPARITION_GAP_DAYS,
-            )?,
-            psd_floor_frac: setting(settings, "psd_floor_frac", CMC2003_PSD_FLOOR_FRAC)?,
-            fit,
-        })),
-        "worst_residual" => Ok(RefinementConfig::WorstResidual(IterativeFitConfig {
-            rchi2_threshold: setting(settings, "rchi2_threshold", 10.0)?,
-            min_obs: setting(settings, "min_obs", 6)?,
-            min_arc_length: setting(settings, "min_arc_length", 1.0)?,
-            contamination_percentage: setting(settings, "contamination_percentage", 20.0)?,
-            fit,
-        })),
+        "cmc2003" => {
+            let defaults = Cmc2003FitConfig::default();
+            Ok(RefinementConfig::Cmc2003(Cmc2003FitConfig {
+                chi2_reject: setting(settings, "chi2_reject", defaults.chi2_reject)?,
+                chi2_recover: setting(settings, "chi2_recover", defaults.chi2_recover)?,
+                chi2_frac: setting(settings, "chi2_frac", defaults.chi2_frac)?,
+                max_iterations: setting(settings, "max_iterations", defaults.max_iterations)?,
+                max_rejected_fraction: setting(
+                    settings,
+                    "max_rejected_fraction",
+                    defaults.max_rejected_fraction,
+                )?,
+                apparition_gap_days: setting(
+                    settings,
+                    "apparition_gap_days",
+                    defaults.apparition_gap_days,
+                )?,
+                psd_floor_frac: setting(settings, "psd_floor_frac", defaults.psd_floor_frac)?,
+                fit,
+            }))
+        }
+        "worst_residual" => {
+            let defaults = IterativeFitConfig::default();
+            Ok(RefinementConfig::WorstResidual(IterativeFitConfig {
+                rchi2_threshold: setting(settings, "rchi2_threshold", defaults.rchi2_threshold)?,
+                min_obs: setting(settings, "min_obs", defaults.min_obs)?,
+                min_arc_length: setting(settings, "min_arc_length", defaults.min_arc_length)?,
+                contamination_percentage: setting(
+                    settings,
+                    "contamination_percentage",
+                    defaults.contamination_percentage,
+                )?,
+                fit,
+            }))
+        }
         other => Err(value_error(format!(
             "refinement method must be 'cmc2003' or 'worst_residual'; got {other:?}"
         ))),
@@ -430,20 +453,18 @@ fn fit_output_dict<'py>(
 /// epoch, statistics, per-observation residuals and flags, plus the search
 /// counters (``triplets_tried``, ``candidates_evaluated``,
 /// ``candidates_failed``) and ``not_found_reason`` (None when found).
-fn iod_dict<'py>(
-    py: Python<'py>,
-    iod: IodOutput,
-    epoch_scale: TimeScale,
-    n: usize,
-) -> PyResult<Bound<'py, PyDict>> {
+fn iod_dict<'py>(py: Python<'py>, iod: IodOutput, n: usize) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
     out.set_item("found", iod.found)?;
     out.set_item(
         "state",
         ndarray::Array1::from_vec(iod.state.to_vec()).into_pyarray(py),
     )?;
-    out.set_item("epoch_mjd", iod.epoch_mjd)?;
-    out.set_item("epoch_scale", epoch_scale.as_str())?;
+    // The epoch crosses exactly, as integer days and nanoseconds in
+    // ``epoch_scale`` (None when no orbit was found).
+    out.set_item("epoch_days", iod.epoch.map(|epoch| epoch.days))?;
+    out.set_item("epoch_nanos", iod.epoch.map(|epoch| epoch.nanos))?;
+    out.set_item("epoch_scale", iod.epoch_scale.as_str())?;
     out.set_item("arc_length", iod.arc_length)?;
     out.set_item("num_obs", iod.num_obs)?;
     out.set_item("chi2", iod.chi2_total)?;
@@ -476,7 +497,7 @@ fn full_od_dict<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
     out.set_item("found", output.iod.found)?;
-    out.set_item("iod", iod_dict(py, output.iod, output.epoch_scale, n)?)?;
+    out.set_item("iod", iod_dict(py, output.iod, n)?)?;
     match output.refined {
         Some(refined) => {
             let fit = fit_output_dict(py, refined.fit, n)?;
@@ -848,16 +869,10 @@ fn iod_fit_ipc<'py>(
     let settings = parse_fit_settings(fit_settings)?;
     let config = parse_iod_settings(iod_settings)?;
     let n = problem.observed.len();
-    let epoch_scale = problem
-        .observed
-        .times
-        .as_ref()
-        .map(|times| times.scale)
-        .ok_or_else(|| value_error("orbit determination requires observation times"))?;
     let output = run_with_predictor(py, propagator, &settings, |predictor| {
         iod_fit(predictor, &problem.observed, &problem.observers, &config)
     })?;
-    iod_dict(py, output, epoch_scale, n)
+    iod_dict(py, output, n)
 }
 
 /// One-crossing `NativeOrbitFitter.full_od`: Gauss IOD (``iod_settings``)

@@ -494,8 +494,11 @@ def tables_from_iod_output(
             vx=state[3:4],
             vy=state[4:5],
             vz=state[5:6],
-            time=Timestamp.from_mjd(
-                [float(output["epoch_mjd"])], scale=output["epoch_scale"]
+            # The IOD epoch crosses exactly (integer days and nanoseconds).
+            time=Timestamp.from_kwargs(
+                days=[int(output["epoch_days"])],
+                nanos=[int(output["epoch_nanos"])],
+                scale=output["epoch_scale"],
             ),
             origin=Origin.from_kwargs(code=["SUN"]),
             frame="ecliptic",

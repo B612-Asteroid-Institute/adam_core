@@ -94,6 +94,24 @@ This file contains notable changes in adam-core
 
 ### Changed
 
+- The IOD epoch crosses the Rust boundary exactly: `IodOutput.epoch`
+  (integer days and nanoseconds, `None` unless found) and
+  `IodOutput.epoch_scale` replace the float `epoch_mjd`, the refinement seed
+  of `full_od` sits at that exact epoch, `FullOdOutput.epoch_scale` is gone,
+  and the IOD dicts carry `epoch_days` / `epoch_nanos` / `epoch_scale`.
+- Rust `Default` impls for `IodConfig`, `RefinementConfig` (CMC2003) and
+  `FullOdConfig`; the binding parsers (`fit_settings`, `iod_settings`,
+  `refinement`) read every numerical default from the Rust configuration
+  types instead of repeating the numbers.
+- `Propagator.two_body_dynamics` (class attribute, default False) declares
+  exact Kepler two-body dynamics; `fit_least_squares`, `iterative_fit`,
+  `cmc2003_fit_detailed`, `NativeOrbitFitter.full_od` and `run_od` warn
+  (`UserWarning`) when `jacobian="analytic"` is paired with a propagator
+  that does not declare it, on the fused and the callback route alike.
+- `run_od(models="default")` checks every default model's data before
+  building any of them and raises one error naming all missing inputs
+  (`ImportError` when the `adam-observatory-uncertainties` package is
+  missing, `FileNotFoundError` when only EFCC18's `bias.dat` is).
 - `fit_least_squares` defaults to `jacobian="analytic"`; the fused Rust
   Gauss-Newton work units of a propagator (`fit_least_squares_evaluated` /
   `fit_least_squares`) are reached with `jacobian="2-point"` and the linear
@@ -126,6 +144,14 @@ This file contains notable changes in adam-core
 - `gaussIOD(mu=...)` now uses the supplied central-body gravitational parameter
   consistently for candidate geometry and velocity. The legacy implementation
   incorrectly reverted to the solar constant inside its velocity helpers.
+
+### Deprecated
+
+- `orbit_determination.od.od`, `orbit_determination.od.differential_correction`
+  and `orbit_determination.least_squares.LeastSquares`, the legacy
+  finite-difference loops (the former still solving with SciPy), warn with
+  `DeprecationWarning` on use; `fit_least_squares`, `iterative_fit`,
+  `cmc2003_fit_detailed` and `run_od` run the Rust solver.
 
 ### Fixed
 

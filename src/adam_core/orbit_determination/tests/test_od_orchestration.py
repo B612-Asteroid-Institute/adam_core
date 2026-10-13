@@ -791,6 +791,44 @@ def test_run_od_default_models_name_the_missing_data_package(
     assert len(members) == 3
 
 
+def test_run_od_default_models_report_every_missing_input_at_once(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """Without the data package AND bias.dat, one error raised before any
+    model is built or fit runs names both, and the models that need them."""
+    from ...observations.efcc18 import EFCC18_BIAS_DAT_ENV
+
+    monkeypatch.setitem(sys.modules, SIGMA_TABLE_PACKAGE, None)
+    monkeypatch.setenv(EFCC18_BIAS_DAT_ENV, str(tmp_path / "missing-bias.dat"))
+    observations = make_observations(["500", "500", "500"], [0.0, 1.0, 2.0])
+    fitter = RecordingFitter()
+    with pytest.raises(ImportError) as info:
+        run_od(observations, fitter, propagator=UNUSED_PROPAGATOR)
+    message = str(info.value)
+    assert "adam-observatory-uncertainties" in message
+    assert "bias.dat" in message
+    for name in ("SigmaFillModel", "EFCC18DebiasModel", "EmpiricalCovarianceModel"):
+        assert name in message
+    assert fitter.received == []
+
+
+def test_run_od_default_models_missing_bias_dat_alone_is_file_not_found(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """With the data package installed, a missing bias.dat alone is still a
+    `FileNotFoundError`, raised before any fit."""
+    pytest.importorskip(SIGMA_TABLE_PACKAGE)
+    from ...observations.efcc18 import EFCC18_BIAS_DAT_ENV
+
+    monkeypatch.setenv(EFCC18_BIAS_DAT_ENV, str(tmp_path / "missing-bias.dat"))
+    observations = make_observations(["500", "500", "500"], [0.0, 1.0, 2.0])
+    fitter = RecordingFitter()
+    with pytest.raises(FileNotFoundError, match="bias.dat") as info:
+        run_od(observations, fitter, propagator=UNUSED_PROPAGATOR)
+    assert "EFCC18DebiasModel" in str(info.value)
+    assert fitter.received == []
+
+
 class TestFusedRunOd:
     """
     `run_od` on a Rust-backed propagator (``run_od`` work unit) is the Python

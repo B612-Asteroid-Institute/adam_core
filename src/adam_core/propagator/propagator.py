@@ -20,7 +20,7 @@ the downstream ``adam-assist`` Rust/parity test suites.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Literal, Optional, Union
+from typing import ClassVar, Literal, Optional, Union
 
 from ..constants import Constants as _Constants
 from ..orbits.ephemeris import Ephemeris
@@ -116,6 +116,14 @@ class Propagator(EphemerisMixin):
     a covariance -- all inside Rust. adam_core ships no concrete propagator and
     no Python composition; only Rust backends are supported.
     """
+
+    #: Whether this propagator integrates exactly the Kepler two-body
+    #: problem, so that the analytic two-body Jacobian of the orbit
+    #: determination solver (``jacobian="analytic"``) is its exact derivative.
+    #: Any other dynamics leave it False: the solver then warns when the
+    #: analytic Jacobian is requested, and ``jacobian="central"`` differences
+    #: the propagator itself instead.
+    two_body_dynamics: ClassVar[bool] = False
 
     @abstractmethod
     def propagate_orbits(
