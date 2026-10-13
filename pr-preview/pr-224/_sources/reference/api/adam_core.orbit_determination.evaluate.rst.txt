@@ -1,0 +1,7 @@
+adam\_core.orbit\_determination.evaluate module
+===============================================
+
+.. automodule:: adam_core.orbit_determination.evaluate
+   :members:
+   :show-inheritance:
+   :undoc-members:

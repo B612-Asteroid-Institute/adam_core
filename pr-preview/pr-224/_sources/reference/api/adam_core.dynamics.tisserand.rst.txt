@@ -1,0 +1,7 @@
+adam\_core.dynamics.tisserand module
+====================================
+
+.. automodule:: adam_core.dynamics.tisserand
+   :members:
+   :show-inheritance:
+   :undoc-members:
