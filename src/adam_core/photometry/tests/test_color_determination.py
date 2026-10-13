@@ -12,7 +12,12 @@ import quivr as qv
 from adam_core.time import Timestamp
 
 from ..bandpasses.api import bandpass_delta_mag
-from ..color_determination import ColorFit, _apply_color_terms, estimate_colors
+from ..color_determination import (
+    ColorFit,
+    _apply_color_terms,
+    _validate_g_bounds,
+    estimate_colors,
+)
 
 DATA_DIR = Path(__file__).parent / "data"
 
@@ -161,8 +166,8 @@ def test_estimate_colors_from_fixture(
     observations = _load_fixture_observations(fx)
     orbits = _load_fixture_orbits(fx)
 
-    # Greenstreet et al. is only reproduced when slope parameters outside the
-    # physical [0, 1] range are allowed, so relax the bound here.
+    # Greenstreet et al. is only reproduced when slope parameters outside their
+    # validity bounds are allowed, so relax the bound here.
     result = estimate_colors(observations, orbits, phi_type, force_g_bounds=False)
 
     assert isinstance(result, ColorFit)
@@ -283,7 +288,7 @@ def test_force_g_bounds_true_raises_on_out_of_range() -> None:
     """With force_g_bounds=True (default), an out-of-[0,1] slope fit raises."""
     observations, orbits, _ = _load_out_of_bounds_case()
 
-    with pytest.raises(ValueError, match=r"G12\*.*outside the physical"):
+    with pytest.raises(ValueError, match=r"G12\*.*outside the HG12star validity"):
         estimate_colors(observations, orbits, "HG12star")
 
 
@@ -300,10 +305,36 @@ def test_force_g_bounds_false_warns_and_returns(
     row = result.apply_mask(pc.equal(result.object_id, object_id))
     assert len(row) == 1
     assert any(
-        "outside the physical" in record.message
+        "outside the HG12star validity" in record.message
         and "force_g_bounds=False" in record.message
         for record in caplog.records
     ), "Expected an out-of-range warning mentioning force_g_bounds=False"
+
+
+@pytest.mark.parametrize(
+    "phi_type, G, valid",
+    [
+        ("HG12star", 0.0, True),
+        ("HG12star", 1.0, True),
+        ("HG12star", -0.1, False),
+        ("HG12star", 1.1, False),
+        # The H-G bounds are wider below 0 than HG12*'s,
+        ("HG", -0.1, True),
+        ("HG", -0.255, True),
+        ("HG", 1.0, True),
+        ("HG", -0.26, False),
+        # but not above 1: sbpy's ~1.194 is for Bowell's full formula, not
+        # the exponential approximation implemented here.
+        ("HG", 1.1, False),
+    ],
+)
+def test_g_bounds_are_model_specific(phi_type: str, G: float, valid: bool) -> None:
+    """Each phase model's slope parameter is checked against its own bounds."""
+    if valid:
+        _validate_g_bounds(G, phi_type, "obj", force_g_bounds=True)
+    else:
+        with pytest.raises(ValueError, match=f"outside the {phi_type} validity"):
+            _validate_g_bounds(G, phi_type, "obj", force_g_bounds=True)
 
 
 # ---------------------------------------------------------------------------
