@@ -121,6 +121,9 @@ _ALPHA_MAX_DEG = 150.0
 # derivative below cannot drift apart.
 _G1_PER_G12STAR = 0.84293649
 _G2_PER_G12STAR = 0.53513350
+# Validity bounds on G12*.  Penttila et al. (2016) define the one-parameter
+# reduction of the H, G1, G2 model on G12* in [0, 1].
+_G12STAR_BOUNDS = (0.0, 1.0)
 # The combined basis sum can go non-positive for an unphysical G12* outside
 # [0, 1] (as a fitter may try), which would break log10; clip it here.
 _PHASE_FLOOR = 1e-10

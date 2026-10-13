@@ -14,10 +14,18 @@ import scipy.optimize
 from ..dynamics.propagation import propagate_2body
 from ..observers.observers import Observers
 from .bandpasses.api import bandpass_delta_mag, map_to_canonical_filter_bands
-from .hg12star import _hg12star_correction_dg12star, hg12star_correction
+from .hg12star import (
+    _G12STAR_BOUNDS,
+    _hg12star_correction_dg12star,
+    hg12star_correction,
+)
 from .lightcurve import reduced_magnitude
 from .magnitude import observing_geometry
-from .magnitude_common import _hg_phase_correction_dg, hg_phase_correction
+from .magnitude_common import (
+    _HG_G_BOUNDS,
+    _hg_phase_correction_dg,
+    hg_phase_correction,
+)
 
 if TYPE_CHECKING:
     # mpcq is an optional dependency (install via `adam_core[mpc]`); it is only
@@ -43,9 +51,10 @@ _PHI_TYPES = ("HG12star", "HG", "c1c2")
 # in g and r alongside a pile of unfiltered reports is still cleanly fit) so
 # they are reported separately and kept out of this denominator.
 _MIN_RETAINED_FRACTION = 0.5
-# Physically meaningful range of the H-G / HG12* slope parameter.  Both G
-# (Bowell et al. 1989) and G12* (Penttilä 2016) are defined on [0, 1].
-_G_BOUNDS = (0.0, 1.0)
+# Validity bounds on each model's slope parameter.  They are model-specific:
+# G12* is defined on [0, 1], while for G the bounds are where the implemented H-G
+# formula still dims monotonically with phase angle (see `_HG_G_BOUNDS`).
+_G_BOUNDS = {"HG12star": _G12STAR_BOUNDS, "HG": _HG_G_BOUNDS}
 _G_LABELS = {"HG12star": "G12*", "HG": "G"}
 # A parameter combination counts as non-fittable once its component along the
 # weighted Jacobian's null space exceeds this fraction of its own norm.  The
@@ -76,7 +85,7 @@ def _validate_g_bounds(
     force_g_bounds: bool,
 ) -> None:
     """
-    Check that a fitted slope parameter lies within its physical range.
+    Check that a fitted slope parameter lies within its model's validity bounds.
 
     "c1c2" has no slope parameter (``G`` is NaN) and is skipped.  When ``G`` is
     out of range: raise ``ValueError`` if ``force_g_bounds`` is True, otherwise
@@ -84,13 +93,13 @@ def _validate_g_bounds(
     """
     if phi_type == "c1c2" or not np.isfinite(G):
         return
-    lo, hi = _G_BOUNDS
+    lo, hi = _G_BOUNDS[phi_type]
     if lo <= G <= hi:
         return
     label = _G_LABELS[phi_type]
     msg = (
-        f"Fitted {label} = {G:.4f} for {obj_id} is outside the physical "
-        f"[{lo:g}, {hi:g}] range"
+        f"Fitted {label} = {G:.4f} for {obj_id} is outside the {phi_type} "
+        f"validity bounds [{lo:g}, {hi:g}]"
     )
     if force_g_bounds:
         raise ValueError(msg)
@@ -647,12 +656,13 @@ def estimate_colors(
         Phase function type: "HG12star" (Penttilä 2016), "HG" (standard H-G),
         or "c1c2" (polynomial).
     force_g_bounds
-        Whether to enforce the physical [0, 1] range on the fitted slope
-        parameter (G for "HG", G12* for "HG12star"; ignored for "c1c2").  If
-        True (default), an out-of-range fit raises ``ValueError``.  If False, it
-        is logged as a warning and the out-of-range value is kept -- some
-        analyses (e.g. Greenstreet et al.) only reproduce when values outside
-        [0, 1] are allowed.
+        Whether to enforce the model's validity bounds on the fitted slope
+        parameter (ignored for "c1c2"): [0, 1] for G12* ("HG12star"), and
+        [-0.255, 1] for G ("HG"), the range over which the implemented H-G
+        formula dims monotonically with phase angle.  If True (default), an
+        out-of-bounds fit raises ``ValueError``.  If False, it is logged as a
+        warning and the out-of-bounds value is kept. Some analyses (e.g.
+        Greenstreet et al.) only reproduce when G12* outside [0, 1] is allowed.
     color_term_composition
         If set, reconcile observations from different filter systems within a
         color channel (e.g. SDSS_g and LSST_g both feeding "g") onto the channel's
