@@ -93,36 +93,61 @@ _PHASE_MODELS: dict[str, tuple[_PhaseCorrection, _PhaseCorrection]] = {
 }
 
 
-def _validate_g_bounds(
-    G: float,
-    phi_type: str,
-    obj_id: str,
-    force_g_bounds: bool,
-) -> None:
+def _g_bounds_violation(G: float, phi_type: str, obj_id: str) -> str | None:
     """
-    Check that a fitted slope parameter lies within its model's validity bounds.
+    Describe how a fitted slope parameter violates its model's validity bounds.
 
-    "c1c2" has no slope parameter (``G`` is NaN) and is skipped.  When ``G`` is
-    out of range: raise ``ValueError`` if ``force_g_bounds`` is True, otherwise
-    log a warning and keep the fit.
+    Returns ``None`` when ``G`` is within bounds, or when there is nothing to check
+    ("c1c2" has no slope parameter, and ``G`` is NaN when no fit was produced).
     """
     if phi_type == "c1c2" or not np.isfinite(G):
-        return
+        return None
     lo, hi = _G_BOUNDS[phi_type]
     if lo <= G <= hi:
-        return
+        return None
     label = _G_LABELS[phi_type]
-    msg = (
+    return (
         f"Fitted {label} = {G:.4f} for {obj_id} is outside the {phi_type} "
         f"validity bounds [{lo:g}, {hi:g}]"
     )
-    if force_g_bounds:
-        raise ValueError(msg)
-    logger.warning("%s; keeping it because force_g_bounds=False", msg)
+
+
+class _UnreliableFitError(ValueError):
+    """Outlier rejection discarded too much of an object's photometry to trust."""
+
+
+# Per-object fit outcomes reported in `ColorFit.status`; see `estimate_colors`.
+_STATUSES = (
+    "ok",
+    "no_orbit",
+    "multiple_orbits",
+    "no_usable_photometry",
+    "too_many_outliers",
+    "phase_param_out_of_bounds",
+    "failed",
+)
+# Results withheld when a fit is rejected for an out-of-bounds slope parameter.
+# The slope itself and the fit diagnostics are kept to show why.
+_PHOTOMETRIC_FIELDS = tuple(
+    [f"{b}_mag" for b in _BANDS]
+    + [f"{b}_mag_sigma" for b in _BANDS]
+    + ["g_r", "g_i", "r_i", "g_r_sigma", "g_i_sigma", "r_i_sigma"]
+)
+
+
+def _mark_failed(row: dict[str, object], status: str, error: str) -> None:
+    """Record why an object's fit produced no usable result, and log it."""
+    row.update(status=status, error=error)
+    logger.warning("No colors for %s (%s): %s", row["object_id"], status, error)
 
 
 class ColorFit(qv.Table):
     object_id = qv.LargeStringColumn()
+    # Outcome of this object's fit: "ok" or the reason it produced no usable
+    # result (one of `_STATUSES`; see `estimate_colors`), with a human-readable
+    # explanation in `error` whenever the status is not "ok".
+    status = qv.LargeStringColumn()
+    error = qv.LargeStringColumn(nullable=True)
     g_mag = qv.Float64Column(nullable=True)
     i_mag = qv.Float64Column(nullable=True)
     r_mag = qv.Float64Column(nullable=True)
@@ -541,7 +566,7 @@ def _fit_per_band_h(
 
     num_clipped = n_eligible - n_incl
     if n_incl < _MIN_RETAINED_FRACTION * n_eligible:
-        raise ValueError(
+        raise _UnreliableFitError(
             f"Outlier rejection removed {num_clipped} of the {n_eligible} "
             f"observation(s) eligible for the color fit (more than "
             f"{1 - _MIN_RETAINED_FRACTION:.0%} of them); fit is unreliable. "
@@ -697,9 +722,11 @@ def estimate_colors(
         parameter (ignored for "c1c2"): [0, 1] for G12* ("HG12star"), and
         [-0.255, 1] for G ("HG"), the range over which the implemented H-G
         formula dims monotonically with phase angle.  If True (default), an
-        out-of-bounds fit raises ``ValueError``.  If False, it is logged as a
-        warning and the out-of-bounds value is kept. Some analyses (e.g.
-        Greenstreet et al.) only reproduce when G12* outside [0, 1] is allowed.
+        out-of-bounds fit is rejected: its status is "phase_param_out_of_bounds"
+        and its magnitudes and colors are withheld (the slope and fit
+        diagnostics are kept to show why).  If False, it is logged as a warning
+        and the fit is kept. Some analyses (e.g. Greenstreet et al.) only
+        reproduce when G12* outside [0, 1] is allowed.
     color_term_composition
         If set, convert every observation onto one defined photometric system,
         LSST g/i/r/u, using `bandpass_delta_mag` and assuming this reflectance
@@ -713,11 +740,33 @@ def estimate_colors(
     Returns
     -------
     ColorFit
-        One row per unique object found in both ``observations`` and ``orbits``.
+        One row per unique object in ``observations``.  Objects are fit
+        independently, and one object's failure never aborts the batch: its row
+        carries a ``status`` other than "ok" and an ``error`` message, and no
+        magnitudes or colors.  The statuses are:
+
+        - "ok": fit succeeded.
+        - "no_orbit" / "multiple_orbits": ``orbits`` has no, or more than one,
+          orbit for the object.
+        - "no_usable_photometry": no observation has a valid magnitude and
+          uncertainty through a g/i/r/u filter.
+        - "too_many_outliers": outlier rejection discarded more than half of the
+          eligible observations, so the fit is not trusted.
+        - "phase_param_out_of_bounds": the fitted slope parameter is outside its
+          validity bounds and ``force_g_bounds`` is True.
+        - "failed": any other error while fitting this object (the traceback is
+          logged).
+
         Magnitudes and colors are system-specific: the ``*_filter`` columns give
         the filter each band's magnitude is in (always LSST with
         ``color_term_composition`` set), and a color such as ``g_r`` is in the
         system of ``g_filter`` minus ``r_filter``.
+
+    Raises
+    ------
+    ValueError
+        If ``phi_type`` is not supported.  Invalid arguments affect every object,
+        so they still fail fast.
     """
     if phi_type not in _PHI_TYPES:
         raise ValueError(
@@ -739,22 +788,12 @@ def estimate_colors(
         obs_mask = pc.equal(observations.requested_provid, obj_id)
         obs = observations.apply_mask(obs_mask)
 
-        orb_mask = pc.equal(orbits.requested_provid, obj_id)
-        orb = orbits.apply_mask(orb_mask)
-        if len(orb) == 0:
-            continue
-        if len(orb) > 1:
-            raise ValueError(f"Expected exactly one orbit for {obj_id}, got {len(orb)}")
-
-        adam_orbits = orb.orbits()
-        propagated = propagate_2body(adam_orbits, obs.obstime)
-        object_coords = propagated.coordinates
-
         # Per-object outputs default to None (no fit produced) and are overwritten
-        # when a fit runs. G_fit stays NaN so `_validate_g_bounds` skips objects
-        # without a slope parameter (no valid data, or phi_type="c1c2").
+        # when a fit runs.
         row: dict[str, object] = {
             "object_id": obj_id,
+            "status": "ok",
+            "error": None,
             "g_mag": None,
             "i_mag": None,
             "r_mag": None,
@@ -791,81 +830,36 @@ def estimate_colors(
             "num_used_r": None,
             "num_used_u": None,
         }
-        G_fit: float = float("nan")
+        rows.append(row)
+
+        orb_mask = pc.equal(orbits.requested_provid, obj_id)
+        orb = orbits.apply_mask(orb_mask)
+        if len(orb) != 1:
+            if len(orb) == 0:
+                _mark_failed(row, "no_orbit", "No orbit given for this object")
+            else:
+                _mark_failed(
+                    row,
+                    "multiple_orbits",
+                    f"Expected exactly one orbit, got {len(orb)}",
+                )
+            continue
 
         try:
+            adam_orbits = orb.orbits()
+            propagated = propagate_2body(adam_orbits, obs.obstime)
+            object_coords = propagated.coordinates
+
             mag, rmsmag, channels, filter_ids, r, delta, alpha_deg, valid = (
                 _prepare_geometry(obs, object_coords)
             )
             n_invalid = len(obs) - int(np.sum(valid))
-            if np.any(valid):
-                m_red = reduced_magnitude(mag[valid], r[valid], delta[valid])
-                # The filter each row's magnitude is expressed in once it enters
-                # the fit: as observed, or the channel's target if converted.
-                row_filters = filter_ids[valid]
-                if color_term_composition is not None:
-                    m_red = _apply_color_terms(
-                        m_red,
-                        filter_ids[valid],
-                        channels[valid],
-                        color_term_composition,
-                    )
-                    row_filters = np.array(
-                        [_TARGET_FILTERS.get(ch) for ch in channels[valid]],
-                        dtype=object,
-                    )
-                root_weights = 1.0 / rmsmag[valid]
-                fit = _fit_per_band_h(
-                    m_red, alpha_deg[valid], channels[valid], root_weights, phi_type
-                )
-                G_fit = fit["G"]
-                band_filters = _band_filters(
-                    row_filters, channels[valid], fit["included"]
-                )
+            row.update(num_invalid=n_invalid)
+            if not np.any(valid & np.isin(channels, _BANDS)):
+                # Nothing to fit: every observation is invalid or comes through a
+                # filter outside the g/i/r/u channels.
                 row.update(
-                    g_mag=fit["H_g"],
-                    i_mag=fit["H_i"],
-                    r_mag=fit["H_r"],
-                    u_mag=fit["H_u"],
-                    g_mag_sigma=fit["H_g_sigma"],
-                    i_mag_sigma=fit["H_i_sigma"],
-                    r_mag_sigma=fit["H_r_sigma"],
-                    u_mag_sigma=fit["H_u_sigma"],
-                    g_filter=band_filters["g"],
-                    i_filter=band_filters["i"],
-                    r_filter=band_filters["r"],
-                    u_filter=band_filters["u"],
-                    g_r=fit["g_r"],
-                    g_i=fit["g_i"],
-                    r_i=fit["r_i"],
-                    g_r_sigma=fit["g_r_sigma"],
-                    g_i_sigma=fit["g_i_sigma"],
-                    r_i_sigma=fit["r_i_sigma"],
-                    phase_param=G_fit,
-                    phase_param_sigma=fit["G_sigma"],
-                    chi2=fit["chi2"],
-                    reduced_chi2=fit["reduced_chi2"],
-                    dof=fit["dof"],
-                    rank=fit["rank"],
-                    num_params=fit["num_params"],
-                    converged=fit["converged"],
-                    # `fit` only ever saw the valid rows, so the invalid count is
-                    # added here to keep the partitioning of num_obs.
-                    num_invalid=n_invalid,
-                    num_unsupported_filter=int(fit["num_unsupported_filter"]),
-                    num_clipped=int(fit["num_clipped"]),
-                    num_used=int(fit["num_used"]),
-                    num_used_g=int(fit["num_used_g"]),
-                    num_used_i=int(fit["num_used_i"]),
-                    num_used_r=int(fit["num_used_r"]),
-                    num_used_u=int(fit["num_used_u"]),
-                )
-            else:
-                # No valid photometry at all: every observation is accounted for
-                # as invalid, and no fit was attempted.
-                row.update(
-                    num_invalid=n_invalid,
-                    num_unsupported_filter=0,
+                    num_unsupported_filter=int(np.sum(valid)),
                     num_clipped=0,
                     num_used=0,
                     num_used_g=0,
@@ -873,18 +867,96 @@ def estimate_colors(
                     num_used_r=0,
                     num_used_u=0,
                 )
-        except Exception:
-            logger.exception("Problem when fitting colors for %s", obj_id)
-            raise
+                _mark_failed(
+                    row,
+                    "no_usable_photometry",
+                    f"None of the {len(obs)} observation(s) has a valid magnitude "
+                    "through a g/i/r/u filter",
+                )
+                continue
 
-        _validate_g_bounds(G_fit, phi_type, obj_id, force_g_bounds)
-        rows.append(row)
+            m_red = reduced_magnitude(mag[valid], r[valid], delta[valid])
+            # The filter each row's magnitude is expressed in once it enters
+            # the fit: as observed, or the channel's target if converted.
+            row_filters = filter_ids[valid]
+            if color_term_composition is not None:
+                m_red = _apply_color_terms(
+                    m_red,
+                    filter_ids[valid],
+                    channels[valid],
+                    color_term_composition,
+                )
+                row_filters = np.array(
+                    [_TARGET_FILTERS.get(ch) for ch in channels[valid]],
+                    dtype=object,
+                )
+            root_weights = 1.0 / rmsmag[valid]
+            fit = _fit_per_band_h(
+                m_red, alpha_deg[valid], channels[valid], root_weights, phi_type
+            )
+        except _UnreliableFitError as exc:
+            _mark_failed(row, "too_many_outliers", str(exc))
+            continue
+        except Exception as exc:
+            # Anything else is unexpected; keep the traceback in the log, but do
+            # not let one object abort the whole batch.
+            logger.exception("Problem when fitting colors for %s", obj_id)
+            row.update(status="failed", error=f"{type(exc).__name__}: {exc}")
+            continue
+
+        G_fit = fit["G"]
+        band_filters = _band_filters(row_filters, channels[valid], fit["included"])
+        row.update(
+            g_mag=fit["H_g"],
+            i_mag=fit["H_i"],
+            r_mag=fit["H_r"],
+            u_mag=fit["H_u"],
+            g_mag_sigma=fit["H_g_sigma"],
+            i_mag_sigma=fit["H_i_sigma"],
+            r_mag_sigma=fit["H_r_sigma"],
+            u_mag_sigma=fit["H_u_sigma"],
+            g_filter=band_filters["g"],
+            i_filter=band_filters["i"],
+            r_filter=band_filters["r"],
+            u_filter=band_filters["u"],
+            g_r=fit["g_r"],
+            g_i=fit["g_i"],
+            r_i=fit["r_i"],
+            g_r_sigma=fit["g_r_sigma"],
+            g_i_sigma=fit["g_i_sigma"],
+            r_i_sigma=fit["r_i_sigma"],
+            phase_param=G_fit,
+            phase_param_sigma=fit["G_sigma"],
+            chi2=fit["chi2"],
+            reduced_chi2=fit["reduced_chi2"],
+            dof=fit["dof"],
+            rank=fit["rank"],
+            num_params=fit["num_params"],
+            converged=fit["converged"],
+            num_unsupported_filter=int(fit["num_unsupported_filter"]),
+            num_clipped=int(fit["num_clipped"]),
+            num_used=int(fit["num_used"]),
+            num_used_g=int(fit["num_used_g"]),
+            num_used_i=int(fit["num_used_i"]),
+            num_used_r=int(fit["num_used_r"]),
+            num_used_u=int(fit["num_used_u"]),
+        )
+
+        violation = _g_bounds_violation(G_fit, phi_type, obj_id)
+        if violation is not None:
+            if force_g_bounds:
+                row.update(dict.fromkeys(_PHOTOMETRIC_FIELDS))
+                _mark_failed(row, "phase_param_out_of_bounds", violation)
+            else:
+                logger.warning("%s; keeping it because force_g_bounds=False", violation)
 
     def _col(name: str) -> list[object]:
         return [row[name] for row in rows]
 
     return ColorFit.from_kwargs(
         object_id=_col("object_id"),
+        status=_col("status"),
+        error=_col("error"),
         g_mag=_col("g_mag"),
         i_mag=_col("i_mag"),
         r_mag=_col("r_mag"),
