@@ -9,6 +9,7 @@ uses the Cargo registry publish protocol directly.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import struct
@@ -129,9 +130,13 @@ def archive_identity(path: Path) -> tuple[str, str]:
     return name, version
 
 
-def validate_preview_packages(
-    packages: dict[str, dict[str, Any]], expected_version: str | None
+def validate_release_packages(
+    packages: dict[str, dict[str, Any]],
+    expected_version: str | None,
+    channel: str,
 ) -> None:
+    if channel not in {"preview", "stable"}:
+        raise ValueError(f"unsupported release channel: {channel}")
     versions = {name: packages[name]["version"] for name in PUBLICATION_ORDER}
     if expected_version is not None:
         mismatched = {
@@ -143,8 +148,13 @@ def validate_preview_packages(
             raise ValueError(
                 f"crate versions do not match {expected_version}: {mismatched}"
             )
-    if any("-" not in version for version in versions.values()):
-        raise ValueError(f"all publication versions must be prereleases: {versions}")
+    prerelease_versions = {
+        name: version for name, version in versions.items() if "-" in version
+    }
+    if channel == "preview" and len(prerelease_versions) != len(versions):
+        raise ValueError(f"preview versions must be prereleases: {versions}")
+    if channel == "stable" and prerelease_versions:
+        raise ValueError(f"stable versions must not be prereleases: {versions}")
 
     for package_name in PUBLICATION_ORDER:
         package = packages[package_name]
@@ -172,6 +182,52 @@ def request_json(request: urllib.request.Request, timeout: float = 60.0) -> Any:
         ) from error
 
 
+def crates_io_index_path(name: str) -> str:
+    normalized = name.lower()
+    if len(normalized) == 1:
+        return f"1/{normalized}"
+    if len(normalized) == 2:
+        return f"2/{normalized}"
+    if len(normalized) == 3:
+        return f"3/{normalized[0]}/{normalized}"
+    return f"{normalized[:2]}/{normalized[2:4]}/{normalized}"
+
+
+def published_crate_entry(index: str, name: str, version: str) -> dict[str, Any] | None:
+    request = urllib.request.Request(
+        f"{index.rstrip('/')}/{crates_io_index_path(name)}",
+        headers={
+            "Accept": "text/plain",
+            "User-Agent": "adam-core-release-automation/1",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            entries = [json.loads(line) for line in response if line.strip()]
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        detail = error.read().decode(errors="replace")
+        raise RuntimeError(
+            f"registry index request failed ({error.code}): {detail}"
+        ) from error
+    matches = [entry for entry in entries if entry.get("vers") == version]
+    if len(matches) > 1:
+        raise ValueError(f"multiple registry entries for {name} {version}")
+    return matches[0] if matches else None
+
+
+def validate_existing_archive(
+    entry: dict[str, Any], name: str, version: str, digest: str
+) -> None:
+    if entry.get("cksum") != digest:
+        raise ValueError(
+            f"published {name} {version} checksum {entry.get('cksum')} != {digest}"
+        )
+    if entry.get("yanked", False):
+        raise ValueError(f"published {name} {version} is yanked")
+
+
 def wait_for_version(api: str, name: str, version: str) -> None:
     url = f"{api.rstrip('/')}/api/v1/crates/{name}/{version}"
     for attempt in range(60):
@@ -192,13 +248,15 @@ def main() -> None:
     parser.add_argument("--repo", type=Path, default=Path.cwd())
     parser.add_argument("--archives", type=Path, required=True)
     parser.add_argument("--registry-api", default="https://crates.io")
+    parser.add_argument("--registry-index", default="https://index.crates.io")
     parser.add_argument("--token-env", default="CARGO_REGISTRY_TOKEN")
     parser.add_argument("--expected-version")
+    parser.add_argument("--channel", choices=("preview", "stable"), default="preview")
     parser.add_argument("--execute", action="store_true")
     args = parser.parse_args()
 
     packages = cargo_packages(args.repo.resolve())
-    validate_preview_packages(packages, args.expected_version)
+    validate_release_packages(packages, args.expected_version, args.channel)
     prepared = []
     for name in PUBLICATION_ORDER:
         package = packages[name]
@@ -212,17 +270,30 @@ def main() -> None:
         archive = archive_path.read_bytes()
         metadata = publish_metadata(package)
         body = publish_body(metadata, archive)
-        prepared.append((name, package["version"], archive_path, body))
+        digest = hashlib.sha256(archive).hexdigest()
+        prepared.append((name, package["version"], archive_path, body, digest))
         print(f"prepared {archive_path.name}: archive={len(archive)} body={len(body)}")
 
     if not args.execute:
         print("dry run only; pass --execute to publish")
         return
+    missing = []
+    for name, version, archive_path, body, digest in prepared:
+        entry = published_crate_entry(args.registry_index, name, version)
+        if entry is None:
+            missing.append((name, version, archive_path, body, digest))
+            continue
+        validate_existing_archive(entry, name, version, digest)
+        print(f"already published exact archive {archive_path.name}; skipping")
+
+    if not missing:
+        print("all exact archives are already published")
+        return
     token = os.environ.get(args.token_env)
     if not token:
         raise SystemExit(f"{args.token_env} is required with --execute")
     endpoint = f"{args.registry_api.rstrip('/')}/api/v1/crates/new"
-    for name, version, archive_path, body in prepared:
+    for name, version, archive_path, body, _digest in missing:
         request = urllib.request.Request(
             endpoint,
             data=body,

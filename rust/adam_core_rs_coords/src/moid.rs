@@ -256,7 +256,7 @@ pub fn calculate_moid(
 ///
 /// `primary_orbits`, `secondary_orbits`: flat (N*6,) row-major Cartesian states.
 /// `mus`: (N,) gravitational parameters per primary.
-/// Returns `(moids[N], dt_at_min[N])` as flat Vec<f64> pairs.
+/// Returns `(moids[N], dt_at_min[N])` as flat `Vec<f64>` pairs.
 #[allow(clippy::too_many_arguments)]
 pub fn calculate_moid_batch(
     primary_orbits: &[f64],

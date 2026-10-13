@@ -1,6 +1,6 @@
 [package]
 name = "adam_core"
-version = "0.1.0-rc.5"
+version = "0.5.8"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -11,11 +11,11 @@ keywords = ["astronomy", "asteroids", "orbits", "spice"]
 categories = ["science"]
 
 [dependencies]
-adam_core_rs_autodiff = { version = "=0.1.0-rc.5", path = "../adam_core_rs_autodiff" }
-adam_core_rs_coords = { version = "=0.1.0-rc.5", path = "../adam_core_rs_coords" }
-adam_core_rs_kernel_data = { version = "=0.1.0-rc.5", path = "../adam_core_rs_kernel_data" }
-adam_core_rs_orbit_determination = { version = "=0.1.0-rc.5", path = "../adam_core_rs_orbit_determination" }
-adam_core_rs_spice = { version = "=0.1.0-rc.5", path = "../adam_core_rs_spice" }
+adam_core_rs_autodiff = { version = "=0.5.8", path = "../adam_core_rs_autodiff" }
+adam_core_rs_coords = { version = "=0.5.8", path = "../adam_core_rs_coords" }
+adam_core_rs_kernel_data = { version = "=0.5.8", path = "../adam_core_rs_kernel_data" }
+adam_core_rs_orbit_determination = { version = "=0.5.8", path = "../adam_core_rs_orbit_determination" }
+adam_core_rs_spice = { version = "=0.5.8", path = "../adam_core_rs_spice" }
 # Correctly round-trip normalized query-client f64 values across JSON handoffs.
 serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
