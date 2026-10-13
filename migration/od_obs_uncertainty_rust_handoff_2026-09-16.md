@@ -418,6 +418,49 @@ of this venv (`dynamics/tests/test_impact_viz_data.py` needs geopandas,
 fields for the touched `iod.py` / `rejection.py` symbols are a few lines
 stale).
 
+## 2026-10-13 follow-up: corrector rewritten (bead od_experiments_setup-a6w.1)
+
+Commit `d450e1b3`. Answers the review's "one consistent meaning for convergence
+and step acceptance, iteration and evaluation limits, singular fits, and
+iterations / success / status_code" and the three solver defects the
+walk-forward and consistency runs exposed.
+
+* `solve` (`od_refine.rs`) is the trust-region Gauss-Newton method of scipy's
+  `least_squares(method="trf", x_scale="jac")` without bounds (the Python
+  baseline's solver): exact trust-region step on the scaled normal equations
+  (Moré–Sorensen iteration on the 6x6 eigen-decomposition), radius driven by
+  the actual-to-predicted reduction ratio, scipy's ftol / xtol / gtol rules
+  with gtol on the column-scaled gradient. Replaces the Levenberg-Marquardt
+  loop that accepted any decrease with `lambda /= 3` and no trust region.
+* A non-finite Jacobian / gradient / normal matrix ends the fit with
+  `status_code = -2`, `success = False`, iterate untouched (was: NaN ignored
+  by the gradient norm, status 1 "converged").
+* `max_nfev` is scipy's `nfev` (initial evaluation plus trial steps); the
+  finite-difference Jacobian evaluations stay in the `iterations` column but
+  are not budget, as in the baseline and the study harness's `max_nfev=200`.
+* The contract (objective, derivatives and their exactness, scaling, step and
+  acceptance, every status code, limits, covariance) lives on
+  `WhitenedFitConfig` and in the `fit_least_squares` Notes.
+* Validation against the recorded cases (astroforge_OD_consistency, ASSIST
+  0.4.1, this commit installed with `scripts/parity/reinstall_adam_core_from_head.sh`):
+
+  | case | before | after |
+  |---|---|---|
+  | 2000 FE8 seed (`results/parity/lm_repro`), analytic Jacobian | rchi2 1514, status 1, success | rchi2 2.316 in 7 evaluations, status 2 |
+  | 2004 UE step 39 -> 40 (363 obs), analytic Jacobian | rchi2 1.3658 (scipy 1.3301) | 1.33014 = scipy's fixed point |
+  | same, central differences | 1.317 (recorded "true minimum") | 1.31184 |
+
+  With an inexact (two-body) Jacobian on ASSIST dynamics the solver converges
+  to that Jacobian's fixed point, as scipy does; the analytic-Jacobian
+  warning (`Propagator.two_body_dynamics`) says so, and `jacobian="central"`
+  is exact for any propagator.
+* Tests: trust-region step, NaN Jacobian, rejected finite trials end in xtol,
+  central differences within default limits, budgets rewritten to trial
+  semantics (Rust + `test_solver_budgets.py`), scipy trf parity
+  (`test_corrector_contract.py`). Pins relaxed with their reason: forward
+  differences 1e-8 (O(h) fixed point), Huber weight 1e-5 (robust cost equal
+  to scipy to 1e-9, end state 1e-11 au apart on the flat valley).
+
 ## Correctness gates
 
 * **HEALPix RING order.** `efcc18::tests::ring_order_matches_jpl_tiles_dat`
