@@ -81,6 +81,25 @@ def test_Observers_from_codes_non_pyarrow(codes_times) -> None:
     assert pc.all(pc.equal(observers.coordinates.time.nanos, times.nanos)).as_py()
 
 
+def test_Observers_from_codes_batch_spanning_earth_orientation_kernels() -> None:
+    """One batch may need several binary PCKs: the historical, high-precision and
+    predicted Earth orientation kernels have disjoint coverage (the predicted
+    kernel starts 2020-01-01; the high-precision one ends a few months after its
+    release). CSPICE serves each epoch from the kernel covering it, and so must
+    the Rust backend: a batch holding a 2010 epoch and a 2035 epoch has to
+    succeed and equal the per-epoch results (before the fix it raised NotCovered
+    although every single epoch resolved)."""
+    code = _valid_mpc_code()
+    assert code is not None
+    mjds = [55200.0, 64328.0]  # 2010-01-04 (pre predicted kernel), 2035-01-01 (predicted only)
+    times = Timestamp.from_mjd(mjds, scale="utc")
+    batch = Observers.from_codes([code] * len(mjds), times)
+    assert len(batch) == len(mjds)
+    for i, mjd in enumerate(mjds):
+        single = Observers.from_code(code, Timestamp.from_mjd([mjd], scale="utc"))
+        np.testing.assert_array_equal(batch.coordinates.values[i], single.coordinates.values[0])
+
+
 def test_Observers_from_codes_raises(codes_times) -> None:
     # Test that observers from code raises an error if the codes and times
     # are not the same length

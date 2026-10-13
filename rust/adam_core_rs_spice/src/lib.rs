@@ -1382,57 +1382,37 @@ impl AdamCoreSpiceBackend {
             } else {
                 NaifFrame::EclipJ2000
             };
-            for reader in readers {
-                let evaluate = |&et: &f64| {
-                    if frame == "J2000" {
-                        reader.state(target, center, et).map_err(|_| ())
-                    } else {
-                        reader
-                            .state_in_frame(target, center, et, out_frame)
-                            .map_err(|_| ())
-                    }
-                };
-                // Chebyshev evaluation is read-only per epoch; parallelize
-                // large batches (multi-thread gate policy) and stay serial
-                // below the spawn-tax threshold.
-                let states: Result<Vec<_>, ()> = if ets.len() >= RAYON_SERIAL_THRESHOLD_EPOCHS {
-                    ets.par_iter().map(evaluate).collect()
+            // Per-epoch kernel selection (CSPICE semantics): every epoch is
+            // served by the highest-priority loaded SPK that covers it, so
+            // kernels with disjoint coverage compose across one batch.
+            let states = first_covering_per_epoch(&readers, ets, |reader, et| {
+                if frame == "J2000" {
+                    reader.state(target, center, et).map_err(|_| ())
                 } else {
-                    ets.iter().map(evaluate).collect()
-                };
-                if let Ok(states) = states {
-                    let mut out = Vec::with_capacity(ets.len() * 6);
-                    for state in states {
-                        out.extend_from_slice(&state);
-                    }
-                    return Some(out);
+                    reader
+                        .state_in_frame(target, center, et, out_frame)
+                        .map_err(|_| ())
                 }
+            })?;
+            let mut out = Vec::with_capacity(ets.len() * 6);
+            for state in states {
+                out.extend_from_slice(&state);
             }
-            return None;
+            return Some(out);
         }
 
         if frame == "ITRF93" {
             let sxform = self.try_sxform_batch("J2000", "ITRF93", ets)?;
-            for reader in readers {
-                let mut out = Vec::with_capacity(ets.len() * 6);
-                let mut covered = true;
-                for (i, &et) in ets.iter().enumerate() {
-                    match reader.state(target, center, et) {
-                        Ok(s) => {
-                            let m = slice_to_mat6(&sxform[i * 36..(i + 1) * 36]);
-                            let rotated = apply_sxform(&m, &s);
-                            out.extend_from_slice(&rotated);
-                        }
-                        Err(_) => {
-                            covered = false;
-                            break;
-                        }
-                    }
-                }
-                if covered {
-                    return Some(out);
-                }
+            let states = first_covering_per_epoch(&readers, ets, |reader, et| {
+                reader.state(target, center, et).map_err(|_| ())
+            })?;
+            let mut out = Vec::with_capacity(ets.len() * 6);
+            for (i, state) in states.iter().enumerate() {
+                let m = slice_to_mat6(&sxform[i * 36..(i + 1) * 36]);
+                let rotated = apply_sxform(&m, state);
+                out.extend_from_slice(&rotated);
             }
+            return Some(out);
         }
 
         None
@@ -1459,27 +1439,63 @@ impl AdamCoreSpiceBackend {
         if frame_from != "ITRF93" && frame_to != "ITRF93" {
             return None;
         }
-        for reader in self.kernels.iter().rev().filter_map(|k| match k {
-            Kernel::Pck { reader, .. } => Some(reader),
-            _ => None,
-        }) {
-            let evaluate =
-                |&et: &f64| pck_sxform_matrix(reader, frame_from, frame_to, et).map_err(|_| ());
-            let matrices: Result<Vec<_>, ()> = if ets.len() >= RAYON_SERIAL_THRESHOLD_EPOCHS {
-                ets.par_iter().map(evaluate).collect()
-            } else {
-                ets.iter().map(evaluate).collect()
-            };
-            if let Ok(matrices) = matrices {
-                let mut out = Vec::with_capacity(ets.len() * 36);
-                for m in matrices {
-                    out.extend(m.iter().flat_map(|row| row.iter()).copied());
-                }
-                return Some(out);
-            }
+        let readers: Vec<&PckFile> = self
+            .kernels
+            .iter()
+            .rev()
+            .filter_map(|k| match k {
+                Kernel::Pck { reader, .. } => Some(reader),
+                _ => None,
+            })
+            .collect();
+        if readers.is_empty() {
+            return None;
         }
-        None
+        // Per-epoch kernel selection (CSPICE semantics): every epoch is served
+        // by the highest-priority loaded binary PCK that covers it. The
+        // historical, high-precision and predicted Earth orientation kernels
+        // have disjoint coverage, so a batch spanning them is covered as long
+        // as every epoch is covered by some kernel; previously a single kernel
+        // had to cover the whole batch and such batches failed as NotCovered
+        // although every epoch alone succeeded.
+        let matrices = first_covering_per_epoch(&readers, ets, |reader, et| {
+            pck_sxform_matrix(reader, frame_from, frame_to, et).map_err(|_| ())
+        })?;
+        let mut out = Vec::with_capacity(ets.len() * 36);
+        for m in matrices {
+            out.extend(m.iter().flat_map(|row| row.iter()).copied());
+        }
+        Some(out)
     }
+}
+
+/// Evaluate `ets` against a priority-ordered list of kernel readers with
+/// CSPICE semantics: each epoch is served by the first reader (highest
+/// priority, i.e. last loaded) whose coverage includes it, independently of
+/// the other epochs. Returns `None` when some epoch is covered by no reader.
+/// Evaluation is read-only per epoch; large batches run in parallel (the
+/// multi-thread gate policy) and stay serial below the spawn-tax threshold.
+fn first_covering_per_epoch<R, T>(
+    readers: &[&R],
+    ets: &[f64],
+    evaluate: impl Fn(&R, f64) -> Result<T, ()> + Sync,
+) -> Option<Vec<T>>
+where
+    R: Sync,
+    T: Send,
+{
+    let per_epoch = |&et: &f64| -> Result<T, ()> {
+        readers
+            .iter()
+            .find_map(|reader| evaluate(reader, et).ok())
+            .ok_or(())
+    };
+    let out: Result<Vec<T>, ()> = if ets.len() >= RAYON_SERIAL_THRESHOLD_EPOCHS {
+        ets.par_iter().map(per_epoch).collect()
+    } else {
+        ets.iter().map(per_epoch).collect()
+    };
+    out.ok()
 }
 
 impl OriginTranslationProvider for AdamCoreSpiceBackend {
@@ -1885,6 +1901,44 @@ mod tests {
     use tempfile::{tempdir, NamedTempFile};
 
     use super::*;
+
+    #[test]
+    fn first_covering_per_epoch_selects_the_kernel_per_epoch_in_priority_order() {
+        // Three "kernels" with partly disjoint coverage, priority order as
+        // loaded last-first: high_prec, predict, hist (like the Earth
+        // orientation PCK stack). A batch spanning all of them must be served
+        // epoch by epoch, with the first covering reader winning.
+        struct Window(f64, f64, &'static str);
+        let hist = Window(0.0, 10.0, "hist");
+        let predict = Window(8.0, 20.0, "predict");
+        let high_prec = Window(5.0, 12.0, "high_prec");
+        let readers: Vec<&Window> = vec![&high_prec, &predict, &hist];
+        let eval = |w: &Window, et: f64| {
+            if et >= w.0 && et <= w.1 {
+                Ok(w.2)
+            } else {
+                Err(())
+            }
+        };
+        let out = first_covering_per_epoch(&readers, &[1.0, 6.0, 9.0, 15.0], eval).unwrap();
+        assert_eq!(out, vec!["hist", "high_prec", "high_prec", "predict"]);
+        // one epoch covered by no kernel fails the whole batch
+        assert!(first_covering_per_epoch(&readers, &[1.0, 25.0], eval).is_none());
+        assert!(first_covering_per_epoch::<Window, &str>(&[], &[1.0], eval).is_none());
+        // large batches take the parallel path and agree with the serial rule
+        let big: Vec<f64> = (0..3000).map(|i| (i as f64) * 20.0 / 2999.0).collect();
+        let out = first_covering_per_epoch(&readers, &big, eval).unwrap();
+        for (et, name) in big.iter().zip(out.iter()) {
+            let expect = if (5.0..=12.0).contains(et) {
+                "high_prec"
+            } else if *et >= 8.0 {
+                "predict"
+            } else {
+                "hist"
+            };
+            assert_eq!(name, &expect, "epoch {et}");
+        }
+    }
 
     #[test]
     fn builtin_body_lookup_works() {
