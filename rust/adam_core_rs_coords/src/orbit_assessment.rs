@@ -8,7 +8,7 @@
 use crate::{
     types::{SchemaError, SchemaResult},
     CoordinateRepresentation, CovarianceBatch, CovarianceUnits, NonGravitationalParametersRow,
-    OrbitBatch,
+    NongravCovarianceAxes, OrbitBatch,
 };
 
 const MAX_COVARIANCE_DIMENSION: usize = 9;
@@ -51,9 +51,17 @@ impl OrbitCovarianceAssessment {
 /// Numerical checks for one present covariance row.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PresentOrbitCovarianceAssessment {
-    /// Semantic solved dimension after recognizing canonical padded 6D rows in
-    /// physical 9D storage.
+    /// Semantic storage dimension after recognizing canonical padded 6D rows
+    /// in physical 9D storage. This remains 9 for labeled partial-A products so
+    /// frozen sigma19 construction and ordering are unchanged.
     pub semantic_dimension: usize,
+    /// Dimension of the principal block consumed by strict numerical checks:
+    /// the six state axes plus exactly the explicitly labeled A axes. Legacy
+    /// unlabeled 9D rows consume all nine axes.
+    pub assessed_dimension: usize,
+    /// Explicit provider-independent A-axis membership for this row. `None`
+    /// means legacy/unlabeled; it is never inferred from covariance values.
+    pub nongrav_axis_mask: Option<NongravCovarianceAxes>,
     /// Whether the covariance validity bitmap marks this row valid.
     pub row_declared_valid: bool,
     /// Whether covariance units match Cartesian orbit coordinates.
@@ -114,10 +122,14 @@ pub struct NonGravitationalAssessment {
     /// Whether at least one central A1/A2/A3 coefficient is nonzero, or `None`
     /// when non-finite coefficients prevent evaluation.
     pub nominal_a_coefficients_nonzero: Option<bool>,
-    /// Whether the supplied covariance's semantic parameterization includes
-    /// A1/A2/A3 in addition to Cartesian state. This does not assert that the
-    /// covariance is numerically usable.
+    /// Whether the supplied covariance parameterization includes at least one
+    /// canonical A1/A2/A3 axis in addition to Cartesian state. This does not
+    /// assert that the covariance is numerically usable.
     pub covariance_includes_a1_a2_a3: bool,
+    /// Explicit provider-independent A-axis membership, when labeled. `None`
+    /// means absent or legacy/unlabeled and is disambiguated by the inclusion
+    /// fact; membership is never inferred from numerical values.
+    pub covariance_nongrav_axis_mask: Option<NongravCovarianceAxes>,
     /// Whether the central A1/A2/A3 coefficients require a usable Marsden law,
     /// or `None` when non-finite coefficients prevent evaluation.
     pub nominal_requires_marsden_law: Option<bool>,
@@ -171,6 +183,10 @@ pub fn assess_orbit_batch(orbits: &OrbitBatch) -> SchemaResult<Vec<OrbitAssessme
                 .as_ref()
                 .map(|parameters| parameters.row(row)),
             covariance.semantic_dimension(),
+            match &covariance {
+                OrbitCovarianceAssessment::Present(assessment) => assessment.nongrav_axis_mask,
+                OrbitCovarianceAssessment::Absent => None,
+            },
         );
         assessments.push(OrbitAssessment {
             row,
@@ -212,6 +228,9 @@ fn assess_validated_orbit_covariance(
     row: usize,
 ) -> PresentOrbitCovarianceAssessment {
     let semantic_dimension = covariance.row_dimension(row);
+    let nongrav_axis_mask = covariance.row_nongrav_axes(row);
+    let (assessed_axes, assessed_dimension) =
+        assessed_covariance_axes(semantic_dimension, nongrav_axis_mask);
     let row_declared_valid = covariance.is_row_valid(row);
     let units_compatible = matches!(
         &covariance.units,
@@ -225,16 +244,16 @@ fn assess_validated_orbit_covariance(
         issues.push(OrbitCovarianceIssue::UnsupportedUnits);
     }
 
-    let values = semantic_covariance_row(covariance, row, semantic_dimension);
-    let raw_values_finite = values[..semantic_dimension * semantic_dimension]
+    let values = assessed_covariance_row(covariance, row, &assessed_axes, assessed_dimension);
+    let raw_values_finite = values[..assessed_dimension * assessed_dimension]
         .iter()
         .all(|value| value.is_finite());
     if !raw_values_finite {
         issues.push(OrbitCovarianceIssue::NonFiniteValue);
     }
 
-    let positive_diagonal = (0..semantic_dimension).all(|axis| {
-        let value = values[axis * semantic_dimension + axis];
+    let positive_diagonal = (0..assessed_dimension).all(|axis| {
+        let value = values[axis * assessed_dimension + axis];
         value.is_finite() && value > 0.0
     });
     if raw_values_finite && !positive_diagonal {
@@ -247,26 +266,26 @@ fn assess_validated_orbit_covariance(
     let mut maximum_correlation_asymmetry = None;
     if raw_values_finite && positive_diagonal {
         let mut scales = [0.0; MAX_COVARIANCE_DIMENSION];
-        for axis in 0..semantic_dimension {
-            scales[axis] = values[axis * semantic_dimension + axis].sqrt();
+        for axis in 0..assessed_dimension {
+            scales[axis] = values[axis * assessed_dimension + axis].sqrt();
         }
         let mut correlation = [0.0; MAX_COVARIANCE_ELEMENTS];
-        for r in 0..semantic_dimension {
-            for c in 0..semantic_dimension {
-                correlation[r * semantic_dimension + c] =
-                    values[r * semantic_dimension + c] / (scales[r] * scales[c]);
+        for r in 0..assessed_dimension {
+            for c in 0..assessed_dimension {
+                correlation[r * assessed_dimension + c] =
+                    values[r * assessed_dimension + c] / (scales[r] * scales[c]);
             }
         }
-        if correlation[..semantic_dimension * semantic_dimension]
+        if correlation[..assessed_dimension * assessed_dimension]
             .iter()
             .all(|value| value.is_finite())
         {
-            let maximum_asymmetry = maximum_asymmetry(&correlation, semantic_dimension);
+            let maximum_asymmetry = maximum_asymmetry(&correlation, assessed_dimension);
             maximum_correlation_asymmetry = Some(maximum_asymmetry);
             let symmetric = maximum_asymmetry <= ORBIT_COVARIANCE_CORRELATION_SYMMETRY_TOLERANCE;
             sufficiently_symmetric = Some(symmetric);
             if symmetric {
-                let positive_definite = strict_cholesky(&correlation, semantic_dimension).is_ok();
+                let positive_definite = strict_cholesky(&correlation, assessed_dimension).is_ok();
                 strictly_positive_definite = Some(positive_definite);
                 if !positive_definite {
                     issues.push(OrbitCovarianceIssue::NotPositiveDefinite);
@@ -282,6 +301,8 @@ fn assess_validated_orbit_covariance(
 
     PresentOrbitCovarianceAssessment {
         semantic_dimension,
+        assessed_dimension,
+        nongrav_axis_mask,
         row_declared_valid,
         units_compatible,
         values_finite,
@@ -293,16 +314,42 @@ fn assess_validated_orbit_covariance(
     }
 }
 
-fn semantic_covariance_row(
+fn assessed_covariance_axes(
+    semantic_dimension: usize,
+    nongrav_axis_mask: Option<NongravCovarianceAxes>,
+) -> ([usize; MAX_COVARIANCE_DIMENSION], usize) {
+    let mut axes = [0; MAX_COVARIANCE_DIMENSION];
+    for (axis, slot) in axes[..6].iter_mut().enumerate() {
+        *slot = axis;
+    }
+    let mut dimension = 6;
+    if semantic_dimension == 9 {
+        for (axis, covariance_axis) in [
+            (NongravCovarianceAxes::A1, 6),
+            (NongravCovarianceAxes::A2, 7),
+            (NongravCovarianceAxes::A3, 8),
+        ] {
+            if nongrav_axis_mask.is_none_or(|mask| mask.contains(axis)) {
+                axes[dimension] = covariance_axis;
+                dimension += 1;
+            }
+        }
+    }
+    (axes, dimension)
+}
+
+fn assessed_covariance_row(
     covariance: &CovarianceBatch,
     row: usize,
-    semantic_dimension: usize,
+    axes: &[usize; MAX_COVARIANCE_DIMENSION],
+    assessed_dimension: usize,
 ) -> [f64; MAX_COVARIANCE_ELEMENTS] {
     let mut values = [0.0; MAX_COVARIANCE_ELEMENTS];
     let source = covariance.row_values(row);
-    for r in 0..semantic_dimension {
-        for c in 0..semantic_dimension {
-            values[r * semantic_dimension + c] = source[r * covariance.dimension + c];
+    for (target_row, &source_row) in axes[..assessed_dimension].iter().enumerate() {
+        for (target_column, &source_column) in axes[..assessed_dimension].iter().enumerate() {
+            values[target_row * assessed_dimension + target_column] =
+                source[source_row * covariance.dimension + source_column];
         }
     }
     values
@@ -347,12 +394,13 @@ fn strict_cholesky(values: &[f64; MAX_COVARIANCE_ELEMENTS], dimension: usize) ->
 pub fn assess_non_gravitational_parameters(
     row: Option<NonGravitationalParametersRow>,
 ) -> NonGravitationalAssessment {
-    assess_non_gravitational(row, None)
+    assess_non_gravitational(row, None, None)
 }
 
 fn assess_non_gravitational(
     row: Option<NonGravitationalParametersRow>,
     covariance_dimension: Option<usize>,
+    covariance_nongrav_axis_mask: Option<NongravCovarianceAxes>,
 ) -> NonGravitationalAssessment {
     let a_coefficients_with_null_as_zero = row
         .map(|row| {
@@ -371,7 +419,8 @@ fn assess_non_gravitational(
             .iter()
             .any(|value| *value != 0.0)
     });
-    let covariance_includes_a1_a2_a3 = covariance_dimension == Some(9);
+    let covariance_includes_a1_a2_a3 = covariance_dimension == Some(9)
+        && covariance_nongrav_axis_mask.is_none_or(|mask| !mask.is_empty());
     let nominal_requires_marsden_law = nominal_a_coefficients_nonzero;
     let covariance_parameterization_requires_marsden_law = covariance_includes_a1_a2_a3;
 
@@ -423,6 +472,7 @@ fn assess_non_gravitational(
         a_coefficients_finite,
         nominal_a_coefficients_nonzero,
         covariance_includes_a1_a2_a3,
+        covariance_nongrav_axis_mask,
         nominal_requires_marsden_law,
         covariance_parameterization_requires_marsden_law,
         marsden_law_encoding,
@@ -441,8 +491,8 @@ fn push_unique<T: Copy + PartialEq>(values: &mut Vec<T>, value: T) {
 mod tests {
     use super::*;
     use crate::{
-        CoordinateBatch, CovarianceBatch, Epoch, NonGravitationalParametersBatch, OrbitId,
-        OriginArray, OriginId, TimeArray, TimeScale, Validity,
+        CoordinateBatch, CovarianceBatch, Epoch, NonGravitationalParametersBatch,
+        NongravCovarianceAxes, OrbitId, OriginArray, OriginId, TimeArray, TimeScale, Validity,
     };
 
     fn diagonal_covariance(dimension: usize) -> Vec<f64> {
@@ -517,6 +567,25 @@ mod tests {
         .unwrap()
     }
 
+    fn labeled_nine_dimensional_covariance(mask: NongravCovarianceAxes) -> CovarianceBatch {
+        let mut values = vec![0.0; 81];
+        for axis in 0..6 {
+            values[axis * 9 + axis] = (axis + 1) as f64;
+        }
+        for (axis, covariance_axis) in [
+            (NongravCovarianceAxes::A1, 6),
+            (NongravCovarianceAxes::A2, 7),
+            (NongravCovarianceAxes::A3, 8),
+        ] {
+            if mask.contains(axis) {
+                values[covariance_axis * 9 + covariance_axis] = (covariance_axis + 1) as f64;
+            }
+        }
+        cartesian_covariance(9, values)
+            .with_nongrav_axis_mask(vec![mask])
+            .unwrap()
+    }
+
     fn present(assessment: &OrbitAssessment) -> &PresentOrbitCovarianceAssessment {
         match &assessment.covariance {
             OrbitCovarianceAssessment::Present(covariance) => covariance,
@@ -576,6 +645,8 @@ mod tests {
             .unwrap();
             let covariance = present(&assessment[0]);
             assert_eq!(covariance.semantic_dimension, dimension);
+            assert_eq!(covariance.assessed_dimension, dimension);
+            assert_eq!(covariance.nongrav_axis_mask, None);
             assert!(covariance.values_finite);
             assert!(covariance.positive_diagonal);
             assert_eq!(covariance.sufficiently_symmetric, Some(true));
@@ -583,6 +654,103 @@ mod tests {
             assert_eq!(covariance.maximum_correlation_asymmetry, Some(0.0));
             assert!(covariance.issues.is_empty());
         }
+    }
+
+    #[test]
+    fn explicit_masks_assess_only_the_labeled_principal_block() {
+        for (mask, assessed_dimension, includes_nongrav, requires_law) in [
+            (NongravCovarianceAxes::NONE, 6, false, false),
+            (NongravCovarianceAxes::A2, 7, true, true),
+            (
+                NongravCovarianceAxes::A1 | NongravCovarianceAxes::A2,
+                8,
+                true,
+                true,
+            ),
+            (NongravCovarianceAxes::ALL, 9, true, true),
+        ] {
+            let assessment = assess_orbit_batch(&orbit(
+                Some(labeled_nine_dimensional_covariance(mask)),
+                None,
+            ))
+            .unwrap();
+            let covariance = present(&assessment[0]);
+            assert_eq!(covariance.semantic_dimension, 9);
+            assert_eq!(covariance.assessed_dimension, assessed_dimension);
+            assert_eq!(covariance.nongrav_axis_mask, Some(mask));
+            assert_eq!(covariance.strictly_positive_definite, Some(true));
+            assert!(covariance.issues.is_empty());
+            assert_eq!(
+                assessment[0].non_gravitational.covariance_includes_a1_a2_a3,
+                includes_nongrav
+            );
+            assert_eq!(
+                assessment[0].non_gravitational.covariance_nongrav_axis_mask,
+                Some(mask)
+            );
+            assert_eq!(
+                assessment[0]
+                    .non_gravitational
+                    .covariance_parameterization_requires_marsden_law,
+                requires_law
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_unlabeled_nine_dimensional_covariance_remains_full_nine() {
+        let assessment = assess_orbit_batch(&orbit(
+            Some(cartesian_covariance(9, diagonal_covariance(9))),
+            None,
+        ))
+        .unwrap();
+        let covariance = present(&assessment[0]);
+        assert_eq!(covariance.semantic_dimension, 9);
+        assert_eq!(covariance.assessed_dimension, 9);
+        assert_eq!(covariance.nongrav_axis_mask, None);
+        assert_eq!(covariance.strictly_positive_definite, Some(true));
+        assert!(assessment[0].non_gravitational.covariance_includes_a1_a2_a3);
+        assert_eq!(
+            assessment[0].non_gravitational.covariance_nongrav_axis_mask,
+            None
+        );
+        assert!(
+            assessment[0]
+                .non_gravitational
+                .covariance_parameterization_requires_marsden_law
+        );
+    }
+
+    #[test]
+    fn labeled_active_block_still_reports_asymmetry_and_non_positive_definiteness() {
+        let mut asymmetric = labeled_nine_dimensional_covariance(NongravCovarianceAxes::A2);
+        asymmetric.values_row_major[7] = 1.0e-9;
+        let assessment = assess_orbit_batch(&orbit(Some(asymmetric), None)).unwrap();
+        assert_eq!(
+            present(&assessment[0]).issues,
+            vec![OrbitCovarianceIssue::ExcessiveAsymmetry]
+        );
+
+        let mut non_positive_definite =
+            labeled_nine_dimensional_covariance(NongravCovarianceAxes::A2);
+        non_positive_definite.values_row_major[7] = 3.0;
+        non_positive_definite.values_row_major[7 * 9] = 3.0;
+        let assessment = assess_orbit_batch(&orbit(Some(non_positive_definite), None)).unwrap();
+        assert_eq!(
+            present(&assessment[0]).issues,
+            vec![OrbitCovarianceIssue::NotPositiveDefinite]
+        );
+    }
+
+    #[test]
+    fn labeled_inactive_axis_nonzero_padding_fails_structural_validation() {
+        let mut covariance = labeled_nine_dimensional_covariance(NongravCovarianceAxes::A2);
+        covariance.nongrav_axis_mask = None;
+        covariance.values_row_major[6 * 9 + 6] = 1.0;
+        let error = covariance
+            .with_nongrav_axis_mask(vec![NongravCovarianceAxes::A2])
+            .unwrap_err();
+        assert!(matches!(error, SchemaError::InvalidRecordBatch(_)));
     }
 
     #[test]
@@ -594,6 +762,8 @@ mod tests {
         .unwrap();
         let covariance = present(&assessment[0]);
         assert_eq!(covariance.semantic_dimension, 6);
+        assert_eq!(covariance.assessed_dimension, 6);
+        assert_eq!(covariance.nongrav_axis_mask, None);
         assert_eq!(covariance.strictly_positive_definite, Some(true));
         assert!(!assessment[0].non_gravitational.covariance_includes_a1_a2_a3);
     }
