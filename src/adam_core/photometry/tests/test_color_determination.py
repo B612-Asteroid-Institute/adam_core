@@ -13,8 +13,12 @@ from adam_core.time import Timestamp
 
 from ..bandpasses.api import bandpass_delta_mag
 from ..color_determination import (
+    _CHANNEL_FILTERS,
+    _FILTER_CHANNEL,
+    _TARGET_FILTERS,
     ColorFit,
     _apply_color_terms,
+    _resolve_channels,
     _validate_g_bounds,
     estimate_colors,
 )
@@ -188,11 +192,9 @@ def _channels_present(fx: np.lib.npyio.NpzFile) -> set[str]:
     """
     present: set[str] = set()
     for fid in fx["filter_id"].astype(str).tolist():
-        if not fid:
-            continue
-        base = fid.rsplit("_", 1)[-1].lower()
-        if base in _BAND_MAG_FIELD:
-            present.add(base)
+        channel = _FILTER_CHANNEL.get(fid)
+        if channel is not None:
+            present.add(channel)
     return present
 
 
@@ -342,35 +344,68 @@ def test_g_bounds_are_model_specific(phi_type: str, G: float, valid: bool) -> No
 # ---------------------------------------------------------------------------
 
 
-def test_apply_color_terms_reconciles_mixed_channel() -> None:
+@pytest.mark.parametrize("composition", ["C", "S", "NEO", "MBA"])
+def test_channel_allow_list_is_close_to_the_target_system(composition: str) -> None:
     """
-    In a channel that mixes filter systems, minority-filter rows are shifted onto
-    the most-observed filter by exactly `bandpass_delta_mag`, while the majority
-    filter and any single-system channel are left untouched.
+    Every filter allowed into a channel is within 0.03 mag of the channel's
+    target filter, so pooling it without a color-term correction is defensible.
     """
-    # g channel: 3x LSST_g (majority) + 1x SDSS_g (minority); r channel single-system.
+    for channel, fids in _CHANNEL_FILTERS.items():
+        target = _TARGET_FILTERS[channel]
+        assert target in fids
+        for fid in fids:
+            delta = bandpass_delta_mag(composition, fid, target)
+            assert abs(delta) <= 0.03, f"{fid} -> {target}: {delta:+.4f} mag"
+
+
+def test_channels_do_not_pool_by_base_letter() -> None:
+    """
+    Filters sharing a channel's letter but not on its allow-list are not fit:
+    Vega-system Bessell U/R/I, and same-letter filters too far from the target.
+    """
+    excluded = [
+        "Bessell_U",
+        "Bessell_R",
+        "Bessell_I",
+        "SkyMapper_g",
+        "SDSS_u",
+        "DECam_u",
+        "SkyMapper_u",
+    ]
+    stn = np.array(["X05"] * len(excluded), dtype=object)
+    channels, filter_ids = _resolve_channels(stn, np.array(excluded, dtype=object))
+    # Each resolves to itself (canonical pass-through) but feeds no channel.
+    assert filter_ids.tolist() == excluded
+    assert channels.tolist() == [None] * len(excluded)
+
+
+def test_apply_color_terms_normalizes_every_channel_onto_the_target() -> None:
+    """
+    Every row is shifted onto its channel's LSST target by exactly
+    `bandpass_delta_mag`, both within a mixed channel and in a channel observed
+    through a single non-target filter. Target-filter rows are left untouched.
+    """
+    # g: 3x LSST_g + 1x SDSS_g (mixed channel); r: only SDSS_r (cross-channel mix).
     filter_ids = np.array(
-        ["LSST_g", "LSST_g", "LSST_g", "SDSS_g", "LSST_r", "LSST_r"], dtype=object
+        ["LSST_g", "LSST_g", "LSST_g", "SDSS_g", "SDSS_r", "SDSS_r"], dtype=object
     )
     channels = np.array(["g", "g", "g", "g", "r", "r"], dtype=object)
     m_red = np.array([20.0, 20.0, 20.0, 20.0, 19.0, 19.0], dtype=np.float64)
 
     out = _apply_color_terms(m_red, filter_ids, channels, "S")
-    delta = bandpass_delta_mag("S", "SDSS_g", "LSST_g")
+    delta_g = bandpass_delta_mag("S", "SDSS_g", "LSST_g")
+    delta_r = bandpass_delta_mag("S", "SDSS_r", "LSST_r")
 
-    assert delta != 0.0
-    # Majority LSST_g rows unchanged (reference filter).
+    assert delta_g != 0.0 and delta_r != 0.0
     np.testing.assert_array_equal(out[:3], 20.0)
-    # Minority SDSS_g row converted onto the LSST_g reference.
-    assert np.isclose(out[3], 20.0 + delta)
-    # Single-system r channel untouched.
-    np.testing.assert_array_equal(out[4:], 19.0)
+    assert np.isclose(out[3], 20.0 + delta_g)
+    np.testing.assert_allclose(out[4:], 19.0 + delta_r)
     # Input is not mutated.
     np.testing.assert_array_equal(m_red[3], 20.0)
 
 
-def test_apply_color_terms_single_system_is_noop() -> None:
-    """A channel observed through a single filter system is never corrected."""
+def test_apply_color_terms_target_system_is_noop() -> None:
+    """Rows already in the LSST target filters are never corrected."""
     filter_ids = np.array(["LSST_g", "LSST_g", "LSST_r"], dtype=object)
     channels = np.array(["g", "g", "r"], dtype=object)
     m_red = np.array([20.0, 21.0, 19.0], dtype=np.float64)
@@ -378,16 +413,77 @@ def test_apply_color_terms_single_system_is_noop() -> None:
     np.testing.assert_array_equal(out, m_red)
 
 
-def _has_mixed_channel(fx: np.lib.npyio.NpzFile) -> bool:
-    """True if any g/i/r/u channel draws on more than one canonical filter."""
-    by_channel: dict[str, set[str]] = {}
-    for fid in fx["filter_id"].astype(str).tolist():
-        if not fid:
-            continue
-        base = fid.rsplit("_", 1)[-1].lower()
-        if base in _BAND_MAG_FIELD:
-            by_channel.setdefault(base, set()).add(fid)
-    return any(len(fids) > 1 for fids in by_channel.values())
+def _all_in_target_system(fx: np.lib.npyio.NpzFile) -> bool:
+    """True if every row feeding a color channel is already in its target filter."""
+    return all(
+        fid == _TARGET_FILTERS[_FILTER_CHANNEL[fid]]
+        for fid in fx["filter_id"].astype(str).tolist()
+        if fid in _FILTER_CHANNEL
+    )
+
+
+_CROSS_SYSTEM_FIXTURE = "color_fixture_2025_MN25.npz"
+
+
+def _cross_system_case():
+    """
+    An all-LSST fixture with its r band relabelled SDSS_r, so g and r are in
+    different systems and no single channel mixes filters.
+    """
+    path = DATA_DIR / _CROSS_SYSTEM_FIXTURE
+    if not path.exists():
+        pytest.skip(f"Missing fixture {_CROSS_SYSTEM_FIXTURE}")
+    fx = np.load(path, allow_pickle=True)
+    assert set(fx["filter_id"].astype(str).tolist()) == {"LSST_g", "LSST_r", "LSST_i"}
+    observations = _load_fixture_observations(fx)
+    is_r = fx["filter_id"].astype(str) == "LSST_r"
+    band = np.where(is_r, "SDSS_r", fx["band"].astype(str))
+    observations = observations.set_column(
+        "band", pa.array(band.tolist(), type=observations.band.type)
+    )
+    return observations, _load_fixture_orbits(fx)
+
+
+def test_cross_channel_mixed_system_colors_are_labelled() -> None:
+    """
+    LSST_g + SDSS_r without a color-term correction: nothing is converted, and the
+    filter columns record that g_r is an LSST_g minus SDSS_r color.
+    """
+    observations, orbits = _cross_system_case()
+    row = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
+
+    assert row.g_filter.to_pylist() == ["LSST_g"]
+    assert row.r_filter.to_pylist() == ["SDSS_r"]
+    assert row.i_filter.to_pylist() == ["LSST_i"]
+    assert row.u_filter.to_pylist() == [None]
+
+
+def test_cross_channel_mixed_system_is_normalized_to_lsst() -> None:
+    """
+    LSST_g + SDSS_r with a color-term correction: the single-filter SDSS_r channel
+    is still converted, so g_r comes out in the LSST system, shifted from the
+    uncorrected color by exactly the SDSS_r -> LSST_r color term.
+    """
+    observations, orbits = _cross_system_case()
+    raw = estimate_colors(observations, orbits, "HG12star", force_g_bounds=False)
+    lsst = estimate_colors(
+        observations,
+        orbits,
+        "HG12star",
+        force_g_bounds=False,
+        color_term_composition="S",
+    )
+
+    assert lsst.g_filter.to_pylist() == ["LSST_g"]
+    assert lsst.r_filter.to_pylist() == ["LSST_r"]
+    assert lsst.i_filter.to_pylist() == ["LSST_i"]
+    delta_r = bandpass_delta_mag("S", "SDSS_r", "LSST_r")
+    assert delta_r != 0.0
+    # A uniform shift of every r row moves H_r by that shift and nothing else.
+    np.testing.assert_allclose(lsst.r_mag.to_numpy(), raw.r_mag.to_numpy() + delta_r)
+    np.testing.assert_allclose(lsst.g_r.to_numpy(), raw.g_r.to_numpy() - delta_r)
+    np.testing.assert_allclose(lsst.r_i.to_numpy(), raw.r_i.to_numpy() + delta_r)
+    np.testing.assert_allclose(lsst.g_i.to_numpy(), raw.g_i.to_numpy())
 
 
 @pytest.mark.parametrize("fixture_name", COLOR_FIXTURES)
@@ -395,14 +491,15 @@ def test_color_term_composition_noop_on_single_system_fixtures(
     fixture_name: str,
 ) -> None:
     """
-    On a fixture whose channels are each single-system, the color-term correction
-    changes nothing: colors are bit-for-bit identical with and without it.
+    On a fixture already entirely in the LSST target system, the color-term
+    correction changes nothing: colors are bit-for-bit identical with and without
+    it, and every band reports its LSST filter either way.
     """
     if fixture_name == "__NO_FIXTURES__":
         pytest.skip("No color fixtures found on disk.")
     fx = np.load(DATA_DIR / fixture_name, allow_pickle=True)
-    if _has_mixed_channel(fx):
-        pytest.skip(f"{fixture_name} mixes filter systems; covered elsewhere.")
+    if not _all_in_target_system(fx):
+        pytest.skip(f"{fixture_name} has non-LSST photometry; covered elsewhere.")
 
     observations = _load_fixture_observations(fx)
     orbits = _load_fixture_orbits(fx)
@@ -417,6 +514,8 @@ def test_color_term_composition_noop_on_single_system_fixtures(
     )
     for field in ("g_r", "g_i", "r_i", "g_mag", "r_mag", "i_mag"):
         assert getattr(base, field).to_pylist() == getattr(corrected, field).to_pylist()
+    for field in ("g_filter", "i_filter", "r_filter", "u_filter"):
+        assert getattr(base, field).to_pylist() == getattr(corrected, field).to_pylist()
 
 
 @pytest.mark.parametrize("fixture_name", COLOR_FIXTURES)
@@ -424,15 +523,15 @@ def test_color_term_composition_preserves_paper_on_mixed_fixtures(
     fixture_name: str,
 ) -> None:
     """
-    On a fixture that mixes filter systems within a channel, applying the
-    correction keeps colors finite and still within tolerance of the paper (the
-    griz inter-system terms are small, so reproduction is preserved).
+    On a fixture with non-LSST photometry, normalizing it onto LSST keeps colors
+    finite and still within tolerance of the paper (the griz inter-system terms
+    are small, so reproduction is preserved), and labels every band LSST.
     """
     if fixture_name == "__NO_FIXTURES__":
         pytest.skip("No color fixtures found on disk.")
     fx = np.load(DATA_DIR / fixture_name, allow_pickle=True)
-    if not _has_mixed_channel(fx):
-        pytest.skip(f"{fixture_name} has no mixed-system channel.")
+    if _all_in_target_system(fx):
+        pytest.skip(f"{fixture_name} is already entirely LSST.")
 
     object_id = str(fx["object_id"][0])
     observations = _load_fixture_observations(fx)
@@ -446,6 +545,8 @@ def test_color_term_composition_preserves_paper_on_mixed_fixtures(
         color_term_composition="S",
     )
     _assert_colors_close(result, object_id, _paper_colors(fx), HG12STAR_TOLERANCE)
+    for channel, target in _TARGET_FILTERS.items():
+        assert getattr(result, f"{channel}_filter").to_pylist() in ([target], [None])
 
 
 # ---------------------------------------------------------------------------

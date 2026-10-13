@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 import pyarrow.compute as pc
@@ -37,10 +37,25 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Color channels we fit an absolute magnitude for. These are the base band
-# letters of the canonical vendored filter IDs (e.g. SDSS_g, LSST_g, PS1_g all
-# reduce to the "g" channel); see `_resolve_channels`.
+# Color channels we fit an absolute magnitude for.
 _BANDS = ("g", "i", "r", "u")
+# The canonical vendored filter IDs allowed to feed each color channel.  This is
+# an explicit allow-list rather than the filter ID's base letter, which would
+# also pool e.g. Bessell_R (a Vega-system Cousins R) into "r".  A filter is
+# listed when, for every vendored reflectance template, its color term onto the
+# channel's target filter (`_TARGET_FILTERS`) is within 0.03 mag, so pooling it
+# uncorrected costs no more than that.  Excluded on those grounds: SkyMapper_g
+# (up to 0.08 mag) and every non-LSST u filter (0.2-0.4 mag).
+_CHANNEL_FILTERS: dict[str, tuple[str, ...]] = {
+    "g": ("LSST_g", "SDSS_g", "PS1_g", "ZTF_g", "DECam_g", "BASS_g"),
+    "i": ("LSST_i", "SDSS_i", "PS1_i", "ZTF_i", "DECam_i", "SkyMapper_i"),
+    "r": ("LSST_r", "SDSS_r", "PS1_r", "ZTF_r", "DECam_r", "BASS_r", "SkyMapper_r"),
+    "u": ("LSST_u",),
+}
+_FILTER_CHANNEL = {fid: ch for ch, fids in _CHANNEL_FILTERS.items() for fid in fids}
+# The single photometric system that `color_term_composition` normalizes every
+# channel onto.
+_TARGET_FILTERS = {ch: f"LSST_{ch}" for ch in _BANDS}
 _PHI_TYPES = ("HG12star", "HG", "c1c2")
 # If fewer than this fraction of an object's eligible observations survive
 # outlier rejection, the fit is not trustworthy enough to report silently.
@@ -119,6 +134,16 @@ class ColorFit(qv.Table):
     i_mag_sigma = qv.Float64Column(nullable=True)
     r_mag_sigma = qv.Float64Column(nullable=True)
     u_mag_sigma = qv.Float64Column(nullable=True)
+    # The photometric system each band's magnitude is in: the canonical filter ID
+    # of the observations used (e.g. "LSST_g"), or several IDs joined with "+"
+    # when the band pooled filters without a color-term correction.  With
+    # `color_term_composition` set this is always the target filter (LSST_g,
+    # LSST_i, LSST_r, LSST_u).  ``None`` for a band with no used observations.
+    # Colors are system-specific: g_r is in the system of g_filter minus r_filter.
+    g_filter = qv.LargeStringColumn(nullable=True)
+    i_filter = qv.LargeStringColumn(nullable=True)
+    r_filter = qv.LargeStringColumn(nullable=True)
+    u_filter = qv.LargeStringColumn(nullable=True)
     g_r = qv.Float64Column(nullable=True)
     g_i = qv.Float64Column(nullable=True)
     r_i = qv.Float64Column(nullable=True)
@@ -175,10 +200,10 @@ def _resolve_channels(
     through the shared `map_to_canonical_filter_bands` utility, which resolves
     `(observatory_code, band)` to a canonical vendored filter ID (handling MPC/ADES
     label quirks, e.g. G96 "G" -> SDSS_g, ATLAS "o" -> ATLAS_o, LSST encodings, etc).
-    The canonical filter's base band letter is then taken as the color channel, so
-    every g-like filter (SDSS_g, LSST_g, PS1_g, DECam_g, so on) contributes to the "g"
-    fit, and filters outside the g/i/r/u set (V, PS1_w, SkyMapper_v) or rows with
-    no resolvable filter are returned as ``None`` (excluded downstream).
+    The canonical filter is then looked up in the `_CHANNEL_FILTERS` allow-list, so
+    only filters close to the channel's target passband contribute to its fit.
+    Anything else (V, PS1_w, Bessell_R, SkyMapper_g, SDSS_u, ...) and rows with no
+    resolvable filter are returned as ``None`` (excluded downstream).
 
     Returns ``(channels, filter_ids)``, each an object array of length
     ``len(bands)``. ``channels`` entries are one of ``"g"``, ``"i"``, ``"r"``,
@@ -191,11 +216,7 @@ def _resolve_channels(
     filter_ids = map_to_canonical_filter_bands(stn, bands, on_unknown="skip")
     channels = np.empty(len(filter_ids), dtype=object)
     for i, fid in enumerate(filter_ids.tolist()):
-        if fid is None:
-            channels[i] = None
-            continue
-        base = str(fid).rsplit("_", 1)[-1].lower()
-        channels[i] = base if base in _BANDS else None
+        channels[i] = None if fid is None else _FILTER_CHANNEL.get(str(fid))
 
     unresolved = channels == None  # noqa: E711
     if np.any(unresolved):
@@ -218,19 +239,19 @@ def _apply_color_terms(
     composition: str | tuple[float, float],
 ) -> np.ndarray:
     """
-    Reconcile reduced magnitudes onto a single reference filter per color channel.
+    Normalize reduced magnitudes onto the channel's target filter (`_TARGET_FILTERS`).
 
-    A channel may pool observations taken through different but same-letter filters
-    (e.g. SDSS_g and LSST_g both feed the "g" channel). Merging them directly biases
-    the per-channel H by the inter-system color term. This converts every row onto
-    the channel's reference filter using `bandpass_delta_mag`:
+    A channel may pool observations taken through different filters (e.g. SDSS_g
+    and LSST_g both feed the "g" channel), and different channels may be observed
+    in different systems (e.g. LSST_g with SDSS_r). This converts every row onto
+    its channel's target filter using `bandpass_delta_mag`:
 
-        m_red_ref = m_red + Δm(composition, filter_id -> reference_filter)
+        m_red_target = m_red + Δm(composition, filter_id -> target_filter)
 
-    Because the reference is the dominant filter, rows already in it are unchanged,
-    and a channel containing a single filter system is a no-op. ``composition`` (a
-    template id "C"/"S"/"NEO"/"MBA" or a ``(weight_C, weight_S)`` tuple) therefore
-    only influences channels that genuinely mix filter systems.
+    so all channels, and hence the colors between them, end up in one defined
+    system regardless of which filters the data happen to contain. Rows already
+    in the target filter are unchanged. ``composition`` is a template id
+    "C"/"S"/"NEO"/"MBA" or a ``(weight_C, weight_S)`` tuple.
     """
     out = np.asarray(m_red, dtype=np.float64).copy()
     fid_str = np.array([str(f) for f in filter_ids.tolist()], dtype=object)
@@ -238,11 +259,8 @@ def _apply_color_terms(
         in_ch = channels == ch
         if not np.any(in_ch):
             continue
-        uniq, counts = np.unique(fid_str[in_ch], return_counts=True)
-        if len(uniq) < 2:
-            continue  # single filter system in this channel: nothing to reconcile
-        ref = str(uniq[int(np.argmax(counts))])
-        for src in uniq.tolist():
+        ref = _TARGET_FILTERS[ch]
+        for src in np.unique(fid_str[in_ch]).tolist():
             if src == ref:
                 continue
             delta = bandpass_delta_mag(composition, src, ref)
@@ -288,6 +306,23 @@ def _prepare_geometry(
     r, delta, alpha_deg = observing_geometry(object_coords, observers)
     valid = np.isfinite(mag) & np.isfinite(rmsmag) & (rmsmag > 0)
     return mag, rmsmag, channels, filter_ids, r, delta, alpha_deg, valid
+
+
+def _band_filters(
+    filter_ids: np.ndarray, channels: np.ndarray, included: np.ndarray
+) -> dict[str, str | None]:
+    """
+    The photometric system each band's magnitude is in, from the rows used.
+
+    A single filter ID when every used row of the band shares it, or the sorted
+    IDs joined with "+" (e.g. "LSST_g+SDSS_g") when the band pools filters
+    without a color-term correction; ``None`` for a band with no used rows.
+    """
+    out: dict[str, str | None] = {}
+    for b in _BANDS:
+        fids = sorted({str(f) for f in filter_ids[included & (channels == b)]})
+        out[b] = "+".join(fids) if fids else None
+    return out
 
 
 def _active_bands(channels: np.ndarray, included: np.ndarray) -> list[str]:
@@ -358,7 +393,7 @@ def _fit_per_band_h(
     channels: np.ndarray,
     root_weights: np.ndarray,
     phi_type: Literal["HG12star", "HG", "c1c2"],
-) -> dict[str, float]:
+) -> dict[str, Any]:
     """
     Fit per-band absolute magnitudes (H_g, H_i, H_r, H_u) with g(t)=0 (no rotation
     term), using one of three phase-function models:
@@ -411,6 +446,7 @@ def _fit_per_band_h(
       failed validity filtering never reach this function, so `estimate_colors`
       adds the invalid count itself.)
     - "num_used_*": per-band retained counts, summing to "num_used".
+    - "included": boolean mask of the rows the final fit is based on.
 
     Uncertainties come from the (J'*W*J)^-1 covariance rescaled by the reduced
     chi-square, i.e. errors are matched to the observed scatter rather than trusting
@@ -628,6 +664,7 @@ def _fit_per_band_h(
         "num_used_i": num_used["i"],
         "num_used_r": num_used["r"],
         "num_used_u": num_used["u"],
+        "included": included,
     }
 
 
@@ -664,20 +701,23 @@ def estimate_colors(
         warning and the out-of-bounds value is kept. Some analyses (e.g.
         Greenstreet et al.) only reproduce when G12* outside [0, 1] is allowed.
     color_term_composition
-        If set, reconcile observations from different filter systems within a
-        color channel (e.g. SDSS_g and LSST_g both feeding "g") onto the channel's
-        most-observed filter using `bandpass_delta_mag`, assuming this reflectance
+        If set, convert every observation onto one defined photometric system,
+        LSST g/i/r/u, using `bandpass_delta_mag` and assuming this reflectance
         spectrum: a template id ("C", "S", "NEO", "MBA") or a ``(weight_C,
-        weight_S)`` tuple. Channels observed through a single filter system are
-        unaffected, so this is a no-op unless a channel actually mixes systems.
-        If ``None`` (default), no color-term correction is applied and same-letter
-        filters are pooled directly (griz inter-system terms are ~0.01 mag; see
-        `_apply_color_terms`).
+        weight_S)`` tuple.  Magnitudes and colors are then LSST-system whatever
+        filters the data contain.  If ``None`` (default), no color-term correction
+        is applied: each band is fit in the filter(s) it was observed through, and
+        the allowed filters of a channel are pooled directly (their color terms
+        onto LSST are within 0.03 mag; see `_CHANNEL_FILTERS`).
 
     Returns
     -------
     ColorFit
         One row per unique object found in both ``observations`` and ``orbits``.
+        Magnitudes and colors are system-specific: the ``*_filter`` columns give
+        the filter each band's magnitude is in (always LSST with
+        ``color_term_composition`` set), and a color such as ``g_r`` is in the
+        system of ``g_filter`` minus ``r_filter``.
     """
     if phi_type not in _PHI_TYPES:
         raise ValueError(
@@ -723,6 +763,10 @@ def estimate_colors(
             "i_mag_sigma": None,
             "r_mag_sigma": None,
             "u_mag_sigma": None,
+            "g_filter": None,
+            "i_filter": None,
+            "r_filter": None,
+            "u_filter": None,
             "g_r": None,
             "g_i": None,
             "r_i": None,
@@ -756,6 +800,9 @@ def estimate_colors(
             n_invalid = len(obs) - int(np.sum(valid))
             if np.any(valid):
                 m_red = reduced_magnitude(mag[valid], r[valid], delta[valid])
+                # The filter each row's magnitude is expressed in once it enters
+                # the fit: as observed, or the channel's target if converted.
+                row_filters = filter_ids[valid]
                 if color_term_composition is not None:
                     m_red = _apply_color_terms(
                         m_red,
@@ -763,11 +810,18 @@ def estimate_colors(
                         channels[valid],
                         color_term_composition,
                     )
+                    row_filters = np.array(
+                        [_TARGET_FILTERS.get(ch) for ch in channels[valid]],
+                        dtype=object,
+                    )
                 root_weights = 1.0 / rmsmag[valid]
                 fit = _fit_per_band_h(
                     m_red, alpha_deg[valid], channels[valid], root_weights, phi_type
                 )
                 G_fit = fit["G"]
+                band_filters = _band_filters(
+                    row_filters, channels[valid], fit["included"]
+                )
                 row.update(
                     g_mag=fit["H_g"],
                     i_mag=fit["H_i"],
@@ -777,6 +831,10 @@ def estimate_colors(
                     i_mag_sigma=fit["H_i_sigma"],
                     r_mag_sigma=fit["H_r_sigma"],
                     u_mag_sigma=fit["H_u_sigma"],
+                    g_filter=band_filters["g"],
+                    i_filter=band_filters["i"],
+                    r_filter=band_filters["r"],
+                    u_filter=band_filters["u"],
                     g_r=fit["g_r"],
                     g_i=fit["g_i"],
                     r_i=fit["r_i"],
@@ -835,6 +893,10 @@ def estimate_colors(
         i_mag_sigma=_col("i_mag_sigma"),
         r_mag_sigma=_col("r_mag_sigma"),
         u_mag_sigma=_col("u_mag_sigma"),
+        g_filter=_col("g_filter"),
+        i_filter=_col("i_filter"),
+        r_filter=_col("r_filter"),
+        u_filter=_col("u_filter"),
         g_r=_col("g_r"),
         g_i=_col("g_i"),
         r_i=_col("r_i"),
