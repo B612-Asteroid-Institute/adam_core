@@ -23,6 +23,7 @@ icu_properties = { version = "=2.2.0", default-features = false }
 icu_provider = { version = "=2.2.0", default-features = false }
 # Select zip's flate2 implementation directly. Its aggregate `deflate` feature
 # also enables zopfli, whose newest compatible release requires Rust 1.88.
+# This direct dependency exists only to select flate2's pure-Rust backend.
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 zip = { version = "2", default-features = false, features = ["flate2", "deflate-flate2"] }
 adam_core_rs_spice = { version = "=0.5.8", path = "../adam_core_rs_spice", optional = true }

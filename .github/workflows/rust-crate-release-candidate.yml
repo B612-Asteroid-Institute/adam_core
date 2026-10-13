@@ -125,7 +125,12 @@ jobs:
               if package["name"] in expected
           }
           assert resolved == {name: "2.2.0" for name in expected}, resolved
-          assert all(package["name"] != "zopfli" for package in packages), packages
+          zopfli = {
+              package["name"]: package["version"]
+              for package in packages
+              if package["name"] == "zopfli"
+          }
+          assert not zopfli, zopfli
           print("clean Rust 1.87 consumer resolved ICU4X 2.2.0 exactly without zopfli")
           PY
       - name: Upload exact crate publication set
