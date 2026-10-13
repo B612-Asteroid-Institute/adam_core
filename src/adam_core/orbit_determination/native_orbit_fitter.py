@@ -41,6 +41,9 @@ def tables_from_native_full_od(
     refined fit with Python-owned orbit ids and the given object id.
     """
     if not output["found"] or output.get("fit") is None:
+        reason = (output.get("iod") or {}).get("not_found_reason")
+        if reason:
+            logger.debug("IOD found no orbit for %s: %s", object_id, reason)
         return FittedOrbits.empty(), FittedOrbitMembers.empty()
     iod = output["iod"]
     state = np.asarray(iod["state"], dtype=np.float64)

@@ -1126,6 +1126,12 @@ pub struct IodConfig {
     pub light_time: bool,
     pub mu: f64,
     pub speed_of_light: f64,
+    /// Upper bound on the number of candidate triplets searched. `None`
+    /// keeps the legacy budget `3 * (max_outliers + 1)`, which couples the
+    /// search to `contamination_percentage`; `Some(k)` searches at most `k`
+    /// triplets whatever the contamination percentage (which then only
+    /// sets the outlier allowance).
+    pub max_triplets: Option<usize>,
 }
 
 /// Product of the complete preliminary-IOD decision loop for one linkage.
@@ -1339,11 +1345,21 @@ fn iod_fit_sorted(
 
     let max_outliers =
         (((n as f64) * (config.contamination_percentage / 100.0)) as usize).min(n - config.min_obs);
-    let mut triplets = select_observation_triplets(&times, config.observation_selection_method);
-    // The public `iod()` loop tries `3 * (max_outliers + 1)` triplets
-    // (`obs_ids[: (3 * (max_outliers + 1))]` on the (k, 3) selection), not
-    // `max_outliers + 1`: three candidate triplets per allowed outlier.
-    triplets.truncate(3 * (max_outliers + 1));
+    // The legacy `iod()` loop tries `3 * (max_outliers + 1)` triplets
+    // (`obs_ids[: (3 * (max_outliers + 1))]` on the (k, 3) selection):
+    // three candidate triplets per allowed outlier. `max_triplets`
+    // decouples the search budget from the outlier allowance.
+    let budget = match config.max_triplets {
+        Some(0) => {
+            return Err(PropagationError::InvalidRequest(
+                "max_triplets must be at least 1".to_string(),
+            ))
+        }
+        Some(budget) => budget,
+        None => 3 * (max_outliers + 1),
+    };
+    let triplets =
+        select_observation_triplets_bounded(&times, config.observation_selection_method, budget);
     if triplets.is_empty() {
         return Ok(IodOutput::not_found_because(
             n,
@@ -1584,12 +1600,25 @@ pub(super) fn mjd_epoch(mjd: f64) -> crate::Epoch {
     )
 }
 
+/// Every candidate triplet of `method` (test oracle for the bounded walk).
+#[cfg(test)]
 fn select_observation_triplets(
     times: &[f64],
     method: ObservationSelectionMethod,
 ) -> Vec<[usize; 3]> {
-    let n = times.len();
-    let mut triplets = match method {
+    select_observation_triplets_bounded(times, method, usize::MAX)
+}
+
+/// The first `budget` candidate triplets of `method` in the legacy priority
+/// order, restricted to three distinct epochs. `Combinations` is
+/// enumerated lazily (see [`combination_triplets`]), never as the full
+/// `C(n, 3)` list.
+fn select_observation_triplets_bounded(
+    times: &[f64],
+    method: ObservationSelectionMethod,
+    budget: usize,
+) -> Vec<[usize; 3]> {
+    let mut triplets: Vec<[usize; 3]> = match method {
         ObservationSelectionMethod::FirstMiddleLast => {
             percentile_triplet(times, [0.0, 50.0, 100.0])
                 .into_iter()
@@ -1600,31 +1629,117 @@ fn select_observation_triplets(
                 .into_iter()
                 .collect()
         }
-        ObservationSelectionMethod::Combinations => {
-            let mut rows = Vec::new();
-            for first in 0..n {
-                for second in first + 1..n {
-                    for third in second + 1..n {
-                        rows.push([first, second, third]);
-                    }
-                }
-            }
-            rows.sort_by(|a, b| {
-                let arc_a = times[a[2]] - times[a[0]];
-                let arc_b = times[b[2]] - times[b[0]];
-                let mid_a = ((times[a[2]] + times[a[0]]) / 2.0 - times[a[1]]).abs();
-                let mid_b = ((times[b[2]] + times[b[0]]) / 2.0 - times[b[1]]).abs();
-                arc_b.total_cmp(&arc_a).then(mid_a.total_cmp(&mid_b))
-            });
-            rows
-        }
+        ObservationSelectionMethod::Combinations => combination_triplets(times, budget),
     };
     triplets.retain(|row| {
         times[row[0]] != times[row[1]]
             && times[row[0]] != times[row[2]]
             && times[row[1]] != times[row[2]]
     });
+    triplets.truncate(budget);
     triplets
+}
+
+/// The first `budget` combination triplets in the legacy priority order
+/// (arc length descending, then the middle observation's offset from the
+/// arc midpoint ascending, then index order), skipping triplets with
+/// coincident epochs, without materializing all `C(n, 3)` combinations.
+///
+/// Observations are walked in time order, so a (first, last) pair's arc
+/// never grows when the first moves later or the last earlier. A frontier
+/// heap seeded with the full-arc pair therefore yields pairs in
+/// non-increasing arc order; only the pairs sharing the current arc have
+/// their middle observations enumerated and sorted, and the walk stops as
+/// soon as the budget is met. Each pair is visited once.
+fn combination_triplets(times: &[f64], budget: usize) -> Vec<[usize; 3]> {
+    use std::cmp::Ordering;
+    use std::collections::{BinaryHeap, HashSet};
+
+    #[derive(PartialEq)]
+    struct Pair {
+        arc: f64,
+        first: usize,
+        last: usize,
+    }
+    impl Eq for Pair {}
+    impl Ord for Pair {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.arc
+                .total_cmp(&other.arc)
+                .then_with(|| other.first.cmp(&self.first))
+                .then_with(|| other.last.cmp(&self.last))
+        }
+    }
+    impl PartialOrd for Pair {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    let n = times.len();
+    let mut out = Vec::new();
+    if n < 3 || budget == 0 {
+        return out;
+    }
+    // Positions in time order (stable, so ties keep index order): the
+    // driver already sorts its observations, and the legacy index order
+    // of a sorted input is the time order.
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&a, &b| times[a].total_cmp(&times[b]));
+    let t = |position: usize| times[order[position]];
+
+    let mut heap = BinaryHeap::new();
+    let mut seen: HashSet<(usize, usize)> = HashSet::new();
+    let mut visit = |heap: &mut BinaryHeap<Pair>, first: usize, last: usize| {
+        if first < last && seen.insert((first, last)) {
+            heap.push(Pair {
+                arc: t(last) - t(first),
+                first,
+                last,
+            });
+        }
+    };
+    visit(&mut heap, 0, n - 1);
+
+    while let Some(top) = heap.pop() {
+        let arc = top.arc;
+        let mut group = vec![(top.first, top.last)];
+        visit(&mut heap, top.first + 1, top.last);
+        visit(&mut heap, top.first, top.last - 1);
+        while heap.peek().is_some_and(|next| next.arc == arc) {
+            let next = heap.pop().expect("peeked");
+            group.push((next.first, next.last));
+            visit(&mut heap, next.first + 1, next.last);
+            visit(&mut heap, next.first, next.last - 1);
+        }
+        if arc == 0.0 {
+            // Every remaining pair has coincident epochs.
+            break;
+        }
+        let mut candidates: Vec<(f64, usize, usize, usize)> = Vec::new();
+        for (first, last) in group {
+            let midpoint = (t(last) + t(first)) / 2.0;
+            for middle in first + 1..last {
+                if t(middle) == t(first) || t(middle) == t(last) {
+                    continue;
+                }
+                candidates.push(((midpoint - t(middle)).abs(), first, middle, last));
+            }
+        }
+        candidates.sort_by(|a, b| {
+            a.0.total_cmp(&b.0)
+                .then(a.1.cmp(&b.1))
+                .then(a.2.cmp(&b.2))
+                .then(a.3.cmp(&b.3))
+        });
+        for (_, first, middle, last) in candidates {
+            out.push([order[first], order[middle], order[last]]);
+            if out.len() == budget {
+                return out;
+            }
+        }
+    }
+    out
 }
 
 fn percentile_triplet(times: &[f64], percentiles: [f64; 3]) -> Option<[usize; 3]> {
@@ -2451,6 +2566,7 @@ mod tests {
             light_time: true,
             mu: crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap(),
             speed_of_light: 173.144_632_674_240_3,
+            max_triplets: None,
         }
     }
 
@@ -2714,6 +2830,276 @@ mod tests {
             assert_eq!(output.candidates_failed, 1);
             assert!(output.candidates_evaluated >= 1);
             assert_eq!(output.outlier, vec![false; NUM_OBS]);
+        }
+    }
+
+    /// The materialized legacy selection: every combination, sorted by
+    /// (arc descending, midpoint offset ascending) with a stable sort, then
+    /// filtered to distinct epochs.
+    fn legacy_combination_triplets(times: &[f64]) -> Vec<[usize; 3]> {
+        let n = times.len();
+        let mut rows = Vec::new();
+        for first in 0..n {
+            for second in first + 1..n {
+                for third in second + 1..n {
+                    rows.push([first, second, third]);
+                }
+            }
+        }
+        rows.sort_by(|a, b| {
+            let arc_a = times[a[2]] - times[a[0]];
+            let arc_b = times[b[2]] - times[b[0]];
+            let mid_a = ((times[a[2]] + times[a[0]]) / 2.0 - times[a[1]]).abs();
+            let mid_b = ((times[b[2]] + times[b[0]]) / 2.0 - times[b[1]]).abs();
+            arc_b.total_cmp(&arc_a).then(mid_a.total_cmp(&mid_b))
+        });
+        rows.retain(|row| {
+            times[row[0]] != times[row[1]]
+                && times[row[0]] != times[row[2]]
+                && times[row[1]] != times[row[2]]
+        });
+        rows
+    }
+
+    #[test]
+    fn combination_triplets_match_the_materialized_legacy_order() {
+        let cases: Vec<Vec<f64>> = vec![
+            vec![1.0, 2.0, 4.0, 8.0],
+            // Regular cadence: many pairs share an arc, many middles tie.
+            (0..9).map(|k| k as f64).collect(),
+            // Coincident epochs inside and at the ends of the arc.
+            vec![0.0, 0.5, 0.5, 2.0, 3.5, 3.5, 7.0, 7.0],
+            vec![0.0, 0.3, 1.1, 1.7, 4.0, 4.2, 5.9, 8.8, 9.0, 13.5],
+            vec![3.0, 3.0, 3.0],
+        ];
+        for times in cases {
+            let expected = legacy_combination_triplets(&times);
+            assert_eq!(
+                select_observation_triplets(&times, ObservationSelectionMethod::Combinations),
+                expected,
+                "{times:?}"
+            );
+            for budget in 0..=expected.len() + 1 {
+                assert_eq!(
+                    select_observation_triplets_bounded(
+                        &times,
+                        ObservationSelectionMethod::Combinations,
+                        budget
+                    ),
+                    expected[..budget.min(expected.len())].to_vec(),
+                    "{times:?} budget {budget}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn combination_triplets_do_not_materialize_all_combinations() {
+        // 3000 observations: C(3000, 3) is 4.5e9 triplets, far beyond what
+        // the legacy materialization could hold; the bounded walk only
+        // touches the full-arc pair's middles.
+        let n = 3000;
+        let times: Vec<f64> = (0..n).map(|k| 60_000.0 + 0.25 * k as f64).collect();
+        let triplets = select_observation_triplets_bounded(
+            &times,
+            ObservationSelectionMethod::Combinations,
+            24,
+        );
+        assert_eq!(triplets.len(), 24);
+        // Longest arc first; of its middles the two closest to the midpoint
+        // tie and index order breaks the tie.
+        assert_eq!(triplets[0], [0, 1499, n - 1]);
+        assert_eq!(triplets[1], [0, 1500, n - 1]);
+        for window in triplets.windows(2) {
+            let arc = |t: &[usize; 3]| times[t[2]] - times[t[0]];
+            assert!(arc(&window[0]) >= arc(&window[1]));
+        }
+        let distinct: std::collections::HashSet<[usize; 3]> = triplets.iter().copied().collect();
+        assert_eq!(distinct.len(), 24);
+    }
+
+    #[test]
+    fn iod_fit_search_budget_is_independent_of_contamination() {
+        let observed = synthetic_observations();
+        let observers = observers();
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = two_body_predictor(&propagator, &options);
+
+        // One triplet, 20 % contamination: the outlier allowance is intact
+        // (max_outliers = 1) and the search stops after one triplet.
+        let config = IodConfig {
+            max_triplets: Some(1),
+            ..iod_config(20.0)
+        };
+        let output = iod_fit(&inner, &observed, &observers, &config).unwrap();
+        assert!(output.found, "{:?}", output.not_found_reason);
+        assert_eq!(output.triplets_tried, 1);
+
+        // Both roots of the first triplet made hopeless: a budget of one
+        // triplet is exhausted, a budget of three finds the next one.
+        let hopeless = |budget: Option<usize>| {
+            let predictor = FaultyPredictor {
+                inner: &inner,
+                calls: std::cell::Cell::new(0),
+                fail_calls: 0,
+                failure: None,
+                garbage_calls: 2,
+            };
+            let config = IodConfig {
+                max_triplets: budget,
+                ..iod_config(20.0)
+            };
+            iod_fit(&predictor, &observed, &observers, &config).unwrap()
+        };
+        let exhausted = hopeless(Some(1));
+        assert!(!exhausted.found);
+        assert_eq!(exhausted.triplets_tried, 1);
+        assert!(exhausted
+            .not_found_reason
+            .as_deref()
+            .unwrap()
+            .contains("none within rchi2_threshold"));
+        let found = hopeless(Some(3));
+        assert!(found.found, "{:?}", found.not_found_reason);
+        assert_eq!(found.triplets_tried, 2);
+        assert_near_truth(&found);
+
+        // Zero contamination with its own budget still searches past the
+        // legacy three triplets.
+        let config = IodConfig {
+            rchi2_threshold: 1e-30,
+            max_triplets: Some(5),
+            ..iod_config(0.0)
+        };
+        let output = iod_fit(&inner, &observed, &observers, &config).unwrap();
+        assert!(!output.found);
+        assert_eq!(output.triplets_tried, 5);
+
+        let config = IodConfig {
+            max_triplets: Some(0),
+            ..iod_config(0.0)
+        };
+        assert!(matches!(
+            iod_fit(&inner, &observed, &observers, &config),
+            Err(PropagationError::InvalidRequest(_))
+        ));
+    }
+
+    #[test]
+    fn iod_fit_never_pairs_duplicate_epochs_in_a_triplet() {
+        // The last observation duplicated: same epoch, same station, same
+        // observer state, an extra row.
+        let observed = synthetic_observations();
+        let observers = observers();
+        let rows: Vec<usize> = (0..NUM_OBS).chain([NUM_OBS - 1]).collect();
+        let observed = take_coordinate_batch(&observed, &rows).unwrap();
+        let observers = take_observer_batch(&observers, &rows).unwrap();
+        let n = rows.len();
+        let twins = [NUM_OBS - 1, NUM_OBS];
+        let config = iod_config(0.0);
+        let run = |observed: &CoordinateBatch, observers: &ObserverBatch| {
+            iod_fit_barycentric(
+                &TwoBodyPropagator::default(),
+                observed,
+                observers,
+                &config,
+                &ephemeris_options(),
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap()
+        };
+        let output = run(&observed, &observers);
+        assert!(output.found, "{:?}", output.not_found_reason);
+        assert_eq!(output.num_obs, n);
+        assert_eq!(output.solution.len(), n);
+        assert_eq!(output.solution.iter().filter(|&&s| s).count(), 3);
+        // The duplicated epoch is used at most once per triplet.
+        assert!(!(output.solution[twins[0]] && output.solution[twins[1]]));
+        assert_eq!(output.outlier, vec![false; n]);
+        assert_near_truth(&output);
+
+        // Indistinguishable rows swapped in the input: the same orbit and
+        // statistics, the duplicate epoch still used at most once.
+        let permutation: Vec<usize> = [4, NUM_OBS, 1, 6, 0, NUM_OBS - 1, 3, 2, 5].to_vec();
+        let swapped = run(
+            &take_coordinate_batch(&observed, &permutation).unwrap(),
+            &take_observer_batch(&observers, &permutation).unwrap(),
+        );
+        assert_same_orbit(&output, &swapped);
+        let twin_rows: Vec<usize> = permutation
+            .iter()
+            .enumerate()
+            .filter(|(_, &row)| twins.contains(&row))
+            .map(|(k, _)| k)
+            .collect();
+        assert_eq!(twin_rows.len(), 2);
+        assert!(!(swapped.solution[twin_rows[0]] && swapped.solution[twin_rows[1]]));
+        assert_eq!(
+            swapped.solution.iter().filter(|&&s| s).count(),
+            output.solution.iter().filter(|&&s| s).count()
+        );
+    }
+
+    #[test]
+    fn iod_fit_scores_every_root_of_a_triplet() {
+        // Every triplet of this geometry has two finite Gauss roots (the
+        // true one near 1.23 au and a spurious one near 1.11 au).
+        let observed = synthetic_observations();
+        let observers = observers();
+        let times = observed_times_mjd(&observed).unwrap();
+        let config = iod_config(0.0);
+        let first = select_observation_triplets(&times, config.observation_selection_method)[0];
+        let observed_values = observed.values.spherical().unwrap();
+        let observer_positions = observers.coordinates.values.cartesian().unwrap();
+        let (_, states_flat) = gauss_iod_fused(
+            std::array::from_fn(|slot| observed_values[first[slot]][1]),
+            std::array::from_fn(|slot| observed_values[first[slot]][2]),
+            std::array::from_fn(|slot| times[first[slot]]),
+            std::array::from_fn(|slot| {
+                let row = observer_positions[first[slot]];
+                [row[0], row[1], row[2]]
+            }),
+            1,
+            config.light_time,
+            config.mu,
+            config.speed_of_light,
+        );
+        let roots: Vec<[f64; 6]> = states_flat
+            .chunks_exact(6)
+            .filter(|state| state.iter().all(|v| v.is_finite()))
+            .map(|state| std::array::from_fn(|axis| state[axis]))
+            .collect();
+        assert!(roots.len() >= 2, "fixture no longer yields multiple roots");
+
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let inner = two_body_predictor(&propagator, &options);
+
+        // Control: the first root is acceptable and is taken without
+        // scoring the second (first-acceptable candidate, as documented).
+        let control = iod_fit(&inner, &observed, &observers, &config).unwrap();
+        assert!(control.found, "{:?}", control.not_found_reason);
+        assert_eq!(control.triplets_tried, 1);
+        assert_eq!(control.candidates_evaluated, 1);
+        assert_eq!(control.state, roots[0]);
+
+        // The first root's prediction made hopeless: the second root of the
+        // same triplet is scored before any other triplet is tried.
+        let predictor = FaultyPredictor {
+            inner: &inner,
+            calls: std::cell::Cell::new(0),
+            fail_calls: 0,
+            failure: None,
+            garbage_calls: 1,
+        };
+        let output = iod_fit(&predictor, &observed, &observers, &config).unwrap();
+        assert!(output.found, "{:?}", output.not_found_reason);
+        assert!(output.candidates_evaluated >= 2);
+        assert_ne!(output.state, roots[0]);
+        if output.triplets_tried == 1 {
+            assert_eq!(output.state, roots[1]);
         }
     }
 

@@ -345,6 +345,36 @@ dict keys unchanged; keys and `IodOutput` fields were added).
    `tables_from_iod_output`, so the fused `full_od` / `run_od` routes do
    not log `not_found_reason` yet (the dict carries it).
 
+5. **IOD: search budget and lazy triplet enumeration** (coordinator,
+   after the agent's items; review items "avoid materializing all C(n, 3)
+   combinations" and "triplet search and outlier allowance should remain
+   separate concepts", plus the regression cases the review listed that
+   were still missing: duplicate epochs, multiple roots).
+   `IodConfig.max_triplets: Option<usize>` (`None` = legacy
+   `3 * (max_outliers + 1)`, so no default changed; `Some(0)` is
+   `InvalidRequest`), parsed from the `max_triplets` key of `iod_settings`
+   in `od_drivers.rs`; not exposed on the Python signatures (the facade
+   consolidation decides that). `select_observation_triplets_bounded` /
+   `combination_triplets` (`od.rs`): (first, last) pairs are drawn in
+   non-increasing arc order from a frontier heap seeded with the full-arc
+   pair (sorted times, so moving the first later or the last earlier never
+   lengthens the arc); only the pairs sharing the current arc have their
+   middles enumerated and sorted by midpoint offset then index; the walk
+   stops at the budget. The order is exactly the legacy one (pinned against
+   the materialized sort on cadences with tied arcs and coincident epochs:
+   `combination_triplets_match_the_materialized_legacy_order`); 3000
+   observations with a budget of 24 run instantly
+   (`combination_triplets_do_not_materialize_all_combinations`). Other
+   tests: `iod_fit_search_budget_is_independent_of_contamination`,
+   `iod_fit_never_pairs_duplicate_epochs_in_a_triplet` (duplicated last
+   row, also with the twins swapped in the input),
+   `iod_fit_scores_every_root_of_a_triplet` (the fixture's triplets all
+   have two finite Gauss roots; the first made hopeless, the second is
+   scored before another triplet). Python (`tests/test_iod_determinism.py`):
+   `iod()` with a duplicated epoch, `iod_fit_ipc` with `max_triplets`.
+   `tables_from_native_full_od` now logs `not_found_reason` at debug level
+   (the follow-up noted under item 4).
+
 Gates run before each of the four commits (`cargo +1.87.0`): `fmt --all
 --check`, `clippy --workspace --all-targets -- -D warnings`, `test
 --workspace` (coords crate 255 -> 265 tests, all green); `maturin develop

@@ -10,9 +10,14 @@ from __future__ import annotations
 
 import numpy as np
 import numpy.testing as npt
+import pyarrow as pa
 import pytest
+import quivr as qv
 
-from ..iod import iod
+from adam_core import _rust_native
+
+from ..differential_correction import _native_problem
+from ..iod import _placeholder_orbit, iod
 from .test_differential_correction import TwoBodyPropagator
 from .test_run_od_null_covariance import two_body_arc  # noqa: F401
 
@@ -59,3 +64,57 @@ def test_iod_is_invariant_to_observation_order(
     chi2 = members.residuals.chi2.to_numpy(zero_copy_only=False)
     chi2_shuffled = members_shuffled.residuals.chi2.to_numpy(zero_copy_only=False)
     npt.assert_array_equal(chi2_shuffled, chi2[permutation])
+
+
+def test_iod_uses_a_duplicated_epoch_at_most_once_per_triplet(
+    two_body_arc,  # noqa: F811
+) -> None:
+    """A second observation at an existing epoch never completes a triplet
+    with its twin, and the search still accepts the arc."""
+    twin = two_body_arc[-1:].set_column("id", pa.array(["twin"], pa.large_string()))
+    with_twin = qv.concatenate([two_body_arc, twin])
+    assert with_twin.coordinates.time[-1].equals(with_twin.coordinates.time[-2])
+
+    fitted, members = iod(with_twin, TwoBodyPropagator, min_obs=6, rchi2_threshold=1e4)
+    assert len(fitted) == 1
+    assert len(members) == len(with_twin)
+    flags = flags_by_id(members)
+    assert sum(solution for solution, _ in flags.values()) == 3
+    last_id = two_body_arc.id[-1].as_py()
+    assert not (flags[last_id][0] and flags["twin"][0])
+    assert not any(outlier for _, outlier in flags.values())
+
+
+def test_iod_search_budget_is_a_separate_setting(two_body_arc) -> None:  # noqa: F811
+    """``max_triplets`` bounds the triplet search on its own; the
+    contamination percentage keeps setting only the outlier allowance."""
+    _, observed_ipc, observers_ipc = _native_problem(
+        _placeholder_orbit(two_body_arc), two_body_arc
+    )
+
+    def run(**overrides):
+        settings = dict(min_obs=6, rchi2_threshold=1e-30, contamination_percentage=20.0)
+        settings.update(overrides)
+        return _rust_native.iod_fit_ipc(
+            TwoBodyPropagator(), observed_ipc, observers_ipc, iod_settings=settings
+        )
+
+    # Nothing passes a reduced chi2 threshold of 1e-30, so the search runs
+    # to its budget: the legacy coupling gives 3 * (max_outliers + 1)
+    # triplets, an explicit budget replaces it.
+    n = len(two_body_arc)
+    max_outliers = min(int(n * 0.2), n - 6)
+    legacy = run()
+    assert not legacy["found"]
+    assert legacy["triplets_tried"] == 3 * (max_outliers + 1)
+    assert "none within rchi2_threshold" in legacy["not_found_reason"]
+
+    bounded = run(max_triplets=2)
+    assert not bounded["found"]
+    assert bounded["triplets_tried"] == 2
+
+    wider = run(max_triplets=3 * (max_outliers + 1) + 2)
+    assert wider["triplets_tried"] == 3 * (max_outliers + 1) + 2
+
+    with pytest.raises(ValueError, match="max_triplets"):
+        run(max_triplets=0)

@@ -2816,6 +2816,7 @@ mod tests {
                 light_time: true,
                 mu: crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap(),
                 speed_of_light: 173.144_632_674_240_3,
+                max_triplets: None,
             },
             refinement,
         }

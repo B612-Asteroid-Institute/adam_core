@@ -196,6 +196,7 @@ fn parse_iod_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<IodConfi
         light_time: setting(settings, "light_time", true)?,
         mu: setting(settings, "mu", 0.000_295_912_208_284_119_56)?,
         speed_of_light: setting(settings, "speed_of_light", 173.144_632_674_240_34)?,
+        max_triplets: setting(settings, "max_triplets", None::<usize>)?,
     })
 }
 
