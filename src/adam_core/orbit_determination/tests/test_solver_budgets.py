@@ -1,4 +1,12 @@
-"""The Rust solver has independent iteration and residual-evaluation limits."""
+"""
+The Rust solver has independent iteration and residual-evaluation limits.
+
+``max_iterations`` bounds optimizer iterations (one Jacobian each);
+``max_nfev`` bounds scipy's ``nfev``, the initial residual evaluation plus
+every trial step. Finite-difference Jacobian evaluations (6 forward or 12
+central per iteration) are reported in the legacy ``iterations`` column but
+are not budget, as in ``scipy.optimize.least_squares(method="trf")``.
+"""
 
 import numpy.testing as npt
 import pytest
@@ -53,17 +61,26 @@ def test_evaluation_budget_caps_solver_work(
         ftol=0.0,
         gtol=0.0,
     )
+    # Zero tolerances never stop the solver: it spends its whole budget of
+    # trial evaluations, plus one Jacobian batch per iteration on top.
     nfev = fitted.iterations[0].as_py()
-    assert 1 <= nfev <= budget
+    assert fitted.success.to_pylist() == [False]
+    assert fitted.status_code.to_pylist() == [0]
+    assert nfev >= budget
+    jacobians, remainder = divmod(nfev - budget, max(jacobian_evals, 1))
+    assert remainder == 0, (nfev, budget, jacobian_evals)
     if budget == 1:
-        assert fitted.success.to_pylist() == [False]
-        assert fitted.status_code.to_pylist() == [0]
+        assert nfev == 1  # no step, so no Jacobian either
         npt.assert_array_equal(fitted.coordinates.values, initial.coordinates.values)
+    elif jacobian_evals:
+        assert 1 <= jacobians <= budget - 1
     if isinstance(propagator, CountingPropagator):
         # Final covariance Jacobian and evaluation are separate diagnostics.
         assert sum(propagator.batches) == nfev + jacobian_evals + 1
-        if budget <= jacobian_evals:
-            assert nfev == 1  # Do not launch a partial numerical Jacobian.
+        solver_trials = sum(1 for size in propagator.batches if size == 1) - 1
+        assert solver_trials == budget
+        if jacobian_evals:
+            assert propagator.batches.count(jacobian_evals) == jacobians + 1
 
 
 @pytest.mark.parametrize("backend", [CountingPropagator, NativeTwoBodyPropagator])

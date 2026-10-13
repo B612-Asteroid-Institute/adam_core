@@ -777,17 +777,16 @@ def fit_least_squares(
     **kwargs
         Solver settings forwarded to the Rust driver: ``xtol``, ``ftol``,
         ``gtol`` (default 1e-12 each, scipy's stopping rules), ``max_iterations``
-        (positive integer, default 100), and ``max_nfev`` (positive integer or
-        None, default None). The limits are independent: ``max_nfev`` counts
-        the initial residual vector, each trial (including rejected trials),
-        and each finite-difference candidate during optimization. A batch of
-        six forward or twelve central differences counts as six or twelve
-        evaluations; a batch that cannot fit in the remaining budget is not
-        started. Final covariance calculation/validation and fit reporting
-        are outside this solver budget. Any other keyword raises a
-        `ValueError`: the fit runs natively (Levenberg-Marquardt with
-        Marquardt scaling) and no longer forwards arguments to
-        `scipy.optimize.least_squares`.
+        (positive integer, default 100: optimizer iterations, one Jacobian
+        each), and ``max_nfev`` (positive integer or None, default None:
+        scipy's ``nfev``, the initial residual vector plus every trial step,
+        accepted or rejected). Residual evaluations spent on finite-difference
+        Jacobians (six forward or twelve central per iteration) are not
+        budget, as in ``scipy.optimize.least_squares(method="trf")``; they
+        are still reported in the ``iterations`` column. Final covariance
+        calculation/validation and fit reporting are outside both limits.
+        Any other keyword raises a `ValueError`: the fit runs natively and no
+        longer forwards arguments to `scipy.optimize.least_squares`.
 
     Returns
     -------
@@ -801,12 +800,30 @@ def fit_least_squares(
 
     Notes
     -----
-    Exhausting either solver limit returns the current state with
-    ``success=False`` and ``status_code=0`` unless a convergence condition was
-    met on the final permitted evaluation. The legacy ``iterations`` output
-    column records solver residual-vector evaluations, including numerical
-    Jacobians, rather than optimizer iterations. Rejection loops receive a
-    fresh budget for each fit.
+    **Solver contract.** The optimizer is the trust-region Gauss-Newton
+    method of ``scipy.optimize.least_squares(method="trf", x_scale="jac")``
+    without bounds, run natively: parameters are scaled by their Jacobian
+    column norms, each iteration takes the exact trust-region step of the
+    scaled Gauss-Newton model, a step is accepted when the cost decreases,
+    and the region shrinks fourfold on a poor actual-to-predicted reduction
+    ratio (or a failed / non-finite prediction) and doubles on a good one at
+    the boundary. ``status_code`` reports why the solver stopped and
+    ``success`` is ``status_code > 0``: ``1`` the scaled gradient
+    (``max |g_k| / scale_k``) fell below ``gtol``; ``2`` an accepted step
+    reduced the cost by less than ``ftol * cost`` with ratio above 0.25;
+    ``3`` an accepted step, or a rejected step after the region shrank, was
+    below ``xtol * (xtol + |x|)``; ``4`` both; ``0`` ``max_iterations`` or
+    ``max_nfev`` was reached first; ``-1`` no step decreased the cost while
+    the region was above the ``xtol`` resolution (stalled); ``-2`` the
+    Jacobian or gradient was non-finite at the current iterate. A non-finite
+    quantity never produces ``success=True``. With ``jacobian="analytic"``
+    on a propagator that is not two-body the Jacobian is inexact and the
+    solver converges to that Jacobian's fixed point rather than the cost
+    minimum (see `Propagator.two_body_dynamics`); ``jacobian="central"`` is
+    exact for any propagator. The legacy ``iterations`` output column records
+    every solver residual-vector evaluation, including numerical Jacobians,
+    rather than optimizer iterations. Rejection loops receive a fresh budget
+    for each fit.
 
     With ``loss="huber"`` the reported ``chi2`` / ``reduced_chi2`` remain the
     plain (unweighted) chi2 of the included observations, so they stay

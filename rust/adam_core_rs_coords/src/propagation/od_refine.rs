@@ -14,11 +14,17 @@
 //! probe with the central-difference fallback; and the final
 //! `evaluate_orbits`-style pass over the full observation set is fused in.
 //!
-//! The optimizer is Levenberg-Marquardt with Marquardt (`x_scale="jac"`)
-//! scaling and scipy's `ftol` / `xtol` / `gtol` stopping rules. It converges
-//! to the same minimum as scipy's trust-region-reflective solver to solver
-//! tolerance, not to bit-identical iterates; the covariance, the residuals
-//! and every reported statistic are functions of the solution only.
+//! The optimizer is the trust-region Gauss-Newton method of scipy's
+//! `least_squares(method="trf", x_scale="jac")` without bounds, the solver
+//! the Python baseline used: an exact trust-region step on the scaled
+//! normal equations, the radius driven by the actual-to-predicted reduction
+//! ratio, scipy's `ftol` / `xtol` / `gtol` stopping rules on the scaled
+//! gradient and the unscaled step, and a non-finite guard that never
+//! reports convergence. The contract is spelled out on
+//! [`WhitenedFitConfig`]. It converges to the same minimum as scipy to
+//! solver tolerance, not to bit-identical iterates; the covariance, the
+//! residuals and every reported statistic are functions of the solution
+//! only.
 
 use super::ephemeris::EphemerisOptions;
 use super::od::{
@@ -80,6 +86,61 @@ impl JacobianMethod {
 /// Settings of one whitened differential correction. Defaults mirror
 /// `fit_least_squares` (`xtol = ftol = gtol = 1e-12`, linear loss,
 /// `f_scale = 1.345`, analytic Jacobian, covariance validation on).
+///
+/// # The refinement contract
+///
+/// One meaning, shared by `fit_least_squares`, the worst-residual loop
+/// (`iterative_fit`) and the CMC2003 loop (`cmc2003_fit`):
+///
+/// * **Objective.** The residual vector is the whitened (cos-latitude
+///   corrected, inverse-Cholesky scaled) `(lon, lat)` residual pairs of the
+///   included observations, `observed - predicted`. The minimized cost is
+///   `sum(r^2)` (chi2) for the linear loss and `f_scale^2 * sum(rho(r^2 /
+///   f_scale^2))` for Huber, twice scipy's `cost`. Reported `chi2` /
+///   `reduced_chi2` are always the plain chi2 of the included observations.
+/// * **Derivatives.** `jacobian` selects the exact two-body autodiff
+///   Jacobian (`Analytic`), central differences through the predictor
+///   (`Central`, 12 evaluations per iteration) or forward differences
+///   (`TwoPoint`, 6). With any predictor that is not two-body the analytic
+///   Jacobian is inexact and the solver converges to that Jacobian's fixed
+///   point, not to the cost minimum; `Central` is exact for any predictor.
+/// * **Scaling.** Marquardt / scipy `x_scale="jac"`: each parameter is
+///   scaled by the (non-decreasing) norm of its Jacobian column, with 1 for a
+///   zero column; the trust region lives in scaled coordinates with initial
+///   radius `||scale * x0||` (1 when zero).
+/// * **Step and acceptance.** Each iteration solves the exact trust-region
+///   subproblem of the scaled Gauss-Newton model (Moré–Sorensen Newton
+///   iteration on the eigen-decomposition of the scaled normal matrix). A
+///   trial is accepted when the cost decreases. The radius becomes
+///   `0.25 * ||step||` when the actual-to-predicted reduction ratio is below
+///   0.25, doubles when the ratio exceeds 0.75 and the step hit the boundary,
+///   and is otherwise kept. A trial whose prediction fails or is non-finite
+///   is rejected with the same shrink. Rejected trials never move the
+///   iterate.
+/// * **Termination (`status_code`, `converged = status_code > 0`).**
+///   `1` scaled-gradient infinity norm `max_k |g_k| / scale_k <= gtol`,
+///   tested before each step; `2` an accepted step reduced the cost by less
+///   than `ftol * cost` with ratio above 0.25; `3` an accepted step, or a
+///   rejected step after the region shrank, was below `xtol * (xtol +
+///   ||x||)`; `4` both 2 and 3; `0` an iteration or evaluation limit was
+///   reached first; `-1` no step of the attempt sequence decreased the cost
+///   while the region was still above the `xtol` resolution (stalled);
+///   `-2` the Jacobian, the gradient or the normal matrix was non-finite at
+///   the current iterate. A non-finite quantity never yields a positive
+///   status.
+/// * **Limits.** `max_iterations` bounds optimizer iterations (one Jacobian
+///   each). `max_nfev` bounds scipy's `nfev`: the initial residual
+///   evaluation plus every trial step, accepted or rejected; evaluations
+///   spent on finite-difference Jacobians are not budget (scipy `trf`
+///   semantics, the Python baseline's). The `iterations` output still
+///   reports every residual evaluation including Jacobian columns. Reaching
+///   either limit returns the current iterate with status 0 unless a
+///   stopping rule was met on the last permitted step.
+/// * **Covariance.** `inv(J^T J)` of the robust-cost Jacobian at the
+///   solution, NaN when singular (with a warning), validated by the
+///   weak-direction probe when `validate_covariance` (central-difference
+///   fallback for the analytic Jacobian). A singular or ill-conditioned fit
+///   therefore keeps its state and statistics and loses only the covariance.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct WhitenedFitConfig {
     pub loss: LossType,
@@ -156,8 +217,10 @@ pub struct WhitenedFitOutput {
     pub covariance: [f64; 36],
     /// Residual-vector evaluations spent by the solver, including numerical
     /// Jacobians. Retains the legacy field name; excludes final diagnostics.
+    /// (`max_nfev` bounds trial evaluations only; see [`WhitenedFitConfig`].)
     pub iterations: usize,
-    /// Whether a convergence stopping rule was met within both solver limits.
+    /// Whether a convergence stopping rule was met within both solver limits
+    /// (`status_code > 0`; see the contract on [`WhitenedFitConfig`]).
     pub converged: bool,
     /// scipy-style status: 0 = iteration/evaluation limit, 1 = gtol, 2 = ftol, 3 = xtol,
     /// 4 = both ftol and xtol, -1 = step rejected (stalled).
@@ -586,11 +649,110 @@ struct Solution {
     state: [f64; 6],
     residuals: Vec<f64>,
     cost: f64,
+    /// Every residual-vector evaluation, Jacobian columns included.
     nfev: usize,
     status: i64,
 }
 
-/// Levenberg-Marquardt on the robust cost with Marquardt scaling.
+/// Solver exit codes; see the contract on [`WhitenedFitConfig`].
+const STATUS_LIMIT: i64 = 0;
+const STATUS_GTOL: i64 = 1;
+const STATUS_FTOL: i64 = 2;
+const STATUS_XTOL: i64 = 3;
+const STATUS_FTOL_XTOL: i64 = 4;
+const STATUS_STALLED: i64 = -1;
+const STATUS_NON_FINITE: i64 = -2;
+
+/// Trial steps attempted within one iteration before the solver reports a
+/// stall. With the radius shrinking fourfold per rejection this spans far
+/// more than the dynamic range between the initial radius and the `xtol`
+/// resolution.
+const MAX_STEP_ATTEMPTS: usize = 64;
+
+fn norm6(v: &[f64; 6]) -> f64 {
+    v.iter().map(|x| x * x).sum::<f64>().sqrt()
+}
+
+/// Exact trust-region step of the scaled Gauss-Newton model (scipy's
+/// `solve_lsq_trust_region`, on the eigen-decomposition of the scaled normal
+/// matrix instead of the SVD of the scaled Jacobian): in the eigenbasis
+/// `p(alpha)_i = -q_i / (lambda_i + alpha)`, with `alpha >= 0` the smallest
+/// value giving `||p|| <= radius`, found by Moré–Sorensen's safeguarded
+/// Newton iteration on `||p(alpha)|| - radius`. Returns the step in the
+/// eigenbasis and the `alpha` used (0 for the Gauss-Newton step).
+fn trust_region_step(
+    eigenvalues: &[f64; 6],
+    q: &[f64; 6],
+    radius: f64,
+    initial_alpha: f64,
+) -> ([f64; 6], f64) {
+    let radius = radius.max(f64::MIN_POSITIVE);
+    let q_norm = norm6(q);
+    if q_norm == 0.0 {
+        return ([0.0; 6], 0.0);
+    }
+    let lambda_max = eigenvalues.iter().copied().fold(0.0_f64, f64::max);
+    let lambda_min = eigenvalues.iter().copied().fold(f64::INFINITY, f64::min);
+    let full_rank = lambda_max > 0.0 && lambda_min > f64::EPSILON * f64::EPSILON * lambda_max;
+    let p_of =
+        |alpha: f64| -> [f64; 6] { std::array::from_fn(|i| -q[i] / (eigenvalues[i] + alpha)) };
+    if full_rank {
+        let p = p_of(0.0);
+        if norm6(&p) <= radius {
+            return (p, 0.0);
+        }
+    }
+    let phi_and_derivative = |alpha: f64| -> (f64, f64) {
+        let p_norm = norm6(&p_of(alpha));
+        let phi = p_norm - radius;
+        let phi_prime = -(0..6)
+            .map(|i| q[i] * q[i] / (eigenvalues[i] + alpha).powi(3))
+            .sum::<f64>()
+            / p_norm;
+        (phi, phi_prime)
+    };
+    let mut alpha_upper = q_norm / radius;
+    let mut alpha_lower = if full_rank {
+        let (phi, phi_prime) = phi_and_derivative(0.0);
+        -phi / phi_prime
+    } else {
+        0.0
+    };
+    let fallback = |lower: f64, upper: f64| (0.001 * upper).max((lower * upper).sqrt());
+    let mut alpha = initial_alpha;
+    if alpha.is_nan() || alpha <= 0.0 || alpha < alpha_lower || alpha > alpha_upper {
+        alpha = fallback(alpha_lower, alpha_upper);
+    }
+    for _ in 0..10 {
+        if alpha < alpha_lower || alpha > alpha_upper {
+            alpha = fallback(alpha_lower, alpha_upper);
+        }
+        let (phi, phi_prime) = phi_and_derivative(alpha);
+        if phi < 0.0 {
+            alpha_upper = alpha;
+        }
+        let ratio = phi / phi_prime;
+        alpha_lower = alpha_lower.max(alpha - ratio);
+        alpha -= (phi + radius) * ratio / radius;
+        if phi.abs() < 0.01 * radius {
+            break;
+        }
+    }
+    let mut p = p_of(alpha);
+    let p_norm = norm6(&p);
+    if p_norm > 0.0 {
+        // The iteration stops within 1 % of the radius; land exactly on it.
+        let factor = radius / p_norm;
+        for value in p.iter_mut() {
+            *value *= factor;
+        }
+    }
+    (p, alpha)
+}
+
+/// Trust-region Gauss-Newton on the robust cost: scipy's `least_squares`
+/// `method="trf"` without bounds and with `x_scale="jac"`, the solver the
+/// Python baseline used. See the contract on [`WhitenedFitConfig`].
 fn solve(
     problem: &WhitenedProblem<'_>,
     initial_state: [f64; 6],
@@ -599,119 +761,164 @@ fn solve(
     let loss = config.loss;
     let f_scale = config.f_scale;
     let mut state = initial_state;
+    // A non-finite initial residual (e.g. a NaN observation) is not an
+    // error here: the gradient is then non-finite and the fit ends with
+    // status -2 at the start state, whose residuals let the rejection loops
+    // flag and drop the offending observation.
     let mut residuals = problem.residuals_one(&state)?;
     let mut cost = robust_cost(&residuals, loss, f_scale);
+    // `nfev` counts every residual evaluation (the legacy `iterations`
+    // column); `trials` counts the initial evaluation and each trial step,
+    // scipy's `nfev`, which `max_nfev` bounds.
     let mut nfev = 1_usize;
-    let mut status = 0_i64;
-    let mut lambda = 1e-3_f64;
-    let max_nfev = config.max_nfev.unwrap_or(usize::MAX);
+    let mut trials = 1_usize;
+    let max_trials = config.max_nfev.unwrap_or(usize::MAX);
     let jacobian_nfev = match config.jacobian {
         JacobianMethod::Analytic => 0,
         JacobianMethod::Central => 12,
         JacobianMethod::TwoPoint => 6,
     };
+    let mut status = STATUS_LIMIT;
+    // scipy `x_scale="jac"`: column norms, non-decreasing across iterations.
+    let mut scale = [0.0_f64; 6];
+    let mut radius = 0.0_f64;
+    let mut alpha = 0.0_f64;
 
-    'iterations: for _iteration in 0..config.max_iterations {
-        // Numerical Jacobians need a complete batch. Do not start one that
-        // would exceed the remaining budget, even if a few evaluations remain.
-        if nfev >= max_nfev || jacobian_nfev > max_nfev - nfev {
+    'iterations: for iteration in 0..config.max_iterations {
+        if trials >= max_trials {
             break;
         }
         nfev += jacobian_nfev;
         let jac = problem.jacobian(config.jacobian, &state, &residuals)?;
         let (jac_weighted, f_weighted) = irls_problem(&jac, &residuals, loss, f_scale);
         let (a, g) = normal_equations(&jac_weighted, &f_weighted);
-        // `g = Jᵀ psi(r)` is the gradient of half the robust cost; scipy's
-        // gtol is on its infinity norm after x_scale scaling, which only
-        // tightens the test.
-        let g_norm = g.iter().fold(0.0_f64, |acc, v| acc.max(v.abs()));
-        if g_norm <= config.gtol {
-            status = 1;
+        if !a.iter().flatten().all(|v| v.is_finite()) || !g.iter().all(|v| v.is_finite()) {
+            // A non-finite derivative is never convergence, whatever the
+            // (NaN-ignoring) gradient norm would have said.
+            status = STATUS_NON_FINITE;
             break;
         }
-        let mut d = [0.0_f64; 6];
         for k in 0..6 {
-            d[k] = a[k][k].sqrt().max(1e-300);
+            scale[k] = scale[k].max(a[k][k].sqrt());
+            if scale[k] == 0.0 {
+                scale[k] = 1.0;
+            }
         }
+        // scipy's gtol: infinity norm of the gradient scaled by `1 / scale`,
+        // so a weakly constrained parameter is judged in its own units.
+        let g_scaled_norm = (0..6)
+            .map(|k| (g[k] / scale[k]).abs())
+            .fold(0.0_f64, f64::max);
+        if g_scaled_norm <= config.gtol {
+            status = STATUS_GTOL;
+            break;
+        }
+        if iteration == 0 {
+            radius = (0..6)
+                .map(|k| (state[k] * scale[k]).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            if radius == 0.0 {
+                radius = 1.0;
+            }
+        }
+        // The Gauss-Newton model in scaled coordinates, in the eigenbasis of
+        // its normal matrix (`vectors[j][i]` is component `j` of vector `i`).
+        let mut a_scaled = [[0.0_f64; 6]; 6];
+        let mut g_scaled = [0.0_f64; 6];
+        for j in 0..6 {
+            g_scaled[j] = g[j] / scale[j];
+            for k in 0..6 {
+                a_scaled[j][k] = a[j][k] / (scale[j] * scale[k]);
+            }
+        }
+        let (eigenvalues, vectors) = symmetric_eigen_6x6(&a_scaled);
+        let eigenvalues: [f64; 6] = std::array::from_fn(|i| eigenvalues[i].max(0.0));
+        let q: [f64; 6] =
+            std::array::from_fn(|i| (0..6).map(|j| vectors[j][i] * g_scaled[j]).sum());
+        let state_norm = norm6(&state);
 
         let mut accepted = false;
-        let mut last_step_norm = f64::INFINITY;
-        for _attempt in 0..24 {
-            if nfev >= max_nfev {
-                // Budget exhaustion is not a stalled step or xtol convergence.
+        for _attempt in 0..MAX_STEP_ATTEMPTS {
+            if trials >= max_trials {
+                // Budget exhaustion is neither a stall nor convergence.
                 break 'iterations;
             }
-            let mut damped = a;
-            for k in 0..6 {
-                damped[k][k] += lambda * d[k] * d[k];
-            }
-            let mut rhs = [0.0_f64; 6];
-            for k in 0..6 {
-                rhs[k] = -g[k];
-            }
-            let delta = match crate::orbit_least_squares::solve_6x6(&damped, &rhs) {
-                Some(delta) => delta,
-                None => {
-                    lambda *= 10.0;
-                    continue;
-                }
-            };
+            let (p_eigen, alpha_used) = trust_region_step(&eigenvalues, &q, radius, alpha);
+            alpha = alpha_used;
+            let p_scaled: [f64; 6] =
+                std::array::from_fn(|j| (0..6).map(|i| vectors[j][i] * p_eigen[i]).sum());
+            let step_scaled_norm = norm6(&p_scaled);
+            let step: [f64; 6] = std::array::from_fn(|k| p_scaled[k] / scale[k]);
+            let step_norm = norm6(&step);
+            // Predicted reduction of the half-cost quadratic model.
+            let predicted = -(0..6)
+                .map(|i| q[i] * p_eigen[i] + 0.5 * eigenvalues[i] * p_eigen[i] * p_eigen[i])
+                .sum::<f64>();
             let mut trial = state;
             for k in 0..6 {
-                trial[k] += delta[k];
+                trial[k] += step[k];
             }
-            last_step_norm = delta.iter().map(|v| v * v).sum::<f64>().sqrt();
             nfev += 1;
+            trials += 1;
             let trial_residuals = match problem.residuals(&[trial])? {
                 Ok(mut batch) => batch.swap_remove(0),
                 Err(_) => {
-                    // A failed prediction (e.g. light time) rejects the step.
-                    lambda *= 10.0;
+                    // A failed prediction (e.g. light time) rejects the step
+                    // and shrinks the region like a non-finite trial.
+                    radius = 0.25 * step_scaled_norm;
                     continue;
                 }
             };
             let trial_cost = robust_cost(&trial_residuals, loss, f_scale);
-            if trial_cost.is_finite() && trial_cost <= cost {
-                let step_norm = delta.iter().map(|v| v * v).sum::<f64>().sqrt();
-                let state_norm = state.iter().map(|v| v * v).sum::<f64>().sqrt();
-                let cost_drop = cost - trial_cost;
-                let ftol_met = cost_drop <= config.ftol * cost.max(f64::MIN_POSITIVE);
-                let xtol_met = step_norm <= config.xtol * (config.xtol + state_norm);
+            if !trial_cost.is_finite() || !trial_residuals.iter().all(|r| r.is_finite()) {
+                radius = 0.25 * step_scaled_norm;
+                continue;
+            }
+            let actual = 0.5 * (cost - trial_cost);
+            let ratio = if predicted > 0.0 {
+                actual / predicted
+            } else {
+                0.0
+            };
+            let new_radius = if ratio < 0.25 {
+                0.25 * step_scaled_norm
+            } else if ratio > 0.75 && step_scaled_norm > 0.95 * radius {
+                2.0 * radius
+            } else {
+                radius
+            };
+            if new_radius > 0.0 {
+                alpha *= radius / new_radius;
+            }
+            radius = new_radius;
+            let xtol_met = step_norm < config.xtol * (config.xtol + state_norm);
+            if actual > 0.0 {
+                let ftol_met = (cost - trial_cost) < config.ftol * cost && ratio > 0.25;
                 state = trial;
                 residuals = trial_residuals;
                 cost = trial_cost;
-                lambda = (lambda / 3.0).max(1e-15);
                 accepted = true;
-                if ftol_met && xtol_met {
-                    status = 4;
-                } else if ftol_met {
-                    status = 2;
-                } else if xtol_met {
-                    status = 3;
-                }
+                status = match (ftol_met, xtol_met) {
+                    (true, true) => STATUS_FTOL_XTOL,
+                    (true, false) => STATUS_FTOL,
+                    (false, true) => STATUS_XTOL,
+                    (false, false) => STATUS_LIMIT,
+                };
                 break;
             }
-            lambda *= 10.0;
+            if xtol_met {
+                // The region shrank below the resolution without any
+                // decrease: the iterate is a numerical minimum.
+                status = STATUS_XTOL;
+                break 'iterations;
+            }
         }
         if !accepted {
-            if nfev >= max_nfev {
-                // The final allowed trial can also be the final damping
-                // attempt; it must have the same budget status as an earlier
-                // exhausted attempt, without falling through to xtol below.
-                break;
-            }
-            // No damping produced a decrease. If the last (heavily damped)
-            // step was already below the xtol resolution the iterate is a
-            // numerical minimum; otherwise the solver stalled.
-            let state_norm = state.iter().map(|v| v * v).sum::<f64>().sqrt();
-            status = if last_step_norm <= config.xtol * (config.xtol + state_norm) {
-                3
-            } else {
-                -1
-            };
+            status = STATUS_STALLED;
             break;
         }
-        if status != 0 {
+        if status != STATUS_LIMIT {
             break;
         }
     }
@@ -2193,10 +2400,21 @@ mod tests {
             .fold(0.0, f64::max)
     }
 
+    #[derive(Clone, Copy, PartialEq)]
+    enum PredictorMode {
+        Normal,
+        /// Every prediction after the first fails in-band.
+        RejectTrials,
+        /// Every prediction after the first is finite but far worse.
+        WorseTrials,
+        /// Any multi-state batch (a finite-difference Jacobian) is NaN.
+        NanBatches,
+    }
+
     struct CountingPredictor<'a> {
         inner: &'a dyn SphericalPredictor,
         batches: std::cell::RefCell<Vec<usize>>,
-        reject_trials: bool,
+        mode: PredictorMode,
     }
 
     impl SphericalPredictor for CountingPredictor<'_> {
@@ -2207,14 +2425,43 @@ mod tests {
             observers: &ObserverBatch,
         ) -> PropagationResultValue<Result<Vec<f64>, String>> {
             self.batches.borrow_mut().push(states.len());
-            if self.reject_trials && self.batches.borrow().len() > 1 {
-                return Ok(Err("rejected trial prediction".to_string()));
+            let later = self.batches.borrow().len() > 1;
+            match self.mode {
+                PredictorMode::RejectTrials if later => {
+                    return Ok(Err("rejected trial prediction".to_string()));
+                }
+                PredictorMode::NanBatches if states.len() > 1 => {
+                    return Ok(Ok(vec![f64::NAN; states.len() * observers.len() * 6]));
+                }
+                _ => {}
             }
-            self.inner.predict_spherical(states, geometry, observers)
+            let mut predicted = self.inner.predict_spherical(states, geometry, observers)?;
+            if self.mode == PredictorMode::WorseTrials && later {
+                if let Ok(values) = &mut predicted {
+                    for row in values.chunks_exact_mut(6) {
+                        row[1] += 0.5;
+                    }
+                }
+            }
+            Ok(predicted)
         }
     }
 
     fn solve_counted(config: &WhitenedFitConfig, reject_trials: bool) -> (Solution, Vec<usize>) {
+        solve_counted_mode(
+            config,
+            if reject_trials {
+                PredictorMode::RejectTrials
+            } else {
+                PredictorMode::Normal
+            },
+        )
+    }
+
+    fn solve_counted_mode(
+        config: &WhitenedFitConfig,
+        mode: PredictorMode,
+    ) -> (Solution, Vec<usize>) {
         let propagator = TwoBodyPropagator::default();
         let options = ephemeris_options();
         let inner = PropagatorPredictor {
@@ -2226,7 +2473,7 @@ mod tests {
         let predictor = CountingPredictor {
             inner: &inner,
             batches: std::cell::RefCell::new(Vec::new()),
-            reject_trials,
+            mode,
         };
         let problem = WhitenedProblem::new(
             &predictor,
@@ -2243,13 +2490,17 @@ mod tests {
     }
 
     #[test]
-    fn evaluation_budget_counts_candidates_without_overrunning_batches() {
-        for jacobian in [
-            JacobianMethod::Analytic,
-            JacobianMethod::Central,
-            JacobianMethod::TwoPoint,
+    fn evaluation_budget_bounds_trials_not_jacobian_columns() {
+        // `max_nfev` is scipy's `nfev`: the initial evaluation plus every
+        // trial step. Finite-difference Jacobian batches (6 or 12 predictions)
+        // are reported in `nfev` but are not budget. Zero tolerances never
+        // stop the solver, so every run spends its whole budget.
+        for (jacobian, columns) in [
+            (JacobianMethod::Analytic, 0_usize),
+            (JacobianMethod::Central, 12),
+            (JacobianMethod::TwoPoint, 6),
         ] {
-            for budget in [1, 2, 6, 7, 8, 12, 13, 14, 25] {
+            for budget in [1, 2, 3, 7, 13, 25] {
                 let config = WhitenedFitConfig {
                     jacobian,
                     max_nfev: Some(budget),
@@ -2260,23 +2511,20 @@ mod tests {
                 };
                 let (solution, batches) = solve_counted(&config, false);
                 assert_eq!(solution.nfev, batches.iter().sum::<usize>());
-                assert!(
-                    solution.nfev <= budget,
-                    "{jacobian:?} {budget}: {batches:?}"
-                );
+                let trials = batches.iter().filter(|&&size| size == 1).count();
+                assert_eq!(trials, budget, "{jacobian:?} {budget}: {batches:?}");
+                assert_eq!(solution.status, 0, "{jacobian:?} {budget}: {batches:?}");
                 if budget == 1 {
                     assert_eq!(batches, vec![1]);
-                    assert_eq!(solution.status, 0);
                     assert_eq!(
                         solution.state,
                         OrbitGeometry::from_orbit(&perturbed_start()).unwrap().state
                     );
-                }
-                if jacobian == JacobianMethod::Central && budget <= 12 {
-                    assert_eq!(batches, vec![1], "no room for a full central Jacobian");
-                }
-                if jacobian == JacobianMethod::TwoPoint && budget <= 6 {
-                    assert_eq!(batches, vec![1], "no room for a full forward Jacobian");
+                } else if columns > 0 {
+                    assert!(
+                        batches.contains(&columns),
+                        "{jacobian:?} {budget}: a Jacobian batch is not budget: {batches:?}"
+                    );
                 }
             }
         }
@@ -2357,6 +2605,104 @@ mod tests {
     }
 
     #[test]
+    fn trust_region_step_is_gauss_newton_inside_and_on_the_boundary_outside() {
+        let eigenvalues = [4.0, 1.0, 0.25, 0.09, 0.01, 0.0025];
+        let q = [2.0, -1.0, 0.5, 0.3, -0.1, 0.05];
+        let gauss_newton: [f64; 6] = std::array::from_fn(|i| -q[i] / eigenvalues[i]);
+        let gn_norm = norm6(&gauss_newton);
+        let (inside, alpha) = trust_region_step(&eigenvalues, &q, 2.0 * gn_norm, 0.0);
+        assert_eq!(alpha, 0.0);
+        assert!(norm6(&std::array::from_fn(|i| inside[i] - gauss_newton[i])) < 1e-12);
+
+        for radius in [0.5 * gn_norm, 0.1 * gn_norm, 0.01 * gn_norm] {
+            let (step, alpha) = trust_region_step(&eigenvalues, &q, radius, 0.0);
+            assert!(alpha > 0.0, "{radius}");
+            assert!((norm6(&step) - radius).abs() <= 1e-12 * radius, "{radius}");
+            // The damped step is the model minimizer on the boundary:
+            // (Lambda + alpha I) p = -q up to the final 1 % renormalization.
+            for i in 0..6 {
+                let implied = -q[i] / (eigenvalues[i] + alpha);
+                assert!((step[i] / implied - 1.0).abs() < 0.02, "{radius} {i}");
+            }
+        }
+
+        // Rank deficiency with a gradient along the null direction: the
+        // Gauss-Newton step is unbounded, the trust-region step is not.
+        let deficient = [4.0, 1.0, 0.25, 0.09, 0.01, 0.0];
+        let (step, alpha) = trust_region_step(&deficient, &q, 1.0, 0.0);
+        assert!(alpha > 0.0);
+        assert!((norm6(&step) - 1.0).abs() <= 1e-12);
+        assert!(step.iter().all(|v| v.is_finite()));
+
+        let (zero, alpha) = trust_region_step(&eigenvalues, &[0.0; 6], 1.0, 0.0);
+        assert_eq!(zero, [0.0; 6]);
+        assert_eq!(alpha, 0.0);
+    }
+
+    #[test]
+    fn non_finite_jacobian_never_reports_convergence() {
+        // A NaN finite-difference Jacobian makes the gradient NaN; a
+        // NaN-ignoring norm would read that as zero and declare gtol
+        // convergence (the 2000 FE8 defect). It must end with status -2,
+        // the iterate untouched.
+        let config = WhitenedFitConfig {
+            jacobian: JacobianMethod::Central,
+            ..WhitenedFitConfig::default()
+        };
+        let (solution, batches) = solve_counted_mode(&config, PredictorMode::NanBatches);
+        assert_eq!(batches, vec![1, 12]);
+        assert_eq!(solution.nfev, 13);
+        assert_eq!(solution.status, -2);
+        assert!(solution.status <= 0);
+        assert_eq!(
+            solution.state,
+            OrbitGeometry::from_orbit(&perturbed_start()).unwrap().state
+        );
+        assert!(solution.residuals.iter().all(|r| r.is_finite()));
+    }
+
+    #[test]
+    fn rejected_finite_trials_shrink_the_region_to_the_xtol_resolution() {
+        // Every trial is finite but worse: the trust region shrinks fourfold
+        // per rejection until the step is below the xtol resolution, which
+        // ends the fit as a numerical minimum (status 3) at the start state,
+        // never as a stall and well inside the attempt limit.
+        let (solution, batches) =
+            solve_counted_mode(&WhitenedFitConfig::default(), PredictorMode::WorseTrials);
+        assert_eq!(solution.status, 3, "{batches:?}");
+        assert_eq!(
+            solution.state,
+            OrbitGeometry::from_orbit(&perturbed_start()).unwrap().state
+        );
+        assert!(
+            batches.len() > 2 && batches.len() < MAX_STEP_ATTEMPTS,
+            "{batches:?}"
+        );
+        assert!(batches.iter().all(|&size| size == 1));
+    }
+
+    #[test]
+    fn central_difference_fit_converges_within_the_default_limits() {
+        // The encounter-guard configuration of the walk-forward: central
+        // differences through the predictor with the default budgets must
+        // converge, not run out (the 2026 AC4 defect).
+        let config = WhitenedFitConfig {
+            jacobian: JacobianMethod::Central,
+            ..WhitenedFitConfig::default()
+        };
+        let (solution, batches) = solve_counted(&config, false);
+        assert!(
+            solution.status > 0,
+            "status {} {batches:?}",
+            solution.status
+        );
+        let jacobians = batches.iter().filter(|&&size| size == 12).count();
+        assert!(jacobians <= 20, "{batches:?}");
+        let error = max_abs_diff(&solution.state[..3], &TRUTH_STATE[..3]);
+        assert!(error < 5e-5, "{error}");
+    }
+
+    #[test]
     fn analytic_fit_recovers_truth_with_validated_covariance() {
         let observed = synthetic_observations(None);
         let output = fit(&observed, &[false; NUM_OBS], &WhitenedFitConfig::default());
@@ -2403,7 +2749,14 @@ mod tests {
             let output = fit(&observed, &[false; NUM_OBS], &config);
             assert!(output.converged, "{method:?} status {}", output.status_code);
             let diff = max_abs_diff(&output.state, &analytic.state);
-            assert!(diff < 1e-9, "{method:?}: {diff}");
+            // Central differences are exact to round-off; forward differences
+            // carry an O(h) Jacobian error, so their fixed point sits a few
+            // 1e-9 au from the true minimum (scipy's "2-point" does the same).
+            let tolerance = match method {
+                JacobianMethod::TwoPoint => 1e-8,
+                _ => 1e-9,
+            };
+            assert!(diff < tolerance, "{method:?}: {diff}");
             let cov_diff = max_abs_diff(&output.covariance, &analytic.covariance);
             let cov_scale = analytic
                 .covariance
@@ -2967,7 +3320,7 @@ mod tests {
                 let counting = CountingPredictor {
                     inner: &predictor,
                     batches: std::cell::RefCell::new(Vec::new()),
-                    reject_trials: false,
+                    mode: PredictorMode::Normal,
                 };
                 let output = cmc2003_fit_with(
                     &counting,

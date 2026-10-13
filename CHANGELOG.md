@@ -94,6 +94,18 @@ This file contains notable changes in adam-core
 
 ### Changed
 
+- The native differential-correction solver is now the trust-region
+  Gauss-Newton method of `scipy.optimize.least_squares(method="trf",
+  x_scale="jac")` without bounds (exact trust-region step on the scaled
+  normal equations, radius driven by the actual-to-predicted reduction
+  ratio, `gtol` on the column-scaled gradient) instead of a
+  Levenberg-Marquardt loop that accepted any decrease; the solver contract
+  (objective, scaling, step acceptance, every `status_code`, limits,
+  covariance) is written once on `WhitenedFitConfig` and in the
+  `fit_least_squares` Notes. `max_nfev` now bounds scipy's `nfev` (the
+  initial evaluation plus trial steps); finite-difference Jacobian
+  evaluations are reported in `iterations` but are no longer budget, as in
+  the Python baseline.
 - The IOD epoch crosses the Rust boundary exactly: `IodOutput.epoch`
   (integer days and nanoseconds, `None` unless found) and
   `IodOutput.epoch_scale` replace the float `epoch_mjd`, the refinement seed
@@ -155,6 +167,10 @@ This file contains notable changes in adam-core
 
 ### Fixed
 
+- The solver reported `success=True` (`status_code=1`) when the Jacobian or
+  gradient was non-finite, because the gradient norm ignored NaN; a
+  non-finite derivative now ends the fit with `status_code=-2` and
+  `success=False`, the iterate untouched.
 - `iterative_fit` returns the lowest reduced chi2 among the passes whose fit
   succeeded, falling back to the lowest overall only when no pass converged;
   previously a failed first pass was kept over a later converged fit.
