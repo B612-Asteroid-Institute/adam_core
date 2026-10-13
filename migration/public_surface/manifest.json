@@ -16501,7 +16501,7 @@
       "kind": "class",
       "domain": "photometry",
       "source": "src/adam_core/photometry/color_determination.py",
-      "line": 109,
+      "line": 124,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -16529,7 +16529,7 @@
       "kind": "function",
       "domain": "photometry",
       "source": "src/adam_core/photometry/color_determination.py",
-      "line": 634,
+      "line": 671,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
