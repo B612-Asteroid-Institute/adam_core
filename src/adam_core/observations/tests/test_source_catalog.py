@@ -1,6 +1,9 @@
 import numpy as np
+import pyarrow as pa
 import pyarrow.compute as pc
+import pyarrow.parquet as pq
 import pytest
+import quivr as qv
 
 from ...coordinates.covariances import CoordinateCovariances
 from ...coordinates.origin import Origin
@@ -49,8 +52,118 @@ def source_catalog() -> SourceCatalog:
         exposure_depth_5sigma=[24.5, 24.5, 21.0, 21.0, 24.5, 21.5],
         object_id=["obj_01", "obj_02", "obj_03", "obj_04", "obj_05", "obj_06"],
         catalog_id=["Rubin", "Rubin", "ZTF", "ZTF", "Rubin", "ZTF"],
+        astcat=["Gaia2", None, "Gaia3", "Gaia3E", None, "UCAC4"],
+        photcat=["Gaia2", None, "PS1_DR1", None, None, "Gaia3"],
     )
     return source_catalog
+
+
+def test_SourceCatalog_catalog_provenance(source_catalog: SourceCatalog) -> None:
+    assert source_catalog.astcat.to_pylist() == [
+        "Gaia2",
+        None,
+        "Gaia3",
+        "Gaia3E",
+        None,
+        "UCAC4",
+    ]
+    assert source_catalog.photcat.to_pylist() == [
+        "Gaia2",
+        None,
+        "PS1_DR1",
+        None,
+        None,
+        "Gaia3",
+    ]
+
+
+def test_SourceCatalog_slice_and_concat_preserve_catalog_provenance(
+    source_catalog: SourceCatalog,
+) -> None:
+    sliced = source_catalog[1:5]
+    assert sliced.astcat.to_pylist() == [None, "Gaia3", "Gaia3E", None]
+    assert sliced.photcat.to_pylist() == [None, "PS1_DR1", None, None]
+
+    concatenated = qv.concatenate([source_catalog[:2], source_catalog[2:]])
+    assert concatenated == source_catalog
+    assert concatenated.astcat.to_pylist() == source_catalog.astcat.to_pylist()
+    assert concatenated.photcat.to_pylist() == source_catalog.photcat.to_pylist()
+
+
+def test_SourceCatalog_catalog_provenance_defaults_to_typed_nulls() -> None:
+    catalog = SourceCatalog.from_kwargs(
+        id=["obs-1"],
+        time=Timestamp.from_kwargs(days=[60_000], nanos=[0], scale="utc"),
+        ra=[10.0],
+        dec=[-5.0],
+        observatory_code=["X05"],
+        catalog_id=["aims"],
+    )
+
+    assert catalog.astcat.type == pa.large_string()
+    assert catalog.photcat.type == pa.large_string()
+    assert catalog.astcat.to_pylist() == [None]
+    assert catalog.photcat.to_pylist() == [None]
+
+
+def test_SourceCatalog_empty_has_catalog_provenance_schema() -> None:
+    catalog = SourceCatalog.empty()
+
+    assert len(catalog) == 0
+    assert catalog.astcat.type == pa.large_string()
+    assert catalog.photcat.type == pa.large_string()
+
+
+def test_SourceCatalog_reads_legacy_arrow_with_typed_null_catalogs(
+    source_catalog: SourceCatalog,
+) -> None:
+    legacy = source_catalog.table.drop(["astcat", "photcat"])
+
+    restored = SourceCatalog.from_pyarrow(legacy)
+
+    assert restored.astcat.to_pylist() == [None] * len(source_catalog)
+    assert restored.photcat.to_pylist() == [None] * len(source_catalog)
+
+
+@pytest.mark.parametrize("missing", ["astcat", "photcat"])
+def test_SourceCatalog_reads_partially_legacy_arrow(
+    source_catalog: SourceCatalog, missing: str
+) -> None:
+    restored = SourceCatalog.from_pyarrow(source_catalog.table.drop([missing]))
+
+    present = "photcat" if missing == "astcat" else "astcat"
+    assert getattr(restored, missing).to_pylist() == [None] * len(source_catalog)
+    assert (
+        getattr(restored, present).to_pylist()
+        == getattr(source_catalog, present).to_pylist()
+    )
+
+
+def test_SourceCatalog_parquet_round_trip_preserves_catalog_provenance(
+    source_catalog: SourceCatalog,
+    tmp_path,
+) -> None:
+    path = tmp_path / "source_catalog.parquet"
+    source_catalog.to_parquet(str(path))
+
+    restored = SourceCatalog.from_parquet(str(path))
+
+    assert restored == source_catalog
+    assert restored.astcat.to_pylist() == source_catalog.astcat.to_pylist()
+    assert restored.photcat.to_pylist() == source_catalog.photcat.to_pylist()
+
+
+def test_SourceCatalog_reads_legacy_parquet_with_typed_null_catalogs(
+    source_catalog: SourceCatalog,
+    tmp_path,
+) -> None:
+    path = tmp_path / "legacy_source_catalog.parquet"
+    pq.write_table(source_catalog.table.drop(["astcat", "photcat"]), path)
+
+    restored = SourceCatalog.from_parquet(str(path))
+
+    assert restored.astcat.to_pylist() == [None] * len(source_catalog)
+    assert restored.photcat.to_pylist() == [None] * len(source_catalog)
 
 
 def test_SourceCatalog_detections(source_catalog: SourceCatalog) -> None:

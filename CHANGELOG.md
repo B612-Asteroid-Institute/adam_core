@@ -2,6 +2,29 @@
 
 This file contains notable changes in adam-core
 
+## [Unreleased]
+
+### Added
+
+- Nullable `astcat` and `photcat` provenance columns on the Python
+  `SourceCatalog` schema and Rust `SourceCatalogBatch`, preserving exact source
+  strings and nulls through Arrow/Parquet and observation IPC.
+
+### Compatibility
+
+- The Python and Rust provenance fields are additive and row-nullable. Current
+  Python `SourceCatalog.from_pyarrow`/`from_parquet` readers and the current Rust
+  observation IPC dispatcher upgrade legacy 25-column
+  `SourceCatalog` artifacts that lack `astcat` and `photcat` by adding typed
+  null `LargeString` fields. The Python shim also accepts a legacy Arrow table
+  missing only one of the two fields. It does not customize generic Quivr
+  dataframe readers or relax unrelated schema/type validation.
+- No compatibility claim is made for older adam-core readers consuming the new
+  27-column schema. Adding fields to the public, exhaustively constructible Rust
+  `SourceCatalogBatch` is semver-breaking for Rust consumers, so any future
+  package release containing this change must be `0.6.0`, not `0.5.9`. Package
+  publication remains a separate release decision.
+
 ## [0.5.8] - 2026-10-05
 
 ### Added
