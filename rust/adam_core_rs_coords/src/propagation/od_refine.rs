@@ -1983,11 +1983,16 @@ fn grow_stage(times: &[f64], mask: &[bool], growth: f64) -> Vec<bool> {
 /// them in stages: the observations spanned by the triplet (grown until it
 /// holds `min_stage_obs`), then spans grown `growth` times (with the gap
 /// rule of `grow_stage`) up to the whole arc, each stage seeded by the
-/// previous fit and kept only within `rchi2_threshold`. The search stops
-/// once `max_converged` candidates reached the whole arc; the accepted
-/// candidate is the converged one with the lowest final reduced chi2,
-/// index order on ties. Its orbit is the corrected full-arc orbit at the
-/// Gauss epoch, unrejected (rejection is the refinement's job).
+/// previous fit and kept only within `rchi2_threshold`. No stage before the
+/// whole arc rejects observations: an orbit fitted to part of the arc cannot
+/// yet tell an outlier from an observation it does not predict well. On the
+/// whole arc, a fit above the threshold gets the CMC2003 rejection loop
+/// (Carpino, Milani & Chesley 2003, OrbFit's constants) and passes if that
+/// brings it within the threshold. The search stops once `max_converged`
+/// candidates reached the whole arc; the accepted candidate is the converged
+/// one with the lowest final reduced chi2, index order on ties. Its orbit is
+/// that whole-arc fit at the Gauss epoch, rejected rows reported as
+/// outliers.
 #[allow(clippy::too_many_arguments)]
 pub fn run_iod_corrected<T: OriginTranslationProvider>(
     iod_predictor: &dyn SphericalPredictor,
@@ -2066,32 +2071,75 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
                 break;
             }
             stages += 1;
-            match stage_fit(
+            let whole_arc = mask.iter().all(|&keep| keep);
+            // The whole-arc stage is judged after rejection (below).
+            let threshold = if whole_arc {
+                f64::INFINITY
+            } else {
+                config.rchi2_threshold
+            };
+            let output = match stage_fit(
                 iod_predictor,
                 &seed,
                 observed,
                 observers,
                 &mask,
                 &stage_config,
-                config.rchi2_threshold,
+                threshold,
                 provider,
                 translation_provider,
             )? {
-                Ok(output) => {
-                    seed = orbit_with_state(&seed, output.state)?;
-                    let whole_arc = mask.iter().all(|&keep| keep);
-                    last_fit = Some(output);
-                    if whole_arc {
-                        break;
-                    }
-                    mask = grow_stage(&times, &mask, correction.growth);
-                }
+                Ok(output) => output,
                 Err(message) => {
                     note = Some(format!("stalled at stage {stages}: {message}"));
-                    last_fit = None;
                     break;
                 }
+            };
+            seed = orbit_with_state(&seed, output.state)?;
+            if !whole_arc {
+                mask = grow_stage(&times, &mask, correction.growth);
+                continue;
             }
+            let output = if output.evaluation.reduced_chi2 <= config.rchi2_threshold {
+                output
+            } else {
+                match cmc2003_fit_with(
+                    iod_predictor,
+                    &seed,
+                    observed,
+                    observers,
+                    &Cmc2003FitConfig {
+                        fit: stage_config,
+                        ..Cmc2003FitConfig::default()
+                    },
+                    provider,
+                    translation_provider,
+                ) {
+                    Ok(rejected) => rejected.fit,
+                    Err(
+                        err @ (PropagationError::Backend(_)
+                        | PropagationError::BackendProtocol(_)
+                        | PropagationError::ThreadPool(_)),
+                    ) => {
+                        note = Some(format!(
+                            "whole-arc rejection failed at stage {stages}: {err}"
+                        ));
+                        break;
+                    }
+                    Err(err) => return Err(err),
+                }
+            };
+            let rchi2 = output.evaluation.reduced_chi2;
+            if rchi2.is_finite() && rchi2 <= config.rchi2_threshold {
+                last_fit = Some(output);
+            } else {
+                note = Some(format!(
+                    "stalled at stage {stages}: whole arc after rejection: reduced chi2 \
+                     {rchi2:.4} ({} observations kept)",
+                    output.evaluation.num_obs
+                ));
+            }
+            break;
         }
         let record = &mut result.candidates[index];
         record.stages = stages;
@@ -2100,6 +2148,9 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
                 record.converged = true;
                 record.postfit_reduced_chi2 = Some(output.evaluation.reduced_chi2);
                 record.corrected_state = Some(output.state);
+                record.removed = (0..n)
+                    .filter(|&row| output.evaluation.outlier[row])
+                    .collect();
                 record.evaluation = Some(output.evaluation);
                 converged += 1;
             }
@@ -3839,6 +3890,47 @@ mod tests {
             output.outlier.iter().all(|&flag| !flag),
             "no rejection in IOD"
         );
+    }
+
+    #[test]
+    fn corrected_acceptance_rejects_on_the_whole_arc_only() {
+        // A gross outlier on the arc: a threshold below the unrejected
+        // whole-arc fit (reduced chi2 6.2) is met only after the CMC2003
+        // rejection of the whole-arc stage, which reports the outlier.
+        let observed = synthetic_observations(Some(3));
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let config = super::super::od::IodConfig {
+            // Intermediate stages see the outlier unrejected: allow them.
+            correction: super::super::od::CorrectionConfig {
+                max_corrections: 47,
+                ..super::super::od::CorrectionConfig::default()
+            },
+            ..corrected_iod_config(3.0)
+        };
+        let result = run_iod_with(
+            &predictor,
+            &observed,
+            &observers(),
+            &config,
+            &WhitenedFitConfig::default(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        let accepted = result
+            .accepted_candidate()
+            .unwrap_or_else(|| panic!("no candidate converged: {:?}", result.not_found_reason));
+        assert_eq!(accepted.removed, vec![3]);
+        assert!(accepted.postfit_reduced_chi2.unwrap() <= 3.0);
+        let output = result.to_output(NUM_OBS);
+        assert!(output.outlier[3]);
+        assert_eq!(output.outlier.iter().filter(|&&f| f).count(), 1);
     }
 
     #[test]

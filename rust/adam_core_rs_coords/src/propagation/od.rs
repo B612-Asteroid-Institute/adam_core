@@ -2310,8 +2310,11 @@ fn combination_triplets(times: &[f64], budget: usize) -> Vec<[usize; 3]> {
 /// visited in that total order without enumerating them all. Each pair gives
 /// one triplet, its middle the observation nearest the pair's midpoint
 /// (earliest on ties) with an epoch distinct from both ends; pairs with no
-/// such middle are skipped, as are triplets already produced by an earlier
-/// window. The walk stops at `budget`.
+/// such middle are skipped, as are pairs whose ends fall on a pair of nights
+/// (integer days) already used, in this or an earlier window: observations
+/// of the same two nights give near-identical Gauss geometry, so a dense
+/// night would otherwise spend the whole budget on one configuration. The
+/// walk stops at `budget`.
 fn span_triplets(
     times: &[f64],
     config: &SpanSearchConfig,
@@ -2387,7 +2390,7 @@ fn span_triplets(
     };
     let deviation = |first: usize, last: usize| ((t[last] - t[first]) - target).abs();
 
-    let mut seen: HashSet<[usize; 3]> = HashSet::new();
+    let mut seen: HashSet<(i64, i64)> = HashSet::new();
     for (lo, hi) in windows {
         if hi < lo + 2 {
             continue;
@@ -2460,7 +2463,7 @@ fn span_triplets(
                 });
             let Some(middle) = middle else { continue };
             let triplet = [order[first], order[middle], order[last]];
-            if seen.insert(triplet) {
+            if seen.insert((t[first].floor() as i64, t[last].floor() as i64)) {
                 out.push((triplet, (order[lo], order[hi])));
                 if out.len() == budget {
                     return out;
@@ -3720,7 +3723,7 @@ mod tests {
                     });
                 if let Some(middle) = middle {
                     let triplet = [order[first], order[middle], order[last]];
-                    if seen.insert(triplet) {
+                    if seen.insert((t[first].floor() as i64, t[last].floor() as i64)) {
                         out.push((triplet, (order[lo], order[hi])));
                     }
                 }
@@ -3795,11 +3798,14 @@ mod tests {
             config.target_span_days / 2.0
         );
         assert_eq!(window, (0, 40));
+        let mut night_pairs = std::collections::HashSet::new();
         for (triplet, (lo, hi)) in &triplets {
             assert!(*lo <= triplet[0] && triplet[2] <= *hi);
-            assert!(
-                (times[triplet[2]] - times[triplet[0]] - config.target_span_days).abs() <= 0.25
-            );
+            // One triplet per pair of nights.
+            assert!(night_pairs.insert((
+                times[triplet[0]].floor() as i64,
+                times[triplet[2]].floor() as i64
+            )));
         }
     }
 
