@@ -28,11 +28,12 @@ pub use ephemeris::{
 pub use od::{
     candidate_orbit_batch, evaluate_orbit, evaluate_orbit_barycentric,
     fit_orbit_least_squares_barycentric, fit_orbit_least_squares_evaluated_barycentric, iod_fit,
-    iod_fit_barycentric, iod_fit_linkages_barycentric, od_fit_barycentric,
-    vallado_least_squares_barycentric, EvaluatedLeastSquaresFit, FitEvaluation, IodConfig,
-    IodOutput, ObservationSelectionMethod, OdConfig, OdMethod, OdOutput, OrbitGeometry,
-    PropagatorPredictor, SphericalPredictor, ValladoConfig, ValladoIteration, ValladoResult,
-    ValladoStatus, INVALID_LIGHT_TIME_MESSAGE, IOD_DEFAULT_MU, IOD_DEFAULT_SPEED_OF_LIGHT,
+    iod_fit_barycentric, iod_fit_linkages_barycentric, od_fit_barycentric, run_iod,
+    run_iod_barycentric, vallado_least_squares_barycentric, EvaluatedLeastSquaresFit,
+    FitEvaluation, IodCandidate, IodConfig, IodOutput, IodResult, ObservationSelectionMethod,
+    OdConfig, OdMethod, OdOutput, OrbitGeometry, PropagatorPredictor, SphericalPredictor,
+    ValladoConfig, ValladoIteration, ValladoResult, ValladoStatus, VelocityMethod,
+    INVALID_LIGHT_TIME_MESSAGE, IOD_DEFAULT_MU, IOD_DEFAULT_SPEED_OF_LIGHT,
 };
 pub use od_refine::{
     cmc2003_fit_barycentric, cmc2003_fit_with, fit_orbit_whitened_barycentric,

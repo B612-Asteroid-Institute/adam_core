@@ -17,7 +17,7 @@ import quivr as qv
 from adam_core import _rust_native
 
 from ..differential_correction import _native_problem
-from ..iod import _placeholder_orbit, iod
+from ..iod import _placeholder_orbit, iod, run_iod
 from .test_differential_correction import TwoBodyPropagator
 from .test_run_od_null_covariance import two_body_arc  # noqa: F401
 
@@ -155,3 +155,89 @@ def test_iod_epoch_crosses_as_exact_days_and_nanoseconds(
     assert not_found["epoch_days"] is None
     assert not_found["epoch_nanos"] is None
     assert not_found["epoch_scale"] == output["epoch_scale"]
+
+
+def test_run_iod_reports_every_scored_candidate(two_body_arc) -> None:  # noqa: F811
+    """`run_iod` returns the accepted orbit plus the typed candidate set:
+    one record per scored candidate with its triplet rows, root and
+    statistics, the accepted index, and counters that agree with the list."""
+    orbit, members, report = run_iod(
+        two_body_arc, TwoBodyPropagator(), min_obs=6, rchi2_threshold=1e4
+    )
+    assert len(orbit) == 1 and len(members) == len(two_body_arc)
+    assert report.found and report.accepted is not None
+    assert len(report.candidates) == report.candidates_evaluated
+    assert report.corrections_run == 0
+    assert report.not_found_reason is None
+    accepted = report.accepted_candidate
+    assert accepted is not None and accepted.accepted
+    assert sum(candidate.accepted for candidate in report.candidates) == 1
+    # Exact epoch and state of the accepted candidate are the orbit's.
+    assert orbit.coordinates.time.days[0].as_py() == accepted.epoch_days
+    assert orbit.coordinates.time.nanos[0].as_py() == accepted.epoch_nanos
+    assert orbit.coordinates.time.scale == accepted.epoch_scale
+    npt.assert_array_equal(
+        np.concatenate([orbit.coordinates.r[0], orbit.coordinates.v[0]]),
+        np.asarray(accepted.state),
+    )
+    # The triplet rows are the solution rows of the members table.
+    solution_rows = [i for i, flag in enumerate(members.solution.to_pylist()) if flag]
+    assert sorted(accepted.triplet) == solution_rows
+    n = len(two_body_arc)
+    times = two_body_arc.coordinates.time.mjd().to_numpy(zero_copy_only=False)
+    for candidate in report.candidates:
+        assert 0 <= candidate.window[0] < n and 0 <= candidate.window[1] < n
+        assert times[candidate.window[0]] == times.min()
+        assert times[candidate.window[1]] == times.max()
+        assert len(set(candidate.triplet)) == 3
+        assert len({times[row] for row in candidate.triplet}) == 3
+        assert 0 <= candidate.root_index < candidate.root_count
+        assert candidate.velocity_method == "gibbs"
+        assert candidate.postfit_reduced_chi2 is None and not candidate.converged
+        if not candidate.accepted:
+            assert candidate.removed == ()
+            assert candidate.chi2 == candidate.prefit_chi2
+
+    # A not-found search still reports every candidate and the reason.
+    _, _, none = run_iod(
+        two_body_arc,
+        TwoBodyPropagator(),
+        min_obs=6,
+        rchi2_threshold=1e-30,
+        max_triplets=2,
+    )
+    assert not none.found and none.accepted is None
+    assert none.triplets_tried == 2
+    assert len(none.candidates) == none.candidates_evaluated > 0
+    assert all(not candidate.accepted for candidate in none.candidates)
+    assert "none within rchi2_threshold" in none.not_found_reason
+
+
+def test_run_iod_candidate_set_is_invariant_to_observation_order(
+    two_body_arc,  # noqa: F811
+) -> None:
+    n = len(two_body_arc)
+    permutation = np.random.default_rng(3).permutation(n)
+    shuffled = two_body_arc.take(permutation)
+    _, _, report = run_iod(
+        two_body_arc, TwoBodyPropagator(), min_obs=6, rchi2_threshold=1e4
+    )
+    _, _, report_shuffled = run_iod(
+        shuffled, TwoBodyPropagator(), min_obs=6, rchi2_threshold=1e4
+    )
+    # shuffled row j holds input row permutation[j]: map rows back.
+    inverse = {int(permutation[j]): j for j in range(n)}
+    assert report.accepted == report_shuffled.accepted
+    assert len(report.candidates) == len(report_shuffled.candidates)
+    for a, b in zip(report.candidates, report_shuffled.candidates):
+        assert a.state == b.state
+        assert (a.epoch_days, a.epoch_nanos) == (b.epoch_days, b.epoch_nanos)
+        assert sorted(inverse[row] for row in a.triplet) == sorted(b.triplet)
+        assert sorted(inverse[row] for row in a.removed) == sorted(b.removed)
+        assert (inverse[a.window[0]], inverse[a.window[1]]) == b.window
+        assert (a.root_index, a.root_count, a.accepted) == (
+            b.root_index,
+            b.root_count,
+            b.accepted,
+        )
+        assert a.prefit_chi2 == b.prefit_chi2 and a.chi2 == b.chi2

@@ -1240,12 +1240,180 @@ impl IodOutput {
             ..Self::not_found(n, epoch_scale)
         }
     }
+}
+
+/// Velocity method of a Gauss preliminary orbit (`gauss_iod_fused`'s
+/// `velocity_method`). The search uses Gibbs today; bead a6w.3 adds the
+/// Herrick-Gibbs / automatic choice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VelocityMethod {
+    Gauss,
+    Gibbs,
+    HerrickGibbs,
+}
+
+impl VelocityMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Gauss => "gauss",
+            Self::Gibbs => "gibbs",
+            Self::HerrickGibbs => "herrick+gibbs",
+        }
+    }
+
+    fn code(self) -> i32 {
+        match self {
+            Self::Gauss => 0,
+            Self::Gibbs => 1,
+            Self::HerrickGibbs => 2,
+        }
+    }
+}
+
+/// One Gauss candidate that was scored against the observations. Every row
+/// index is in the caller's observation order.
+#[derive(Debug, Clone)]
+pub struct IodCandidate {
+    /// Heliocentric ecliptic Cartesian state at `epoch`.
+    pub state: [f64; 6],
+    /// Gauss epoch of the candidate, exact to the nanosecond in `epoch_scale`.
+    pub epoch: crate::Epoch,
+    pub epoch_scale: crate::TimeScale,
+    /// Rows of the earliest and latest observation of the search window
+    /// (the whole arc under the current policy).
+    pub window: (usize, usize),
+    /// Rows of the three observations the candidate was built from.
+    pub triplet: [usize; 3],
+    /// Which of the triplet's `root_count` physical Gauss roots this is.
+    pub root_index: usize,
+    pub root_count: usize,
+    pub velocity_method: VelocityMethod,
+    /// Two-body score of the preliminary orbit against every observation.
+    pub prefit_chi2: f64,
+    pub prefit_reduced_chi2: f64,
+    /// Rows the outlier trial removed to reach acceptance (empty otherwise).
+    pub removed: Vec<usize>,
+    /// Statistics after the outlier trial (the prefit ones unless rows were
+    /// removed).
+    pub chi2_total: f64,
+    pub reduced_chi2: f64,
+    pub num_obs: usize,
+    pub arc_length: f64,
+    /// Reduced chi2 of the bounded differential correction on the window
+    /// (bead a6w.4); `None` under the current policy.
+    pub postfit_reduced_chi2: Option<f64>,
+    /// Whether that correction converged; `false` under the current policy.
+    pub converged: bool,
+    pub accepted: bool,
+    /// The per-observation evaluation, kept for the accepted candidate (and
+    /// every converged one once a6w.4 lands); `None` for the rest so dense
+    /// arcs do not retain one residual table per candidate.
+    pub evaluation: Option<FitEvaluation>,
+}
+
+/// Product of [`run_iod`]: every scored candidate, which one was accepted,
+/// the search counters and the reason when none was.
+#[derive(Debug, Clone)]
+pub struct IodResult {
+    pub candidates: Vec<IodCandidate>,
+    /// Index into `candidates` of the accepted orbit; `None` when none was.
+    pub accepted: Option<usize>,
+    /// Time scale of every candidate epoch (that of the observation times).
+    pub epoch_scale: crate::TimeScale,
+    /// Triplets for which Gauss candidates were generated.
+    pub triplets_tried: usize,
+    /// Candidates scored against the observations (successful predictions).
+    pub candidates_evaluated: usize,
+    /// Candidates skipped because their prediction failed.
+    pub candidates_failed: usize,
+    /// Bounded corrections run on candidates (0 until bead a6w.4).
+    pub corrections_run: usize,
+    /// Why no orbit was accepted; `None` when one was.
+    pub not_found_reason: Option<String>,
+}
+
+impl IodResult {
+    pub fn found(&self) -> bool {
+        self.accepted.is_some()
+    }
+
+    pub fn accepted_candidate(&self) -> Option<&IodCandidate> {
+        self.accepted.map(|index| &self.candidates[index])
+    }
+
+    fn not_found(epoch_scale: crate::TimeScale, reason: String) -> Self {
+        Self {
+            candidates: Vec::new(),
+            accepted: None,
+            epoch_scale,
+            triplets_tried: 0,
+            candidates_evaluated: 0,
+            candidates_failed: 0,
+            corrections_run: 0,
+            not_found_reason: Some(reason),
+        }
+    }
 
     fn with_search_counters(mut self, counters: &SearchCounters) -> Self {
         self.triplets_tried = counters.triplets_tried;
         self.candidates_evaluated = counters.candidates_evaluated;
         self.candidates_failed = counters.candidates_failed;
         self
+    }
+
+    /// The legacy one-orbit view ([`IodOutput`]) of this result over `n`
+    /// observations: the accepted candidate's orbit, statistics and member
+    /// arrays, or a not-found output carrying the counters and the reason.
+    pub fn to_output(&self, n: usize) -> IodOutput {
+        let mut output = match self.accepted_candidate() {
+            Some(candidate) => {
+                let evaluation = candidate
+                    .evaluation
+                    .clone()
+                    .unwrap_or_else(|| FitEvaluation {
+                        residuals: Vec::new(),
+                        chi2: Vec::new(),
+                        dof: Vec::new(),
+                        probability: Vec::new(),
+                        orbit_chi2: candidate.prefit_chi2,
+                        reduced_chi2: candidate.prefit_reduced_chi2,
+                        arc_length: candidate.arc_length,
+                        num_obs: candidate.num_obs,
+                        outlier: Vec::new(),
+                    });
+                IodOutput {
+                    found: true,
+                    state: candidate.state,
+                    epoch: Some(candidate.epoch),
+                    epoch_scale: candidate.epoch_scale,
+                    arc_length: candidate.arc_length,
+                    num_obs: candidate.num_obs,
+                    chi2_total: candidate.chi2_total,
+                    reduced_chi2: candidate.reduced_chi2,
+                    residuals: evaluation.residuals,
+                    residual_chi2: evaluation.chi2,
+                    residual_dof: evaluation.dof,
+                    residual_probability: evaluation.probability,
+                    solution: (0..n).map(|row| candidate.triplet.contains(&row)).collect(),
+                    outlier: (0..n).map(|row| candidate.removed.contains(&row)).collect(),
+                    triplets_tried: 0,
+                    candidates_evaluated: 0,
+                    candidates_failed: 0,
+                    not_found_reason: None,
+                }
+            }
+            None => IodOutput::not_found_because(
+                n,
+                self.epoch_scale,
+                self.not_found_reason
+                    .clone()
+                    .unwrap_or_else(|| "no orbit accepted".to_string()),
+            ),
+        };
+        output.triplets_tried = self.triplets_tried;
+        output.candidates_evaluated = self.candidates_evaluated;
+        output.candidates_failed = self.candidates_failed;
+        output
     }
 }
 
@@ -1304,12 +1472,20 @@ where
 /// `candidates_failed` and skipped; `InvalidRequest` and `Schema` errors
 /// are caller errors and propagate. When every candidate failed the result
 /// is not found with the last failure message as `not_found_reason`.
-pub fn iod_fit(
-    predictor: &dyn SphericalPredictor,
+///
+/// The product is the typed candidate set [`IodResult`]: every scored
+/// candidate with its triplet, root, prefit statistics and (for the
+/// accepted one) the full evaluation, plus the search counters. The
+/// policy is unchanged: the first candidate within `rchi2_threshold`, with
+/// the outlier trial, is accepted. `iod_predictor` is the propagator that
+/// scores candidates; it is explicit so that IOD and refinement can run on
+/// different backends.
+pub fn run_iod(
+    iod_predictor: &dyn SphericalPredictor,
     observed: &CoordinateBatch,
     observers: &ObserverBatch,
     config: &IodConfig,
-) -> PropagationResultValue<IodOutput> {
+) -> PropagationResultValue<IodResult> {
     let n = observed.len();
     if observers.len() != n {
         return Err(PropagationError::InvalidRequest(
@@ -1318,8 +1494,7 @@ pub fn iod_fit(
     }
     let epoch_scale = observation_time_scale(observed)?;
     if n == 0 || n < config.min_obs {
-        return Ok(IodOutput::not_found_because(
-            n,
+        return Ok(IodResult::not_found(
             epoch_scale,
             format!("{n} observations, fewer than min_obs = {}", config.min_obs),
         ));
@@ -1327,8 +1502,44 @@ pub fn iod_fit(
     let order = iod_observation_order(observed, observers)?;
     let sorted_observed = take_coordinate_batch(observed, &order)?;
     let sorted_observers = take_observer_batch(observers, &order)?;
-    let output = iod_fit_sorted(predictor, &sorted_observed, &sorted_observers, config)?;
-    Ok(restore_input_order(output, &order))
+    let result = run_iod_sorted(iod_predictor, &sorted_observed, &sorted_observers, config)?;
+    Ok(restore_input_order(result, &order))
+}
+
+/// [`run_iod`] over the backend-generic barycentric ephemeris workflow of
+/// `iod_propagator`.
+pub fn run_iod_barycentric<P, T>(
+    iod_propagator: &P,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &IodConfig,
+    options: &EphemerisOptions,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<IodResult>
+where
+    P: Propagator,
+    T: OriginTranslationProvider,
+{
+    let predictor = PropagatorPredictor {
+        propagator: iod_propagator,
+        options,
+        provider,
+        translation_provider,
+    };
+    run_iod(&predictor, observed, observers, config)
+}
+
+/// The legacy one-orbit view of [`run_iod`] (`IodOutput`): kept for the
+/// linkage batch driver and for callers of the pre-candidate-set contract;
+/// new code should use [`run_iod`]. Deprecated in favour of `run_iod`.
+pub fn iod_fit(
+    predictor: &dyn SphericalPredictor,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &IodConfig,
+) -> PropagationResultValue<IodOutput> {
+    run_iod(predictor, observed, observers, config).map(|result| result.to_output(observed.len()))
 }
 
 /// Time scale of the observation epochs (the scale of every IOD epoch).
@@ -1366,9 +1577,10 @@ fn iod_observation_order(
     Ok(order)
 }
 
-/// Map the member arrays of an output computed on the sorted view
-/// (`order[k]` = input row of sorted row `k`) back to the input order.
-fn restore_input_order(mut output: IodOutput, order: &[usize]) -> IodOutput {
+/// Map a result computed on the sorted view (`order[k]` = input row of
+/// sorted row `k`) back to the input order: every candidate's rows and the
+/// member arrays of its evaluation.
+fn restore_input_order(mut result: IodResult, order: &[usize]) -> IodResult {
     fn unpermute<T: Clone>(sorted: &[T], order: &[usize], width: usize) -> Vec<T> {
         if sorted.is_empty() {
             return Vec::new();
@@ -1380,22 +1592,30 @@ fn restore_input_order(mut output: IodOutput, order: &[usize]) -> IodOutput {
         }
         out
     }
-    output.residuals = unpermute(&output.residuals, order, 6);
-    output.residual_chi2 = unpermute(&output.residual_chi2, order, 1);
-    output.residual_dof = unpermute(&output.residual_dof, order, 1);
-    output.residual_probability = unpermute(&output.residual_probability, order, 1);
-    output.solution = unpermute(&output.solution, order, 1);
-    output.outlier = unpermute(&output.outlier, order, 1);
-    output
+    for candidate in result.candidates.iter_mut() {
+        candidate.window = (order[candidate.window.0], order[candidate.window.1]);
+        candidate.triplet = std::array::from_fn(|slot| order[candidate.triplet[slot]]);
+        for row in candidate.removed.iter_mut() {
+            *row = order[*row];
+        }
+        if let Some(evaluation) = candidate.evaluation.as_mut() {
+            evaluation.residuals = unpermute(&evaluation.residuals, order, 6);
+            evaluation.chi2 = unpermute(&evaluation.chi2, order, 1);
+            evaluation.dof = unpermute(&evaluation.dof, order, 1);
+            evaluation.probability = unpermute(&evaluation.probability, order, 1);
+            evaluation.outlier = unpermute(&evaluation.outlier, order, 1);
+        }
+    }
+    result
 }
 
-/// [`iod_fit`] on observations already in the canonical search order.
-fn iod_fit_sorted(
+/// [`run_iod`] on observations already in the canonical search order.
+fn run_iod_sorted(
     predictor: &dyn SphericalPredictor,
     observed: &CoordinateBatch,
     observers: &ObserverBatch,
     config: &IodConfig,
-) -> PropagationResultValue<IodOutput> {
+) -> PropagationResultValue<IodResult> {
     let n = observed.len();
     let observed_values = observed.values.spherical().ok_or_else(|| {
         PropagationError::InvalidRequest("IOD requires spherical observed coordinates".to_string())
@@ -1424,17 +1644,18 @@ fn iod_fit_sorted(
     let triplets =
         select_observation_triplets_bounded(&times, config.observation_selection_method, budget);
     if triplets.is_empty() {
-        return Ok(IodOutput::not_found_because(
-            n,
+        return Ok(IodResult::not_found(
             epoch_scale,
             "no triplet of observations with three distinct epochs".to_string(),
         ));
     }
 
+    let velocity_method = VelocityMethod::Gibbs;
     let mut counters = SearchCounters {
         best_reduced_chi2: f64::INFINITY,
         ..SearchCounters::default()
     };
+    let mut candidates: Vec<IodCandidate> = Vec::new();
     for triplet in triplets {
         counters.triplets_tried += 1;
         let ra = std::array::from_fn(|slot| observed_values[triplet[slot]][1]);
@@ -1449,7 +1670,7 @@ fn iod_fit_sorted(
             dec,
             triplet_times,
             triplet_observers,
-            1,
+            velocity_method.code(),
             config.light_time,
             config.mu,
             config.speed_of_light,
@@ -1496,23 +1717,49 @@ fn iod_fit_sorted(
                 Err(err) => return Err(err),
             };
             counters.candidates_evaluated += 1;
+            let mut record = IodCandidate {
+                state,
+                epoch,
+                epoch_scale,
+                window: (0, n - 1),
+                triplet,
+                root_index: candidate,
+                root_count: candidate_count,
+                velocity_method,
+                prefit_chi2: evaluation.orbit_chi2,
+                prefit_reduced_chi2: evaluation.reduced_chi2,
+                removed: Vec::new(),
+                chi2_total: evaluation.orbit_chi2,
+                reduced_chi2: evaluation.reduced_chi2,
+                num_obs: evaluation.num_obs,
+                arc_length: evaluation.arc_length,
+                postfit_reduced_chi2: None,
+                converged: false,
+                accepted: false,
+                evaluation: None,
+            };
 
             if evaluation.reduced_chi2 <= config.rchi2_threshold {
-                return Ok(iod_accepted_output(
-                    state,
-                    epoch,
+                record.accepted = true;
+                record.evaluation = Some(evaluation);
+                candidates.push(record);
+                return Ok(IodResult {
+                    accepted: Some(candidates.len() - 1),
+                    candidates,
                     epoch_scale,
-                    &times,
-                    triplet,
-                    Vec::new(),
-                    evaluation,
-                )
+                    triplets_tried: 0,
+                    candidates_evaluated: 0,
+                    candidates_failed: 0,
+                    corrections_run: 0,
+                    not_found_reason: None,
+                }
                 .with_search_counters(&counters));
             }
             counters.best_reduced_chi2 = counters.best_reduced_chi2.min(evaluation.reduced_chi2);
             if max_outliers == 0 {
                 // Zero contamination only disables outlier removal: the
                 // next candidate, then the next triplet, is tried.
+                candidates.push(record);
                 continue;
             }
 
@@ -1532,22 +1779,28 @@ fn iod_fit_sorted(
                 let keep: Vec<bool> = (0..n).map(|row| !removed.contains(&row)).collect();
                 let (arc_length, _, _) = masked_arc_length(&times, &keep);
                 if reduced <= config.rchi2_threshold && arc_length >= config.min_arc_length {
-                    let mut accepted = iod_accepted_output(
-                        state,
-                        epoch,
+                    record.removed = removed;
+                    record.chi2_total = chi2;
+                    record.reduced_chi2 = reduced;
+                    record.num_obs = num_obs;
+                    record.arc_length = arc_length;
+                    record.accepted = true;
+                    record.evaluation = Some(evaluation);
+                    candidates.push(record);
+                    return Ok(IodResult {
+                        accepted: Some(candidates.len() - 1),
+                        candidates,
                         epoch_scale,
-                        &times,
-                        triplet,
-                        removed,
-                        evaluation,
-                    );
-                    accepted.chi2_total = chi2;
-                    accepted.reduced_chi2 = reduced;
-                    accepted.num_obs = num_obs;
-                    accepted.arc_length = arc_length;
-                    return Ok(accepted.with_search_counters(&counters));
+                        triplets_tried: 0,
+                        candidates_evaluated: 0,
+                        candidates_failed: 0,
+                        corrections_run: 0,
+                        not_found_reason: None,
+                    }
+                    .with_search_counters(&counters));
                 }
             }
+            candidates.push(record);
         }
     }
     let reason = if counters.candidates_evaluated == 0 && counters.candidates_failed > 0 {
@@ -1574,7 +1827,17 @@ fn iod_fit_sorted(
             counters.candidates_failed
         )
     };
-    Ok(IodOutput::not_found_because(n, epoch_scale, reason).with_search_counters(&counters))
+    Ok(IodResult {
+        candidates,
+        accepted: None,
+        epoch_scale,
+        triplets_tried: 0,
+        candidates_evaluated: 0,
+        candidates_failed: 0,
+        corrections_run: 0,
+        not_found_reason: Some(reason),
+    }
+    .with_search_counters(&counters))
 }
 
 /// Batch the complete IOD work unit across linkage row selections without
@@ -1622,39 +1885,6 @@ where
         }
     }
     Ok(outputs)
-}
-
-fn iod_accepted_output(
-    state: [f64; 6],
-    epoch: crate::Epoch,
-    epoch_scale: crate::TimeScale,
-    times: &[f64],
-    triplet: [usize; 3],
-    removed: Vec<usize>,
-    evaluation: FitEvaluation,
-) -> IodOutput {
-    let outlier: Vec<bool> = (0..times.len()).map(|row| removed.contains(&row)).collect();
-    let solution: Vec<bool> = (0..times.len()).map(|row| triplet.contains(&row)).collect();
-    IodOutput {
-        found: true,
-        state,
-        epoch: Some(epoch),
-        epoch_scale,
-        arc_length: evaluation.arc_length,
-        num_obs: evaluation.num_obs,
-        chi2_total: evaluation.orbit_chi2,
-        reduced_chi2: evaluation.reduced_chi2,
-        residuals: evaluation.residuals,
-        residual_chi2: evaluation.chi2,
-        residual_dof: evaluation.dof,
-        residual_probability: evaluation.probability,
-        solution,
-        outlier,
-        triplets_tried: 0,
-        candidates_evaluated: 0,
-        candidates_failed: 0,
-        not_found_reason: None,
-    }
 }
 
 pub(super) fn mjd_epoch(mjd: f64) -> crate::Epoch {

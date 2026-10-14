@@ -152,6 +152,15 @@ class NativeTwoBodyPropagator(TwoBodyPropagator):
             observers_to_ipc(observations.observers),
         )
 
+    def run_iod(self, observations, *, iod_settings=None, fit_settings=None):
+        from adam_core import _rust_native
+
+        return _rust_native.run_iod_2body_ipc(
+            *self._observations(observations),
+            iod_settings=iod_settings,
+            fit_settings=fit_settings,
+        )
+
     def full_od(self, observations, **kwargs):
         from adam_core import _rust_native
 

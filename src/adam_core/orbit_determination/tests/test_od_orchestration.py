@@ -928,29 +928,37 @@ class TestFusedRunOd:
                     atol=1e-15,
                 )
 
-    def test_fused_route_requires_the_configured_iod_propagator(
+    def test_fused_route_runs_iod_on_the_configured_propagator(
         self, two_body_observations
     ) -> None:
-        """A fused work unit runs IOD and refinement on the same propagator,
-        so it only replaces the composition when that propagator is the
-        fitter's configured IOD propagator; otherwise IOD runs on the
-        configured class, as the composition does."""
+        """The IOD propagator is explicit on the fused route: when the
+        refining propagator is the fitter's configured IOD propagator the
+        work unit scores candidates on it; otherwise it receives a fresh
+        ``propagator_class(**propagator_kwargs)`` instance, as the
+        composition uses, and the fused route is still taken."""
 
         class OtherTwoBodyPropagator(TwoBodyPropagator):
-            pass
+            ephemeris_calls = 0
+
+            def generate_ephemeris(self, orbits, observers, **kwargs):
+                type(self).ephemeris_calls += 1
+                return super().generate_ephemeris(orbits, observers, **kwargs)
 
         class CountingNativePropagator(NativeTwoBodyPropagator):
             def __init__(self) -> None:
                 super().__init__()
                 self.fused_run_od_calls = 0
                 self.fused_full_od_calls = 0
+                self.iod_propagators: list = []
 
             def run_od(self, *args, **kwargs):
                 self.fused_run_od_calls += 1
+                self.iod_propagators.append(kwargs.get("iod_propagator"))
                 return super().run_od(*args, **kwargs)
 
             def full_od(self, *args, **kwargs):
                 self.fused_full_od_calls += 1
+                self.iod_propagators.append(kwargs.get("iod_propagator"))
                 return super().full_od(*args, **kwargs)
 
         matching = NativeOrbitFitter(
@@ -966,7 +974,11 @@ class TestFusedRunOd:
         )
         propagator = CountingNativePropagator()
         assert matching.fused_propagator_matches(propagator)
+        assert matching.iod_propagator_for(propagator) is None
         assert not other_class.fused_propagator_matches(propagator)
+        assert isinstance(
+            other_class.iod_propagator_for(propagator), OtherTwoBodyPropagator
+        )
         assert not with_kwargs.fused_propagator_matches(propagator)
 
         with warnings.catch_warnings():
@@ -975,14 +987,25 @@ class TestFusedRunOd:
                 two_body_observations, matching, None, propagator=propagator
             )
             assert propagator.fused_run_od_calls == 1
-            composed, _ = run_od(
+            assert propagator.iod_propagators == [None]
+            assert OtherTwoBodyPropagator.ephemeris_calls == 0
+            other, _ = run_od(
                 two_body_observations, other_class, None, propagator=propagator
             )
-            assert propagator.fused_run_od_calls == 1
+            assert propagator.fused_run_od_calls == 2
+            assert isinstance(propagator.iod_propagators[1], OtherTwoBodyPropagator)
+            assert OtherTwoBodyPropagator.ephemeris_calls > 0
+            calls_after_run_od = OtherTwoBodyPropagator.ephemeris_calls
             direct, _ = other_class.full_od("x", two_body_observations, propagator)
-            assert propagator.fused_full_od_calls == 0
-        assert len(fused) == len(composed) == len(direct) == 1
-        assert composed.success.to_pylist() == [True]
+            assert propagator.fused_full_od_calls == 1
+            assert OtherTwoBodyPropagator.ephemeris_calls > calls_after_run_od
+            composed, _ = other_class.initial_fit("x", two_body_observations)
+        assert len(fused) == len(other) == len(direct) == len(composed) == 1
+        assert other.success.to_pylist() == [True]
+        # Same two-body dynamics on every route: the same orbit comes back.
+        npt.assert_allclose(
+            other.coordinates.values, fused.coordinates.values, rtol=0, atol=1e-12
+        )
 
     def test_object_id_none_is_null_on_both_routes(self, two_body_observations) -> None:
         """Neither route leaks the opaque backend identifier into object_id."""

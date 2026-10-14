@@ -11,8 +11,11 @@ from .gauss import gaussIOD
 from .gibbs import calcGibbs
 from .herrick_gibbs import calcHerrickGibbs
 from .iod import (
+    IodCandidate,
+    IodReport,
     initial_orbit_determination,
     iod,
+    run_iod,
     select_observations,
     sort_by_id_and_time,
 )

@@ -1852,18 +1852,21 @@ pub struct RefinedOutput {
 /// order.
 #[derive(Debug, Clone)]
 pub struct FullOdOutput {
-    /// The IOD decision; `iod.epoch` / `iod.epoch_scale` is the epoch of
-    /// `refined` too.
-    pub iod: super::od::IodOutput,
+    /// The IOD stage: every scored candidate and the accepted one, whose
+    /// exact epoch is the epoch of `refined` too.
+    pub iod: super::od::IodResult,
     pub refined: Option<RefinedOutput>,
 }
 
 /// One-crossing `OrbitFitter.full_od` for the native fitter: the complete
-/// Gauss IOD decision loop (`iod_fit_barycentric`) followed by the
-/// worst-residual or CMC2003 refinement of the accepted orbit against all
-/// observations.
-pub fn full_od_barycentric<P, T>(
-    propagator: &P,
+/// Gauss IOD decision loop (`run_iod_barycentric` on `iod_propagator`)
+/// followed by the worst-residual or CMC2003 refinement of the accepted
+/// orbit against all observations on `propagator`. The two propagators are
+/// explicit; passing the same one twice is the single-backend case.
+#[allow(clippy::too_many_arguments)]
+pub fn full_od_barycentric<I, R, T>(
+    iod_propagator: &I,
+    propagator: &R,
     observed: &CoordinateBatch,
     observers: &ObserverBatch,
     config: &FullOdConfig,
@@ -1872,9 +1875,16 @@ pub fn full_od_barycentric<P, T>(
     translation_provider: &T,
 ) -> PropagationResultValue<FullOdOutput>
 where
-    P: Propagator,
+    I: Propagator,
+    R: Propagator,
     T: OriginTranslationProvider,
 {
+    let iod_predictor = PropagatorPredictor {
+        propagator: iod_propagator,
+        options,
+        provider,
+        translation_provider,
+    };
     let predictor = PropagatorPredictor {
         propagator,
         options,
@@ -1882,6 +1892,7 @@ where
         translation_provider,
     };
     full_od_with(
+        &iod_predictor,
         &predictor,
         observed,
         observers,
@@ -1891,9 +1902,11 @@ where
     )
 }
 
-/// [`full_od_barycentric`] over any [`SphericalPredictor`].
+/// [`full_od_barycentric`] over any pair of [`SphericalPredictor`]s: IOD
+/// scores candidates on `iod_predictor`, refinement runs on `predictor`.
 #[allow(clippy::too_many_arguments)]
 pub fn full_od_with<T: OriginTranslationProvider>(
+    iod_predictor: &dyn SphericalPredictor,
     predictor: &dyn SphericalPredictor,
     observed: &CoordinateBatch,
     observers: &ObserverBatch,
@@ -1901,20 +1914,18 @@ pub fn full_od_with<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<FullOdOutput> {
-    let iod = super::od::iod_fit(predictor, observed, observers, &config.iod)?;
-    if !iod.found {
-        return Ok(FullOdOutput { iod, refined: None });
-    }
+    let iod = super::od::run_iod(iod_predictor, observed, observers, &config.iod)?;
+    let (state, epoch, epoch_scale) = match iod.accepted_candidate() {
+        Some(candidate) => (candidate.state, candidate.epoch, candidate.epoch_scale),
+        None => return Ok(FullOdOutput { iod, refined: None }),
+    };
     // The seed sits exactly at the IOD epoch (days and nanoseconds), not at
     // a float MJD round trip of it.
-    let epoch = iod.epoch.ok_or_else(|| {
-        PropagationError::InvalidRequest("accepted IOD orbit carries no epoch".to_string())
-    })?;
     let seed_coordinates = CoordinateBatch::cartesian(
-        vec![iod.state],
+        vec![state],
         Frame::Ecliptic,
         OriginArray::repeat(OriginId::from_code("SUN"), 1),
-        Some(crate::TimeArray::new(iod.epoch_scale, vec![epoch])?),
+        Some(crate::TimeArray::new(epoch_scale, vec![epoch])?),
         None,
     )?;
     let seed = OrbitBatch::new(
@@ -2020,8 +2031,9 @@ pub struct RunOdOutput {
 /// must have finite, positive lon/lat variances, else `InvalidRequest`
 /// names that model as the remedy.
 #[allow(clippy::too_many_arguments)]
-pub fn run_od_barycentric<P, T>(
-    propagator: &P,
+pub fn run_od_barycentric<I, R, T>(
+    iod_propagator: &I,
+    propagator: &R,
     observed: &CoordinateBatch,
     observers: &ObserverBatch,
     obs_code: &[String],
@@ -2034,9 +2046,16 @@ pub fn run_od_barycentric<P, T>(
     translation_provider: &T,
 ) -> PropagationResultValue<RunOdOutput>
 where
-    P: Propagator,
+    I: Propagator,
+    R: Propagator,
     T: OriginTranslationProvider,
 {
+    let iod_predictor = PropagatorPredictor {
+        propagator: iod_propagator,
+        options,
+        provider,
+        translation_provider,
+    };
     let predictor = PropagatorPredictor {
         propagator,
         options,
@@ -2044,6 +2063,7 @@ where
         translation_provider,
     };
     run_od_with(
+        &iod_predictor,
         &predictor,
         observed,
         observers,
@@ -2057,9 +2077,11 @@ where
     )
 }
 
-/// [`run_od_barycentric`] over any [`SphericalPredictor`].
+/// [`run_od_barycentric`] over any pair of [`SphericalPredictor`]s (IOD,
+/// refinement).
 #[allow(clippy::too_many_arguments)]
 pub fn run_od_with<T: OriginTranslationProvider>(
+    iod_predictor: &dyn SphericalPredictor,
     predictor: &dyn SphericalPredictor,
     observed: &CoordinateBatch,
     observers: &ObserverBatch,
@@ -2169,6 +2191,7 @@ pub fn run_od_with<T: OriginTranslationProvider>(
     };
 
     let full_od = full_od_with(
+        iod_predictor,
         predictor,
         &used,
         observers,
@@ -3380,6 +3403,7 @@ mod tests {
         let observed = synthetic_observations_spaced(1, Some(3));
         let output = full_od_barycentric(
             &TwoBodyPropagator::default(),
+            &TwoBodyPropagator::default(),
             &observed,
             &observers_spaced(1),
             &full_od_config(RefinementConfig::Cmc2003(Cmc2003FitConfig::default())),
@@ -3388,9 +3412,12 @@ mod tests {
             &ZeroTranslationProvider,
         )
         .unwrap();
-        assert!(output.iod.found);
+        assert!(output.iod.found());
         assert_eq!(output.iod.epoch_scale, TimeScale::Tdb);
-        let iod_epoch = output.iod.epoch.expect("iod epoch");
+        let accepted = output.iod.accepted_candidate().expect("accepted candidate");
+        assert!(accepted.accepted && accepted.evaluation.is_some());
+        assert_eq!(output.iod.candidates.len(), output.iod.candidates_evaluated);
+        let iod_epoch = accepted.epoch;
         assert_eq!(iod_epoch, super::super::od::mjd_epoch(iod_epoch.mjd()));
         let refined = output.refined.expect("refined orbit");
         assert!(refined.fit.converged);
@@ -3433,6 +3460,7 @@ mod tests {
             crate::observation_uncertainty::NightBatchDeweightingModel::new(2).unwrap(),
         )];
         let output = run_od_barycentric(
+            &TwoBodyPropagator::default(),
             &TwoBodyPropagator::default(),
             &observed,
             &observers_spaced(1),
@@ -3483,6 +3511,7 @@ mod tests {
         let obs_code: Vec<String> = (0..NUM_OBS).map(|_| "T00".to_string()).collect();
         run_od_barycentric(
             &TwoBodyPropagator::default(),
+            &TwoBodyPropagator::default(),
             &observations_without_covariance(),
             &observers_spaced(1),
             &obs_code,
@@ -3520,7 +3549,7 @@ mod tests {
             .iter()
             .all(|s| (s - SIGMA_DEG).abs() < 1e-15));
         assert!(output.used.sigma_lon.iter().all(|s| s.is_finite()));
-        assert!(output.full_od.iod.found);
+        assert!(output.full_od.iod.found());
         let refined = output.full_od.refined.expect("refined orbit");
         assert!(refined.fit.converged);
         assert_eq!(refined.n_rejected, 0);

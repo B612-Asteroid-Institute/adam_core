@@ -39,6 +39,8 @@ _REQUIRED_NATIVE_SYMBOLS = (
     "cmc2003_fit_ipc",
     "cmc2003_fit_2body_ipc",
     "iod_fit_ipc",
+    "run_iod_ipc",
+    "run_iod_2body_ipc",
     "full_od_ipc",
     "full_od_2body_ipc",
     "run_od_ipc",

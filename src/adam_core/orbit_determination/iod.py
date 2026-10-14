@@ -1,6 +1,7 @@
 import logging
 import time
 import uuid
+from dataclasses import dataclass
 from typing import Literal, Optional, Tuple, Type
 
 import numpy as np
@@ -22,7 +23,7 @@ from .observation_uncertainty import ObservationUncertaintyModel
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["initial_orbit_determination"]
+__all__ = ["IodCandidate", "IodReport", "initial_orbit_determination", "run_iod"]
 
 
 def sort_by_id_and_time(
@@ -298,6 +299,208 @@ def iod_worker(
     return iod_orbits, iod_orbit_members
 
 
+@dataclass(frozen=True)
+class IodCandidate:
+    """
+    One Gauss candidate scored by `run_iod`. Row indices refer to the
+    observations as passed to `run_iod`.
+    """
+
+    #: Heliocentric ecliptic Cartesian state (au, au/day) at the epoch.
+    state: tuple[float, float, float, float, float, float]
+    #: Gauss epoch, exact (integer days and nanoseconds in ``epoch_scale``).
+    epoch_days: int
+    epoch_nanos: int
+    epoch_scale: str
+    #: Rows of the earliest and latest observation of the search window.
+    window: tuple[int, int]
+    #: Rows of the three observations the candidate was built from.
+    triplet: tuple[int, int, int]
+    #: Which of the triplet's ``root_count`` physical Gauss roots this is.
+    root_index: int
+    root_count: int
+    velocity_method: str
+    #: Two-body score of the preliminary orbit against every observation.
+    prefit_chi2: float
+    prefit_reduced_chi2: float
+    #: Rows the outlier trial removed to reach acceptance (empty otherwise).
+    removed: tuple[int, ...]
+    #: Statistics after the outlier trial (the prefit ones unless rows were
+    #: removed).
+    chi2: float
+    reduced_chi2: float
+    num_obs: int
+    arc_length: float
+    #: Reduced chi2 of the bounded correction on the window (None until the
+    #: post-correction policy lands) and whether it converged.
+    postfit_reduced_chi2: Optional[float]
+    converged: bool
+    accepted: bool
+
+
+@dataclass(frozen=True)
+class IodReport:
+    """
+    What `run_iod` searched: every scored candidate (`IodCandidate`), which
+    one was accepted, the search counters and the reason when none was.
+    A dataclass rather than a table: candidates are few and their rows
+    reference the observations by index.
+    """
+
+    candidates: tuple[IodCandidate, ...]
+    #: Index into ``candidates`` of the accepted orbit; None when none was.
+    accepted: Optional[int]
+    triplets_tried: int
+    candidates_evaluated: int
+    candidates_failed: int
+    corrections_run: int
+    not_found_reason: Optional[str]
+
+    @property
+    def found(self) -> bool:
+        return self.accepted is not None
+
+    @property
+    def accepted_candidate(self) -> Optional[IodCandidate]:
+        return None if self.accepted is None else self.candidates[self.accepted]
+
+
+def report_from_iod_output(output: dict) -> IodReport:
+    """The `IodReport` of a Rust IOD dict (`run_iod_ipc` or the ``iod`` entry
+    of a fused ``full_od`` / ``run_od`` output)."""
+    candidates = tuple(
+        IodCandidate(
+            state=tuple(float(v) for v in candidate["state"]),
+            epoch_days=int(candidate["epoch_days"]),
+            epoch_nanos=int(candidate["epoch_nanos"]),
+            epoch_scale=candidate["epoch_scale"],
+            window=(int(candidate["window"][0]), int(candidate["window"][1])),
+            triplet=tuple(int(row) for row in candidate["triplet"]),
+            root_index=int(candidate["root_index"]),
+            root_count=int(candidate["root_count"]),
+            velocity_method=candidate["velocity_method"],
+            prefit_chi2=float(candidate["prefit_chi2"]),
+            prefit_reduced_chi2=float(candidate["prefit_reduced_chi2"]),
+            removed=tuple(int(row) for row in candidate["removed"]),
+            chi2=float(candidate["chi2"]),
+            reduced_chi2=float(candidate["reduced_chi2"]),
+            num_obs=int(candidate["num_obs"]),
+            arc_length=float(candidate["arc_length"]),
+            postfit_reduced_chi2=candidate.get("postfit_reduced_chi2"),
+            converged=bool(candidate.get("converged", False)),
+            accepted=bool(candidate["accepted"]),
+        )
+        for candidate in output.get("candidates", ())
+    )
+    accepted = output.get("accepted")
+    return IodReport(
+        candidates=candidates,
+        accepted=None if accepted is None else int(accepted),
+        triplets_tried=int(output.get("triplets_tried", 0)),
+        candidates_evaluated=int(output.get("candidates_evaluated", 0)),
+        candidates_failed=int(output.get("candidates_failed", 0)),
+        corrections_run=int(output.get("corrections_run", 0)),
+        not_found_reason=output.get("not_found_reason"),
+    )
+
+
+def _empty_report(reason: str) -> IodReport:
+    return IodReport((), None, 0, 0, 0, 0, reason)
+
+
+def run_iod(
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    *,
+    min_obs: int = 6,
+    min_arc_length: float = 1.0,
+    contamination_percentage: float = 0.0,
+    rchi2_threshold: float = 200,
+    observation_selection_method: Literal[
+        "combinations", "first+middle+last", "thirds"
+    ] = "combinations",
+    light_time: bool = True,
+    max_triplets: Optional[int] = None,
+    observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
+) -> Tuple[FittedOrbits, FittedOrbitMembers, IodReport]:
+    """
+    The IOD stage: Gauss preliminary orbits on observation triplets, scored
+    against all observations on ``propagator``, with the first candidate
+    within ``rchi2_threshold`` (after the outlier trial) accepted.
+
+    This is the native stage behind `iod`, `NativeOrbitFitter.initial_fit`
+    and the IOD half of `run_od`. ``propagator`` is explicit: it is the
+    backend that scores candidates and may differ from the one that later
+    refines the orbit. A Rust-backed propagator exposing the fused
+    ``run_iod`` work unit runs the whole search in one crossing; any other
+    propagator runs the same Rust search through its own
+    ``generate_ephemeris``.
+
+    Parameters
+    ----------
+    observations : `OrbitDeterminationObservations`
+        Observations believed to belong to one object (any row order; the
+        search sorts by epoch, station and row and reports in input order).
+    propagator : `~adam_core.propagator.Propagator`
+        The propagator instance that scores candidates.
+    min_obs, min_arc_length, contamination_percentage, rchi2_threshold,
+    observation_selection_method, light_time
+        As for `iod`.
+    max_triplets : int, optional
+        Bound on the triplets searched; None keeps the legacy budget of three
+        triplets per allowed outlier.
+    observatory_bias_model : `ObservationUncertaintyModel`, optional
+        Applied to the observations before the search.
+
+    Returns
+    -------
+    orbit : `FittedOrbits` (0 or 1)
+        The accepted preliminary orbit at its exact Gauss epoch.
+    members : `FittedOrbitMembers` (0 or N)
+        Residuals and solution / outlier flags of every observation against
+        the accepted orbit, in input order.
+    report : `IodReport`
+        Every scored candidate, the accepted index, the search counters and
+        the reason when no orbit was accepted.
+    """
+    if observatory_bias_model is not None:
+        observations = observatory_bias_model.apply(observations)
+    if len(observations) == 0:
+        return (
+            FittedOrbits.empty(),
+            FittedOrbitMembers.empty(),
+            _empty_report("no observations"),
+        )
+    iod_settings = {
+        "min_obs": min_obs,
+        "min_arc_length": min_arc_length,
+        "contamination_percentage": contamination_percentage,
+        "rchi2_threshold": rchi2_threshold,
+        "observation_selection_method": observation_selection_method,
+        "light_time": light_time,
+        "mu": MU,
+        "speed_of_light": C,
+        "max_triplets": max_triplets,
+    }
+    orbit_id = uuid.uuid4().hex
+    fused = getattr(propagator, "run_iod", None)
+    if fused is not None:
+        output = fused(observations, iod_settings=iod_settings)
+    else:
+        from adam_core import _rust_native
+
+        from .differential_correction import _native_problem
+
+        _, observed_ipc, observers_ipc = _native_problem(
+            _placeholder_orbit(observations), observations
+        )
+        output = _rust_native.run_iod_ipc(
+            propagator, observed_ipc, observers_ipc, iod_settings=iod_settings
+        )
+    orbit, members = tables_from_iod_output(orbit_id, observations, output)
+    return orbit, members, report_from_iod_output(output)
+
+
 def iod(
     observations: OrbitDeterminationObservations,
     propagator: Type[Propagator],
@@ -383,62 +586,23 @@ def iod(
             "outlier" : Flag to indicate which observations are potential outliers (their chi2 is higher than
                 the chi2 threshold) [float]
     """
-    # Apply the observatory bias model (if any) before fitting: inflates the
-    # observation uncertainties once at this entry point.
+    # Apply the observatory bias model (if any) before anything else, as
+    # every entry point does; then the accepted orbit of the `run_iod` stage
+    # on a fresh propagator instance (the candidate report is available from
+    # `run_iod` itself).
     if observatory_bias_model is not None:
         observations = observatory_bias_model.apply(observations)
-
-    # Initialize the propagator
-    prop = propagator(**propagator_kwargs)
-
-    # One native crossing owns the complete preliminary-IOD decision loop on
-    # providers exposing the fused work unit. UUID creation remains Python-
-    # owned; the native batch uses it as the synthetic linkage/final orbit id.
-    if hasattr(prop, "initial_orbit_determination"):
-        orbit_id = uuid.uuid4().hex
-        return _native_initial_orbit_determination(
-            prop,
-            observations,
-            [orbit_id],
-            [orbit_id] * len(observations),
-            observations.id.to_pylist(),
-            min_obs=min_obs,
-            min_arc_length=min_arc_length,
-            contamination_percentage=contamination_percentage,
-            rchi2_threshold=rchi2_threshold,
-            observation_selection_method=observation_selection_method,
-            light_time=light_time,
-            chunk_size=1,
-        )
-
-    # Every other propagator runs the same Rust decision loop through the
-    # callback route, driving its own ``generate_ephemeris``.
-    from adam_core import _rust_native
-
-    from .differential_correction import _native_problem
-
-    orbit_id = uuid.uuid4().hex
-    if len(observations) == 0:
-        return FittedOrbits.empty(), FittedOrbitMembers.empty()
-    _, observed_ipc, observers_ipc = _native_problem(
-        _placeholder_orbit(observations), observations
+    orbit, members, _report = run_iod(
+        observations,
+        propagator(**propagator_kwargs),
+        min_obs=min_obs,
+        min_arc_length=min_arc_length,
+        contamination_percentage=contamination_percentage,
+        rchi2_threshold=rchi2_threshold,
+        observation_selection_method=observation_selection_method,
+        light_time=light_time,
     )
-    output = _rust_native.iod_fit_ipc(
-        prop,
-        observed_ipc,
-        observers_ipc,
-        iod_settings={
-            "min_obs": min_obs,
-            "min_arc_length": min_arc_length,
-            "contamination_percentage": contamination_percentage,
-            "rchi2_threshold": rchi2_threshold,
-            "observation_selection_method": observation_selection_method,
-            "light_time": light_time,
-            "mu": MU,
-            "speed_of_light": C,
-        },
-    )
-    return tables_from_iod_output(orbit_id, observations, output)
+    return orbit, members
 
 
 def _placeholder_orbit(observations: OrbitDeterminationObservations) -> Orbits:

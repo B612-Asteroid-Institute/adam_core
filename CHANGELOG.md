@@ -92,8 +92,35 @@ This file contains notable changes in adam-core
   `file=mpc` snapshots and lifecycle errors, and validity-bounded Trajectory
   methods are Rust-owned behind compatible Python schemas.
 
+### Added
+
+- The typed IOD stage: Rust `run_iod` (and `run_iod_barycentric`) returns an
+  `IodResult`, every scored Gauss candidate (`IodCandidate`: state, exact
+  epoch, search window, triplet rows, root index and count, velocity method,
+  prefit and post-trial statistics, outlier rows, acceptance) plus the
+  accepted index, the search counters and the not-found reason; the
+  bindings `run_iod_ipc` / `run_iod_2body_ipc` and the IOD dicts carry the
+  same (`candidates`, `accepted`, `corrections_run`); Python `run_iod`
+  returns the accepted orbit, its members and an `IodReport`. The search
+  policy is unchanged. `iod_fit` / `iod_fit_ipc` remain as the one-orbit view
+  and are deprecated in favour of `run_iod`.
+- The IOD propagator is explicit at every stage boundary: `full_od_with`,
+  `run_od_with` and their barycentric drivers take an IOD predictor and a
+  refinement predictor; the `full_od` / `run_od` bindings (and their
+  `_2body` twins) accept `iod_propagator`; `NativeOrbitFitter.iod_propagator_for`
+  hands fused work units the configured `propagator_class(**propagator_kwargs)`
+  when it differs from the refining propagator, so the fused route now runs
+  for every configuration and matches the composition on IOD backend.
+
 ### Changed
 
+- `iod()` and `NativeOrbitFitter.initial_fit` are thin wrappers over
+  `run_iod`; the per-object shortcut to a propagator's compiled
+  `initial_orbit_determination` work unit is gone from `iod()` (the linkage
+  batch `initial_orbit_determination` still uses it), so a propagator without
+  the fused `run_iod` work unit runs the core search through its own
+  `generate_ephemeris` and gets the deterministic ordering, continuation and
+  budget fixes of this branch.
 - The native differential-correction solver is now the trust-region
   Gauss-Newton method of `scipy.optimize.least_squares(method="trf",
   x_scale="jac")` without bounds (exact trust-region step on the scaled

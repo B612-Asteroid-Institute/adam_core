@@ -461,6 +461,49 @@ walk-forward and consistency runs exposed.
   differences 1e-8 (O(h) fixed point), Huber weight 1e-5 (robust cost equal
   to scipy to 1e-9, end state 1e-11 au apart on the flat valley).
 
+## 2026-10-13 follow-up: typed IOD stage (bead od_experiments_setup-a6w.2)
+
+The review's "typed batch between IOD and refinement" and "explicit
+propagators per stage", without changing the search policy (beads a6w.3 /
+a6w.4 do that).
+
+* Rust `run_iod(iod_predictor, observed, observers, &IodConfig) -> IodResult`
+  (`od.rs`): `IodResult { candidates: Vec<IodCandidate>, accepted, epoch_scale,
+  triplets_tried, candidates_evaluated, candidates_failed, corrections_run,
+  not_found_reason }`; `IodCandidate` carries state, exact `Epoch`, window
+  rows, triplet rows, root index / count, `VelocityMethod`, prefit and
+  post-trial statistics, removed rows, acceptance, and the full
+  `FitEvaluation` for the accepted candidate only (dense arcs would otherwise
+  retain one residual table per candidate). `restore_input_order` maps every
+  candidate back to the caller's rows. `iod_fit` = `run_iod(..).to_output(n)`
+  (deprecated one-orbit view; the linkage batch driver still uses it).
+* `full_od_with(iod_predictor, predictor, ...)`, `run_od_with(iod_predictor,
+  predictor, ...)`, `full_od_barycentric<I, R, T>` / `run_od_barycentric<I, R, T>`:
+  IOD scores on the first, refinement runs on the second; `FullOdOutput.iod`
+  is the `IodResult`.
+* Bindings (`od_drivers.rs`): `run_with_predictors` (each of the two may be a
+  Python propagator through `PyEphemerisPredictor` or adam_core's two-body;
+  `iod_propagator=None` means the refining one; a Python exception from either
+  is re-raised unchanged); `run_iod_ipc` / `run_iod_2body_ipc`; `iod_fit_ipc`
+  aliases `run_iod_ipc`; `full_od_ipc` / `run_od_ipc` and the `_2body` twins
+  take `iod_propagator=None`. The IOD dict keeps the accepted-orbit keys and
+  adds `candidates` (list of candidate dicts), `accepted`, `corrections_run`.
+* Python: `run_iod(observations, propagator, *, ...) -> (FittedOrbits,
+  FittedOrbitMembers, IodReport)` in `iod.py` (frozen dataclasses `IodReport`
+  / `IodCandidate`; `report_from_iod_output`), dispatching to a propagator's
+  fused `run_iod` work unit or the callback binding; `iod()` and
+  `NativeOrbitFitter.initial_fit` wrap it (the per-object
+  `initial_orbit_determination` shortcut is gone from `iod()`, see CHANGELOG);
+  `NativeOrbitFitter.iod_propagator_for(propagator)` gives fused `full_od` /
+  `run_od` the configured IOD propagator when it is not the refining one, and
+  the fused route no longer requires `fused_propagator_matches`.
+* Tests: `test_run_iod.py` (legacy `iod()` parity with `run_iod`, fused vs
+  callback candidate sets, empty input, two distinct Python propagators through
+  `full_od_ipc` / `run_od_ipc`, `initial_fit` on the configured class),
+  `test_iod_determinism.py` (candidate report contents and counters; candidate
+  set invariant to row order), `test_od_orchestration.py` (fused route runs IOD
+  on the configured propagator and still takes the fused route).
+
 ## Correctness gates
 
 * **HEALPix RING order.** `efcc18::tests::ring_order_matches_jpl_tiles_dat`

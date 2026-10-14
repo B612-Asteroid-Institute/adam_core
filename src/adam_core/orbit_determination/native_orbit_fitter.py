@@ -26,7 +26,7 @@ from .differential_correction import (
 )
 from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
-from .iod import iod
+from .iod import run_iod
 from .orbit_fitter import OrbitFitter
 from .rejection import cmc2003_fit
 
@@ -264,16 +264,27 @@ class NativeOrbitFitter(OrbitFitter):
 
     def fused_propagator_matches(self, propagator: Propagator) -> bool:
         """
-        Whether a fused work unit of ``propagator`` would run the IOD this
-        fitter is configured for. The composition runs IOD on a fresh
-        ``propagator_class(**propagator_kwargs)`` and refinement on
-        ``propagator``; a fused work unit runs both on ``propagator``, so it
-        only represents the composition when ``propagator`` is an instance
-        of ``propagator_class`` built without extra keyword arguments.
+        Whether ``propagator`` is the IOD propagator this fitter is
+        configured for: an instance of ``propagator_class`` built without
+        extra keyword arguments. When it is, a fused work unit scores the
+        IOD candidates on ``propagator`` itself; otherwise
+        `iod_propagator_for` hands the fused work unit a fresh configured
+        instance, as the composition uses.
         """
         return (
             isinstance(propagator, self.propagator_class) and not self.propagator_kwargs
         )
+
+    def iod_propagator_for(self, propagator: Propagator) -> Optional[Propagator]:
+        """
+        The explicit IOD propagator for a fused work unit refining on
+        ``propagator``: None when ``propagator`` already is the configured
+        IOD propagator (`fused_propagator_matches`), else a fresh
+        ``propagator_class(**propagator_kwargs)``.
+        """
+        if self.fused_propagator_matches(propagator):
+            return None
+        return self.propagator_class(**self.propagator_kwargs)
 
     def full_od(
         self,
@@ -285,18 +296,14 @@ class NativeOrbitFitter(OrbitFitter):
         IOD followed by refinement. On a Rust-backed propagator exposing the
         fused ``full_od`` work unit the whole pipeline (Gauss IOD decision
         loop, differential correction, outlier rejection) runs natively in
-        one crossing when ``supports_native_full_od`` confirms compatibility
-        and ``fused_propagator_matches`` confirms that ``propagator`` is the
-        configured IOD propagator; otherwise `initial_fit` and `refine_fit`
-        are chained, honoring subclass overrides and the configured
-        ``propagator_class`` for IOD.
+        one crossing when ``supports_native_full_od`` confirms compatibility;
+        the IOD stage runs on the configured IOD propagator (`iod_propagator_for`),
+        which the work unit receives explicitly when it is not ``propagator``
+        itself. Otherwise `initial_fit` and `refine_fit` are chained,
+        honoring subclass overrides.
         """
         fused = getattr(propagator, "full_od", None)
-        if (
-            fused is not None
-            and self.supports_native_full_od()
-            and self.fused_propagator_matches(propagator)
-        ):
+        if fused is not None and self.supports_native_full_od():
             iod_settings, refinement, fit_settings = self.native_settings()
             _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
             output = fused(
@@ -304,6 +311,7 @@ class NativeOrbitFitter(OrbitFitter):
                 iod_settings=iod_settings,
                 refinement=refinement,
                 fit_settings=fit_settings,
+                iod_propagator=self.iod_propagator_for(propagator),
             )
             return tables_from_native_full_od(object_id, observations, output)
         return super().full_od(object_id, observations, propagator)
@@ -361,15 +369,14 @@ class NativeOrbitFitter(OrbitFitter):
             )
             return fitted_orbits, fitted_orbit_members
 
-        fitted_orbits, fitted_orbit_members = iod(
+        fitted_orbits, fitted_orbit_members, _report = run_iod(
             observations,
-            self.propagator_class,
+            self.propagator_class(**self.propagator_kwargs),
             min_obs=self.min_obs,
             min_arc_length=self.min_arc_length,
             contamination_percentage=self.contamination_percentage,
             rchi2_threshold=self.iod_rchi2_threshold,
             observation_selection_method=self.observation_selection_method,
-            propagator_kwargs=self.propagator_kwargs,
         )
         return fitted_orbits, fitted_orbit_members
 

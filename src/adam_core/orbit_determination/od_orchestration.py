@@ -261,10 +261,6 @@ def _fused_run_od(
         return None
     if not fitter.supports_native_full_od():
         return None
-    if not fitter.fused_propagator_matches(propagator):
-        # The fitter is configured to run IOD on another propagator than
-        # the one refining; only the composition honors that.
-        return None
     if models is None:
         model_list: list[ObservationUncertaintyModel] = []
     elif isinstance(models, ObservationUncertaintyModel):
@@ -284,6 +280,8 @@ def _fused_run_od(
         iod_settings=iod_settings,
         refinement=refinement,
         fit_settings=fit_settings,
+        # The configured IOD propagator, explicit when it is not `propagator`.
+        iod_propagator=fitter.iod_propagator_for(propagator),
     )
     fitted_orbits, members = tables_from_native_full_od(
         backend_object_id, observations, output

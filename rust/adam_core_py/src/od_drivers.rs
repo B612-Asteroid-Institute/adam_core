@@ -26,12 +26,13 @@ use adam_core_rs_coords::observation_uncertainty::{
     SigmaFloorModel,
 };
 use adam_core_rs_coords::propagation::{
-    cmc2003_fit_with, fit_orbit_whitened_with, full_od_with, iod_fit, iterative_fit_with,
+    cmc2003_fit_with, fit_orbit_whitened_with, full_od_with, iterative_fit_with, run_iod,
     run_od_with, validate_fit_covariance_with, AstrometrySnapshot, Cmc2003FitConfig,
-    CovariancePropagation, EphemerisOptions, EpochPolicy, FullOdConfig, FullOdOutput, IodConfig,
-    IodOutput, IterativeFitConfig, JacobianMethod, ObservationSelectionMethod, PropagationOptions,
-    PropagationResultValue, PropagatorPredictor, RefinementConfig, SphericalPredictor,
-    TwoBodyPropagator, TwoBodyPropagatorConfig, WhitenedFitConfig, WhitenedFitOutput,
+    CovariancePropagation, EphemerisOptions, EpochPolicy, FullOdConfig, FullOdOutput, IodCandidate,
+    IodConfig, IodResult, IterativeFitConfig, JacobianMethod, ObservationSelectionMethod,
+    PropagationOptions, PropagationResultValue, PropagatorPredictor, RefinementConfig,
+    SphericalPredictor, TwoBodyPropagator, TwoBodyPropagatorConfig, WhitenedFitConfig,
+    WhitenedFitOutput,
 };
 use adam_core_rs_coords::veres2017::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
 use adam_core_rs_coords::{
@@ -402,6 +403,55 @@ fn run_with_predictor<R: Send>(
     }
 }
 
+/// [`run_with_predictor`] for a two-stage driver: `iod_propagator` scores the
+/// IOD candidates and `propagator` refines (each `None` = adam_core's two-body
+/// propagator; `iod_propagator=None` alone = the refinement propagator). A
+/// Python exception raised by either propagator is re-raised unchanged.
+fn run_with_predictors<R: Send>(
+    py: Python<'_>,
+    iod_propagator: Option<&Bound<'_, PyAny>>,
+    propagator: Option<&Bound<'_, PyAny>>,
+    settings: &FitSettings,
+    driver: impl for<'p> FnOnce(
+            &'p dyn SphericalPredictor,
+            &'p dyn SphericalPredictor,
+        ) -> PropagationResultValue<R>
+        + Send,
+) -> PyResult<R> {
+    let iod_callback = iod_propagator
+        .map(|object| PyEphemerisPredictor::new(py, object))
+        .transpose()?;
+    let refine_callback = propagator
+        .map(|object| PyEphemerisPredictor::new(py, object))
+        .transpose()?;
+    let result = py.allow_threads(|| {
+        let two_body = PropagatorPredictor {
+            propagator: &settings.propagator,
+            options: &settings.options,
+            provider: &ErfaTimeProvider,
+            translation_provider: &LockingSpiceTranslation,
+        };
+        let refine: &dyn SphericalPredictor = match &refine_callback {
+            Some(callback) => callback,
+            None => &two_body,
+        };
+        let iod: &dyn SphericalPredictor = match &iod_callback {
+            Some(callback) => callback,
+            None => refine,
+        };
+        driver(iod, refine)
+    });
+    result.map_err(|err| {
+        if let Some(py_err) = iod_callback
+            .as_ref()
+            .and_then(PyEphemerisPredictor::take_error)
+        {
+            return py_err;
+        }
+        od_error(err, refine_callback.as_ref())
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Output dicts
 // ---------------------------------------------------------------------------
@@ -449,11 +499,43 @@ fn fit_output_dict<'py>(
     Ok(out)
 }
 
-/// The dict contract of an IOD decision: ``found``, the accepted state and
-/// epoch, statistics, per-observation residuals and flags, plus the search
-/// counters (``triplets_tried``, ``candidates_evaluated``,
-/// ``candidates_failed``) and ``not_found_reason`` (None when found).
-fn iod_dict<'py>(py: Python<'py>, iod: IodOutput, n: usize) -> PyResult<Bound<'py, PyDict>> {
+/// One scored IOD candidate: orbit, exact epoch, provenance (window,
+/// triplet rows, root, velocity method), prefit and post-trial statistics.
+fn candidate_dict<'py>(py: Python<'py>, candidate: &IodCandidate) -> PyResult<Bound<'py, PyDict>> {
+    let out = PyDict::new(py);
+    out.set_item(
+        "state",
+        ndarray::Array1::from_vec(candidate.state.to_vec()).into_pyarray(py),
+    )?;
+    out.set_item("epoch_days", candidate.epoch.days)?;
+    out.set_item("epoch_nanos", candidate.epoch.nanos)?;
+    out.set_item("epoch_scale", candidate.epoch_scale.as_str())?;
+    out.set_item("window", (candidate.window.0, candidate.window.1))?;
+    out.set_item("triplet", candidate.triplet.to_vec())?;
+    out.set_item("root_index", candidate.root_index)?;
+    out.set_item("root_count", candidate.root_count)?;
+    out.set_item("velocity_method", candidate.velocity_method.as_str())?;
+    out.set_item("prefit_chi2", candidate.prefit_chi2)?;
+    out.set_item("prefit_reduced_chi2", candidate.prefit_reduced_chi2)?;
+    out.set_item("removed", candidate.removed.clone())?;
+    out.set_item("chi2", candidate.chi2_total)?;
+    out.set_item("reduced_chi2", candidate.reduced_chi2)?;
+    out.set_item("num_obs", candidate.num_obs)?;
+    out.set_item("arc_length", candidate.arc_length)?;
+    out.set_item("postfit_reduced_chi2", candidate.postfit_reduced_chi2)?;
+    out.set_item("converged", candidate.converged)?;
+    out.set_item("accepted", candidate.accepted)?;
+    Ok(out)
+}
+
+/// The dict contract of an IOD stage: ``found``, the accepted orbit's state,
+/// exact epoch, statistics, per-observation residuals and flags (the legacy
+/// one-orbit view), plus ``candidates`` (every scored candidate, see
+/// `candidate_dict`), ``accepted`` (its index or None), the search counters
+/// (``triplets_tried``, ``candidates_evaluated``, ``candidates_failed``,
+/// ``corrections_run``) and ``not_found_reason`` (None when found).
+fn iod_dict<'py>(py: Python<'py>, result: IodResult, n: usize) -> PyResult<Bound<'py, PyDict>> {
+    let iod = result.to_output(n);
     let out = PyDict::new(py);
     out.set_item("found", iod.found)?;
     out.set_item(
@@ -484,7 +566,14 @@ fn iod_dict<'py>(py: Python<'py>, iod: IodOutput, n: usize) -> PyResult<Bound<'p
     out.set_item("triplets_tried", iod.triplets_tried)?;
     out.set_item("candidates_evaluated", iod.candidates_evaluated)?;
     out.set_item("candidates_failed", iod.candidates_failed)?;
+    out.set_item("corrections_run", result.corrections_run)?;
     out.set_item("not_found_reason", iod.not_found_reason)?;
+    out.set_item("accepted", result.accepted)?;
+    let candidates = PyList::empty(py);
+    for candidate in &result.candidates {
+        candidates.append(candidate_dict(py, candidate)?)?;
+    }
+    out.set_item("candidates", candidates)?;
     Ok(out)
 }
 
@@ -496,7 +585,7 @@ fn full_od_dict<'py>(
     n: usize,
 ) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
-    out.set_item("found", output.iod.found)?;
+    out.set_item("found", output.iod.found())?;
     out.set_item("iod", iod_dict(py, output.iod, n)?)?;
     match output.refined {
         Some(refined) => {
@@ -852,9 +941,52 @@ fn cmc2003_fit_2body_ipc<'py>(
     )
 }
 
-/// One-crossing Gauss IOD decision loop (`iod`): triplet selection, Gauss
-/// candidates, acceptance against ``rchi2_threshold`` with outlier trials.
-/// ``fit_settings`` carries only the ephemeris / two-body options here.
+/// One-crossing IOD stage (`run_iod`): triplet selection, Gauss candidates,
+/// acceptance against ``rchi2_threshold`` with outlier trials, returning the
+/// typed candidate set (see `iod_dict`). ``iod_propagator`` scores the
+/// candidates (None = adam_core's two-body propagator). ``fit_settings``
+/// carries only the ephemeris / two-body options here.
+#[pyfunction]
+#[pyo3(signature = (iod_propagator, observed_ipc, observers_ipc, iod_settings=None, fit_settings=None))]
+fn run_iod_ipc<'py>(
+    py: Python<'py>,
+    iod_propagator: Option<&Bound<'py, PyAny>>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    iod_settings: Option<&Bound<'py, PyDict>>,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let settings = parse_fit_settings(fit_settings)?;
+    let config = parse_iod_settings(iod_settings)?;
+    let n = problem.observed.len();
+    let result = run_with_predictor(py, iod_propagator, &settings, |predictor| {
+        run_iod(predictor, &problem.observed, &problem.observers, &config)
+    })?;
+    iod_dict(py, result, n)
+}
+
+/// `run_iod_ipc` over adam_core's two-body propagator.
+#[pyfunction]
+#[pyo3(signature = (observed_ipc, observers_ipc, iod_settings=None, fit_settings=None))]
+fn run_iod_2body_ipc<'py>(
+    py: Python<'py>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    iod_settings: Option<&Bound<'py, PyDict>>,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
+    run_iod_ipc(
+        py,
+        None,
+        observed_ipc,
+        observers_ipc,
+        iod_settings,
+        fit_settings,
+    )
+}
+
+/// The pre-candidate-set name of `run_iod_ipc`; same dict (deprecated).
 #[pyfunction]
 #[pyo3(signature = (propagator, observed_ipc, observers_ipc, iod_settings=None, fit_settings=None))]
 fn iod_fit_ipc<'py>(
@@ -865,20 +997,22 @@ fn iod_fit_ipc<'py>(
     iod_settings: Option<&Bound<'py, PyDict>>,
     fit_settings: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let problem = decode_observations(observed_ipc, observers_ipc)?;
-    let settings = parse_fit_settings(fit_settings)?;
-    let config = parse_iod_settings(iod_settings)?;
-    let n = problem.observed.len();
-    let output = run_with_predictor(py, propagator, &settings, |predictor| {
-        iod_fit(predictor, &problem.observed, &problem.observers, &config)
-    })?;
-    iod_dict(py, output, n)
+    run_iod_ipc(
+        py,
+        propagator,
+        observed_ipc,
+        observers_ipc,
+        iod_settings,
+        fit_settings,
+    )
 }
 
 /// One-crossing `NativeOrbitFitter.full_od`: Gauss IOD (``iod_settings``)
-/// followed by the ``refinement`` loop with ``fit_settings``.
+/// on ``iod_propagator`` (None = ``propagator``) followed by the
+/// ``refinement`` loop with ``fit_settings`` on ``propagator``.
 #[pyfunction]
-#[pyo3(signature = (propagator, observed_ipc, observers_ipc, iod_settings=None, refinement=None, fit_settings=None))]
+#[pyo3(signature = (propagator, observed_ipc, observers_ipc, iod_settings=None, refinement=None, fit_settings=None, iod_propagator=None))]
+#[allow(clippy::too_many_arguments)]
 fn full_od_ipc<'py>(
     py: Python<'py>,
     propagator: Option<&Bound<'py, PyAny>>,
@@ -887,6 +1021,7 @@ fn full_od_ipc<'py>(
     iod_settings: Option<&Bound<'py, PyDict>>,
     refinement: Option<&Bound<'py, PyDict>>,
     fit_settings: Option<&Bound<'py, PyDict>>,
+    iod_propagator: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let settings = parse_fit_settings(fit_settings)?;
@@ -895,22 +1030,30 @@ fn full_od_ipc<'py>(
         refinement: parse_refinement(refinement, settings.config)?,
     };
     let n = problem.observed.len();
-    let output = run_with_predictor(py, propagator, &settings, |predictor| {
-        full_od_with(
-            predictor,
-            &problem.observed,
-            &problem.observers,
-            &config,
-            &ErfaTimeProvider,
-            &LockingSpiceTranslation,
-        )
-    })?;
+    let output = run_with_predictors(
+        py,
+        iod_propagator,
+        propagator,
+        &settings,
+        |iod_predictor, predictor| {
+            full_od_with(
+                iod_predictor,
+                predictor,
+                &problem.observed,
+                &problem.observers,
+                &config,
+                &ErfaTimeProvider,
+                &LockingSpiceTranslation,
+            )
+        },
+    )?;
     full_od_dict(py, output, n)
 }
 
-/// `full_od_ipc` over adam_core's two-body propagator.
+/// `full_od_ipc` over adam_core's two-body propagator (``iod_propagator``
+/// may still name a Python propagator for the IOD stage).
 #[pyfunction]
-#[pyo3(signature = (observed_ipc, observers_ipc, iod_settings=None, refinement=None, fit_settings=None))]
+#[pyo3(signature = (observed_ipc, observers_ipc, iod_settings=None, refinement=None, fit_settings=None, iod_propagator=None))]
 fn full_od_2body_ipc<'py>(
     py: Python<'py>,
     observed_ipc: &Bound<'py, PyBytes>,
@@ -918,6 +1061,7 @@ fn full_od_2body_ipc<'py>(
     iod_settings: Option<&Bound<'py, PyDict>>,
     refinement: Option<&Bound<'py, PyDict>>,
     fit_settings: Option<&Bound<'py, PyDict>>,
+    iod_propagator: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     full_od_ipc(
         py,
@@ -927,6 +1071,7 @@ fn full_od_2body_ipc<'py>(
         iod_settings,
         refinement,
         fit_settings,
+        iod_propagator,
     )
 }
 
@@ -945,7 +1090,8 @@ fn full_od_2body_ipc<'py>(
     models=None,
     iod_settings=None,
     refinement=None,
-    fit_settings=None
+    fit_settings=None,
+    iod_propagator=None
 ))]
 #[allow(clippy::too_many_arguments)]
 fn run_od_ipc<'py>(
@@ -960,6 +1106,7 @@ fn run_od_ipc<'py>(
     iod_settings: Option<&Bound<'py, PyDict>>,
     refinement: Option<&Bound<'py, PyDict>>,
     fit_settings: Option<&Bound<'py, PyDict>>,
+    iod_propagator: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let settings = parse_fit_settings(fit_settings)?;
@@ -969,20 +1116,27 @@ fn run_od_ipc<'py>(
     };
     let models = models_from_specs(models)?;
     let n = problem.observed.len();
-    let output = run_with_predictor(py, propagator, &settings, move |predictor| {
-        run_od_with(
-            predictor,
-            &problem.observed,
-            &problem.observers,
-            &obs_code,
-            &band,
-            &astcat,
-            models,
-            &config,
-            &ErfaTimeProvider,
-            &LockingSpiceTranslation,
-        )
-    })?;
+    let output = run_with_predictors(
+        py,
+        iod_propagator,
+        propagator,
+        &settings,
+        move |iod_predictor, predictor| {
+            run_od_with(
+                iod_predictor,
+                predictor,
+                &problem.observed,
+                &problem.observers,
+                &obs_code,
+                &band,
+                &astcat,
+                models,
+                &config,
+                &ErfaTimeProvider,
+                &LockingSpiceTranslation,
+            )
+        },
+    )?;
     let out = full_od_dict(py, output.full_od, n)?;
     out.set_item("original_astrometry", snapshot_dict(py, output.original)?)?;
     out.set_item("used_astrometry", snapshot_dict(py, output.used)?)?;
@@ -1001,7 +1155,8 @@ fn run_od_ipc<'py>(
     models=None,
     iod_settings=None,
     refinement=None,
-    fit_settings=None
+    fit_settings=None,
+    iod_propagator=None
 ))]
 #[allow(clippy::too_many_arguments)]
 fn run_od_2body_ipc<'py>(
@@ -1015,6 +1170,7 @@ fn run_od_2body_ipc<'py>(
     iod_settings: Option<&Bound<'py, PyDict>>,
     refinement: Option<&Bound<'py, PyDict>>,
     fit_settings: Option<&Bound<'py, PyDict>>,
+    iod_propagator: Option<&Bound<'py, PyAny>>,
 ) -> PyResult<Bound<'py, PyDict>> {
     run_od_ipc(
         py,
@@ -1028,6 +1184,7 @@ fn run_od_2body_ipc<'py>(
         iod_settings,
         refinement,
         fit_settings,
+        iod_propagator,
     )
 }
 
@@ -1040,6 +1197,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cmc2003_fit_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(cmc2003_fit_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(iod_fit_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(run_iod_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(run_iod_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(full_od_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(full_od_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_od_ipc, m)?)?;
