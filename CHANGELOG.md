@@ -146,6 +146,13 @@ This file contains notable changes in adam-core
   `run_iod` and `NativeOrbitFitter` now default to `"spans"` with corrected
   acceptance; `iod()` and the deprecated `iod_fit_ipc` keep the legacy
   `"combinations"` search with the prefit gate. Values provisional (a6w.9).
+- Corrected IOD down-weights inside the partial stages:
+  `CorrectionConfig::stage_loss` (Python `correction_settings={"stage_loss":
+  ...}`) defaults to `Huber` (the fit's `f_scale`), and each stage before the
+  whole arc is gated on its robust cost (reduced chi2 times robust cost over
+  chi2) instead of plain chi2, so observations a partial orbit predicts badly
+  no longer stall the search; `"linear"` restores the plain-chi2 stages. The
+  whole-arc stage stays linear with CMC2003 rejection.
 - `iod()` and `NativeOrbitFitter.initial_fit` are thin wrappers over
   `run_iod`; the per-object shortcut to a propagator's compiled
   `initial_orbit_determination` work unit is gone from `iod()` (the linkage

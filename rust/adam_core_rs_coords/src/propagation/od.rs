@@ -31,6 +31,7 @@
 
 use super::ephemeris::{generate_ephemeris_barycentric, EphemerisOptions};
 use super::{PropagationError, PropagationResultValue, Propagator};
+use crate::differential_correction::LossType;
 use crate::orbit_least_squares::{
     fit_orbit_least_squares_with_predictor, inverse_6x6, solve_6x6, LeastSquaresConfig,
     LeastSquaresFit,
@@ -1234,7 +1235,9 @@ impl IodAcceptance {
 /// No outlier rejection runs during these stages: an intermediate orbit
 /// fitted to part of the arc must not reject observations it cannot yet
 /// predict well; rejection belongs to the refinement of the accepted
-/// orbit. Values are provisional until bead a6w.9.
+/// orbit. The partial stages down-weight instead (`stage_loss`), as
+/// OrbFit, JPL and Find_Orb weight or reject inside every correction.
+/// Values are provisional until bead a6w.9.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CorrectionConfig {
     /// Candidates corrected at most, in increasing prefit reduced chi2.
@@ -1250,6 +1253,13 @@ pub struct CorrectionConfig {
     pub min_stage_obs: usize,
     /// Stages per candidate at most before it is abandoned.
     pub max_stages: usize,
+    /// Loss of the stages before the whole arc. `Huber` (the fit's
+    /// `f_scale`) bounds the pull of observations a partial orbit predicts
+    /// badly (433 Eros: 1960s plates stalled a 7,140-observation stage at
+    /// reduced chi2 2,516) and gates each stage on its robust cost;
+    /// `Linear` fits and gates on plain chi2. The whole-arc stage is always
+    /// linear, followed by CMC2003 rejection when above the threshold.
+    pub stage_loss: LossType,
 }
 
 impl Default for CorrectionConfig {
@@ -1260,6 +1270,7 @@ impl Default for CorrectionConfig {
             growth: 4.0,
             min_stage_obs: 6,
             max_stages: 40,
+            stage_loss: LossType::Huber,
         }
     }
 }

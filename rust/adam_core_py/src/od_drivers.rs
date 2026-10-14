@@ -36,10 +36,11 @@ use adam_core_rs_coords::propagation::{
 };
 use adam_core_rs_coords::veres2017::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
 use adam_core_rs_coords::{
-    validate_loss, CoordinateBatch as DataCoordinateBatch, ObserverBatch as DataObserverBatch,
-    OrbitBatch as DataOrbitBatch, TimeScale, TryFromNestedRecordBatch, TwoBodyModelConfig,
-    CMC2003_APPARITION_GAP_DAYS, CMC2003_CHI2_FRAC, CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT,
-    CMC2003_MAX_ITERATIONS, CMC2003_MAX_REJECTED_FRACTION, CMC2003_PSD_FLOOR_FRAC,
+    validate_loss, CoordinateBatch as DataCoordinateBatch, LossType,
+    ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch, TimeScale,
+    TryFromNestedRecordBatch, TwoBodyModelConfig, CMC2003_APPARITION_GAP_DAYS, CMC2003_CHI2_FRAC,
+    CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT, CMC2003_MAX_ITERATIONS,
+    CMC2003_MAX_REJECTED_FRACTION, CMC2003_PSD_FLOOR_FRAC,
 };
 use numpy::{IntoPyArray, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::exceptions::PyValueError;
@@ -265,6 +266,10 @@ fn parse_iod_settings_over(
             growth: setting(settings, "correction_growth", defaults.correction.growth)?,
             min_stage_obs: setting(settings, "min_stage_obs", defaults.correction.min_stage_obs)?,
             max_stages: setting(settings, "max_stages", defaults.correction.max_stages)?,
+            stage_loss: match setting::<Option<String>>(settings, "stage_loss", None)? {
+                Some(value) => LossType::parse(&value).map_err(value_error)?,
+                None => defaults.correction.stage_loss,
+            },
         },
     })
 }

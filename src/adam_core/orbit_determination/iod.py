@@ -489,12 +489,15 @@ def run_iod(
     correction_settings : dict, optional
         Overrides of the corrected acceptance (keys ``max_corrections``,
         ``max_converged``, ``correction_growth``, ``min_stage_obs``,
-        ``max_stages``); missing keys keep the Rust ``CorrectionConfig``
-        defaults.
+        ``max_stages``, ``stage_loss``); missing keys keep the Rust
+        ``CorrectionConfig`` defaults. ``stage_loss`` is the loss of the
+        stages before the whole arc: ``"huber"`` (default) down-weights
+        observations a partial orbit predicts badly and gates each stage on
+        its robust cost; ``"linear"`` turns that off.
     fit_settings : dict, optional
         Solver settings of the correction stages (as `fit_least_squares`'s;
-        the stages always use the linear loss and skip covariance
-        validation).
+        the whole-arc stage uses the linear loss, the earlier ones
+        ``stage_loss``; all skip covariance validation).
     observatory_bias_model : `ObservationUncertaintyModel`, optional
         Applied to the observations before the search.
 

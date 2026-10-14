@@ -1860,8 +1860,9 @@ pub struct FullOdOutput {
 
 /// The IOD stage under its configured acceptance: [`super::od::run_iod`]
 /// for `Prefit`, the staged correction of [`run_iod_corrected`] for
-/// `Corrected` (whose stage fits use `fit` with the linear loss and no
-/// covariance validation).
+/// `Corrected` (whose stage fits use `fit` without covariance validation,
+/// with `correction.stage_loss` before the whole arc and the linear loss
+/// on it).
 #[allow(clippy::too_many_arguments)]
 pub fn run_iod_with<T: OriginTranslationProvider>(
     iod_predictor: &dyn SphericalPredictor,
@@ -1937,7 +1938,14 @@ fn stage_fit<T: OriginTranslationProvider>(
         ) => return Ok(Err(format!("prediction failed: {err}"))),
         Err(err) => return Err(err),
     };
-    let rchi2 = output.evaluation.reduced_chi2;
+    // The stage is judged on the objective it minimized: the plain reduced
+    // chi2 for the linear loss, scaled by robust cost / chi2 for Huber (so
+    // observations the partial orbit down-weights do not fail the stage).
+    let rchi2 = if config.loss == LossType::Linear || output.fit_chi2 <= 0.0 {
+        output.evaluation.reduced_chi2
+    } else {
+        output.evaluation.reduced_chi2 * output.cost / output.fit_chi2
+    };
     // Any finite fit within the threshold is a usable seed for the next
     // stage, converged or not (the walk-forward accepted budget-exhausted
     // fits at a good state); a non-finite derivative (status -2) is not.
@@ -2002,7 +2010,9 @@ fn grow_stage(times: &[f64], mask: &[bool], growth: f64) -> Vec<bool> {
 /// rule of `grow_stage`) up to the whole arc, each stage seeded by the
 /// previous fit and kept only within `rchi2_threshold`. No stage before the
 /// whole arc rejects observations: an orbit fitted to part of the arc cannot
-/// yet tell an outlier from an observation it does not predict well. On the
+/// yet tell an outlier from an observation it does not predict well. Those
+/// stages use `correction.stage_loss` (Huber by default: down-weighted,
+/// gated on the robust cost); the whole-arc stage is linear. On the
 /// whole arc, a fit above the threshold gets the CMC2003 rejection loop
 /// (Carpino, Milani & Chesley 2003, OrbFit's constants) and passes if that
 /// brings it within the threshold. The search stops once `max_converged`
@@ -2032,6 +2042,10 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
         ..*fit
     };
     let correction = config.correction;
+    let partial_config = WhitenedFitConfig {
+        loss: correction.stage_loss,
+        ..stage_config
+    };
     let mut order: Vec<usize> = (0..result.candidates.len()).collect();
     order.sort_by(|&a, &b| {
         result.candidates[a]
@@ -2101,7 +2115,11 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
                 observed,
                 observers,
                 &mask,
-                &stage_config,
+                if whole_arc {
+                    &stage_config
+                } else {
+                    &partial_config
+                },
                 threshold,
                 provider,
                 translation_provider,
@@ -3948,6 +3966,55 @@ mod tests {
         let output = result.to_output(NUM_OBS);
         assert!(output.outlier[3]);
         assert_eq!(output.outlier.iter().filter(|&&f| f).count(), 1);
+    }
+
+    #[test]
+    fn huber_stages_carry_an_outlier_the_linear_stages_stall_on() {
+        // The outlier (row 3) sits inside the early stages: with the linear
+        // loss their plain reduced chi2 exceeds 3 and the candidates whose
+        // stages hold it stall, so the search spends its whole budget on
+        // the few that avoid it; Huber stages down-weight it, gate on the
+        // robust cost, and reach the whole-arc CMC2003 stage (which rejects
+        // it) in fewer corrections.
+        let observed = synthetic_observations(Some(3));
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let run = |stage_loss| {
+            let config = super::super::od::IodConfig {
+                correction: super::super::od::CorrectionConfig {
+                    stage_loss,
+                    ..super::super::od::CorrectionConfig::default()
+                },
+                ..corrected_iod_config(3.0)
+            };
+            run_iod_with(
+                &predictor,
+                &observed,
+                &observers(),
+                &config,
+                &WhitenedFitConfig::default(),
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap()
+        };
+        let linear = run(LossType::Linear);
+        let huber = run(LossType::Huber);
+        let accepted = huber
+            .accepted_candidate()
+            .unwrap_or_else(|| panic!("huber stages stalled: {:?}", huber.not_found_reason));
+        assert_eq!(accepted.removed, vec![3]);
+        assert!(accepted.postfit_reduced_chi2.unwrap() <= 3.0);
+        assert!(huber.corrections_run < linear.corrections_run);
+        assert!(linear.candidates.iter().any(|c| c
+            .correction_note
+            .as_deref()
+            .is_some_and(|n| n.contains("stalled"))));
     }
 
     #[test]
