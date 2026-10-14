@@ -1,4 +1,5 @@
 use crate::http::{get_text, get_text_with_status, percent_encode};
+use adam_core::query::sbdb::{query_sbdb, query_sbdb_recorded, SbdbError, SbdbQueryOptions};
 use adam_core_rs_coords::{
     cometary_to_cartesian6, optical_obs80_record_batch, parse_optical_obs80_file,
     transform_with_covariance_flat, CoordinateBatch, CoordinateRepresentation, CovarianceBatch,
@@ -24,7 +25,6 @@ const MU_SUN: f64 = 0.000_295_912_208_284_119_56;
 const JD_MINUS_MJD: f64 = 2_400_000.5;
 const NEOCC_URL: &str = "https://neo.ssa.esa.int/PSDB-portlet/download";
 const SCOUT_URL: &str = "https://ssd-api.jpl.nasa.gov/scout.api";
-const SBDB_URL: &str = "https://ssd-api.jpl.nasa.gov/sbdb.api";
 
 fn mjd_values(times: &TimeArray) -> Vec<f64> {
     times
@@ -1194,252 +1194,12 @@ fn query_scout_arrow<'py>(
         .map_err(|err| value_error(err.to_string()))
 }
 
-fn optional_number_array(value: &Value, name: &str) -> PyResult<Vec<Option<f64>>> {
-    field(value, name)?
-        .as_array()
-        .ok_or_else(|| value_error(format!("field {name:?} must be an array")))?
-        .iter()
-        .map(|entry| match entry {
-            Value::Null => Ok(None),
-            _ => entry
-                .as_f64()
-                .map(Some)
-                .ok_or_else(|| value_error(format!("{name} entries must be numeric or null"))),
-        })
-        .collect()
-}
-
-fn sbdb_payload(
-    object_id: &str,
-    physical_parameters: bool,
-    timeout_s: f64,
-    max_attempts: usize,
-) -> PyResult<String> {
-    if object_id.trim().is_empty() {
-        return Err(value_error("object_id must be non-empty"));
-    }
-    if timeout_s <= 0.0 {
-        return Err(value_error("timeout_s must be > 0"));
-    }
-    if max_attempts == 0 {
-        return Err(value_error("max_attempts must be > 0"));
-    }
-    let url = format!(
-        "{SBDB_URL}?sstr={}&cov=mat&full-prec=true&phys-par={}",
-        percent_encode(object_id.trim()),
-        if physical_parameters { "true" } else { "false" }
-    );
-    let timeout = Duration::from_secs_f64(timeout_s);
-    let mut last_error = None;
-    for attempt in 0..max_attempts {
-        match get_text(&url, timeout, "SBDB") {
-            Ok(payload) => return Ok(payload),
-            Err(error) => last_error = Some(error),
-        }
-        if attempt + 1 < max_attempts {
-            std::thread::sleep(Duration::from_secs_f64(
-                8.0_f64.min(0.5 * 2.0_f64.powi(attempt as i32)),
-            ));
-        }
-    }
-    Err(PyRuntimeError::new_err(format!(
-        "SBDB query failed after {max_attempts} attempts: {}",
-        last_error
-            .map(|error| error.to_string())
-            .unwrap_or_else(|| "unknown error".to_string())
-    )))
-}
-
-fn sbdb_orbits(
-    ids: &[String],
-    physical_parameters: bool,
-    timeout_s: f64,
-    max_attempts: usize,
-    allow_missing: bool,
-    orbit_id_from_input: bool,
-    recorded: Option<&[String]>,
-) -> PyResult<(OrbitBatch, Vec<String>)> {
-    let mut cursor = 0usize;
-    let mut kept_ids = Vec::new();
-    let mut payloads = Vec::new();
-    for id in ids {
-        let text = if let Some(recorded) = recorded {
-            let payload = recorded
-                .get(cursor)
-                .ok_or_else(|| value_error("not enough recorded SBDB responses"))?
-                .clone();
-            cursor += 1;
-            payload
-        } else {
-            sbdb_payload(id, physical_parameters, timeout_s, max_attempts)?
-        };
-        let payload = parse_json(&text, "SBDB response")?;
-        if payload.get("object").is_none() {
-            if allow_missing {
-                continue;
-            }
-            return Err(value_error(format!("__NOT_FOUND__:{id}")));
-        }
-        kept_ids.push(id.clone());
-        payloads.push(text);
-    }
-    let ids_json = serde_json::to_string(&kept_ids).map_err(|err| value_error(err.to_string()))?;
-    let payloads_json = format!("[{}]", payloads.join(","));
-    let normalized = adam_core_rs_coords::sbdb_normalize_payloads_json(&ids_json, &payloads_json)
-        .map_err(|err| value_error(err.to_string()))?;
-    let normalized = parse_json(&normalized, "normalized SBDB")?;
-    let mut orbit_ids = string_array(&normalized, "orbit_id")?;
-    if orbit_id_from_input {
-        orbit_ids.clone_from(&kept_ids);
-    }
-    let object_ids = string_array(&normalized, "object_id")?;
-    let cometary = matrix_rows(&normalized, "coords_cometary")?;
-    let times_jd = number_array(&normalized, "times_jd")?;
-    let covariance_rows = field(&normalized, "covariances_cometary")?
-        .as_array()
-        .ok_or_else(|| value_error("covariances_cometary must be an array"))?;
-    let covariance_dimension = if covariance_rows
-        .iter()
-        .any(|row| row.as_array().is_some_and(|values| values.len() == 81))
-    {
-        9
+fn sbdb_py_error(error: SbdbError) -> PyErr {
+    if error.is_request() {
+        PyRuntimeError::new_err(error.to_string())
     } else {
-        6
-    };
-    let mut covariance =
-        vec![f64::NAN; covariance_rows.len() * covariance_dimension * covariance_dimension];
-    for (row_index, row) in covariance_rows.iter().enumerate() {
-        let values = row
-            .as_array()
-            .ok_or_else(|| value_error("SBDB covariance rows must be arrays"))?;
-        if !matches!(values.len(), 36 | 81) {
-            return Err(value_error(
-                "SBDB covariance rows must contain 36 or 81 values",
-            ));
-        }
-        let parsed = values
-            .iter()
-            .map(|value| value.as_f64().unwrap_or(f64::NAN))
-            .collect::<Vec<_>>();
-        let row_start = row_index * covariance_dimension * covariance_dimension;
-        if values.len() == covariance_dimension * covariance_dimension {
-            covariance[row_start..row_start + parsed.len()].copy_from_slice(&parsed);
-        } else {
-            for coordinate_row in 0..6 {
-                let source = &parsed[coordinate_row * 6..coordinate_row * 6 + 6];
-                let start = row_start + coordinate_row * covariance_dimension;
-                covariance[start..start + 6].copy_from_slice(source);
-            }
-        }
+        value_error(error.to_string())
     }
-    let rows = cometary.len();
-    let flat: Vec<f64> = cometary.iter().flatten().copied().collect();
-    let epochs_mjd: Vec<f64> = times_jd.iter().map(|value| value - JD_MINUS_MJD).collect();
-    let time_array = TimeArray::from_mjd(TimeScale::Tdb, &epochs_mjd)
-        .map_err(|err| value_error(err.to_string()))?;
-    let mu = vec![MU_SUN; rows];
-    let (cartesian, covariance) = transform_with_covariance_flat(
-        &flat,
-        &covariance,
-        covariance_dimension,
-        Representation::Cometary,
-        Representation::Cartesian,
-        adam_core_rs_coords::Frame::Ecliptic,
-        adam_core_rs_coords::Frame::Ecliptic,
-        &epochs_mjd,
-        &mu,
-        &mu,
-        0.0,
-        0.0,
-        100,
-        1e-15,
-        None,
-    );
-    let states = cartesian
-        .chunks_exact(6)
-        .map(|row| [row[0], row[1], row[2], row[3], row[4], row[5]])
-        .collect();
-    let coordinates = CoordinateBatch::cartesian(
-        states,
-        DataFrame::Ecliptic,
-        OriginArray::repeat(OriginId::from_code("SUN"), rows),
-        Some(time_array),
-        Some(
-            CovarianceBatch::new(
-                rows,
-                covariance_dimension,
-                covariance,
-                CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
-            )
-            .map_err(|err| value_error(err.to_string()))?,
-        ),
-    )
-    .map_err(|err| value_error(err.to_string()))?;
-    let physical = field(&normalized, "physical_parameters")?;
-    let nan_values = |name: &str| -> PyResult<Vec<Option<f64>>> {
-        Ok(optional_number_array(physical, name)?
-            .into_iter()
-            .map(|value| Some(value.unwrap_or(f64::NAN)))
-            .collect())
-    };
-    let physical = PhysicalParametersBatch {
-        h_v: nan_values("H_v")?,
-        h_v_sigma: nan_values("H_v_sigma")?,
-        g: nan_values("G")?,
-        g_sigma: nan_values("G_sigma")?,
-        sigma_eff: vec![None; rows],
-        chi2_red: vec![None; rows],
-    };
-    let warnings = field(&normalized, "warnings")?
-        .as_array()
-        .ok_or_else(|| value_error("warnings must be an array"))?
-        .iter()
-        .map(|warning| {
-            warning
-                .as_str()
-                .map(str::to_string)
-                .ok_or_else(|| value_error("warning entries must be strings"))
-        })
-        .collect::<PyResult<Vec<_>>>()?;
-    let nongrav_rows = field(&normalized, "non_gravitational_parameters")?
-        .as_array()
-        .ok_or_else(|| value_error("non_gravitational_parameters must be an array"))?;
-    let nongrav_float = |name: &str| {
-        nongrav_rows
-            .iter()
-            .map(|row| row.get(name).and_then(Value::as_f64))
-            .collect::<Vec<_>>()
-    };
-    let nongrav = NonGravitationalParametersBatch {
-        source: nongrav_rows
-            .iter()
-            .map(|row| {
-                row.get("source")
-                    .and_then(Value::as_str)
-                    .map(str::to_string)
-            })
-            .collect(),
-        a1: nongrav_float("A1"),
-        a2: nongrav_float("A2"),
-        a3: nongrav_float("A3"),
-        aln: nongrav_float("ALN"),
-        nk: nongrav_float("NK"),
-        nm: nongrav_float("NM"),
-        nn: nongrav_float("NN"),
-        r0: nongrav_float("R0"),
-    };
-    let orbits = OrbitBatch::new(
-        orbit_ids.into_iter().map(OrbitId).collect(),
-        object_ids
-            .into_iter()
-            .map(|id| Some(ObjectId(id)))
-            .collect(),
-        coordinates,
-    )
-    .and_then(|orbits| orbits.with_physical_parameters(physical))
-    .and_then(|orbits| orbits.with_non_gravitational_parameters(nongrav))
-    .map_err(|err| value_error(err.to_string()))?;
-    Ok((orbits, warnings))
 }
 
 #[pyfunction]
@@ -1455,22 +1215,25 @@ fn query_sbdb_arrow<'py>(
     orbit_id_from_input: bool,
     recorded_responses: Option<Vec<String>>,
 ) -> PyResult<(PyObject, Vec<String>)> {
-    let (output, warnings) = py.allow_threads(|| {
-        sbdb_orbits(
-            &ids,
-            physical_parameters,
-            timeout_s,
-            max_attempts,
-            allow_missing,
-            orbit_id_from_input,
-            recorded_responses.as_deref(),
-        )
-    })?;
-    output
+    let options = SbdbQueryOptions {
+        physical_parameters,
+        timeout_s,
+        max_attempts,
+        allow_missing,
+        orbit_id_from_input,
+    };
+    let result = py
+        .allow_threads(|| match recorded_responses.as_deref() {
+            Some(recorded) => query_sbdb_recorded(&ids, options, recorded),
+            None => query_sbdb(&ids, options),
+        })
+        .map_err(sbdb_py_error)?;
+    result
+        .orbits
         .into_nested_record_batch()
         .map_err(|err| value_error(err.to_string()))?
         .to_pyarrow(py)
-        .map(|batch| (batch, warnings))
+        .map(|batch| (batch, result.warnings))
         .map_err(|err| value_error(err.to_string()))
 }
 
@@ -1536,15 +1299,20 @@ fn benchmark_query_client_processing(
                 )?);
             }
             "sbdb" => {
-                black_box(sbdb_orbits(
-                    &vec!["recorded".to_string(); payloads.len()],
-                    true,
-                    60.0,
-                    1,
-                    false,
-                    false,
-                    Some(&payloads),
-                )?);
+                black_box(
+                    query_sbdb_recorded(
+                        &vec!["recorded".to_string(); payloads.len()],
+                        SbdbQueryOptions {
+                            physical_parameters: true,
+                            timeout_s: 60.0,
+                            max_attempts: 1,
+                            allow_missing: false,
+                            orbit_id_from_input: false,
+                        },
+                        &payloads,
+                    )
+                    .map_err(sbdb_py_error)?,
+                );
             }
             other => return Err(value_error(format!("unknown query kind: {other}"))),
         }

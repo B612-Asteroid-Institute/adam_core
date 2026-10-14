@@ -93,6 +93,10 @@ impl OrbitBatch {
                     Some(validity) => propagated_covariance.with_row_validity(validity)?,
                     None => propagated_covariance,
                 };
+                let propagated_covariance = match covariance.nongrav_axis_mask.clone() {
+                    Some(mask) => propagated_covariance.with_nongrav_axis_mask(mask)?,
+                    None => propagated_covariance,
+                };
                 CoordinateBatch::cartesian(
                     chunk6(&states),
                     self.coordinates.frame,
@@ -116,7 +120,7 @@ impl OrbitBatch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{Frame, OrbitId, OriginArray, OriginId};
+    use crate::types::{Frame, NongravCovarianceAxes, OrbitId, OriginArray, OriginId};
 
     fn sample() -> OrbitBatch {
         let coordinates = CoordinateBatch::cartesian(
@@ -141,6 +145,31 @@ mod tests {
         for (a, b) in original.iter().zip(propagated.iter()) {
             assert!((a - b).abs() < 1e-12, "{a} vs {b}");
         }
+    }
+
+    #[test]
+    fn propagate_preserves_explicit_state_only_covariance_mask() {
+        let mut orbits = sample();
+        orbits.coordinates.covariance = Some(
+            CovarianceBatch::new(
+                1,
+                6,
+                vec![0.0; 36],
+                CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+            )
+            .unwrap()
+            .with_nongrav_axis_mask(vec![NongravCovarianceAxes::NONE])
+            .unwrap(),
+        );
+        orbits.validate().unwrap();
+
+        let propagated = orbits
+            .propagate_2body_to(Epoch::new(60000, 0), TimeScale::Tdb, 100, 1e-14)
+            .unwrap();
+        assert_eq!(
+            propagated.coordinates.covariance.unwrap().nongrav_axis_mask,
+            Some(vec![NongravCovarianceAxes::NONE])
+        );
     }
 
     #[test]

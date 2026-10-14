@@ -95,6 +95,10 @@ impl CoordinateBatch {
                     Some(validity) => new_covariance.with_row_validity(validity)?,
                     None => new_covariance,
                 };
+                let new_covariance = match covariance.nongrav_axis_mask.clone() {
+                    Some(mask) => new_covariance.with_nongrav_axis_mask(mask)?,
+                    None => new_covariance,
+                };
                 CoordinateBatch::cartesian(
                     chunk6(&coords_out),
                     target,
@@ -127,7 +131,7 @@ impl OrbitBatch {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{OriginArray, OriginId, TimeArray, TimeScale};
+    use crate::types::{NongravCovarianceAxes, OriginArray, OriginId, TimeArray, TimeScale};
 
     #[test]
     fn rotate_frame_is_noop_when_target_matches() {
@@ -141,6 +145,37 @@ mod tests {
         .unwrap();
         let rotated = coords.rotate_frame(Frame::Ecliptic).unwrap();
         assert_eq!(rotated, coords);
+    }
+
+    #[test]
+    fn rotate_frame_preserves_nongrav_covariance_axis_mask() {
+        let mut covariance_values = vec![0.0; 81];
+        for diagonal in [0, 1, 2, 3, 4, 5, 7] {
+            covariance_values[diagonal * 9 + diagonal] = 1.0;
+        }
+        let covariance = CovarianceBatch::new(
+            1,
+            9,
+            covariance_values,
+            CovarianceUnits::Coordinate(CoordinateRepresentation::Cartesian),
+        )
+        .unwrap()
+        .with_nongrav_axis_mask(vec![NongravCovarianceAxes::A2])
+        .unwrap();
+        let coordinates = CoordinateBatch::cartesian(
+            vec![[1.0, 2.0, 3.0, 0.1, 0.2, 0.3]],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::SolarSystemBarycenter, 1),
+            None,
+            Some(covariance),
+        )
+        .unwrap();
+
+        let rotated = coordinates.rotate_frame(Frame::Equatorial).unwrap();
+        assert_eq!(
+            rotated.covariance.unwrap().nongrav_axis_mask,
+            Some(vec![NongravCovarianceAxes::A2])
+        );
     }
 
     #[test]

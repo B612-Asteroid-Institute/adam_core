@@ -542,15 +542,10 @@ def _orbits_from_sbdb_payloads(
     ids: list[str],
     payloads: list[dict[str, Any]],
 ) -> Orbits:
-    """
-    Convert raw SBDB JSON payloads into an `Orbits` table.
-
-    The deterministic payload normalization (element selection, covariance
-    matrix/label handling, SBDB->ADAM covariance ordering, and physical
-    parameter extraction) is Rust-backed behind this canonical helper; Python
-    remains the thin table-construction facade.
-    """
+    """Build the canonical Rust SBDB product from recorded payloads."""
     from adam_core import _rust_native as _rn
+
+    from ..._rust.arrow import table_from_record_batch
 
     if len(ids) != len(payloads):
         raise ValueError("ids and payloads must have the same length.")
@@ -558,63 +553,18 @@ def _orbits_from_sbdb_payloads(
         if "object" not in payload:
             raise NotFoundError("object {} was not found", obj_id)
 
-    normalized = json.loads(
-        _rn.query_sbdb_normalize_payloads(json.dumps(ids), json.dumps(payloads))
+    batch, warnings = _rn.query_sbdb_arrow(
+        ids,
+        True,
+        60.0,
+        1,
+        False,
+        False,
+        [json.dumps(payload) for payload in payloads],
     )
-    for warning in normalized.get("warnings", []):
+    for warning in warnings:
         logger.warning("%s", warning)
-    coords_cometary = np.asarray(normalized["coords_cometary"], dtype=np.float64)
-    covariance_rows = normalized["covariances_cometary"]
-    if any(len(row) == 81 for row in covariance_rows):
-        covariances_cometary = np.full((len(payloads), 9, 9), np.nan, dtype=np.float64)
-        for row_index, row in enumerate(covariance_rows):
-            dimension = int(np.sqrt(len(row)))
-            values = np.asarray(row, dtype=np.float64).reshape(dimension, dimension)
-            covariances_cometary[row_index, :dimension, :dimension] = values
-    else:
-        covariances_cometary = np.asarray(covariance_rows, dtype=np.float64).reshape(
-            len(payloads), 6, 6
-        )
-    times = Timestamp.from_jd(
-        pa.array(normalized["times_jd"], type=pa.float64()), scale="tdb"
-    )
-    origin = Origin.from_kwargs(code=["SUN" for _ in range(len(times))])
-
-    coordinates = CometaryCoordinates.from_kwargs(
-        time=times,
-        q=coords_cometary[:, 0],
-        e=coords_cometary[:, 1],
-        i=coords_cometary[:, 2],
-        raan=coords_cometary[:, 3],
-        ap=coords_cometary[:, 4],
-        tp=coords_cometary[:, 5],
-        covariance=CoordinateCovariances.from_matrix(covariances_cometary),
-        origin=origin,
-        frame="ecliptic",
-    )
-
-    phys = normalized["physical_parameters"]
-    physical_parameters = PhysicalParameters.from_kwargs(
-        H_v=np.asarray(phys["H_v"], dtype=np.float64),
-        H_v_sigma=np.asarray(phys["H_v_sigma"], dtype=np.float64),
-        G=np.asarray(phys["G"], dtype=np.float64),
-        G_sigma=np.asarray(phys["G_sigma"], dtype=np.float64),
-    )
-    nongrav_rows = normalized["non_gravitational_parameters"]
-    nongrav_columns = {
-        field: [row.get(field) for row in nongrav_rows]
-        for field in ("source", "A1", "A2", "A3", "ALN", "NK", "NM", "NN", "R0")
-    }
-    non_gravitational_parameters = NonGravitationalParameters.from_kwargs(
-        **nongrav_columns
-    )
-    return Orbits.from_kwargs(
-        orbit_id=np.array(normalized["orbit_id"], dtype="object"),
-        object_id=np.array(normalized["object_id"], dtype="object"),
-        coordinates=coordinates.to_cartesian(),
-        physical_parameters=physical_parameters,
-        non_gravitational_parameters=non_gravitational_parameters,
-    )
+    return table_from_record_batch(Orbits, batch)
 
 
 def _get_sbdb_payloads_new(

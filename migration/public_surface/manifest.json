@@ -24,7 +24,7 @@
     },
     "by_domain": {
       "constants": 4,
-      "coordinates": 172,
+      "coordinates": 173,
       "dynamics": 59,
       "missions": 16,
       "observations": 42,
@@ -1829,7 +1829,7 @@
       "kind": "constant",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 13,
+      "line": 14,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -1857,7 +1857,7 @@
       "kind": "constant",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 12,
+      "line": 13,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -1885,7 +1885,7 @@
       "kind": "class",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 42,
+      "line": 43,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -1913,7 +1913,7 @@
       "kind": "classmethod",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 193,
+      "line": 216,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -1934,6 +1934,34 @@
       "audit_document": "migration/public_surface/coordinates_time_observers.md"
     },
     {
+      "id": "adam_core.coordinates.covariances:CoordinateCovariances.from_pyarrow",
+      "module": "adam_core.coordinates.covariances",
+      "qualname": "CoordinateCovariances.from_pyarrow",
+      "name": "from_pyarrow",
+      "kind": "classmethod",
+      "domain": "coordinates",
+      "source": "src/adam_core/coordinates/covariances.py",
+      "line": 52,
+      "explicit_export": null,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": false,
+        "python_loop": false,
+        "numpy_reference": false,
+        "pyarrow_reference": true,
+        "quivr_reference": true,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "python_gap_or_external_boundary",
+      "rust_entrypoint": null,
+      "parity_coverage": "see_domain_audit",
+      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "tracking_issue": "personal-cmy.37.2",
+      "audit_document": "migration/public_surface/coordinates_time_observers.md"
+    },
+    {
       "id": "adam_core.coordinates.covariances:CoordinateCovariances.from_sigmas",
       "module": "adam_core.coordinates.covariances",
       "qualname": "CoordinateCovariances.from_sigmas",
@@ -1941,7 +1969,7 @@
       "kind": "classmethod",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 244,
+      "line": 267,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -1969,7 +1997,7 @@
       "kind": "method",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 68,
+      "line": 91,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -1997,7 +2025,7 @@
       "kind": "method",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 284,
+      "line": 307,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2025,7 +2053,7 @@
       "kind": "method",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 58,
+      "line": 81,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2053,7 +2081,7 @@
       "kind": "classmethod",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 263,
+      "line": 286,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2081,7 +2109,7 @@
       "kind": "property",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 50,
+      "line": 73,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2109,7 +2137,7 @@
       "kind": "method",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 161,
+      "line": 184,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2137,7 +2165,7 @@
       "kind": "method",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 103,
+      "line": 126,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2165,7 +2193,7 @@
       "kind": "method",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 188,
+      "line": 211,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2193,7 +2221,7 @@
       "kind": "constant",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 14,
+      "line": 15,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2221,7 +2249,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 563,
+      "line": 586,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2249,7 +2277,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 298,
+      "line": 321,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2277,7 +2305,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 600,
+      "line": 623,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2305,7 +2333,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 331,
+      "line": 354,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2333,7 +2361,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 407,
+      "line": 430,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2361,7 +2389,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 17,
+      "line": 18,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2389,7 +2417,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 526,
+      "line": 549,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2417,7 +2445,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 496,
+      "line": 519,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -2445,7 +2473,7 @@
       "kind": "function",
       "domain": "coordinates",
       "source": "src/adam_core/coordinates/covariances.py",
-      "line": 468,
+      "line": 491,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11937,7 +11965,7 @@
       "kind": "class",
       "domain": "orbits",
       "source": "src/adam_core/orbits/query/sbdb.py",
-      "line": 779,
+      "line": 729,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11965,7 +11993,7 @@
       "kind": "constructor",
       "domain": "orbits",
       "source": "src/adam_core/orbits/query/sbdb.py",
-      "line": 780,
+      "line": 730,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -12021,7 +12049,7 @@
       "kind": "function",
       "domain": "orbits",
       "source": "src/adam_core/orbits/query/sbdb.py",
-      "line": 671,
+      "line": 621,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {

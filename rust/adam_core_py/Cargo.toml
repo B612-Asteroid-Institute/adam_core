@@ -21,13 +21,15 @@ arrow-array = "54"
 arrow-ipc = "54"
 arrow-schema = "54"
 parquet = { version = "54", default-features = false, features = ["arrow", "zstd"] }
-serde_json = { version = "1", features = ["preserve_order"] }
+# Correctly round-trip normalized query-client f64 values across JSON handoffs.
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 sha2 = "0.10"
 pathdiff = "0.2"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 chrono-tz = "0.10"
 tzf-rs = { version = "1.3.6", default-features = false, features = ["bundled"] }
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
+adam_core = { version = "=0.5.8", path = "../adam_core" }
 adam_core_rs_coords = { version = "=0.5.8", path = "../adam_core_rs_coords" }
 adam_core_rs_orbit_determination = { version = "=0.5.8", path = "../adam_core_rs_orbit_determination" }
 adam_core_rs_spice = { version = "=0.5.8", path = "../adam_core_rs_spice" }

@@ -109,15 +109,19 @@ def test_query_sbdb_for_missing_value():
             query_sbdb(["missing"])
 
 
-def _load_sbdb_fixture_payload(response_file: str) -> dict:
+def _load_sbdb_fixture_text(response_file: str) -> str:
     resp_path = os.path.join(
         os.path.dirname(__file__), "testdata", "sbdb", response_file
     )
     with open(resp_path, "r", encoding="utf-8") as f:
-        return json.load(f)
+        return f.read()
 
 
-def _assert_orbits_equivalent(a, b, *, covariance_atol: float = 0.0) -> None:
+def _load_sbdb_fixture_payload(response_file: str) -> dict:
+    return json.loads(_load_sbdb_fixture_text(response_file))
+
+
+def _assert_orbits_equivalent(a, b) -> None:
     assert len(a) == len(b)
     assert a.orbit_id.to_pylist() == b.orbit_id.to_pylist()
     assert a.object_id.to_pylist() == b.object_id.to_pylist()
@@ -148,7 +152,7 @@ def _assert_orbits_equivalent(a, b, *, covariance_atol: float = 0.0) -> None:
         a.coordinates.covariance.to_matrix(),
         b.coordinates.covariance.to_matrix(),
         rtol=0.0,
-        atol=covariance_atol,
+        atol=0.0,
         equal_nan=True,
     )
 
@@ -158,7 +162,11 @@ def test_query_sbdb_new_matches_query_sbdb_for_multiple_objects() -> None:
         "Ceres": _load_sbdb_fixture_payload("Ceres.json"),
         "2001VB": _load_sbdb_fixture_payload("2001VB.json"),
         "54509": _load_sbdb_fixture_payload("54509.json"),
+        "7994": _load_sbdb_fixture_payload("7994.json"),
+        "C/2024 A1": _load_sbdb_fixture_payload("C_2024_A1.json"),
+        "C/2022 R6": _load_sbdb_fixture_payload("C_2022_R6.json"),
     }
+    ids = list(payloads)
 
     def legacy_side_effect(obj_id: str, *args, **kwargs):
         return SBDB()._process_data(OrderedDict(payloads[obj_id]))
@@ -168,12 +176,12 @@ def test_query_sbdb_new_matches_query_sbdb_for_multiple_objects() -> None:
 
     with patch("adam_core.orbits.query.sbdb.SBDB.query") as mock_legacy:
         mock_legacy.side_effect = legacy_side_effect
-        legacy = query_sbdb(["Ceres", "2001VB", "54509"])
+        legacy = query_sbdb(ids)
 
     with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
         mock_new.side_effect = new_side_effect
         new = query_sbdb_new(
-            ["Ceres", "2001VB", "54509"],
+            ids,
             max_concurrent_requests=2,
             timeout_s=1.0,
             max_attempts=1,
@@ -410,6 +418,9 @@ def test_query_sbdb_new_populates_nongrav_and_extended_covariance() -> None:
 
         assert orbits.non_gravitational_parameters.source[0].as_py() == "SBDB"
         assert orbits.coordinates.covariance.nongrav_block_mask().tolist() == [True]
+        assert orbits.coordinates.covariance.nongrav_axis_mask[0].as_py() == (
+            0b111 if object_id == "67P" else 0b011
+        )
         full = orbits.coordinates.covariance.to_full_matrix()[0]
         assert full.shape == (9, 9)
         assert np.isfinite(full).all()
@@ -452,8 +463,26 @@ def test_query_sbdb_new_degrades_bad_covariance_with_warning(
         for record in caplog.records
     )
     assert not orbits.coordinates.covariance.has_nongrav_block()
+    assert orbits.coordinates.covariance.nongrav_axis_mask[0].as_py() == 0
     assert orbits.non_gravitational_parameters.A2[0].as_py() is not None
     assert np.isfinite(orbits.coordinates.covariance.to_matrix()).all()
+
+
+def test_query_sbdb_new_marks_incomplete_sigma_fallback_covariance_absent() -> None:
+    payload = copy.deepcopy(_load_sbdb_fixture_payload("2001VB.json"))
+    payload["orbit"].pop("covariance")
+    payload["orbit"]["elements"][0]["sigma"] = None
+
+    def new_side_effect(object_id: str, *, timeout_s: float, max_attempts: int) -> dict:
+        return payload
+
+    with patch("adam_core.orbits.query.sbdb._sbdb_api_get_json") as mock_new:
+        mock_new.side_effect = new_side_effect
+        orbits = query_sbdb_new(["2001VB"], timeout_s=1.0, max_attempts=1)
+
+    assert np.isfinite(orbits.coordinates.values[0]).all()
+    assert orbits.coordinates.covariance.values[0].as_py() is None
+    assert orbits.coordinates.covariance.nongrav_axis_mask[0].as_py() is None
 
 
 def test_query_sbdb_new_include_nongrav_false_strips_solution() -> None:
@@ -475,22 +504,49 @@ def test_query_sbdb_new_include_nongrav_false_strips_solution() -> None:
     assert not orbits.coordinates.covariance.has_nongrav_block()
 
 
-def test_recorded_sbdb_complete_rust_product_matches_payload_facade() -> None:
-    ids = ["Ceres", "2001VB", "54509"]
-    payloads = [_load_sbdb_fixture_payload(f"{object_id}.json") for object_id in ids]
-    expected = _orbits_from_sbdb_payloads(ids, payloads)
+def test_recorded_sbdb_rust_binding_smoke() -> None:
+    fixtures = [
+        ("Ceres", "Ceres.json"),
+        ("2001VB", "2001VB.json"),
+        ("54509", "54509.json"),
+        ("7994", "7994.json"),
+        ("C/2024 A1", "C_2024_A1.json"),
+        ("C/2022 R6", "C_2022_R6.json"),
+    ]
+    ids = [object_id for object_id, _ in fixtures]
+    recorded_responses = [
+        _load_sbdb_fixture_text(response_file) for _, response_file in fixtures
+    ]
     batch, warnings = _rust_native.query_sbdb_arrow(
         ids,
         True,
         60.0,
         1,
         False,
-        False,
-        [json.dumps(payload) for payload in payloads],
+        True,
+        recorded_responses,
     )
-    actual = table_from_record_batch(Orbits, batch)
+    orbits = table_from_record_batch(Orbits, batch)
     assert warnings == []
-    _assert_orbits_equivalent(actual, expected, covariance_atol=3e-28)
+    assert orbits.orbit_id.to_pylist() == ids
+    assert len(orbits.coordinates.covariance) == len(ids)
+
+
+def test_recorded_sbdb_payload_facade_preserves_mixed_covariance_validity() -> None:
+    valid = _load_sbdb_fixture_payload("67P_phys.json")
+    missing = copy.deepcopy(_load_sbdb_fixture_payload("2001VB.json"))
+    missing["orbit"].pop("covariance")
+    missing["orbit"]["elements"][0]["sigma"] = None
+
+    orbits = _orbits_from_sbdb_payloads(["67P", "2001VB"], [valid, missing])
+
+    assert np.isfinite(orbits.coordinates.values).all()
+    assert len(orbits.coordinates.covariance.values[0].as_py()) == 81
+    assert orbits.coordinates.covariance.values[1].as_py() is None
+    assert orbits.coordinates.covariance.nongrav_axis_mask.to_pylist() == [
+        0b111,
+        None,
+    ]
 
 
 def test_sbdb_complete_product_has_rust_owned_timing() -> None:

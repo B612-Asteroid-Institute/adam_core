@@ -10,6 +10,8 @@ pub use adam_core_rs_kernel_data as kernel_data;
 pub use adam_core_rs_orbit_determination as orbit_determination;
 pub use adam_core_rs_spice as spice;
 
+pub mod query;
+
 pub use adam_core_rs_coords::{
     estimate_rotation_period, estimate_rotation_period_best_apparition,
     estimate_rotation_period_grouped, RotationPeriodConfig, RotationPeriodEstimate,

@@ -21,9 +21,9 @@ adam_core_rs_orbit_determination = { version = "=0.5.8", path = "../adam_core_rs
 # weighted_mean / weighted_covariance GEMV/GEMM and unblocks future
 # Cholesky/LU/QR/eigen kernels (sigma-point sampling, ATWA solve, etc.).
 faer = "0.22"
-# JSON marshalling for the ObsContext render/parse boundary (bead
-# personal-cmy.26); preserve_order keeps Python dict insertion order.
-serde_json = { version = "1", features = ["preserve_order"] }
+# JSON marshalling for query and ObsContext boundaries (bead personal-cmy.26):
+# preserve insertion order and exactly round-trip normalized f64 values.
+serde_json = { version = "1", features = ["float_roundtrip", "preserve_order"] }
 statrs = "0.18"
 nalgebra = "0.33"
 
