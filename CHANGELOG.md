@@ -109,7 +109,7 @@ This file contains notable changes in adam-core
   turn (densest 10 d, densest 30 d, last 30 d, first 30 d, whole arc), and
   within each a lazy walk of (first, last) pairs by distance of their span
   from a 6-day target, one triplet per pair with the middle nearest the
-  midpoint, deduplicated across windows, budget 32 triplets unless
+  midpoint and at most one per pair of nights, across windows, budget 32 triplets unless
   `max_triplets` is given; never materializes all pairs. Values are
   provisional (bead a6w.9). The default stays `"combinations"` until the
   post-correction acceptance of bead a6w.4.
@@ -135,10 +135,12 @@ This file contains notable changes in adam-core
   of them in increasing prefit reduced chi2: first on the observations the
   triplet spans (grown to at least 6), then on spans grown fourfold, jumping
   apparition gaps to the nearest night, up to the whole arc, every stage
-  within `rchi2_threshold` and with no outlier rejection (rejection belongs
-  to the refinement); it stops after `max_converged` (2) candidates reach
-  the whole arc and accepts the one with the lowest whole-arc reduced chi2
-  (index order on ties). The accepted orbit is that corrected fit. Rust
+  within `rchi2_threshold`; no stage before the whole arc rejects anything,
+  and the whole-arc stage gets the CMC2003 loop when its plain fit is above
+  the threshold. It stops after `max_converged` (2) candidates reach the
+  whole arc and accepts the one with the lowest whole-arc reduced chi2
+  (index order on ties). The accepted orbit is that whole-arc fit, rejected
+  rows reported as outliers. Rust
   `run_iod_with` / `run_iod_corrected`; `full_od` / `run_od` use it.
   `IodConfig::default()`, `run_od_ipc` / `full_od_ipc` / `run_iod_ipc`,
   `run_iod` and `NativeOrbitFitter` now default to `"spans"` with corrected

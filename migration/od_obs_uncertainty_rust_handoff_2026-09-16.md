@@ -540,8 +540,13 @@ a6w.4 do that).
   refinement's solver settings) on the triplet's span grown to 6
   observations, then `grow_stage` (span x4 about its centre; if that adds
   nothing, the night of the nearest outside observation), seeded by the
-  previous stage, each stage within `rchi2_threshold`; a backend failure is
-  local to the candidate. Selection: lowest whole-arc rchi2 among the
+  previous stage, each stage within `rchi2_threshold`; the whole-arc stage
+  gets `cmc2003_fit_with` when its plain fit is above the threshold (the
+  only rejection inside IOD; 779ac0b0, found on 2000 SG344: 12 of 31
+  observations are outliers); a backend failure is local to the candidate.
+  The span walk takes one triplet per (first night, last night) pair
+  (779ac0b0, found on 163132: 182 observations on six nights gave 32
+  near-identical rootless triplets). Selection: lowest whole-arc rchi2 among the
   converged, index on ties. The accepted orbit is the unrejected corrected
   fit; `full_od_with` refines it. Deviation from the bead text: stage 0 is the
   triplet's span, not the span-search window (the walk-forward's 10/30-day
