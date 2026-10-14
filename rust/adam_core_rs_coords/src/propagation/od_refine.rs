@@ -104,6 +104,11 @@ impl JacobianMethod {
 ///   (`TwoPoint`, 6). With any predictor that is not two-body the analytic
 ///   Jacobian is inexact and the solver converges to that Jacobian's fixed
 ///   point, not to the cost minimum; `Central` is exact for any predictor.
+///   When the analytic Jacobian turns non-finite at an iterate whose
+///   residuals are finite (two-body STM on very long arcs: 3200 Phaethon,
+///   15,000 days), the fit continues from that iterate with `Central`
+///   (with a warning, and a fresh `max_nfev` / `max_iterations` budget), and
+///   the covariance uses `Central` too.
 /// * **Scaling.** Marquardt / scipy `x_scale="jac"`: each parameter is
 ///   scaled by the (non-decreasing) norm of its Jacobian column, with 1 for a
 ///   zero column; the trust region lives in scaled coordinates with initial
@@ -126,7 +131,8 @@ impl JacobianMethod {
 ///   reached first; `-1` no step of the attempt sequence decreased the cost
 ///   while the region was still above the `xtol` resolution (stalled);
 ///   `-2` the Jacobian, the gradient or the normal matrix was non-finite at
-///   the current iterate. A non-finite quantity never yields a positive
+///   the current iterate (for `Analytic`, under the central-difference
+///   continuation as well, or with non-finite residuals). A non-finite quantity never yields a positive
 ///   status.
 /// * **Limits.** `max_iterations` bounds optimizer iterations (one Jacobian
 ///   each). `max_nfev` bounds scipy's `nfev`: the initial residual
@@ -753,6 +759,41 @@ fn trust_region_step(
 /// Trust-region Gauss-Newton on the robust cost: scipy's `least_squares`
 /// `method="trf"` without bounds and with `x_scale="jac"`, the solver the
 /// Python baseline used. See the contract on [`WhitenedFitConfig`].
+/// [`solve`], continued with central differences from the iterate where an
+/// analytic Jacobian turned non-finite (residuals still finite); returns the
+/// Jacobian method in effect at the solution.
+fn solve_with_fallback(
+    problem: &WhitenedProblem<'_>,
+    initial_state: [f64; 6],
+    config: &WhitenedFitConfig,
+    warnings: &mut Vec<String>,
+) -> PropagationResultValue<(Solution, JacobianMethod)> {
+    let solution = solve(problem, initial_state, config)?;
+    if solution.status != STATUS_NON_FINITE
+        || config.jacobian != JacobianMethod::Analytic
+        || !solution.residuals.iter().all(|r| r.is_finite())
+    {
+        return Ok((solution, config.jacobian));
+    }
+    warnings.push(
+        "The analytic two-body Jacobian was non-finite at the current iterate; the fit \
+         continued with central differences through the propagator."
+            .to_string(),
+    );
+    let central = WhitenedFitConfig {
+        jacobian: JacobianMethod::Central,
+        ..*config
+    };
+    let retry = solve(problem, solution.state, &central)?;
+    Ok((
+        Solution {
+            nfev: solution.nfev + retry.nfev,
+            ..retry
+        },
+        JacobianMethod::Central,
+    ))
+}
+
 fn solve(
     problem: &WhitenedProblem<'_>,
     initial_state: [f64; 6],
@@ -1175,8 +1216,9 @@ fn fit_orbit_whitened_impl<T: OriginTranslationProvider>(
         translation_provider,
     )?;
 
-    let solution = solve(&problem, problem.geometry.state, config)?;
     let mut warnings = Vec::new();
+    let (solution, jacobian_method) =
+        solve_with_fallback(&problem, problem.geometry.state, config, &mut warnings)?;
 
     let rejection_jacobian = covariance_problem
         .map(|full| full.jacobian(JacobianMethod::Central, &solution.state, &[]))
@@ -1192,8 +1234,8 @@ fn fit_orbit_whitened_impl<T: OriginTranslationProvider>(
             (selected_jac, JacobianMethod::Central)
         }
         None => (
-            problem.jacobian(config.jacobian, &solution.state, &solution.residuals)?,
-            config.jacobian,
+            problem.jacobian(jacobian_method, &solution.state, &solution.residuals)?,
+            jacobian_method,
         ),
     };
     let mut covariance =
@@ -1902,33 +1944,18 @@ fn stage_fit<T: OriginTranslationProvider>(
     translation_provider: &T,
 ) -> PropagationResultValue<Result<WhitenedFitOutput, String>> {
     let ignore: Vec<bool> = mask.iter().map(|&keep| !keep).collect();
-    let run = |config: &WhitenedFitConfig| {
-        fit_orbit_whitened_with(
-            predictor,
-            seed,
-            observed,
-            observers,
-            &ignore,
-            config,
-            provider,
-            translation_provider,
-        )
-    };
-    // The two-body analytic Jacobian can turn non-finite on long arcs where
-    // the predictor's own dynamics are fine (3200 Phaethon, status -2 at a
-    // reduced chi2 of 0.9); the stage is then retried with central
-    // differences through the predictor, which are exact for any dynamics.
-    let attempt = run(config).and_then(|output| {
-        if output.status_code == STATUS_NON_FINITE && config.jacobian == JacobianMethod::Analytic {
-            run(&WhitenedFitConfig {
-                jacobian: JacobianMethod::Central,
-                ..*config
-            })
-        } else {
-            Ok(output)
-        }
-    });
-    let output = match attempt {
+    // A non-finite analytic Jacobian is handled inside the fit (central
+    // differences from that iterate).
+    let output = match fit_orbit_whitened_with(
+        predictor,
+        seed,
+        observed,
+        observers,
+        &ignore,
+        config,
+        provider,
+        translation_provider,
+    ) {
         Ok(output) => output,
         // A failed prediction is local to this candidate.
         Err(
@@ -3101,6 +3128,95 @@ mod tests {
             assert_eq!(solution.nfev, batches.iter().sum::<usize>());
             assert_eq!(solution.status, 3);
         }
+    }
+
+    #[test]
+    fn non_finite_analytic_jacobian_continues_with_central_differences() {
+        // Analytic terms poisoned (as the two-body STM is on very long arcs):
+        // the plain solver stops with status -2, the fit continues from that
+        // iterate with central differences through the predictor and reaches
+        // the same minimum as a central-difference fit.
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let observed = synthetic_observations(None);
+        let config = WhitenedFitConfig::default();
+        let mut problem = WhitenedProblem::new(
+            &predictor,
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &config,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        problem.analytic_terms.as_mut().unwrap().cos_lats[0] = f64::NAN;
+        let plain = solve(&problem, problem.geometry.state, &config).unwrap();
+        assert_eq!(plain.status, STATUS_NON_FINITE);
+
+        let mut warnings = Vec::new();
+        let (solution, method) =
+            solve_with_fallback(&problem, problem.geometry.state, &config, &mut warnings).unwrap();
+        assert_eq!(method, JacobianMethod::Central);
+        assert!(solution.status > 0, "status {}", solution.status);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].contains("central differences"));
+        let central = fit(
+            &observed,
+            &[false; NUM_OBS],
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::Central,
+                ..WhitenedFitConfig::default()
+            },
+        );
+        assert!(max_abs_diff(&solution.state, &central.state) < 1e-9);
+
+        // Central differences are not retried, and neither are non-finite
+        // residuals (a NaN observation): status -2 stands.
+        let mut warnings = Vec::new();
+        let (_, method) = solve_with_fallback(
+            &problem,
+            problem.geometry.state,
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::TwoPoint,
+                ..config
+            },
+            &mut warnings,
+        )
+        .unwrap();
+        assert_eq!(method, JacobianMethod::TwoPoint);
+        assert!(warnings.is_empty());
+        let mut nan_observed = synthetic_observations(None);
+        if let crate::CoordinateValues::Spherical(values) = &mut nan_observed.values {
+            values[2][1] = f64::NAN;
+        }
+        let nan_problem = WhitenedProblem::new(
+            &predictor,
+            &perturbed_start(),
+            &nan_observed,
+            &observers(),
+            &config,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        let mut warnings = Vec::new();
+        let (solution, method) = solve_with_fallback(
+            &nan_problem,
+            nan_problem.geometry.state,
+            &config,
+            &mut warnings,
+        )
+        .unwrap();
+        assert_eq!(solution.status, STATUS_NON_FINITE);
+        assert_eq!(method, JacobianMethod::Analytic);
+        assert!(warnings.is_empty());
     }
 
     #[test]

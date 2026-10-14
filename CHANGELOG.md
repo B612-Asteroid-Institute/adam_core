@@ -164,6 +164,13 @@ This file contains notable changes in adam-core
   within that same margin. A search where nothing converges now reports
   "all roots failed correction". `IodCandidate::corrected_covariance` holds
   each whole-arc fit's covariance.
+- A fit whose analytic two-body Jacobian turns non-finite at an iterate
+  with finite residuals (very long arcs: 3200 Phaethon) continues from that
+  iterate with central differences through the propagator, with a warning,
+  and computes its covariance with them (bead a6w.12). This applies to every
+  whitened fit (`fit_least_squares`, the CMC2003 and worst-residual loops,
+  the corrected-IOD stages, which no longer retry on their own). Status -2
+  now means non-finite under both Jacobians or non-finite residuals.
 - `iod()` and `NativeOrbitFitter.initial_fit` are thin wrappers over
   `run_iod`; the per-object shortcut to a propagator's compiled
   `initial_orbit_determination` work unit is gone from `iod()` (the linkage
