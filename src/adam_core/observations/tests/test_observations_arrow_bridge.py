@@ -138,8 +138,12 @@ def test_source_catalog_round_trip_with_null_exposure_time():
         exposure_depth_5sigma=[24.0, None],
         object_id=[None, "object-9"],
         catalog_id=["cat-1", "cat-1"],
+        astcat=["Gaia2", None],
+        photcat=[None, "Gaia3"],
     )
-    _assert_round_trip(catalog)
+    round_tripped = _assert_round_trip(catalog)
+    assert round_tripped.astcat.to_pylist() == ["Gaia2", None]
+    assert round_tripped.photcat.to_pylist() == [None, "Gaia3"]
 
 
 def test_unsupported_table_raises():

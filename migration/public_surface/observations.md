@@ -46,6 +46,31 @@ Scout `file=mpc` acquisition, signature validation, SHA-256, snapshot metadata, 
 
 These gaps are covered by children of `personal-cmy.37.7` for observation grouping/linkage/HEALPix and exposure-derived workflows.
 
+## `SourceCatalog` provenance schema compatibility
+
+`SourceCatalog.astcat` and `SourceCatalog.photcat` are nullable `LargeString`
+columns mirrored by nullable string vectors on the public Rust
+`SourceCatalogBatch`. Values are opaque provenance: present strings and nulls
+are preserved exactly, with no inference or substitution from `catalog_id`.
+The current schema has 27 columns.
+
+Python's `SourceCatalog.from_pyarrow` compatibility shim adds typed-null
+`LargeString` columns when either provenance field is absent; inherited
+`from_parquet` delegates through that path. The Rust observation IPC dispatcher
+likewise upgrades the legacy 25-column batch by supplying null vectors before
+re-encoding the current schema. These exceptions are limited to the two known
+additive fields: dataframe constructors and unrelated schema/type drift receive
+no special compatibility handling beyond existing generic Quivr/Rust
+validation. Direct Arrow, partial-legacy Arrow, Parquet, slicing,
+concatenation, and Rust dispatcher regressions guard this contract. No claim is
+made that older readers accept the new 27-column schema.
+
+Although row values are nullable and the data evolution is additive, adding
+public fields to exhaustively constructed Rust `SourceCatalogBatch` values is a
+semver-breaking source change. Any future package release containing this
+change must therefore be `0.6.0` rather than `0.5.9`; this audit does not
+authorize publication.
+
 ## `SourceCatalog` custom surface
 
 - `detections`, `associations`, and `photometry`: computation-free declarative column re-projections through generic validated quivr constructors. There is no kernel to migrate or time; classified as generic-projection compatible veneers (no Rust migration credit claimed).

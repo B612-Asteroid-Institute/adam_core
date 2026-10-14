@@ -12,10 +12,10 @@
     "plotting_policy": "plotting/display may remain Python; all other symbols require review"
   },
   "summary": {
-    "symbols": 646,
+    "symbols": 647,
     "by_kind": {
       "class": 89,
-      "classmethod": 33,
+      "classmethod": 34,
       "constant": 78,
       "constructor": 4,
       "function": 227,
@@ -27,7 +27,7 @@
       "coordinates": 175,
       "dynamics": 59,
       "missions": 16,
-      "observations": 41,
+      "observations": 42,
       "observers": 19,
       "orbit_determination": 33,
       "orbits": 115,
@@ -40,7 +40,7 @@
       "compatibility_data_or_external_generic": 165,
       "mixed_rust_python_gap": 95,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 237,
+      "python_gap_or_external_boundary": 238,
       "rust_veneer_candidate_see_domain_audit": 133
     },
     "plotting_exemption_candidates": 16,
@@ -49,7 +49,7 @@
   "frozen_updated_upstream_reconciliation": {
     "commit": "757c09fca86adf9e3d5899952db3d379e09413f6",
     "upstream_symbols": 600,
-    "current_symbols": 646,
+    "current_symbols": 647,
     "upstream_only_symbols": 22,
     "all_upstream_only_symbols_classified": true,
     "disposition": "The listed upstream implementation helpers are intentionally retired; their useful public workflows are Rust-backed or are explicit provider boundaries in the referenced domain audit.",
@@ -8213,7 +8213,7 @@
       "kind": "class",
       "domain": "observations",
       "source": "src/adam_core/observations/source_catalog.py",
-      "line": 19,
+      "line": 22,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8241,7 +8241,7 @@
       "kind": "method",
       "domain": "observations",
       "source": "src/adam_core/observations/source_catalog.py",
-      "line": 137,
+      "line": 172,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8269,7 +8269,7 @@
       "kind": "method",
       "domain": "observations",
       "source": "src/adam_core/observations/source_catalog.py",
-      "line": 169,
+      "line": 204,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8297,7 +8297,7 @@
       "kind": "method",
       "domain": "observations",
       "source": "src/adam_core/observations/source_catalog.py",
-      "line": 84,
+      "line": 119,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8325,7 +8325,7 @@
       "kind": "method",
       "domain": "observations",
       "source": "src/adam_core/observations/source_catalog.py",
-      "line": 105,
+      "line": 140,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8346,6 +8346,34 @@
       "audit_document": "migration/public_surface/observations.md"
     },
     {
+      "id": "adam_core.observations.source_catalog:SourceCatalog.from_pyarrow",
+      "module": "adam_core.observations.source_catalog",
+      "qualname": "SourceCatalog.from_pyarrow",
+      "name": "from_pyarrow",
+      "kind": "classmethod",
+      "domain": "observations",
+      "source": "src/adam_core/observations/source_catalog.py",
+      "line": 94,
+      "explicit_export": null,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": false,
+        "python_loop": true,
+        "numpy_reference": false,
+        "pyarrow_reference": true,
+        "quivr_reference": false,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "python_gap_or_external_boundary",
+      "rust_entrypoint": null,
+      "parity_coverage": "see_domain_audit",
+      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "tracking_issue": "personal-cmy.37.7",
+      "audit_document": "migration/public_surface/observations.md"
+    },
+    {
       "id": "adam_core.observations.source_catalog:SourceCatalog.healpixels",
       "module": "adam_core.observations.source_catalog",
       "qualname": "SourceCatalog.healpixels",
@@ -8353,7 +8381,7 @@
       "kind": "method",
       "domain": "observations",
       "source": "src/adam_core/observations/source_catalog.py",
-      "line": 264,
+      "line": 299,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8381,7 +8409,7 @@
       "kind": "method",
       "domain": "observations",
       "source": "src/adam_core/observations/source_catalog.py",
-      "line": 202,
+      "line": 237,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -8409,7 +8437,7 @@
       "kind": "method",
       "domain": "observations",
       "source": "src/adam_core/observations/source_catalog.py",
-      "line": 152,
+      "line": 187,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
