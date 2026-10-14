@@ -360,10 +360,18 @@ class IodReport:
     candidates_failed: int
     corrections_run: int
     not_found_reason: Optional[str]
+    #: Indices of converged candidates that are distinct solutions (outside
+    #: the accepted orbit's 3-sigma region) fitting about as well (chi2
+    #: within the same margin); non-empty means the IOD is ambiguous.
+    ambiguous_with: tuple[int, ...] = ()
 
     @property
     def found(self) -> bool:
         return self.accepted is not None
+
+    @property
+    def ambiguous(self) -> bool:
+        return bool(self.ambiguous_with)
 
     @property
     def accepted_candidate(self) -> Optional[IodCandidate]:
@@ -413,6 +421,7 @@ def report_from_iod_output(output: dict) -> IodReport:
         candidates_failed=int(output.get("candidates_failed", 0)),
         corrections_run=int(output.get("corrections_run", 0)),
         not_found_reason=output.get("not_found_reason"),
+        ambiguous_with=tuple(int(i) for i in output.get("ambiguous_with") or ()),
     )
 
 

@@ -602,7 +602,8 @@ fn candidate_dict<'py>(py: Python<'py>, candidate: &IodCandidate) -> PyResult<Bo
 /// one-orbit view), plus ``candidates`` (every scored candidate, see
 /// `candidate_dict`), ``accepted`` (its index or None), the search counters
 /// (``triplets_tried``, ``candidates_evaluated``, ``candidates_failed``,
-/// ``corrections_run``) and ``not_found_reason`` (None when found).
+/// ``corrections_run``), ``not_found_reason`` (None when found) and
+/// ``ambiguous_with`` (indices of distinct, equally acceptable solutions).
 fn iod_dict<'py>(py: Python<'py>, result: IodResult, n: usize) -> PyResult<Bound<'py, PyDict>> {
     let iod = result.to_output(n);
     let out = PyDict::new(py);
@@ -638,6 +639,7 @@ fn iod_dict<'py>(py: Python<'py>, result: IodResult, n: usize) -> PyResult<Bound
     out.set_item("corrections_run", result.corrections_run)?;
     out.set_item("not_found_reason", iod.not_found_reason)?;
     out.set_item("accepted", result.accepted)?;
+    out.set_item("ambiguous_with", result.ambiguous_with.clone())?;
     let candidates = PyList::empty(py);
     for candidate in &result.candidates {
         candidates.append(candidate_dict(py, candidate)?)?;

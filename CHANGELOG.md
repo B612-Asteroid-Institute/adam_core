@@ -153,6 +153,17 @@ This file contains notable changes in adam-core
   chi2) instead of plain chi2, so observations a partial orbit predicts badly
   no longer stall the search; `"linear"` restores the plain-chi2 stages. The
   whole-arc stage stays linear with CMC2003 rejection.
+- Multiple Gauss solutions (bead a6w.5): every other root of a converged
+  candidate's triplet (Charlier: up to three) is corrected before the search
+  moves on, outside the `max_corrections` budget; the accepted orbit is the
+  lowest final reduced chi2 (ties within a relative 1e-6 go to the lowest
+  candidate index), never the root order. `IodResult::ambiguous_with`
+  (Python `IodReport.ambiguous_with` / `.ambiguous`) lists converged
+  solutions outside the accepted orbit's 3-sigma region (Mahalanobis
+  distance squared above 20.06, the 6-dof 99.73 % quantile) whose chi2 is
+  within that same margin. A search where nothing converges now reports
+  "all roots failed correction". `IodCandidate::corrected_covariance` holds
+  each whole-arc fit's covariance.
 - `iod()` and `NativeOrbitFitter.initial_fit` are thin wrappers over
   `run_iod`; the per-object shortcut to a propagator's compiled
   `initial_orbit_determination` work unit is gone from `iod()` (the linkage

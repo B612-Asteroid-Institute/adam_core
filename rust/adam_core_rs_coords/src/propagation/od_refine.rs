@@ -2002,6 +2002,56 @@ fn grow_stage(times: &[f64], mask: &[bool], growth: f64) -> Vec<bool> {
     }
 }
 
+/// Relative reduced-chi2 difference below which two converged IOD
+/// candidates tie (far above solver precision, `ftol = 1e-12`, far below
+/// any difference between distinct minima that matters).
+const RCHI2_TIE_RTOL: f64 = 1e-6;
+
+/// The 6-parameter, 3-sigma (99.73 %) chi2 quantile: the boundary of the
+/// joint confidence region of an orbit (Milani & Gronchi 2010, sec. 5.6).
+const AMBIGUITY_DELTA_CHI2: f64 = 20.062;
+
+/// Whether `other` is a second solution as acceptable as `best`: outside
+/// `best`'s 3-sigma confidence region (Mahalanobis distance squared under
+/// `best`'s covariance, `other` moved to `best`'s epoch by two-body
+/// propagation, above `AMBIGUITY_DELTA_CHI2`) yet within the same
+/// chi2 margin of it (`(rchi2_other - rchi2_best) * dof_best`). This is
+/// the multiple-solution case of Gronchi (2009) / Charlier: separate local
+/// minima the observations cannot choose between. Without a finite,
+/// invertible covariance the solutions are not compared.
+fn is_ambiguous_with(best: &super::od::IodCandidate, other: &super::od::IodCandidate) -> bool {
+    let (Some(state), Some(other_state), Some(covariance), Some(best_rchi2), Some(other_rchi2)) = (
+        best.corrected_state,
+        other.corrected_state,
+        best.corrected_covariance,
+        best.postfit_reduced_chi2,
+        other.postfit_reduced_chi2,
+    ) else {
+        return false;
+    };
+    let dof = (2 * best.evaluation.as_ref().map_or(best.num_obs, |e| e.num_obs)).saturating_sub(6);
+    if dof == 0 || (other_rchi2 - best_rchi2) * dof as f64 >= AMBIGUITY_DELTA_CHI2 {
+        return false;
+    }
+    let Ok(mu) = crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")) else {
+        return false;
+    };
+    let moved = crate::propagate_2body_row::<f64>(
+        other_state,
+        best.epoch.mjd() - other.epoch.mjd(),
+        mu,
+        1000,
+        1e-14,
+    );
+    let matrix = nalgebra::Matrix6::from_row_slice(&covariance);
+    let Some(inverse) = matrix.try_inverse() else {
+        return false;
+    };
+    let delta = nalgebra::Vector6::from_fn(|axis, _| moved[axis] - state[axis]);
+    let distance2 = (delta.transpose() * inverse * delta)[(0, 0)];
+    distance2.is_finite() && distance2 > AMBIGUITY_DELTA_CHI2
+}
+
 /// Corrected acceptance ([`super::od::IodAcceptance::Corrected`]): score
 /// every candidate of the search, then, in increasing prefit reduced chi2
 /// (index order on ties), correct up to `correction.max_corrections` of
@@ -2016,10 +2066,15 @@ fn grow_stage(times: &[f64], mask: &[bool], growth: f64) -> Vec<bool> {
 /// whole arc, a fit above the threshold gets the CMC2003 rejection loop
 /// (Carpino, Milani & Chesley 2003, OrbFit's constants) and passes if that
 /// brings it within the threshold. The search stops once `max_converged`
-/// candidates reached the whole arc; the accepted candidate is the converged
-/// one with the lowest final reduced chi2, index order on ties. Its orbit is
-/// that whole-arc fit at the Gauss epoch, rejected rows reported as
-/// outliers.
+/// candidates reached the whole arc; every other Gauss root of a converged
+/// candidate's triplet (Charlier: up to three per triplet) is corrected too
+/// before the search moves on or stops, outside the `max_corrections`
+/// budget. The accepted candidate is the converged one with the lowest final
+/// reduced chi2 (the weighted RMS), the lowest index among those within a
+/// relative `RCHI2_TIE_RTOL` of it, never the root order. Its orbit is that whole-arc fit at the Gauss epoch, rejected rows
+/// reported as outliers. Converged candidates that are distinct solutions
+/// fitting about as well (`is_ambiguous_with`) are listed in
+/// `ambiguous_with`.
 #[allow(clippy::too_many_arguments)]
 pub fn run_iod_corrected<T: OriginTranslationProvider>(
     iod_predictor: &dyn SphericalPredictor,
@@ -2055,9 +2110,25 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
     });
     let mut converged = 0_usize;
     let mut last_note: Option<String> = None;
-    for &index in order.iter().take(correction.max_corrections.max(1)) {
-        if converged >= correction.max_converged.max(1) {
-            break;
+    let mut primary = order.into_iter().take(correction.max_corrections.max(1));
+    // Sibling roots of a converged candidate, corrected before the search
+    // moves on or stops (lowest root index first).
+    let mut siblings: Vec<usize> = Vec::new();
+    loop {
+        let index = match siblings.pop() {
+            Some(index) => index,
+            None => {
+                if converged >= correction.max_converged.max(1) {
+                    break;
+                }
+                match primary.next() {
+                    Some(index) => index,
+                    None => break,
+                }
+            }
+        };
+        if result.candidates[index].stages > 0 {
+            continue;
         }
         result.corrections_run += 1;
         let candidate = &result.candidates[index];
@@ -2183,11 +2254,27 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
                 record.converged = true;
                 record.postfit_reduced_chi2 = Some(output.evaluation.reduced_chi2);
                 record.corrected_state = Some(output.state);
+                record.corrected_covariance = Some(output.covariance);
                 record.removed = (0..n)
                     .filter(|&row| output.evaluation.outlier[row])
                     .collect();
                 record.evaluation = Some(output.evaluation);
                 converged += 1;
+                let (window, triplet, velocity_method) =
+                    (record.window, record.triplet, record.velocity_method);
+                let mut roots: Vec<usize> = (0..result.candidates.len())
+                    .filter(|&other| {
+                        let c = &result.candidates[other];
+                        other != index
+                            && c.stages == 0
+                            && c.window == window
+                            && c.triplet == triplet
+                            && c.velocity_method == velocity_method
+                            && !siblings.contains(&other)
+                    })
+                    .collect();
+                roots.sort_by_key(|&other| std::cmp::Reverse(result.candidates[other].root_index));
+                siblings.extend(roots);
             }
             (_, note) => {
                 last_note = note.clone();
@@ -2195,28 +2282,42 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
             }
         }
     }
-    let best = result
+    // Roots of one triplet often converge to the same minimum, their final
+    // reduced chi2 equal to solver precision: values within
+    // `RCHI2_TIE_RTOL` of the lowest tie, and the lowest candidate index
+    // (canonical observation order) wins, so the choice does not depend on
+    // rounding. A distinct solution that close is reported in
+    // `ambiguous_with`.
+    let postfit = |candidate: &super::od::IodCandidate| {
+        candidate.postfit_reduced_chi2.unwrap_or(f64::INFINITY)
+    };
+    let lowest = result
         .candidates
         .iter()
-        .enumerate()
-        .filter(|(_, candidate)| candidate.converged)
-        .min_by(|(a, x), (b, y)| {
-            x.postfit_reduced_chi2
-                .unwrap_or(f64::INFINITY)
-                .total_cmp(&y.postfit_reduced_chi2.unwrap_or(f64::INFINITY))
-                .then(a.cmp(b))
-        })
-        .map(|(index, _)| index);
+        .filter(|candidate| candidate.converged)
+        .map(postfit)
+        .fold(f64::INFINITY, f64::min);
+    let best = result.candidates.iter().position(|candidate| {
+        candidate.converged && postfit(candidate) <= lowest + RCHI2_TIE_RTOL * lowest.abs()
+    });
     match best {
         Some(index) => {
             result.candidates[index].accepted = true;
             result.accepted = Some(index);
             result.not_found_reason = None;
+            let accepted = &result.candidates[index];
+            result.ambiguous_with = (0..result.candidates.len())
+                .filter(|&other| {
+                    other != index
+                        && result.candidates[other].converged
+                        && is_ambiguous_with(accepted, &result.candidates[other])
+                })
+                .collect();
         }
         None => {
             result.not_found_reason = Some(format!(
-                "{} of {} candidates corrected, none reached the whole arc within \
-                 rchi2_threshold = {}{}",
+                "{} of {} candidates corrected, all roots failed correction: none reached \
+                 the whole arc within rchi2_threshold = {}{}",
                 result.corrections_run,
                 result.candidates.len(),
                 config.rchi2_threshold,
@@ -4058,7 +4159,135 @@ mod tests {
             .all(|c| !c.converged && c.corrected_state.is_none()));
         let reason = result.not_found_reason.unwrap();
         assert!(reason.contains("none reached the whole arc"), "{reason}");
+        assert!(reason.contains("all roots failed correction"), "{reason}");
         assert!(reason.contains("stalled at stage 1"), "{reason}");
+    }
+
+    #[test]
+    fn corrected_acceptance_corrects_every_root_of_a_converged_triplet() {
+        // The late rows of this geometry give three Gauss roots per triplet
+        // (Charlier's regime): every root of each converged triplet is
+        // corrected and the accepted one is the lowest final reduced chi2
+        // and the true orbit, whatever its root index.
+        let rows: Vec<usize> = (6..NUM_OBS).collect();
+        let observed =
+            super::super::od::take_coordinate_batch(&synthetic_observations(None), &rows).unwrap();
+        let observers = super::super::od::take_observer_batch(&observers(), &rows).unwrap();
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let result = run_iod_with(
+            &predictor,
+            &observed,
+            &observers,
+            &corrected_iod_config(50.0),
+            &WhitenedFitConfig::default(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        let accepted = result
+            .accepted_candidate()
+            .unwrap_or_else(|| panic!("{:?}", result.not_found_reason));
+        let siblings: Vec<&super::super::od::IodCandidate> = result
+            .candidates
+            .iter()
+            .filter(|c| {
+                c.window == accepted.window
+                    && c.triplet == accepted.triplet
+                    && c.velocity_method == accepted.velocity_method
+            })
+            .collect();
+        assert!(
+            siblings.len() >= 2,
+            "fixture no longer yields multiple roots"
+        );
+        assert!(siblings.iter().all(|c| c.root_count == siblings.len()));
+        for sibling in &siblings {
+            assert!(
+                sibling.stages > 0,
+                "root {} not corrected",
+                sibling.root_index
+            );
+        }
+        let rchi2 = accepted.postfit_reduced_chi2.unwrap();
+        for candidate in result.candidates.iter().filter(|c| c.converged) {
+            assert!(candidate.postfit_reduced_chi2.unwrap() >= rchi2);
+        }
+        // The accepted orbit is the true one (within the scatter of six
+        // observations), not the root-order first.
+        let mu = crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap();
+        let truth = crate::propagate_2body_row::<f64>(
+            TRUTH_STATE,
+            accepted.epoch.mjd() - 60_000.0,
+            mu,
+            1000,
+            1e-14,
+        );
+        let state = accepted.corrected_state.unwrap();
+        assert!(max_abs_diff(&state[..3], &truth[..3]) < 1e-3);
+        // One root converges to a separate, worse local minimum (about
+        // 0.4 au away, reduced chi2 3.7 against 0.03): distinct, but its
+        // chi2 margin (about 22 on 6 dof) exceeds the 3-sigma 20.06, so the
+        // IOD is not ambiguous.
+        let distinct: Vec<_> = siblings
+            .iter()
+            .filter(|c| {
+                c.converged && max_abs_diff(&c.corrected_state.unwrap()[..3], &state[..3]) > 0.1
+            })
+            .collect();
+        assert_eq!(distinct.len(), 1);
+        assert!(distinct[0].postfit_reduced_chi2.unwrap() > rchi2);
+        assert!(!result.ambiguous(), "{:?}", result.ambiguous_with);
+    }
+
+    #[test]
+    fn ambiguity_needs_a_distinct_solution_with_a_comparable_fit() {
+        let observed = synthetic_observations(None);
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let result = run_iod_with(
+            &predictor,
+            &observed,
+            &observers(),
+            &corrected_iod_config(50.0),
+            &WhitenedFitConfig::default(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        let best = result.accepted_candidate().unwrap().clone();
+        let covariance = best.corrected_covariance.unwrap();
+        let sigma_x = covariance[0].sqrt();
+        assert!(sigma_x.is_finite() && sigma_x > 0.0);
+        let shifted = |k: f64, rchi2: f64| {
+            let mut other = best.clone();
+            let mut state = other.corrected_state.unwrap();
+            state[0] += k * sigma_x;
+            other.corrected_state = Some(state);
+            other.postfit_reduced_chi2 = Some(rchi2);
+            other
+        };
+        let rchi2 = best.postfit_reduced_chi2.unwrap();
+        // The same orbit is not a second solution.
+        assert!(!is_ambiguous_with(&best, &best));
+        // Far outside the 3-sigma region, an equally good fit: ambiguous.
+        assert!(is_ambiguous_with(&best, &shifted(1e3, rchi2)));
+        // Far outside, but the fit is clearly worse: not ambiguous.
+        assert!(!is_ambiguous_with(&best, &shifted(1e3, rchi2 + 10.0)));
+        // Without a usable covariance the solutions are not compared.
+        let mut blind = best.clone();
+        blind.corrected_covariance = Some([f64::NAN; 36]);
+        assert!(!is_ambiguous_with(&blind, &shifted(1e3, rchi2)));
     }
 
     #[test]

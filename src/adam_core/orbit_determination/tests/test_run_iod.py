@@ -218,6 +218,7 @@ def test_run_iod_defaults_to_corrected_acceptance(two_body_arc) -> None:  # noqa
     legacy prefit gate."""
     orbit, members, report = run_iod(two_body_arc, TwoBodyPropagator(), min_obs=6)
     assert report.found and report.corrections_run >= 1
+    assert not report.ambiguous and report.ambiguous_with == ()
     accepted = report.accepted_candidate
     assert accepted.converged and accepted.stages >= 1
     assert accepted.corrected_state is not None
@@ -227,9 +228,12 @@ def test_run_iod_defaults_to_corrected_acceptance(two_body_arc) -> None:  # noqa
     )
     assert orbit.reduced_chi2[0].as_py() == pytest.approx(accepted.postfit_reduced_chi2)
     assert not any(members.outlier.to_pylist()), "IOD rejects nothing"
+    # Lowest final reduced chi2, ties (relative 1e-6) to the lowest index.
     for candidate in report.candidates:
         if candidate.converged:
-            assert candidate.postfit_reduced_chi2 >= accepted.postfit_reduced_chi2
+            assert candidate.postfit_reduced_chi2 >= accepted.postfit_reduced_chi2 * (
+                1 - 1e-6
+            )
     legacy, _ = iod(two_body_arc, TwoBodyPropagator, min_obs=6, rchi2_threshold=1e4)
     assert len(legacy) == 1
 
@@ -246,8 +250,29 @@ def test_corrected_acceptance_reports_why_nothing_converged(
     )
     assert not report.found
     assert report.corrections_run == 2
+    assert "all roots failed correction" in report.not_found_reason
     assert "none reached the whole arc" in report.not_found_reason
     assert sum(c.correction_note is not None for c in report.candidates) == 2
+
+
+def test_stage_loss_toggle(two_body_arc) -> None:  # noqa: F811
+    """``stage_loss`` selects the partial-stage loss: Huber (default) and
+    linear both seed a clean arc; anything else is rejected."""
+    for stage_loss in ("huber", "linear"):
+        _, _, report = run_iod(
+            two_body_arc,
+            TwoBodyPropagator(),
+            min_obs=6,
+            correction_settings={"stage_loss": stage_loss},
+        )
+        assert report.found, (stage_loss, report.not_found_reason)
+    with pytest.raises(ValueError, match="loss must be one of"):
+        run_iod(
+            two_body_arc,
+            TwoBodyPropagator(),
+            min_obs=6,
+            correction_settings={"stage_loss": "cauchy"},
+        )
 
 
 def test_corrected_acceptance_is_invariant_to_observation_order(

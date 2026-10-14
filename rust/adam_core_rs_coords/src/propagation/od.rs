@@ -1486,6 +1486,9 @@ pub struct IodCandidate {
     pub converged: bool,
     /// The corrected state at `epoch` (corrected acceptance, converged).
     pub corrected_state: Option<[f64; 6]>,
+    /// Row-major 6x6 covariance of `corrected_state` from the whole-arc fit
+    /// (NaN when singular); used to tell distinct solutions apart.
+    pub corrected_covariance: Option<[f64; 36]>,
     /// Correction stages run (0 when not corrected).
     pub stages: usize,
     /// Why the correction stopped short of the whole arc, if it did.
@@ -1516,6 +1519,10 @@ pub struct IodResult {
     pub corrections_run: usize,
     /// Why no orbit was accepted; `None` when one was.
     pub not_found_reason: Option<String>,
+    /// Indices of the converged candidates that are a distinct solution
+    /// about as good as the accepted one (corrected acceptance; see
+    /// `run_iod_corrected`). Non-empty means the IOD is ambiguous.
+    pub ambiguous_with: Vec<usize>,
 }
 
 impl IodResult {
@@ -1525,6 +1532,12 @@ impl IodResult {
 
     pub fn accepted_candidate(&self) -> Option<&IodCandidate> {
         self.accepted.map(|index| &self.candidates[index])
+    }
+
+    /// Whether another converged solution is distinct from the accepted
+    /// one yet fits about as well.
+    pub fn ambiguous(&self) -> bool {
+        !self.ambiguous_with.is_empty()
     }
 
     pub(super) fn not_found(epoch_scale: crate::TimeScale, reason: String) -> Self {
@@ -1537,6 +1550,7 @@ impl IodResult {
             candidates_failed: 0,
             corrections_run: 0,
             not_found_reason: Some(reason),
+            ambiguous_with: Vec::new(),
         }
     }
 
@@ -1992,6 +2006,7 @@ fn run_iod_sorted(
                 postfit_reduced_chi2: None,
                 converged: false,
                 corrected_state: None,
+                corrected_covariance: None,
                 stages: 0,
                 correction_note: None,
                 accepted: false,
@@ -2016,6 +2031,7 @@ fn run_iod_sorted(
                     candidates_evaluated: 0,
                     candidates_failed: 0,
                     corrections_run: 0,
+                    ambiguous_with: Vec::new(),
                     not_found_reason: None,
                 }
                 .with_search_counters(&counters));
@@ -2060,6 +2076,7 @@ fn run_iod_sorted(
                         candidates_evaluated: 0,
                         candidates_failed: 0,
                         corrections_run: 0,
+                        ambiguous_with: Vec::new(),
                         not_found_reason: None,
                     }
                     .with_search_counters(&counters));
@@ -2100,6 +2117,7 @@ fn run_iod_sorted(
         candidates_evaluated: 0,
         candidates_failed: 0,
         corrections_run: 0,
+        ambiguous_with: Vec::new(),
         not_found_reason: Some(reason),
     }
     .with_search_counters(&counters))
