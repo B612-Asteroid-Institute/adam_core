@@ -504,6 +504,31 @@ a6w.4 do that).
   set invariant to row order), `test_od_orchestration.py` (fused route runs IOD
   on the configured propagator and still takes the fused route).
 
+## 2026-10-14 follow-up: span-bounded triplet search + velocity choice (bead od_experiments_setup-a6w.3)
+
+* `ObservationSelectionMethod::Spans` / `"spans"` with `SpanSearchConfig`
+  (`od.rs`): windows (densest 10 d, densest 30 d, last 30 d, first 30 d,
+  whole arc; repeats skipped), and within each a lazy k-way merge of
+  per-first-observation streams of last observations in increasing
+  |span - 6 d| (two pointers from the target outwards; the lower side is
+  walked run by run so equal epochs keep position order), one triplet per
+  pair (middle nearest the midpoint, distinct epochs), triplets deduplicated
+  across windows, budget `spans.max_triplets` = 32 unless `max_triplets`.
+  Pinned against a materialized oracle on nightly, multi-per-night with
+  coincident epochs, bounded-span and degenerate cadences; 3000-observation
+  case touches only the walked pairs. Values provisional (a6w.9).
+* `IodConfig.velocity_method` (`VelocityMethod::{Gauss, Gibbs, HerrickGibbs,
+  Auto}`); `Auto` resolves per root in the Gauss crate
+  (`resolve_velocity_method`: Herrick-Gibbs when both consecutive position
+  separations are <= 5 degrees, Vallado 2013 sec. 7.5.2, else Gibbs);
+  `gauss_iod_candidates` returns the method per root and `IodCandidate`
+  records it. Defaults unchanged: `combinations` and `gibbs`.
+* Bindings: `velocity_method`, `span_target_days`, `span_min_days`,
+  `span_max_days`, `span_dense_window_days`, `span_edge_window_days`,
+  `span_max_triplets` in `iod_settings`. Python: `"spans"` and
+  `velocity_method` on `run_iod`, `iod`, `NativeOrbitFitter`; `span_settings`
+  on `run_iod`.
+
 ## Correctness gates
 
 * **HEALPix RING order.** `efcc18::tests::ring_order_matches_jpl_tiles_dat`

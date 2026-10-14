@@ -104,6 +104,20 @@ This file contains notable changes in adam-core
   returns the accepted orbit, its members and an `IodReport`. The search
   policy is unchanged. `iod_fit` / `iod_fit_ipc` remain as the one-orbit view
   and are deprecated in favour of `run_iod`.
+- The span-bounded IOD triplet search, `observation_selection_method="spans"`
+  (Rust `SpanSearchConfig`, settings keys `span_*`): windows of the arc in
+  turn (densest 10 d, densest 30 d, last 30 d, first 30 d, whole arc), and
+  within each a lazy walk of (first, last) pairs by distance of their span
+  from a 6-day target, one triplet per pair with the middle nearest the
+  midpoint, deduplicated across windows, budget 32 triplets unless
+  `max_triplets` is given; never materializes all pairs. Values are
+  provisional (bead a6w.9). The default stays `"combinations"` until the
+  post-correction acceptance of bead a6w.4.
+- `velocity_method` for IOD (`run_iod`, `iod`, `NativeOrbitFitter`,
+  `IodConfig`): `"gauss"`, `"gibbs"` (default, unchanged), `"herrick+gibbs"`
+  or `"auto"` (Herrick-Gibbs when consecutive Gauss position vectors are
+  within 5 degrees, Vallado 2013, Gibbs otherwise); each candidate records
+  the method used. Rust `gauss_iod_candidates` reports it per root.
 - The IOD propagator is explicit at every stage boundary: `full_od_with`,
   `run_od_with` and their barycentric drivers take an IOD predictor and a
   refinement predictor; the `full_od` / `run_od` bindings (and their

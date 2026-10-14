@@ -219,7 +219,7 @@ def iod_worker(
     contamination_percentage: float = 0.0,
     rchi2_threshold: float = 200,
     observation_selection_method: Literal[
-        "combinations", "first+middle+last", "thirds"
+        "combinations", "first+middle+last", "thirds", "spans"
     ] = "combinations",
     linkage_id_col: str = "cluster_id",
     iterate: bool = False,
@@ -417,10 +417,12 @@ def run_iod(
     contamination_percentage: float = 0.0,
     rchi2_threshold: float = 200,
     observation_selection_method: Literal[
-        "combinations", "first+middle+last", "thirds"
+        "combinations", "first+middle+last", "thirds", "spans"
     ] = "combinations",
     light_time: bool = True,
     max_triplets: Optional[int] = None,
+    velocity_method: Literal["gauss", "gibbs", "herrick+gibbs", "auto"] = "gibbs",
+    span_settings: Optional[dict] = None,
     observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers, IodReport]:
     """
@@ -448,7 +450,17 @@ def run_iod(
         As for `iod`.
     max_triplets : int, optional
         Bound on the triplets searched; None keeps the legacy budget of three
-        triplets per allowed outlier.
+        triplets per allowed outlier (``"spans"``: its own default budget).
+    velocity_method : {"gauss", "gibbs", "herrick+gibbs", "auto"}
+        Velocity of the Gauss candidates. ``"auto"`` uses Herrick-Gibbs when
+        consecutive position vectors are within 5 degrees (Vallado 2013) and
+        Gibbs otherwise; candidates record the method used.
+    span_settings : dict, optional
+        Overrides of the ``observation_selection_method="spans"`` search
+        (keys ``span_target_days``, ``span_min_days``, ``span_max_days``,
+        ``span_dense_window_days``, ``span_edge_window_days``,
+        ``span_max_triplets``); missing keys keep the Rust defaults of
+        ``SpanSearchConfig``.
     observatory_bias_model : `ObservationUncertaintyModel`, optional
         Applied to the observations before the search.
 
@@ -481,6 +493,8 @@ def run_iod(
         "mu": MU,
         "speed_of_light": C,
         "max_triplets": max_triplets,
+        "velocity_method": velocity_method,
+        **(span_settings or {}),
     }
     orbit_id = uuid.uuid4().hex
     fused = getattr(propagator, "run_iod", None)
@@ -509,12 +523,13 @@ def iod(
     contamination_percentage: float = 0.0,
     rchi2_threshold: float = 200,
     observation_selection_method: Literal[
-        "combinations", "first+middle+last", "thirds"
+        "combinations", "first+middle+last", "thirds", "spans"
     ] = "combinations",
     iterate: bool = False,
     light_time: bool = True,
     propagator_kwargs: dict = {},
     observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
+    velocity_method: Literal["gauss", "gibbs", "herrick+gibbs", "auto"] = "gibbs",
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
     Run initial orbit determination on a set of observations believed to belong to a single
@@ -601,6 +616,7 @@ def iod(
         rchi2_threshold=rchi2_threshold,
         observation_selection_method=observation_selection_method,
         light_time=light_time,
+        velocity_method=velocity_method,
     )
     return orbit, members
 
@@ -697,7 +713,7 @@ def initial_orbit_determination(
     contamination_percentage: float = 20.0,
     rchi2_threshold: float = 10**3,
     observation_selection_method: Literal[
-        "combinations", "first+middle+last", "thirds"
+        "combinations", "first+middle+last", "thirds", "spans"
     ] = "combinations",
     iterate: bool = False,
     light_time: bool = True,

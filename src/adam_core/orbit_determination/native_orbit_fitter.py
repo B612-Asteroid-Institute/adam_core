@@ -108,8 +108,13 @@ class NativeOrbitFitter(OrbitFitter):
         Default 200.0.
     observation_selection_method : str, optional
         Strategy for selecting observation triplets in IOD.  One of
-        ``"combinations"``, ``"first+middle+last"``, ``"thirds"``.
+        ``"combinations"``, ``"first+middle+last"``, ``"thirds"``,
+        ``"spans"`` (span-bounded triplets swept across search windows).
         Default ``"combinations"``.
+    velocity_method : {"gauss", "gibbs", "herrick+gibbs", "auto"}, optional
+        Velocity of the Gauss IOD candidates; ``"auto"`` chooses
+        Herrick-Gibbs or Gibbs per root by the separation of its position
+        vectors. Default ``"gibbs"``.
     loss : {"linear", "huber"}, optional
         Loss used during differential correction (`iterative_fit`).
         ``"huber"`` downweights large residuals instead of letting them pull
@@ -154,8 +159,9 @@ class NativeOrbitFitter(OrbitFitter):
         rchi2_threshold: float = 10.0,
         iod_rchi2_threshold: float = 200.0,
         observation_selection_method: Literal[
-            "combinations", "first+middle+last", "thirds"
+            "combinations", "first+middle+last", "thirds", "spans"
         ] = "combinations",
+        velocity_method: Literal["gauss", "gibbs", "herrick+gibbs", "auto"] = "gibbs",
         loss: LossType = "linear",
         f_scale: float = HUBER_F_SCALE_DEFAULT,
         outlier_rejection: Literal["worst_residual", "cmc2003"] = "cmc2003",
@@ -174,6 +180,7 @@ class NativeOrbitFitter(OrbitFitter):
         self.rchi2_threshold = rchi2_threshold
         self.iod_rchi2_threshold = iod_rchi2_threshold
         self.observation_selection_method = observation_selection_method
+        self.velocity_method = velocity_method
         self.loss = loss
         self.f_scale = f_scale
         self.outlier_rejection = outlier_rejection
@@ -201,6 +208,7 @@ class NativeOrbitFitter(OrbitFitter):
             "contamination_percentage": self.contamination_percentage,
             "rchi2_threshold": self.iod_rchi2_threshold,
             "observation_selection_method": self.observation_selection_method,
+            "velocity_method": self.velocity_method,
             "light_time": True,
             "mu": MU,
             "speed_of_light": C,
@@ -377,6 +385,7 @@ class NativeOrbitFitter(OrbitFitter):
             contamination_percentage=self.contamination_percentage,
             rchi2_threshold=self.iod_rchi2_threshold,
             observation_selection_method=self.observation_selection_method,
+            velocity_method=self.velocity_method,
         )
         return fitted_orbits, fitted_orbit_members
 

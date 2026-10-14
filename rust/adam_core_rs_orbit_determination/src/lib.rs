@@ -1,5 +1,53 @@
 pub mod gauss_iod;
-pub use gauss_iod::gauss_iod_fused;
+pub use gauss_iod::{gauss_iod_candidates, gauss_iod_fused};
+
+/// `velocity_method` code of the automatic choice between Gibbs and
+/// Herrick-Gibbs (codes 0 = Gauss, 1 = Gibbs, 2 = Herrick-Gibbs).
+pub const VELOCITY_METHOD_AUTO: i32 = 3;
+
+/// Largest angular separation (degrees) between consecutive position
+/// vectors for which the automatic choice uses Herrick-Gibbs. Gibbs
+/// divides by the coplanarity geometry of the three vectors and loses
+/// accuracy as they close up; Vallado (Fundamentals of Astrodynamics and
+/// Applications, 4th ed., 2013, sec. 7.5.2) recommends Gibbs above about
+/// 5 degrees of separation and the Taylor-series Herrick-Gibbs below it.
+pub const AUTO_HERRICK_GIBBS_MAX_SEPARATION_DEG: f64 = 5.0;
+
+/// One Gauss preliminary orbit: epoch (decimal days, light-time corrected
+/// when requested), heliocentric ecliptic state, and the velocity method
+/// actually used (0 Gauss, 1 Gibbs, 2 Herrick-Gibbs).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct GaussCandidate {
+    pub epoch: f64,
+    pub state: [f64; 6],
+    pub velocity_method: i32,
+}
+
+/// The velocity method `velocity_method` stands for at these positions:
+/// itself, or for [`VELOCITY_METHOD_AUTO`] Herrick-Gibbs when both
+/// consecutive separations are at most
+/// [`AUTO_HERRICK_GIBBS_MAX_SEPARATION_DEG`], Gibbs otherwise.
+pub fn resolve_velocity_method(
+    velocity_method: i32,
+    r1: [f64; 3],
+    r2: [f64; 3],
+    r3: [f64; 3],
+) -> i32 {
+    if velocity_method != VELOCITY_METHOD_AUTO {
+        return velocity_method;
+    }
+    let separation = |a: [f64; 3], b: [f64; 3]| {
+        (dot(a, b) / (norm(a) * norm(b)))
+            .clamp(-1.0, 1.0)
+            .acos()
+            .to_degrees()
+    };
+    if separation(r1, r2).max(separation(r2, r3)) <= AUTO_HERRICK_GIBBS_MAX_SEPARATION_DEG {
+        2
+    } else {
+        1
+    }
+}
 
 fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
     [
@@ -139,8 +187,49 @@ pub fn gauss_iod_orbits_from_roots(
     mu: f64,
     c: f64,
 ) -> (Vec<f64>, Vec<f64>) {
-    let mut epochs = Vec::with_capacity(r2_mags.len());
-    let mut orbits_flat = Vec::with_capacity(r2_mags.len() * 6);
+    let candidates = gauss_iod_candidates_from_roots(
+        r2_mags,
+        q1,
+        q2,
+        q3,
+        rho1_hat,
+        rho2_hat,
+        rho3_hat,
+        t1,
+        t2,
+        t3,
+        v,
+        velocity_method,
+        light_time,
+        mu,
+        c,
+    );
+    let epochs = candidates.iter().map(|c| c.epoch).collect();
+    let orbits = candidates.iter().flat_map(|c| c.state).collect();
+    (epochs, orbits)
+}
+
+/// [`gauss_iod_orbits_from_roots`] returning one [`GaussCandidate`] per
+/// physical root, with the velocity method actually used.
+#[allow(clippy::too_many_arguments)]
+pub fn gauss_iod_candidates_from_roots(
+    r2_mags: &[f64],
+    q1: [f64; 3],
+    q2: [f64; 3],
+    q3: [f64; 3],
+    rho1_hat: [f64; 3],
+    rho2_hat: [f64; 3],
+    rho3_hat: [f64; 3],
+    t1: f64,
+    t2: f64,
+    t3: f64,
+    v: f64,
+    velocity_method: i32,
+    light_time: bool,
+    mu: f64,
+    c: f64,
+) -> Vec<GaussCandidate> {
+    let mut candidates = Vec::with_capacity(r2_mags.len());
 
     let t31 = t3 - t1;
     let t21 = t2 - t1;
@@ -166,6 +255,7 @@ pub fn gauss_iod_orbits_from_roots(
         let r2 = add(q2, rho2);
         let r3 = add(q3, rho3);
 
+        let velocity_method = resolve_velocity_method(velocity_method, r1, r2, r3);
         let v2 = if velocity_method == 0 {
             calc_gauss_row(r1, r2, r3, t1, t2, t3, mu)
         } else if velocity_method == 1 {
@@ -202,11 +292,14 @@ pub fn gauss_iod_orbits_from_roots(
             continue;
         }
 
-        epochs.push(epoch);
-        orbits_flat.extend_from_slice(&[r2[0], r2[1], r2[2], v2[0], v2[1], v2[2]]);
+        candidates.push(GaussCandidate {
+            epoch,
+            state: [r2[0], r2[1], r2[2], v2[0], v2[1], v2[2]],
+            velocity_method,
+        });
     }
 
-    (epochs, orbits_flat)
+    candidates
 }
 
 #[cfg(test)]
@@ -238,5 +331,37 @@ mod tests {
         let herrick_half = calc_herrick_gibbs_row(r1, r2, r3, 0.0, 2.0, 5.0, 0.5 * mu);
         assert_ne!(gauss_full, gauss_half);
         assert_ne!(herrick_full, herrick_half);
+    }
+}
+
+#[cfg(test)]
+mod velocity_choice_tests {
+    use super::*;
+
+    #[test]
+    fn auto_uses_herrick_gibbs_only_for_close_vectors() {
+        let at = |deg: f64| [deg.to_radians().cos(), deg.to_radians().sin(), 0.0];
+        assert_eq!(
+            resolve_velocity_method(VELOCITY_METHOD_AUTO, at(0.0), at(2.0), at(4.0)),
+            2
+        );
+        assert_eq!(
+            resolve_velocity_method(VELOCITY_METHOD_AUTO, at(0.0), at(5.0), at(10.0)),
+            2
+        );
+        assert_eq!(
+            resolve_velocity_method(VELOCITY_METHOD_AUTO, at(0.0), at(2.0), at(9.0)),
+            1
+        );
+        assert_eq!(
+            resolve_velocity_method(VELOCITY_METHOD_AUTO, at(0.0), at(20.0), at(40.0)),
+            1
+        );
+        for explicit in [0, 1, 2] {
+            assert_eq!(
+                resolve_velocity_method(explicit, at(0.0), at(30.0), at(60.0)),
+                explicit
+            );
+        }
     }
 }

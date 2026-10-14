@@ -31,8 +31,8 @@ use adam_core_rs_coords::propagation::{
     CovariancePropagation, EphemerisOptions, EpochPolicy, FullOdConfig, FullOdOutput, IodCandidate,
     IodConfig, IodResult, IterativeFitConfig, JacobianMethod, ObservationSelectionMethod,
     PropagationOptions, PropagationResultValue, PropagatorPredictor, RefinementConfig,
-    SphericalPredictor, TwoBodyPropagator, TwoBodyPropagatorConfig, WhitenedFitConfig,
-    WhitenedFitOutput,
+    SpanSearchConfig, SphericalPredictor, TwoBodyPropagator, TwoBodyPropagatorConfig,
+    VelocityMethod, WhitenedFitConfig, WhitenedFitOutput,
 };
 use adam_core_rs_coords::veres2017::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
 use adam_core_rs_coords::{
@@ -210,6 +210,30 @@ fn parse_iod_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<IodConfi
         mu: setting(settings, "mu", defaults.mu)?,
         speed_of_light: setting(settings, "speed_of_light", defaults.speed_of_light)?,
         max_triplets: setting(settings, "max_triplets", defaults.max_triplets)?,
+        velocity_method: match setting::<Option<String>>(settings, "velocity_method", None)? {
+            Some(method) => VelocityMethod::parse(&method).map_err(value_error)?,
+            None => defaults.velocity_method,
+        },
+        spans: SpanSearchConfig {
+            target_span_days: setting(
+                settings,
+                "span_target_days",
+                defaults.spans.target_span_days,
+            )?,
+            min_span_days: setting(settings, "span_min_days", defaults.spans.min_span_days)?,
+            max_span_days: setting(settings, "span_max_days", defaults.spans.max_span_days)?,
+            dense_window_days: setting(
+                settings,
+                "span_dense_window_days",
+                defaults.spans.dense_window_days,
+            )?,
+            edge_window_days: setting(
+                settings,
+                "span_edge_window_days",
+                defaults.spans.edge_window_days,
+            )?,
+            max_triplets: setting(settings, "span_max_triplets", defaults.spans.max_triplets)?,
+        },
     })
 }
 

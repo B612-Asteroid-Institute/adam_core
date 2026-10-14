@@ -43,7 +43,7 @@ use crate::{
     CoordinateValues, CovarianceBatch, ObjectId, ObserverBatch, OrbitBatch, OrbitId, OriginArray,
     TimeArray, Validity,
 };
-use adam_core_rs_orbit_determination::gauss_iod_fused;
+use adam_core_rs_orbit_determination::{gauss_iod_candidates, VELOCITY_METHOD_AUTO};
 
 /// Legacy light-time failure phrase. adam-core's public `LeastSquares` class
 /// treats provider errors containing this text as a rejected trial step; the
@@ -1114,6 +1114,9 @@ pub enum ObservationSelectionMethod {
     Combinations,
     FirstMiddleLast,
     Thirds,
+    /// Span-bounded triplets swept across search windows (see
+    /// [`SpanSearchConfig`]).
+    Spans,
 }
 
 impl ObservationSelectionMethod {
@@ -1123,9 +1126,10 @@ impl ObservationSelectionMethod {
             "combinations" => Ok(Self::Combinations),
             "first+middle+last" => Ok(Self::FirstMiddleLast),
             "thirds" => Ok(Self::Thirds),
+            "spans" => Ok(Self::Spans),
             other => Err(format!(
                 "observation_selection_method must be one of 'combinations', \
-                 'first+middle+last', 'thirds'; got {other:?}"
+                 'first+middle+last', 'thirds', 'spans'; got {other:?}"
             )),
         }
     }
@@ -1137,6 +1141,56 @@ pub const IOD_DEFAULT_MU: f64 = 0.000_295_912_208_284_119_56;
 /// Speed of light (au/day) of [`IodConfig::default`]: adam-core's
 /// `Constants.C`.
 pub const IOD_DEFAULT_SPEED_OF_LIGHT: f64 = 173.144_632_674_240_34;
+
+/// Settings of the span-bounded triplet search
+/// ([`ObservationSelectionMethod::Spans`]).
+///
+/// Gauss's method truncates the f and g series, so a preliminary orbit
+/// degrades as the triplet spans a larger fraction of the orbit; on NEO
+/// arcs its two-body fit to the whole arc worsened from reduced chi2 ~1e4
+/// at a 3-day triplet span to ~1e9 at 67 days (2012 TF79, sweep of
+/// 2026-07-28), while longest-arc-first is the THOR tracklet-linking
+/// heuristic (Moeyens et al. 2021) the legacy `combinations` order ports.
+/// The search therefore visits windows of the arc in turn (the densest
+/// `dense_window_days[0]` days, the densest `dense_window_days[1]` days,
+/// the last and the first `edge_window_days`, then the whole arc: the
+/// seeding windows of the 2026-10-12 walk-forward), and within each window
+/// walks (first, last) pairs by distance of their span from
+/// `target_span_days`, one triplet per pair with the middle observation
+/// nearest the pair's midpoint. The values are provisional until bead
+/// a6w.9 fixes them on the validation set.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct SpanSearchConfig {
+    /// Preferred triplet span (days): the middle of the 3 / 6 / 12-day
+    /// spans of the 2026-07-28 sweep.
+    pub target_span_days: f64,
+    /// Pairs spanning less than this are never used (0 = any two distinct
+    /// epochs).
+    pub min_span_days: f64,
+    /// Pairs spanning more than this are never used (infinite = no bound).
+    pub max_span_days: f64,
+    /// Lengths of the two densest-window searches, in this order.
+    pub dense_window_days: [f64; 2],
+    /// Length of the last- and first-window searches.
+    pub edge_window_days: f64,
+    /// Triplet budget when `IodConfig::max_triplets` is None: the order of
+    /// the study ladder's candidate count (two triplets x two selections x
+    /// up to four windows, times the roots).
+    pub max_triplets: usize,
+}
+
+impl Default for SpanSearchConfig {
+    fn default() -> Self {
+        Self {
+            target_span_days: 6.0,
+            min_span_days: 0.0,
+            max_span_days: f64::INFINITY,
+            dense_window_days: [10.0, 30.0],
+            edge_window_days: 30.0,
+            max_triplets: 32,
+        }
+    }
+}
 
 #[derive(Debug, Clone, Copy)]
 pub struct IodConfig {
@@ -1154,6 +1208,11 @@ pub struct IodConfig {
     /// triplets whatever the contamination percentage (which then only
     /// sets the outlier allowance).
     pub max_triplets: Option<usize>,
+    /// Velocity method of the Gauss candidates; `Auto` picks Gibbs or
+    /// Herrick-Gibbs per root by the separation of its position vectors.
+    pub velocity_method: VelocityMethod,
+    /// Settings of the `Spans` selection method (ignored by the others).
+    pub spans: SpanSearchConfig,
 }
 
 impl Default for IodConfig {
@@ -1171,6 +1230,8 @@ impl Default for IodConfig {
             mu: IOD_DEFAULT_MU,
             speed_of_light: IOD_DEFAULT_SPEED_OF_LIGHT,
             max_triplets: None,
+            velocity_method: VelocityMethod::Gibbs,
+            spans: SpanSearchConfig::default(),
         }
     }
 }
@@ -1242,14 +1303,16 @@ impl IodOutput {
     }
 }
 
-/// Velocity method of a Gauss preliminary orbit (`gauss_iod_fused`'s
-/// `velocity_method`). The search uses Gibbs today; bead a6w.3 adds the
-/// Herrick-Gibbs / automatic choice.
+/// Velocity method of a Gauss preliminary orbit. `Auto` is a setting only:
+/// it resolves per root to Herrick-Gibbs when consecutive position vectors
+/// are within `AUTO_HERRICK_GIBBS_MAX_SEPARATION_DEG` (5 degrees, Vallado
+/// 2013) and to Gibbs otherwise; candidates record the resolved method.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VelocityMethod {
     Gauss,
     Gibbs,
     HerrickGibbs,
+    Auto,
 }
 
 impl VelocityMethod {
@@ -1258,6 +1321,21 @@ impl VelocityMethod {
             Self::Gauss => "gauss",
             Self::Gibbs => "gibbs",
             Self::HerrickGibbs => "herrick+gibbs",
+            Self::Auto => "auto",
+        }
+    }
+
+    /// The Python spelling of ``velocity_method``.
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "gauss" => Ok(Self::Gauss),
+            "gibbs" => Ok(Self::Gibbs),
+            "herrick+gibbs" => Ok(Self::HerrickGibbs),
+            "auto" => Ok(Self::Auto),
+            other => Err(format!(
+                "velocity_method must be one of 'gauss', 'gibbs', 'herrick+gibbs', 'auto'; \
+                 got {other:?}"
+            )),
         }
     }
 
@@ -1266,6 +1344,15 @@ impl VelocityMethod {
             Self::Gauss => 0,
             Self::Gibbs => 1,
             Self::HerrickGibbs => 2,
+            Self::Auto => VELOCITY_METHOD_AUTO,
+        }
+    }
+
+    fn from_code(code: i32) -> Self {
+        match code {
+            0 => Self::Gauss,
+            2 => Self::HerrickGibbs,
+            _ => Self::Gibbs,
         }
     }
 }
@@ -1639,10 +1726,20 @@ fn run_iod_sorted(
             ))
         }
         Some(budget) => budget,
+        None if config.observation_selection_method == ObservationSelectionMethod::Spans => {
+            config.spans.max_triplets.max(1)
+        }
         None => 3 * (max_outliers + 1),
     };
-    let triplets =
-        select_observation_triplets_bounded(&times, config.observation_selection_method, budget);
+    let triplets: Vec<([usize; 3], (usize, usize))> =
+        if config.observation_selection_method == ObservationSelectionMethod::Spans {
+            span_triplets(&times, &config.spans, budget)
+        } else {
+            select_observation_triplets_bounded(&times, config.observation_selection_method, budget)
+                .into_iter()
+                .map(|triplet| (triplet, (0, n - 1)))
+                .collect()
+        };
     if triplets.is_empty() {
         return Ok(IodResult::not_found(
             epoch_scale,
@@ -1650,13 +1747,12 @@ fn run_iod_sorted(
         ));
     }
 
-    let velocity_method = VelocityMethod::Gibbs;
     let mut counters = SearchCounters {
         best_reduced_chi2: f64::INFINITY,
         ..SearchCounters::default()
     };
     let mut candidates: Vec<IodCandidate> = Vec::new();
-    for triplet in triplets {
+    for (triplet, window) in triplets {
         counters.triplets_tried += 1;
         let ra = std::array::from_fn(|slot| observed_values[triplet[slot]][1]);
         let dec = std::array::from_fn(|slot| observed_values[triplet[slot]][2]);
@@ -1665,23 +1761,24 @@ fn run_iod_sorted(
             let row = observer_positions[triplet[slot]];
             [row[0], row[1], row[2]]
         });
-        let (epochs, states_flat) = gauss_iod_fused(
+        let gauss = gauss_iod_candidates(
             ra,
             dec,
             triplet_times,
             triplet_observers,
-            velocity_method.code(),
+            config.velocity_method.code(),
             config.light_time,
             config.mu,
             config.speed_of_light,
         );
-        let candidate_count = epochs.len();
-        for candidate in 0..candidate_count {
-            let state: [f64; 6] = std::array::from_fn(|axis| states_flat[candidate * 6 + axis]);
+        let candidate_count = gauss.len();
+        for (candidate, root) in gauss.iter().enumerate() {
+            let state = root.state;
             if !state.iter().all(|value| value.is_finite()) {
                 continue;
             }
-            let epoch = mjd_epoch(epochs[candidate]);
+            let velocity_method = VelocityMethod::from_code(root.velocity_method);
+            let epoch = mjd_epoch(root.epoch);
             let candidate_coordinates = CoordinateBatch::cartesian(
                 vec![state],
                 Frame::Ecliptic,
@@ -1721,7 +1818,7 @@ fn run_iod_sorted(
                 state,
                 epoch,
                 epoch_scale,
-                window: (0, n - 1),
+                window,
                 triplet,
                 root_index: candidate,
                 root_count: candidate_count,
@@ -1925,6 +2022,12 @@ fn select_observation_triplets_bounded(
                 .collect()
         }
         ObservationSelectionMethod::Combinations => combination_triplets(times, budget),
+        ObservationSelectionMethod::Spans => {
+            span_triplets(times, &SpanSearchConfig::default(), budget)
+                .into_iter()
+                .map(|(triplet, _)| triplet)
+                .collect()
+        }
     };
     triplets.retain(|row| {
         times[row[0]] != times[row[1]]
@@ -2031,6 +2134,180 @@ fn combination_triplets(times: &[f64], budget: usize) -> Vec<[usize; 3]> {
             out.push([order[first], order[middle], order[last]]);
             if out.len() == budget {
                 return out;
+            }
+        }
+    }
+    out
+}
+
+/// The first `budget` triplets of the span-bounded search
+/// ([`SpanSearchConfig`]), each with the rows of its search window.
+///
+/// Windows, in order: the densest `dense_window_days[0]` and
+/// `dense_window_days[1]` days (the earliest on ties), the last and the
+/// first `edge_window_days`, then the whole arc; repeated windows are
+/// skipped. Within a window every first observation contributes a lazy
+/// stream of last observations in increasing |span - target| (two pointers
+/// from the target outwards, bounded by the span limits); the streams are
+/// merged by a heap keyed (|span - target|, first, last), so pairs are
+/// visited in that total order without enumerating them all. Each pair gives
+/// one triplet, its middle the observation nearest the pair's midpoint
+/// (earliest on ties) with an epoch distinct from both ends; pairs with no
+/// such middle are skipped, as are triplets already produced by an earlier
+/// window. The walk stops at `budget`.
+fn span_triplets(
+    times: &[f64],
+    config: &SpanSearchConfig,
+    budget: usize,
+) -> Vec<([usize; 3], (usize, usize))> {
+    use std::cmp::{Ordering, Reverse};
+    use std::collections::{BinaryHeap, HashSet};
+
+    let n = times.len();
+    let mut out = Vec::new();
+    if n < 3 || budget == 0 {
+        return out;
+    }
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&a, &b| times[a].total_cmp(&times[b]).then(a.cmp(&b)));
+    let t: Vec<f64> = order.iter().map(|&row| times[row]).collect();
+
+    // Windows as inclusive position ranges over the time-sorted view.
+    let densest = |length: f64| -> (usize, usize) {
+        let mut best = (0, 0);
+        let mut best_count = 0;
+        let mut hi = 0;
+        for lo in 0..n {
+            if hi < lo {
+                hi = lo;
+            }
+            while hi + 1 < n && t[hi + 1] - t[lo] <= length {
+                hi += 1;
+            }
+            if hi - lo + 1 > best_count {
+                best_count = hi - lo + 1;
+                best = (lo, hi);
+            }
+        }
+        best
+    };
+    let last_from = t.partition_point(|&value| value < t[n - 1] - config.edge_window_days);
+    let first_to = t.partition_point(|&value| value <= t[0] + config.edge_window_days) - 1;
+    let mut windows: Vec<(usize, usize)> = Vec::new();
+    for window in [
+        densest(config.dense_window_days[0]),
+        densest(config.dense_window_days[1]),
+        (last_from, n - 1),
+        (0, first_to),
+        (0, n - 1),
+    ] {
+        if !windows.contains(&window) {
+            windows.push(window);
+        }
+    }
+
+    #[derive(PartialEq)]
+    struct Key(f64, usize, usize);
+    impl Eq for Key {}
+    impl Ord for Key {
+        fn cmp(&self, other: &Self) -> Ordering {
+            self.0
+                .total_cmp(&other.0)
+                .then(self.1.cmp(&other.1))
+                .then(self.2.cmp(&other.2))
+        }
+    }
+    impl PartialOrd for Key {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    let target = config.target_span_days;
+    let span_ok = |first: usize, last: usize| {
+        let span = t[last] - t[first];
+        span > 0.0 && span >= config.min_span_days && span <= config.max_span_days
+    };
+    let deviation = |first: usize, last: usize| ((t[last] - t[first]) - target).abs();
+
+    let mut seen: HashSet<[usize; 3]> = HashSet::new();
+    for (lo, hi) in windows {
+        if hi < lo + 2 {
+            continue;
+        }
+        // Per first position: the lower side as (current, end of its run of
+        // equal epochs), walked upwards within each run so that ties come
+        // out in position order, and the next higher last; `None` once a
+        // side is exhausted.
+        type Down = Option<(usize, usize)>;
+        let run_start = |first: usize, k: usize| {
+            first + 1 + t[first + 1..=k].partition_point(|&value| value < t[k])
+        };
+        let down_run = |first: usize, k: usize| -> Down {
+            if k <= first || !span_ok(first, k) {
+                return None;
+            }
+            Some((run_start(first, k), k))
+        };
+        let mut cursors: Vec<(Down, Option<usize>)> = vec![(None, None); hi + 1];
+        let mut heap: BinaryHeap<Reverse<Key>> = BinaryHeap::new();
+        let next_of = |first: usize, cursor: &(Down, Option<usize>)| -> Option<usize> {
+            match (cursor.0.map(|(current, _)| current), cursor.1) {
+                (Some(down), Some(up)) => {
+                    if deviation(first, down) <= deviation(first, up) {
+                        Some(down)
+                    } else {
+                        Some(up)
+                    }
+                }
+                (Some(down), None) => Some(down),
+                (None, Some(up)) => Some(up),
+                (None, None) => None,
+            }
+        };
+        for first in lo..hi {
+            // Split point: the first last with span >= target.
+            let split =
+                first + 1 + t[first + 1..=hi].partition_point(|&value| value - t[first] < target);
+            let down = down_run(first, split - 1);
+            let up = (split <= hi && span_ok(first, split)).then_some(split);
+            cursors[first] = (down, up);
+            if let Some(last) = next_of(first, &cursors[first]) {
+                heap.push(Reverse(Key(deviation(first, last), first, last)));
+            }
+        }
+        while let Some(Reverse(Key(_, first, last))) = heap.pop() {
+            // Advance this first's stream past `last`.
+            let (down, up) = cursors[first];
+            if let Some((current, end)) = down.filter(|&(current, _)| current == last) {
+                cursors[first].0 = if current < end {
+                    Some((current + 1, end))
+                } else {
+                    down_run(first, run_start(first, end) - 1)
+                };
+            } else if up == Some(last) {
+                cursors[first].1 = (last < hi && span_ok(first, last + 1)).then(|| last + 1);
+            }
+            if let Some(next) = next_of(first, &cursors[first]) {
+                heap.push(Reverse(Key(deviation(first, next), first, next)));
+            }
+
+            let midpoint = (t[first] + t[last]) / 2.0;
+            let middle = (first + 1..last)
+                .filter(|&m| t[m] != t[first] && t[m] != t[last])
+                .min_by(|&a, &b| {
+                    (t[a] - midpoint)
+                        .abs()
+                        .total_cmp(&(t[b] - midpoint).abs())
+                        .then(a.cmp(&b))
+                });
+            let Some(middle) = middle else { continue };
+            let triplet = [order[first], order[middle], order[last]];
+            if seen.insert(triplet) {
+                out.push((triplet, (order[lo], order[hi])));
+                if out.len() == budget {
+                    return out;
+                }
             }
         }
     }
@@ -2567,6 +2844,7 @@ mod tests {
     };
     use crate::types::{Frame, SchemaError, SchemaResult};
     use crate::{CovarianceUnits, Epoch, ObservatoryCode, OriginId, TimeScale};
+    use adam_core_rs_orbit_determination::gauss_iod_fused;
 
     struct NoopProvider;
 
@@ -2862,6 +3140,8 @@ mod tests {
             mu: crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap(),
             speed_of_light: 173.144_632_674_240_3,
             max_triplets: None,
+            velocity_method: VelocityMethod::Gibbs,
+            spans: SpanSearchConfig::default(),
         }
     }
 
@@ -3212,6 +3492,228 @@ mod tests {
         }
         let distinct: std::collections::HashSet<[usize; 3]> = triplets.iter().copied().collect();
         assert_eq!(distinct.len(), 24);
+    }
+
+    /// Materialized oracle of `span_triplets`: every window, every pair in
+    /// bounds sorted by (|span - target|, first, last), one middle per pair,
+    /// triplets deduplicated across windows in window order.
+    fn materialized_span_triplets(
+        times: &[f64],
+        config: &SpanSearchConfig,
+    ) -> Vec<([usize; 3], (usize, usize))> {
+        let n = times.len();
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by(|&a, &b| times[a].total_cmp(&times[b]).then(a.cmp(&b)));
+        let t: Vec<f64> = order.iter().map(|&row| times[row]).collect();
+        let densest = |length: f64| {
+            let mut best = (0, 0);
+            let mut best_count = 0;
+            for lo in 0..n {
+                let hi = (lo..n).filter(|&k| t[k] - t[lo] <= length).max().unwrap();
+                if hi - lo + 1 > best_count {
+                    best_count = hi - lo + 1;
+                    best = (lo, hi);
+                }
+            }
+            best
+        };
+        let last_from = (0..n)
+            .find(|&k| t[k] >= t[n - 1] - config.edge_window_days)
+            .unwrap();
+        let first_to = (0..n)
+            .filter(|&k| t[k] <= t[0] + config.edge_window_days)
+            .max()
+            .unwrap();
+        let mut windows = Vec::new();
+        for w in [
+            densest(config.dense_window_days[0]),
+            densest(config.dense_window_days[1]),
+            (last_from, n - 1),
+            (0, first_to),
+            (0, n - 1),
+        ] {
+            if !windows.contains(&w) {
+                windows.push(w);
+            }
+        }
+        let mut out = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for (lo, hi) in windows {
+            let mut pairs = Vec::new();
+            for first in lo..=hi {
+                for last in first + 1..=hi {
+                    let span = t[last] - t[first];
+                    if span > 0.0 && span >= config.min_span_days && span <= config.max_span_days {
+                        pairs.push(((span - config.target_span_days).abs(), first, last));
+                    }
+                }
+            }
+            pairs.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+            for (_, first, last) in pairs {
+                let midpoint = (t[first] + t[last]) / 2.0;
+                let middle = (first + 1..last)
+                    .filter(|&m| t[m] != t[first] && t[m] != t[last])
+                    .min_by(|&a, &b| {
+                        (t[a] - midpoint)
+                            .abs()
+                            .total_cmp(&(t[b] - midpoint).abs())
+                            .then(a.cmp(&b))
+                    });
+                if let Some(middle) = middle {
+                    let triplet = [order[first], order[middle], order[last]];
+                    if seen.insert(triplet) {
+                        out.push((triplet, (order[lo], order[hi])));
+                    }
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn span_triplets_match_the_materialized_order() {
+        let mut cases: Vec<(Vec<f64>, SpanSearchConfig)> = Vec::new();
+        let base = SpanSearchConfig::default();
+        // Nightly cadence over 80 days with a 40-day gap; tied spans.
+        let nightly: Vec<f64> = (0..20)
+            .map(|k| k as f64)
+            .chain((60..80).map(|k| k as f64))
+            .collect();
+        cases.push((nightly.clone(), base));
+        // Several observations per night, coincident epochs, unsorted input.
+        let mut dense: Vec<f64> = (0..15)
+            .flat_map(|night| [night as f64, night as f64 + 0.01, night as f64 + 0.01])
+            .collect();
+        dense.reverse();
+        cases.push((dense, base));
+        // Span bounds that exclude most pairs.
+        cases.push((
+            nightly.clone(),
+            SpanSearchConfig {
+                min_span_days: 4.0,
+                max_span_days: 9.0,
+                ..base
+            },
+        ));
+        cases.push((
+            vec![
+                0.0, 0.3, 1.1, 1.7, 4.0, 4.2, 5.9, 8.8, 9.0, 13.5, 47.0, 51.0,
+            ],
+            base,
+        ));
+        cases.push((vec![3.0, 3.0, 3.0, 3.0], base));
+        for (times, config) in cases {
+            let expected = materialized_span_triplets(&times, &config);
+            for budget in [0, 1, 2, 5, 17, expected.len(), expected.len() + 3] {
+                assert_eq!(
+                    span_triplets(&times, &config, budget),
+                    expected[..budget.min(expected.len())].to_vec(),
+                    "{times:?} budget {budget}"
+                );
+            }
+            for (triplet, _) in &expected {
+                let epochs: std::collections::HashSet<u64> =
+                    triplet.iter().map(|&row| times[row].to_bits()).collect();
+                assert_eq!(epochs.len(), 3, "coincident epochs in {triplet:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn span_triplets_prefer_the_target_span_in_the_densest_window() {
+        // 3000 observations every six hours: the first triplet spans the
+        // target exactly, its middle at the pair's midpoint, inside the
+        // densest 10-day window (the first one, on ties).
+        let n = 3000;
+        let times: Vec<f64> = (0..n).map(|k| 60_000.0 + 0.25 * k as f64).collect();
+        let config = SpanSearchConfig::default();
+        let triplets = span_triplets(&times, &config, config.max_triplets);
+        assert_eq!(triplets.len(), config.max_triplets);
+        let (first, window) = triplets[0];
+        assert_eq!(times[first[2]] - times[first[0]], config.target_span_days);
+        assert_eq!(
+            times[first[1]] - times[first[0]],
+            config.target_span_days / 2.0
+        );
+        assert_eq!(window, (0, 40));
+        for (triplet, (lo, hi)) in &triplets {
+            assert!(*lo <= triplet[0] && triplet[2] <= *hi);
+            assert!(
+                (times[triplet[2]] - times[triplet[0]] - config.target_span_days).abs() <= 0.25
+            );
+        }
+    }
+
+    #[test]
+    fn spans_search_accepts_the_arc_and_records_windows_and_velocity() {
+        let config = IodConfig {
+            observation_selection_method: ObservationSelectionMethod::Spans,
+            velocity_method: VelocityMethod::Auto,
+            ..iod_config(0.0)
+        };
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let predictor = two_body_predictor(&propagator, &options);
+        let observed = synthetic_observations();
+        let observers = observers();
+        let result = run_iod(&predictor, &observed, &observers, &config).unwrap();
+        assert!(result.found(), "{:?}", result.not_found_reason);
+        let accepted = result.accepted_candidate().unwrap();
+        assert!(matches!(
+            accepted.velocity_method,
+            VelocityMethod::Gibbs | VelocityMethod::HerrickGibbs
+        ));
+        let mjd = observed_times_mjd(&observed).unwrap();
+        for candidate in &result.candidates {
+            assert_ne!(candidate.velocity_method, VelocityMethod::Auto);
+            let (lo, hi) = candidate.window;
+            assert!(candidate
+                .triplet
+                .iter()
+                .all(|&row| mjd[row] >= mjd[lo] && mjd[row] <= mjd[hi]));
+        }
+        assert_near_truth(&result.to_output(observed.len()));
+        // Budget: the spans default when max_triplets is None.
+        let none = run_iod(
+            &predictor,
+            &observed,
+            &observers,
+            &IodConfig {
+                rchi2_threshold: 1e-30,
+                ..config
+            },
+        )
+        .unwrap();
+        assert!(!none.found());
+        assert!(none.triplets_tried <= config.spans.max_triplets);
+    }
+
+    #[test]
+    fn velocity_method_setting_reaches_every_candidate() {
+        let propagator = TwoBodyPropagator::default();
+        let options = ephemeris_options();
+        let predictor = two_body_predictor(&propagator, &options);
+        for method in [VelocityMethod::Gibbs, VelocityMethod::HerrickGibbs] {
+            let config = IodConfig {
+                velocity_method: method,
+                rchi2_threshold: 1e-30,
+                max_triplets: Some(4),
+                ..iod_config(0.0)
+            };
+            let result =
+                run_iod(&predictor, &synthetic_observations(), &observers(), &config).unwrap();
+            assert!(!result.candidates.is_empty());
+            assert!(result
+                .candidates
+                .iter()
+                .all(|c| c.velocity_method == method));
+        }
+        assert_eq!(VelocityMethod::parse("auto").unwrap(), VelocityMethod::Auto);
+        assert!(VelocityMethod::parse("laplace").is_err());
+        assert_eq!(
+            ObservationSelectionMethod::parse("spans").unwrap(),
+            ObservationSelectionMethod::Spans
+        );
     }
 
     #[test]

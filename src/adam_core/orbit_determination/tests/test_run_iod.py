@@ -146,3 +146,54 @@ def test_fitter_initial_fit_runs_iod_on_the_configured_class(
     orbit, members = fitter.initial_fit("x", two_body_arc)
     assert len(orbit) == 1 and len(members) == len(two_body_arc)
     assert len(Configured.instances) == 1 and Configured.instances[0].calls > 0
+
+
+@pytest.mark.parametrize("velocity_method", ["gibbs", "herrick+gibbs", "auto"])
+def test_spans_search_finds_the_arc(
+    two_body_arc, velocity_method
+) -> None:  # noqa: F811
+    orbit, members, report = run_iod(
+        two_body_arc,
+        TwoBodyPropagator(),
+        min_obs=6,
+        rchi2_threshold=1e4,
+        observation_selection_method="spans",
+        velocity_method=velocity_method,
+    )
+    assert report.found, report.not_found_reason
+    assert len(orbit) == 1
+    methods = {candidate.velocity_method for candidate in report.candidates}
+    if velocity_method == "auto":
+        assert methods <= {"gibbs", "herrick+gibbs"}
+    else:
+        assert methods == {velocity_method}
+
+
+def test_spans_settings_reach_the_search(two_body_arc) -> None:  # noqa: F811
+    _, _, report = run_iod(
+        two_body_arc,
+        TwoBodyPropagator(),
+        min_obs=6,
+        rchi2_threshold=1e-30,
+        observation_selection_method="spans",
+        span_settings={"span_max_triplets": 3},
+    )
+    assert not report.found and report.triplets_tried == 3
+    times = two_body_arc.coordinates.time.mjd().to_numpy(zero_copy_only=False)
+    spans = [times[c.triplet[2]] - times[c.triplet[0]] for c in report.candidates]
+    assert all(abs(span) > 0 for span in spans)
+    with pytest.raises(ValueError, match="velocity_method"):
+        run_iod(two_body_arc, TwoBodyPropagator(), velocity_method="laplace")
+    with pytest.raises(ValueError, match="observation_selection_method"):
+        run_iod(two_body_arc, TwoBodyPropagator(), observation_selection_method="best")
+
+
+def test_fitter_forwards_the_velocity_method() -> None:
+    fitter = NativeOrbitFitter(
+        propagator_class=TwoBodyPropagator,
+        observation_selection_method="spans",
+        velocity_method="auto",
+    )
+    iod_settings, _, _ = fitter.native_settings()
+    assert iod_settings["velocity_method"] == "auto"
+    assert iod_settings["observation_selection_method"] == "spans"

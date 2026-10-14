@@ -21,7 +21,7 @@
 //! Newton polish so near-real roots snap to `im == 0.0` cleanly,
 //! matching the numpy `np.isreal` filter semantics.
 
-use crate::gauss_iod_orbits_from_roots;
+use crate::{gauss_iod_candidates_from_roots, GaussCandidate};
 
 const PI_F64: f64 = std::f64::consts::PI;
 const OBLIQUITY_RAD: f64 = 84381.448_f64 * PI_F64 / (180.0_f64 * 3600.0_f64);
@@ -239,7 +239,8 @@ fn norm(v: [f64; 3]) -> f64 {
 ///   AU, **ecliptic** frame. Caller is responsible for the frame
 ///   (matching the existing legacy gaussIOD contract where observer
 ///   coords come from `Observers` already in ecliptic).
-/// * `velocity_method`: 0 = gauss, 1 = gibbs, 2 = herrick+gibbs.
+/// * `velocity_method`: 0 = gauss, 1 = gibbs, 2 = herrick+gibbs,
+///   3 = automatic (see [`crate::resolve_velocity_method`]).
 /// * `light_time`: subtract light-time from epoch if true.
 /// * `mu`, `c`: gravitational parameter (AU³/d²), speed of light (AU/d).
 ///
@@ -256,6 +257,34 @@ pub fn gauss_iod_fused(
     mu: f64,
     c: f64,
 ) -> (Vec<f64>, Vec<f64>) {
+    let candidates = gauss_iod_candidates(
+        ra_deg,
+        dec_deg,
+        obs_times_mjd,
+        coords_obs,
+        velocity_method,
+        light_time,
+        mu,
+        c,
+    );
+    let epochs = candidates.iter().map(|c| c.epoch).collect();
+    let orbits = candidates.iter().flat_map(|c| c.state).collect();
+    (epochs, orbits)
+}
+
+/// [`gauss_iod_fused`] returning one [`GaussCandidate`] per physical root,
+/// in the same order, with the velocity method each root used.
+#[allow(clippy::too_many_arguments)]
+pub fn gauss_iod_candidates(
+    ra_deg: [f64; 3],
+    dec_deg: [f64; 3],
+    obs_times_mjd: [f64; 3],
+    coords_obs: [[f64; 3]; 3],
+    velocity_method: i32,
+    light_time: bool,
+    mu: f64,
+    c: f64,
+) -> Vec<GaussCandidate> {
     // Step 1: RA/Dec → equatorial unit vector → ecliptic unit vector.
     //
     // Equatorial unit vector: [cos(δ)·cos(α), cos(δ)·sin(α), sin(δ)].
@@ -323,7 +352,7 @@ pub fn gauss_iod_fused(
     let h0 = -a_coef / b_coef;
 
     if !c0.is_finite() || !h0.is_finite() {
-        return (Vec::new(), Vec::new());
+        return Vec::new();
     }
 
     // Step 3: 8th-order polynomial coefficients (descending powers).
@@ -369,7 +398,7 @@ pub fn gauss_iod_fused(
     }
 
     if r2_mags.is_empty() {
-        return (Vec::new(), Vec::new());
+        return Vec::new();
     }
     // Legacy numpy.roots emits the positive real roots in descending
     // magnitude for this sparse degree-8 polynomial. Candidate order is
@@ -378,7 +407,7 @@ pub fn gauss_iod_fused(
 
     // Step 6: per-root orbit construction — reuse the already-Rust
     // implementation in gauss_iod_orbits_from_roots.
-    gauss_iod_orbits_from_roots(
+    gauss_iod_candidates_from_roots(
         &r2_mags,
         q1,
         q2,

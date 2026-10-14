@@ -3393,6 +3393,8 @@ mod tests {
                 mu: crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap(),
                 speed_of_light: 173.144_632_674_240_3,
                 max_triplets: None,
+                velocity_method: super::super::od::VelocityMethod::Gibbs,
+                spans: super::super::od::SpanSearchConfig::default(),
             },
             refinement,
         }
