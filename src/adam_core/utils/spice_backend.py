@@ -3,9 +3,9 @@
 ``RustBackend`` is a thin Python owner for the process-local Rust backend
 implemented in ``adam_core_rs_spice`` and exposed through
 ``adam_core._rust_native.AdamCoreSpiceBackend``. Kernel registration,
-SPK/PCK reader dispatch, text-kernel name bindings, and last-loaded-wins
-semantics live in Rust so standalone ``adam-core-rs`` can use the same
-behavior without importing Python ``spicekit``.
+SPK/PCK reader dispatch (per epoch, as in CSPICE), text-kernel name bindings,
+and last-loaded-wins semantics live in Rust so standalone ``adam-core-rs`` can
+use the same behavior without importing Python ``spicekit``.
 
 Parity against CSPICE remains owned upstream by the public ``spicekit``
 crate's ``spicekit-bench`` suite. adam-core tests validate adam-core's
@@ -90,10 +90,10 @@ class RustBackend:
                     dtype=np.float64,
                 )
             except (RuntimeError, ValueError) as exc:
-                raise NotCovered(
-                    f"rust SPK readers do not cover target={target} "
-                    f"observer={observer} frame={frame} across {len(ets)} epochs"
-                ) from exc
+                # Keep the backend's message: it names the target, the
+                # observer, the frame, and the first epoch that no loaded
+                # kernel covers.
+                raise NotCovered(str(exc)) from exc
 
     def pxform_batch(
         self,
@@ -109,9 +109,9 @@ class RustBackend:
                     dtype=np.float64,
                 )
             except (RuntimeError, ValueError) as exc:
-                raise NotCovered(
-                    f"rust PCK readers do not cover pxform({frame_from},{frame_to})"
-                ) from exc
+                # Keep the backend's message: it names the frames and
+                # the first epoch that no loaded kernel covers.
+                raise NotCovered(str(exc)) from exc
 
     def sxform_batch(
         self,
@@ -127,9 +127,9 @@ class RustBackend:
                     dtype=np.float64,
                 )
             except (RuntimeError, ValueError) as exc:
-                raise NotCovered(
-                    f"rust PCK readers do not cover sxform({frame_from},{frame_to})"
-                ) from exc
+                # Keep the backend's message: it names the frames and
+                # the first epoch that no loaded kernel covers.
+                raise NotCovered(str(exc)) from exc
 
     def load_mpc_obscodes(self, json_text: str) -> int:
         """Parse + cache MPC observatory parallax coefficients Rust-side."""
