@@ -1901,16 +1901,33 @@ fn stage_fit<T: OriginTranslationProvider>(
     translation_provider: &T,
 ) -> PropagationResultValue<Result<WhitenedFitOutput, String>> {
     let ignore: Vec<bool> = mask.iter().map(|&keep| !keep).collect();
-    let output = match fit_orbit_whitened_with(
-        predictor,
-        seed,
-        observed,
-        observers,
-        &ignore,
-        config,
-        provider,
-        translation_provider,
-    ) {
+    let run = |config: &WhitenedFitConfig| {
+        fit_orbit_whitened_with(
+            predictor,
+            seed,
+            observed,
+            observers,
+            &ignore,
+            config,
+            provider,
+            translation_provider,
+        )
+    };
+    // The two-body analytic Jacobian can turn non-finite on long arcs where
+    // the predictor's own dynamics are fine (3200 Phaethon, status -2 at a
+    // reduced chi2 of 0.9); the stage is then retried with central
+    // differences through the predictor, which are exact for any dynamics.
+    let attempt = run(config).and_then(|output| {
+        if output.status_code == STATUS_NON_FINITE && config.jacobian == JacobianMethod::Analytic {
+            run(&WhitenedFitConfig {
+                jacobian: JacobianMethod::Central,
+                ..*config
+            })
+        } else {
+            Ok(output)
+        }
+    });
+    let output = match attempt {
         Ok(output) => output,
         // A failed prediction is local to this candidate.
         Err(
