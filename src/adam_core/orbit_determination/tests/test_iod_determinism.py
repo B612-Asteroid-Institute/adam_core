@@ -162,7 +162,12 @@ def test_run_iod_reports_every_scored_candidate(two_body_arc) -> None:  # noqa: 
     one record per scored candidate with its triplet rows, root and
     statistics, the accepted index, and counters that agree with the list."""
     orbit, members, report = run_iod(
-        two_body_arc, TwoBodyPropagator(), min_obs=6, rchi2_threshold=1e4
+        two_body_arc,
+        TwoBodyPropagator(),
+        min_obs=6,
+        rchi2_threshold=1e4,
+        observation_selection_method="combinations",
+        acceptance="prefit",
     )
     assert len(orbit) == 1 and len(members) == len(two_body_arc)
     assert report.found and report.accepted is not None
@@ -205,6 +210,8 @@ def test_run_iod_reports_every_scored_candidate(two_body_arc) -> None:  # noqa: 
         min_obs=6,
         rchi2_threshold=1e-30,
         max_triplets=2,
+        observation_selection_method="combinations",
+        acceptance="prefit",
     )
     assert not none.found and none.accepted is None
     assert none.triplets_tried == 2
@@ -219,12 +226,14 @@ def test_run_iod_candidate_set_is_invariant_to_observation_order(
     n = len(two_body_arc)
     permutation = np.random.default_rng(3).permutation(n)
     shuffled = two_body_arc.take(permutation)
-    _, _, report = run_iod(
-        two_body_arc, TwoBodyPropagator(), min_obs=6, rchi2_threshold=1e4
+    legacy = dict(
+        min_obs=6,
+        rchi2_threshold=1e4,
+        observation_selection_method="combinations",
+        acceptance="prefit",
     )
-    _, _, report_shuffled = run_iod(
-        shuffled, TwoBodyPropagator(), min_obs=6, rchi2_threshold=1e4
-    )
+    _, _, report = run_iod(two_body_arc, TwoBodyPropagator(), **legacy)
+    _, _, report_shuffled = run_iod(shuffled, TwoBodyPropagator(), **legacy)
     # shuffled row j holds input row permutation[j]: map rows back.
     inverse = {int(permutation[j]): j for j in range(n)}
     assert report.accepted == report_shuffled.accepted

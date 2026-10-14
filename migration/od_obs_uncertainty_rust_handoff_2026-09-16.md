@@ -529,6 +529,32 @@ a6w.4 do that).
   `velocity_method` on `run_iod`, `iod`, `NativeOrbitFitter`; `span_settings`
   on `run_iod`.
 
+## 2026-10-14 follow-up: corrected IOD acceptance + staged expansion (bead od_experiments_setup-a6w.4)
+
+* `IodAcceptance::{Prefit, Corrected}` and `CorrectionConfig { max_corrections
+  8, max_converged 2, growth 4, min_stage_obs 6, max_stages 40 }` on
+  `IodConfig` (`od.rs`); `iod_candidate_pool` = the search with no acceptance
+  and no outlier trial. `run_iod_with` / `run_iod_corrected` (`od_refine.rs`):
+  candidates in increasing prefit rchi2, each corrected with
+  `fit_orbit_whitened_with` (linear loss, no covariance validation, the
+  refinement's solver settings) on the triplet's span grown to 6
+  observations, then `grow_stage` (span x4 about its centre; if that adds
+  nothing, the night of the nearest outside observation), seeded by the
+  previous stage, each stage within `rchi2_threshold`; a backend failure is
+  local to the candidate. Selection: lowest whole-arc rchi2 among the
+  converged, index on ties. The accepted orbit is the unrejected corrected
+  fit; `full_od_with` refines it. Deviation from the bead text: stage 0 is the
+  triplet's span, not the span-search window (the walk-forward's 10/30-day
+  window seeding is subsumed: windows choose the triplets).
+* Bindings: `acceptance`, `max_corrections`, `max_converged`,
+  `correction_growth`, `min_stage_obs`, `max_stages`; candidate dicts carry
+  `corrected_state`, `stages`, `correction_note`. `iod_fit_ipc` defaults to
+  the legacy search. Python: `run_iod(acceptance=, correction_settings=,
+  fit_settings=)`, `NativeOrbitFitter(iod_acceptance=)`; defaults spans +
+  corrected; `iod()` pinned to prefit.
+* Timing (two-body, this machine): full `run_od` 25 / 100 / 300 obs = 0.02 /
+  0.35 / 0.56 s fused, 0.96 / 0.90 / 1.89 s callback.
+
 ## Correctness gates
 
 * **HEALPix RING order.** `efcc18::tests::ring_order_matches_jpl_tiles_dat`

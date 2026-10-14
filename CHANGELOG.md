@@ -128,6 +128,22 @@ This file contains notable changes in adam-core
 
 ### Changed
 
+- IOD default policy (bead a6w.4): a Gauss orbit is a seed for differential
+  corrections, not the answer. `IodAcceptance::Corrected` (Python
+  `acceptance="corrected"`, `NativeOrbitFitter(iod_acceptance=...)`) scores
+  every candidate of the search, then corrects up to `max_corrections` (8)
+  of them in increasing prefit reduced chi2: first on the observations the
+  triplet spans (grown to at least 6), then on spans grown fourfold, jumping
+  apparition gaps to the nearest night, up to the whole arc, every stage
+  within `rchi2_threshold` and with no outlier rejection (rejection belongs
+  to the refinement); it stops after `max_converged` (2) candidates reach
+  the whole arc and accepts the one with the lowest whole-arc reduced chi2
+  (index order on ties). The accepted orbit is that corrected fit. Rust
+  `run_iod_with` / `run_iod_corrected`; `full_od` / `run_od` use it.
+  `IodConfig::default()`, `run_od_ipc` / `full_od_ipc` / `run_iod_ipc`,
+  `run_iod` and `NativeOrbitFitter` now default to `"spans"` with corrected
+  acceptance; `iod()` and the deprecated `iod_fit_ipc` keep the legacy
+  `"combinations"` search with the prefit gate. Values provisional (a6w.9).
 - `iod()` and `NativeOrbitFitter.initial_fit` are thin wrappers over
   `run_iod`; the per-object shortcut to a propagator's compiled
   `initial_orbit_determination` work unit is gone from `iod()` (the linkage

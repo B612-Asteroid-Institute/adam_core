@@ -1858,6 +1858,291 @@ pub struct FullOdOutput {
     pub refined: Option<RefinedOutput>,
 }
 
+/// The IOD stage under its configured acceptance: [`super::od::run_iod`]
+/// for `Prefit`, the staged correction of [`run_iod_corrected`] for
+/// `Corrected` (whose stage fits use `fit` with the linear loss and no
+/// covariance validation).
+#[allow(clippy::too_many_arguments)]
+pub fn run_iod_with<T: OriginTranslationProvider>(
+    iod_predictor: &dyn SphericalPredictor,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &super::od::IodConfig,
+    fit: &WhitenedFitConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<super::od::IodResult> {
+    match config.acceptance {
+        super::od::IodAcceptance::Prefit => {
+            super::od::run_iod(iod_predictor, observed, observers, config)
+        }
+        super::od::IodAcceptance::Corrected => run_iod_corrected(
+            iod_predictor,
+            observed,
+            observers,
+            config,
+            fit,
+            provider,
+            translation_provider,
+        ),
+    }
+}
+
+/// Outcome of one stage fit: the fit when it is usable as the next seed.
+fn stage_fit<T: OriginTranslationProvider>(
+    predictor: &dyn SphericalPredictor,
+    seed: &OrbitBatch,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    mask: &[bool],
+    config: &WhitenedFitConfig,
+    rchi2_threshold: f64,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<Result<WhitenedFitOutput, String>> {
+    let ignore: Vec<bool> = mask.iter().map(|&keep| !keep).collect();
+    let output = match fit_orbit_whitened_with(
+        predictor,
+        seed,
+        observed,
+        observers,
+        &ignore,
+        config,
+        provider,
+        translation_provider,
+    ) {
+        Ok(output) => output,
+        // A failed prediction is local to this candidate.
+        Err(
+            err @ (PropagationError::Backend(_)
+            | PropagationError::BackendProtocol(_)
+            | PropagationError::ThreadPool(_)),
+        ) => return Ok(Err(format!("prediction failed: {err}"))),
+        Err(err) => return Err(err),
+    };
+    let rchi2 = output.evaluation.reduced_chi2;
+    // Any finite fit within the threshold is a usable seed for the next
+    // stage, converged or not (the walk-forward accepted budget-exhausted
+    // fits at a good state); a non-finite derivative (status -2) is not.
+    let usable = output.status_code != STATUS_NON_FINITE;
+    if !usable || !rchi2.is_finite() || rchi2 > rchi2_threshold {
+        return Ok(Err(format!(
+            "stage fit on {} observations: reduced chi2 {:.4}, status {}",
+            mask.iter().filter(|&&keep| keep).count(),
+            rchi2,
+            output.status_code
+        )));
+    }
+    Ok(Ok(output))
+}
+
+/// The next stage's observation mask: every observation within the
+/// current span grown `growth` times about its centre; when that adds
+/// nothing (an apparition gap) the night (integer MJD) of the observation
+/// nearest the current span, earliest on ties, joins instead.
+fn grow_stage(times: &[f64], mask: &[bool], growth: f64) -> Vec<bool> {
+    let included = times
+        .iter()
+        .zip(mask)
+        .filter(|(_, &keep)| keep)
+        .map(|(&t, _)| t);
+    let (t0, t1) = included.fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), t| {
+        (lo.min(t), hi.max(t))
+    });
+    let span = (t1 - t0).max(1.0);
+    let pad = (growth - 1.0) / 2.0 * span;
+    let grown: Vec<bool> = times
+        .iter()
+        .zip(mask)
+        .map(|(&t, &keep)| keep || (t >= t0 - pad && t <= t1 + pad))
+        .collect();
+    let count = |m: &[bool]| m.iter().filter(|&&keep| keep).count();
+    if count(&grown) > count(mask) {
+        return grown;
+    }
+    let nearest = (0..times.len()).filter(|&row| !mask[row]).min_by(|&a, &b| {
+        let distance = |row: usize| (times[row] - t0).abs().min((times[row] - t1).abs());
+        distance(a).total_cmp(&distance(b)).then(a.cmp(&b))
+    });
+    match nearest {
+        Some(row) => {
+            let night = times[row].floor();
+            times
+                .iter()
+                .zip(mask)
+                .map(|(&t, &keep)| keep || t.floor() == night)
+                .collect()
+        }
+        None => mask.to_vec(),
+    }
+}
+
+/// Corrected acceptance ([`super::od::IodAcceptance::Corrected`]): score
+/// every candidate of the search, then, in increasing prefit reduced chi2
+/// (index order on ties), correct up to `correction.max_corrections` of
+/// them in stages: the observations spanned by the triplet (grown until it
+/// holds `min_stage_obs`), then spans grown `growth` times (with the gap
+/// rule of `grow_stage`) up to the whole arc, each stage seeded by the
+/// previous fit and kept only within `rchi2_threshold`. The search stops
+/// once `max_converged` candidates reached the whole arc; the accepted
+/// candidate is the converged one with the lowest final reduced chi2,
+/// index order on ties. Its orbit is the corrected full-arc orbit at the
+/// Gauss epoch, unrejected (rejection is the refinement's job).
+#[allow(clippy::too_many_arguments)]
+pub fn run_iod_corrected<T: OriginTranslationProvider>(
+    iod_predictor: &dyn SphericalPredictor,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &super::od::IodConfig,
+    fit: &WhitenedFitConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<super::od::IodResult> {
+    let mut result = super::od::iod_candidate_pool(iod_predictor, observed, observers, config)?;
+    if result.candidates.is_empty() {
+        return Ok(result);
+    }
+    let n = observed.len();
+    let times = super::od::observed_times_mjd(observed)?;
+    let stage_config = WhitenedFitConfig {
+        loss: LossType::Linear,
+        validate_covariance: false,
+        ..*fit
+    };
+    let correction = config.correction;
+    let mut order: Vec<usize> = (0..result.candidates.len()).collect();
+    order.sort_by(|&a, &b| {
+        result.candidates[a]
+            .prefit_reduced_chi2
+            .total_cmp(&result.candidates[b].prefit_reduced_chi2)
+            .then(a.cmp(&b))
+    });
+    let mut converged = 0_usize;
+    let mut last_note: Option<String> = None;
+    for &index in order.iter().take(correction.max_corrections.max(1)) {
+        if converged >= correction.max_converged.max(1) {
+            break;
+        }
+        result.corrections_run += 1;
+        let candidate = &result.candidates[index];
+        let seed_coordinates = CoordinateBatch::cartesian(
+            vec![candidate.state],
+            Frame::Ecliptic,
+            OriginArray::repeat(OriginId::from_code("SUN"), 1),
+            Some(crate::TimeArray::new(
+                candidate.epoch_scale,
+                vec![candidate.epoch],
+            )?),
+            None,
+        )?;
+        let mut seed = OrbitBatch::new(
+            vec![crate::OrbitId("iod-candidate".to_string())],
+            vec![None],
+            seed_coordinates,
+        )?;
+        let (t_lo, t_hi) = candidate
+            .triplet
+            .iter()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &row| {
+                (lo.min(times[row]), hi.max(times[row]))
+            });
+        let mut mask: Vec<bool> = times.iter().map(|&t| t >= t_lo && t <= t_hi).collect();
+        let count = |m: &[bool]| m.iter().filter(|&&keep| keep).count();
+        while count(&mask) < correction.min_stage_obs.min(n) {
+            let grown = grow_stage(&times, &mask, correction.growth);
+            if count(&grown) == count(&mask) {
+                break;
+            }
+            mask = grown;
+        }
+        let mut stages = 0_usize;
+        let mut note: Option<String> = None;
+        let mut last_fit: Option<WhitenedFitOutput> = None;
+        loop {
+            if stages >= correction.max_stages {
+                note = Some(format!(
+                    "stopped after {stages} stages short of the whole arc"
+                ));
+                break;
+            }
+            stages += 1;
+            match stage_fit(
+                iod_predictor,
+                &seed,
+                observed,
+                observers,
+                &mask,
+                &stage_config,
+                config.rchi2_threshold,
+                provider,
+                translation_provider,
+            )? {
+                Ok(output) => {
+                    seed = orbit_with_state(&seed, output.state)?;
+                    let whole_arc = mask.iter().all(|&keep| keep);
+                    last_fit = Some(output);
+                    if whole_arc {
+                        break;
+                    }
+                    mask = grow_stage(&times, &mask, correction.growth);
+                }
+                Err(message) => {
+                    note = Some(format!("stalled at stage {stages}: {message}"));
+                    last_fit = None;
+                    break;
+                }
+            }
+        }
+        let record = &mut result.candidates[index];
+        record.stages = stages;
+        match (last_fit, note) {
+            (Some(output), None) => {
+                record.converged = true;
+                record.postfit_reduced_chi2 = Some(output.evaluation.reduced_chi2);
+                record.corrected_state = Some(output.state);
+                record.evaluation = Some(output.evaluation);
+                converged += 1;
+            }
+            (_, note) => {
+                last_note = note.clone();
+                record.correction_note = note;
+            }
+        }
+    }
+    let best = result
+        .candidates
+        .iter()
+        .enumerate()
+        .filter(|(_, candidate)| candidate.converged)
+        .min_by(|(a, x), (b, y)| {
+            x.postfit_reduced_chi2
+                .unwrap_or(f64::INFINITY)
+                .total_cmp(&y.postfit_reduced_chi2.unwrap_or(f64::INFINITY))
+                .then(a.cmp(b))
+        })
+        .map(|(index, _)| index);
+    match best {
+        Some(index) => {
+            result.candidates[index].accepted = true;
+            result.accepted = Some(index);
+            result.not_found_reason = None;
+        }
+        None => {
+            result.not_found_reason = Some(format!(
+                "{} of {} candidates corrected, none reached the whole arc within \
+                 rchi2_threshold = {}{}",
+                result.corrections_run,
+                result.candidates.len(),
+                config.rchi2_threshold,
+                last_note
+                    .map(|note| format!(" (last: {note})"))
+                    .unwrap_or_default()
+            ));
+        }
+    }
+    Ok(result)
+}
+
 /// One-crossing `OrbitFitter.full_od` for the native fitter: the complete
 /// Gauss IOD decision loop (`run_iod_barycentric` on `iod_propagator`)
 /// followed by the worst-residual or CMC2003 refinement of the accepted
@@ -1914,9 +2199,25 @@ pub fn full_od_with<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<FullOdOutput> {
-    let iod = super::od::run_iod(iod_predictor, observed, observers, &config.iod)?;
+    let refinement_fit = match &config.refinement {
+        RefinementConfig::WorstResidual(loop_config) => loop_config.fit,
+        RefinementConfig::Cmc2003(loop_config) => loop_config.fit,
+    };
+    let iod = run_iod_with(
+        iod_predictor,
+        observed,
+        observers,
+        &config.iod,
+        &refinement_fit,
+        provider,
+        translation_provider,
+    )?;
     let (state, epoch, epoch_scale) = match iod.accepted_candidate() {
-        Some(candidate) => (candidate.state, candidate.epoch, candidate.epoch_scale),
+        Some(candidate) => (
+            candidate.corrected_state.unwrap_or(candidate.state),
+            candidate.epoch,
+            candidate.epoch_scale,
+        ),
         None => return Ok(FullOdOutput { iod, refined: None }),
     };
     // The seed sits exactly at the IOD epoch (days and nanoseconds), not at
@@ -3395,8 +3696,223 @@ mod tests {
                 max_triplets: None,
                 velocity_method: super::super::od::VelocityMethod::Gibbs,
                 spans: super::super::od::SpanSearchConfig::default(),
+                acceptance: super::super::od::IodAcceptance::Prefit,
+                correction: super::super::od::CorrectionConfig::default(),
             },
             refinement,
+        }
+    }
+
+    fn corrected_iod_config(rchi2_threshold: f64) -> super::super::od::IodConfig {
+        super::super::od::IodConfig {
+            rchi2_threshold,
+            contamination_percentage: 0.0,
+            ..super::super::od::IodConfig::default()
+        }
+    }
+
+    fn two_body() -> (TwoBodyPropagator, EphemerisOptions) {
+        (TwoBodyPropagator::default(), ephemeris_options())
+    }
+
+    #[test]
+    fn grow_stage_grows_geometrically_and_jumps_gaps() {
+        let times = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 40.0, 40.2, 41.0];
+        let mask =
+            |rows: &[usize]| -> Vec<bool> { (0..times.len()).map(|r| rows.contains(&r)).collect() };
+        // Span 2 days about 2..4 grown 4x: 1 .. 7 days -> rows 0..=6.
+        assert_eq!(
+            grow_stage(&times, &mask(&[2, 3, 4]), 4.0),
+            mask(&[0, 1, 2, 3, 4, 5, 6])
+        );
+        // Nothing within 4x of the first week: the night of the nearest
+        // observation beyond it (MJD 40) joins, both of its observations.
+        assert_eq!(
+            grow_stage(&times, &mask(&[0, 1, 2, 3, 4, 5, 6]), 4.0)
+                .iter()
+                .filter(|&&k| k)
+                .count(),
+            10 - 1
+        );
+        let jumped = grow_stage(&times, &mask(&[0, 1, 2, 3, 4, 5, 6]), 1.5);
+        assert_eq!(jumped, mask(&[0, 1, 2, 3, 4, 5, 6, 7, 8]));
+        // Everything included: unchanged.
+        let all = vec![true; times.len()];
+        assert_eq!(grow_stage(&times, &all, 4.0), all);
+    }
+
+    #[test]
+    fn corrected_acceptance_seeds_where_the_prefit_gate_cannot() {
+        // 44-day arc with one outlier: the raw Gauss orbits do not fit the
+        // whole arc within reduced chi2 50, the corrected ones do.
+        let observed = synthetic_observations(Some(3));
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let prefit = super::super::od::run_iod(
+            &predictor,
+            &observed,
+            &observers(),
+            &super::super::od::IodConfig {
+                acceptance: super::super::od::IodAcceptance::Prefit,
+                ..corrected_iod_config(50.0)
+            },
+        )
+        .unwrap();
+        assert!(!prefit.found(), "prefit unexpectedly accepted");
+
+        let config = corrected_iod_config(50.0);
+        let result = run_iod_with(
+            &predictor,
+            &observed,
+            &observers(),
+            &config,
+            &WhitenedFitConfig::default(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(result.found(), "{:?}", result.not_found_reason);
+        assert!(result.corrections_run >= 1);
+        assert!(result.corrections_run <= config.correction.max_corrections);
+        let accepted = result.accepted_candidate().unwrap();
+        assert!(accepted.converged && accepted.stages >= 2);
+        let rchi2 = accepted.postfit_reduced_chi2.unwrap();
+        assert!(rchi2 <= 50.0);
+        // The lowest final reduced chi2 among the converged, index on ties.
+        for candidate in result.candidates.iter().filter(|c| c.converged) {
+            assert!(candidate.postfit_reduced_chi2.unwrap() >= rchi2);
+        }
+        assert!(
+            result.candidates.iter().filter(|c| c.converged).count()
+                <= config.correction.max_converged
+        );
+        // The unrejected full-arc minimum: the same orbit a fit started from
+        // the truth (propagated to the Gauss epoch) reaches on all
+        // observations.
+        let state = accepted.corrected_state.unwrap();
+        let mu = crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap();
+        let truth = crate::propagate_2body_row::<f64>(
+            TRUTH_STATE,
+            accepted.epoch.mjd() - 60_000.0,
+            mu,
+            1000,
+            1e-14,
+        );
+        let truth_orbit = OrbitBatch::new(
+            vec![OrbitId("truth".to_string())],
+            vec![None],
+            CoordinateBatch::cartesian(
+                vec![truth],
+                Frame::Ecliptic,
+                OriginArray::repeat(OriginId::Named("SUN".to_string()), 1),
+                Some(TimeArray::new(TimeScale::Tdb, vec![accepted.epoch]).unwrap()),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let reference = fit_orbit_whitened_barycentric(
+            &propagator,
+            &truth_orbit,
+            &observed,
+            &observers(),
+            &[false; NUM_OBS],
+            &WhitenedFitConfig {
+                validate_covariance: false,
+                ..WhitenedFitConfig::default()
+            },
+            &options,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!((reference.evaluation.reduced_chi2 - rchi2).abs() < 1e-6 * rchi2);
+        assert!(max_abs_diff(&state[..3], &reference.state[..3]) < 1e-7);
+        let output = result.to_output(NUM_OBS);
+        assert_eq!(output.state, state);
+        assert!(
+            output.outlier.iter().all(|&flag| !flag),
+            "no rejection in IOD"
+        );
+    }
+
+    #[test]
+    fn corrected_acceptance_reports_stalled_candidates() {
+        let observed = synthetic_observations(None);
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let config = super::super::od::IodConfig {
+            correction: super::super::od::CorrectionConfig {
+                max_corrections: 3,
+                ..super::super::od::CorrectionConfig::default()
+            },
+            ..corrected_iod_config(1e-9)
+        };
+        let result = run_iod_with(
+            &predictor,
+            &observed,
+            &observers(),
+            &config,
+            &WhitenedFitConfig::default(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert!(!result.found());
+        assert_eq!(result.corrections_run, 3.min(result.candidates.len()));
+        let noted = result
+            .candidates
+            .iter()
+            .filter(|c| c.correction_note.is_some())
+            .count();
+        assert_eq!(noted, result.corrections_run);
+        assert!(result
+            .candidates
+            .iter()
+            .all(|c| !c.converged && c.corrected_state.is_none()));
+        let reason = result.not_found_reason.unwrap();
+        assert!(reason.contains("none reached the whole arc"), "{reason}");
+        assert!(reason.contains("stalled at stage 1"), "{reason}");
+    }
+
+    #[test]
+    fn corrected_acceptance_is_deterministic() {
+        let observed = synthetic_observations(Some(3));
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let run = || {
+            run_iod_with(
+                &predictor,
+                &observed,
+                &observers(),
+                &corrected_iod_config(50.0),
+                &WhitenedFitConfig::default(),
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap()
+        };
+        let (a, b) = (run(), run());
+        assert_eq!(a.accepted, b.accepted);
+        assert_eq!(a.corrections_run, b.corrections_run);
+        for (x, y) in a.candidates.iter().zip(&b.candidates) {
+            assert_eq!(x.corrected_state, y.corrected_state);
+            assert_eq!(x.stages, y.stages);
         }
     }
 

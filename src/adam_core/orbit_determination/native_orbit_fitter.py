@@ -110,11 +110,17 @@ class NativeOrbitFitter(OrbitFitter):
         Strategy for selecting observation triplets in IOD.  One of
         ``"combinations"``, ``"first+middle+last"``, ``"thirds"``,
         ``"spans"`` (span-bounded triplets swept across search windows).
-        Default ``"combinations"``.
+        Default ``"spans"``.
     velocity_method : {"gauss", "gibbs", "herrick+gibbs", "auto"}, optional
         Velocity of the Gauss IOD candidates; ``"auto"`` chooses
         Herrick-Gibbs or Gibbs per root by the separation of its position
         vectors. Default ``"gibbs"``.
+    iod_acceptance : {"corrected", "prefit"}, optional
+        ``"corrected"`` (default): each Gauss orbit seeds staged differential
+        corrections from its triplet's span to the whole arc, and the
+        converged candidate with the lowest reduced chi2 is accepted
+        (``iod_rchi2_threshold`` bounds every stage). ``"prefit"``: the
+        legacy gate on the raw Gauss orbit. See `run_iod`.
     loss : {"linear", "huber"}, optional
         Loss used during differential correction (`iterative_fit`).
         ``"huber"`` downweights large residuals instead of letting them pull
@@ -160,8 +166,9 @@ class NativeOrbitFitter(OrbitFitter):
         iod_rchi2_threshold: float = 200.0,
         observation_selection_method: Literal[
             "combinations", "first+middle+last", "thirds", "spans"
-        ] = "combinations",
+        ] = "spans",
         velocity_method: Literal["gauss", "gibbs", "herrick+gibbs", "auto"] = "gibbs",
+        iod_acceptance: Literal["corrected", "prefit"] = "corrected",
         loss: LossType = "linear",
         f_scale: float = HUBER_F_SCALE_DEFAULT,
         outlier_rejection: Literal["worst_residual", "cmc2003"] = "cmc2003",
@@ -181,6 +188,7 @@ class NativeOrbitFitter(OrbitFitter):
         self.iod_rchi2_threshold = iod_rchi2_threshold
         self.observation_selection_method = observation_selection_method
         self.velocity_method = velocity_method
+        self.iod_acceptance = iod_acceptance
         self.loss = loss
         self.f_scale = f_scale
         self.outlier_rejection = outlier_rejection
@@ -209,6 +217,7 @@ class NativeOrbitFitter(OrbitFitter):
             "rchi2_threshold": self.iod_rchi2_threshold,
             "observation_selection_method": self.observation_selection_method,
             "velocity_method": self.velocity_method,
+            "acceptance": self.iod_acceptance,
             "light_time": True,
             "mu": MU,
             "speed_of_light": C,
@@ -386,6 +395,8 @@ class NativeOrbitFitter(OrbitFitter):
             rchi2_threshold=self.iod_rchi2_threshold,
             observation_selection_method=self.observation_selection_method,
             velocity_method=self.velocity_method,
+            acceptance=self.iod_acceptance,
+            fit_settings=self.native_settings()[2],
         )
         return fitted_orbits, fitted_orbit_members
 

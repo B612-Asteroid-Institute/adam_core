@@ -331,11 +331,16 @@ class IodCandidate:
     reduced_chi2: float
     num_obs: int
     arc_length: float
-    #: Reduced chi2 of the bounded correction on the window (None until the
-    #: post-correction policy lands) and whether it converged.
+    #: Corrected acceptance: reduced chi2 of the corrected orbit on the whole
+    #: arc (None when not corrected or stalled), whether the staged
+    #: correction reached the whole arc, the corrected state, the stages
+    #: run and why it stopped short, if it did.
     postfit_reduced_chi2: Optional[float]
     converged: bool
     accepted: bool
+    corrected_state: Optional[tuple[float, float, float, float, float, float]] = None
+    stages: int = 0
+    correction_note: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -389,6 +394,13 @@ def report_from_iod_output(output: dict) -> IodReport:
             postfit_reduced_chi2=candidate.get("postfit_reduced_chi2"),
             converged=bool(candidate.get("converged", False)),
             accepted=bool(candidate["accepted"]),
+            corrected_state=(
+                None
+                if candidate.get("corrected_state") is None
+                else tuple(float(v) for v in candidate["corrected_state"])
+            ),
+            stages=int(candidate.get("stages", 0)),
+            correction_note=candidate.get("correction_note"),
         )
         for candidate in output.get("candidates", ())
     )
@@ -418,17 +430,28 @@ def run_iod(
     rchi2_threshold: float = 200,
     observation_selection_method: Literal[
         "combinations", "first+middle+last", "thirds", "spans"
-    ] = "combinations",
+    ] = "spans",
     light_time: bool = True,
     max_triplets: Optional[int] = None,
     velocity_method: Literal["gauss", "gibbs", "herrick+gibbs", "auto"] = "gibbs",
     span_settings: Optional[dict] = None,
+    acceptance: Literal["corrected", "prefit"] = "corrected",
+    correction_settings: Optional[dict] = None,
+    fit_settings: Optional[dict] = None,
     observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers, IodReport]:
     """
     The IOD stage: Gauss preliminary orbits on observation triplets, scored
-    against all observations on ``propagator``, with the first candidate
-    within ``rchi2_threshold`` (after the outlier trial) accepted.
+    on ``propagator`` and accepted in one of two ways. ``acceptance=
+    "corrected"`` (default) treats each Gauss orbit as a seed for
+    differential corrections: in increasing prefit reduced chi2, up to
+    ``max_corrections`` candidates are corrected on the observations their
+    triplet spans, then on spans grown fourfold (jumping apparition gaps)
+    up to the whole arc, every stage within ``rchi2_threshold``; the
+    converged candidate with the lowest whole-arc reduced chi2 is accepted
+    and its orbit is that corrected, unrejected fit. ``"prefit"`` is the
+    legacy gate: the first raw Gauss orbit within ``rchi2_threshold`` on
+    every observation (after the outlier trial).
 
     This is the native stage behind `iod`, `NativeOrbitFitter.initial_fit`
     and the IOD half of `run_od`. ``propagator`` is explicit: it is the
@@ -461,6 +484,17 @@ def run_iod(
         ``span_dense_window_days``, ``span_edge_window_days``,
         ``span_max_triplets``); missing keys keep the Rust defaults of
         ``SpanSearchConfig``.
+    acceptance : {"corrected", "prefit"}
+        See above.
+    correction_settings : dict, optional
+        Overrides of the corrected acceptance (keys ``max_corrections``,
+        ``max_converged``, ``correction_growth``, ``min_stage_obs``,
+        ``max_stages``); missing keys keep the Rust ``CorrectionConfig``
+        defaults.
+    fit_settings : dict, optional
+        Solver settings of the correction stages (as `fit_least_squares`'s;
+        the stages always use the linear loss and skip covariance
+        validation).
     observatory_bias_model : `ObservationUncertaintyModel`, optional
         Applied to the observations before the search.
 
@@ -494,12 +528,16 @@ def run_iod(
         "speed_of_light": C,
         "max_triplets": max_triplets,
         "velocity_method": velocity_method,
+        "acceptance": acceptance,
         **(span_settings or {}),
+        **(correction_settings or {}),
     }
     orbit_id = uuid.uuid4().hex
     fused = getattr(propagator, "run_iod", None)
     if fused is not None:
-        output = fused(observations, iod_settings=iod_settings)
+        output = fused(
+            observations, iod_settings=iod_settings, fit_settings=fit_settings
+        )
     else:
         from adam_core import _rust_native
 
@@ -509,7 +547,11 @@ def run_iod(
             _placeholder_orbit(observations), observations
         )
         output = _rust_native.run_iod_ipc(
-            propagator, observed_ipc, observers_ipc, iod_settings=iod_settings
+            propagator,
+            observed_ipc,
+            observers_ipc,
+            iod_settings=iod_settings,
+            fit_settings=fit_settings,
         )
     orbit, members = tables_from_iod_output(orbit_id, observations, output)
     return orbit, members, report_from_iod_output(output)
@@ -617,6 +659,8 @@ def iod(
         observation_selection_method=observation_selection_method,
         light_time=light_time,
         velocity_method=velocity_method,
+        # `iod` keeps the legacy acceptance; `run_iod` defaults to corrected.
+        acceptance="prefit",
     )
     return orbit, members
 

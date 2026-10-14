@@ -26,13 +26,13 @@ use adam_core_rs_coords::observation_uncertainty::{
     SigmaFloorModel,
 };
 use adam_core_rs_coords::propagation::{
-    cmc2003_fit_with, fit_orbit_whitened_with, full_od_with, iterative_fit_with, run_iod,
+    cmc2003_fit_with, fit_orbit_whitened_with, full_od_with, iterative_fit_with, run_iod_with,
     run_od_with, validate_fit_covariance_with, AstrometrySnapshot, Cmc2003FitConfig,
-    CovariancePropagation, EphemerisOptions, EpochPolicy, FullOdConfig, FullOdOutput, IodCandidate,
-    IodConfig, IodResult, IterativeFitConfig, JacobianMethod, ObservationSelectionMethod,
-    PropagationOptions, PropagationResultValue, PropagatorPredictor, RefinementConfig,
-    SpanSearchConfig, SphericalPredictor, TwoBodyPropagator, TwoBodyPropagatorConfig,
-    VelocityMethod, WhitenedFitConfig, WhitenedFitOutput,
+    CorrectionConfig, CovariancePropagation, EphemerisOptions, EpochPolicy, FullOdConfig,
+    FullOdOutput, IodAcceptance, IodCandidate, IodConfig, IodResult, IterativeFitConfig,
+    JacobianMethod, ObservationSelectionMethod, PropagationOptions, PropagationResultValue,
+    PropagatorPredictor, RefinementConfig, SpanSearchConfig, SphericalPredictor, TwoBodyPropagator,
+    TwoBodyPropagatorConfig, VelocityMethod, WhitenedFitConfig, WhitenedFitOutput,
 };
 use adam_core_rs_coords::veres2017::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
 use adam_core_rs_coords::{
@@ -190,7 +190,24 @@ fn parse_fit_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<FitSetti
 
 /// `IodConfig` from the ``iod_settings`` dict over `IodConfig::default()`.
 fn parse_iod_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<IodConfig> {
-    let defaults = IodConfig::default();
+    parse_iod_settings_over(settings, IodConfig::default())
+}
+
+/// The pre-a6w.4 IOD defaults (combination triplets, prefit acceptance) of
+/// the deprecated `iod_fit_ipc`.
+fn legacy_iod_defaults() -> IodConfig {
+    IodConfig {
+        observation_selection_method: ObservationSelectionMethod::Combinations,
+        acceptance: IodAcceptance::Prefit,
+        ..IodConfig::default()
+    }
+}
+
+/// `IodConfig` from the ``iod_settings`` dict over `defaults`.
+fn parse_iod_settings_over(
+    settings: Option<&Bound<'_, PyDict>>,
+    defaults: IodConfig,
+) -> PyResult<IodConfig> {
     let observation_selection_method =
         match setting::<Option<String>>(settings, "observation_selection_method", None)? {
             Some(method) => ObservationSelectionMethod::parse(&method).map_err(value_error)?,
@@ -233,6 +250,21 @@ fn parse_iod_settings(settings: Option<&Bound<'_, PyDict>>) -> PyResult<IodConfi
                 defaults.spans.edge_window_days,
             )?,
             max_triplets: setting(settings, "span_max_triplets", defaults.spans.max_triplets)?,
+        },
+        acceptance: match setting::<Option<String>>(settings, "acceptance", None)? {
+            Some(value) => IodAcceptance::parse(&value).map_err(value_error)?,
+            None => defaults.acceptance,
+        },
+        correction: CorrectionConfig {
+            max_corrections: setting(
+                settings,
+                "max_corrections",
+                defaults.correction.max_corrections,
+            )?,
+            max_converged: setting(settings, "max_converged", defaults.correction.max_converged)?,
+            growth: setting(settings, "correction_growth", defaults.correction.growth)?,
+            min_stage_obs: setting(settings, "min_stage_obs", defaults.correction.min_stage_obs)?,
+            max_stages: setting(settings, "max_stages", defaults.correction.max_stages)?,
         },
     })
 }
@@ -548,6 +580,14 @@ fn candidate_dict<'py>(py: Python<'py>, candidate: &IodCandidate) -> PyResult<Bo
     out.set_item("arc_length", candidate.arc_length)?;
     out.set_item("postfit_reduced_chi2", candidate.postfit_reduced_chi2)?;
     out.set_item("converged", candidate.converged)?;
+    out.set_item(
+        "corrected_state",
+        candidate
+            .corrected_state
+            .map(|state| ndarray::Array1::from_vec(state.to_vec()).into_pyarray(py)),
+    )?;
+    out.set_item("stages", candidate.stages)?;
+    out.set_item("correction_note", candidate.correction_note.clone())?;
     out.set_item("accepted", candidate.accepted)?;
     Ok(out)
 }
@@ -980,12 +1020,37 @@ fn run_iod_ipc<'py>(
     iod_settings: Option<&Bound<'py, PyDict>>,
     fit_settings: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
+    run_iod_impl(
+        py,
+        iod_propagator,
+        observed_ipc,
+        observers_ipc,
+        parse_iod_settings(iod_settings)?,
+        fit_settings,
+    )
+}
+
+fn run_iod_impl<'py>(
+    py: Python<'py>,
+    iod_propagator: Option<&Bound<'py, PyAny>>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    config: IodConfig,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyDict>> {
     let problem = decode_observations(observed_ipc, observers_ipc)?;
     let settings = parse_fit_settings(fit_settings)?;
-    let config = parse_iod_settings(iod_settings)?;
     let n = problem.observed.len();
     let result = run_with_predictor(py, iod_propagator, &settings, |predictor| {
-        run_iod(predictor, &problem.observed, &problem.observers, &config)
+        run_iod_with(
+            predictor,
+            &problem.observed,
+            &problem.observers,
+            &config,
+            &settings.config,
+            &ErfaTimeProvider,
+            &LockingSpiceTranslation,
+        )
     })?;
     iod_dict(py, result, n)
 }
@@ -1010,7 +1075,9 @@ fn run_iod_2body_ipc<'py>(
     )
 }
 
-/// The pre-candidate-set name of `run_iod_ipc`; same dict (deprecated).
+/// The pre-candidate-set name of `run_iod_ipc`; same dict, but settings
+/// default to the legacy search (combination triplets, prefit acceptance)
+/// (deprecated).
 #[pyfunction]
 #[pyo3(signature = (propagator, observed_ipc, observers_ipc, iod_settings=None, fit_settings=None))]
 fn iod_fit_ipc<'py>(
@@ -1021,12 +1088,12 @@ fn iod_fit_ipc<'py>(
     iod_settings: Option<&Bound<'py, PyDict>>,
     fit_settings: Option<&Bound<'py, PyDict>>,
 ) -> PyResult<Bound<'py, PyDict>> {
-    run_iod_ipc(
+    run_iod_impl(
         py,
         propagator,
         observed_ipc,
         observers_ipc,
-        iod_settings,
+        parse_iod_settings_over(iod_settings, legacy_iod_defaults())?,
         fit_settings,
     )
 }

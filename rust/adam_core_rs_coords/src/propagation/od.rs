@@ -1192,6 +1192,78 @@ impl Default for SpanSearchConfig {
     }
 }
 
+/// How an IOD candidate is accepted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IodAcceptance {
+    /// The legacy gate: the raw Gauss orbit's two-body fit to every
+    /// observation (after the outlier trial) is within `rchi2_threshold`;
+    /// the first such candidate wins.
+    Prefit,
+    /// The Gauss orbit only seeds differential corrections (Milani &
+    /// Gronchi 2010; the practice of OrbFit, Find_Orb and Aegis):
+    /// each candidate is corrected on the observations spanned by its
+    /// triplet, then on a geometrically growing span up to the whole arc
+    /// (see [`CorrectionConfig`]), every stage within `rchi2_threshold`;
+    /// the converged candidate with the lowest final reduced chi2 wins.
+    Corrected,
+}
+
+impl IodAcceptance {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Prefit => "prefit",
+            Self::Corrected => "corrected",
+        }
+    }
+
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "prefit" => Ok(Self::Prefit),
+            "corrected" => Ok(Self::Corrected),
+            other => Err(format!(
+                "acceptance must be 'prefit' or 'corrected'; got {other:?}"
+            )),
+        }
+    }
+}
+
+/// Settings of [`IodAcceptance::Corrected`]: the staged correction of
+/// each candidate, ported from the seeding ladder of the 2026-10-12
+/// walk-forward (`od_walkforward.py` `_arc_seed` / `_arc_expand`), which
+/// seeded 98 of the 100 first solutions the legacy full-arc gate missed.
+/// No outlier rejection runs during these stages: an intermediate orbit
+/// fitted to part of the arc must not reject observations it cannot yet
+/// predict well; rejection belongs to the refinement of the accepted
+/// orbit. Values are provisional until bead a6w.9.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct CorrectionConfig {
+    /// Candidates corrected at most, in increasing prefit reduced chi2.
+    pub max_corrections: usize,
+    /// The search stops once this many candidates converged on the whole
+    /// arc (more than one guards against a wrong-basin first success).
+    pub max_converged: usize,
+    /// Each stage spans `growth` times the previous span (the walk-forward
+    /// expansion factor).
+    pub growth: f64,
+    /// The first stage holds at least this many observations (grown from
+    /// the triplet's span until it does).
+    pub min_stage_obs: usize,
+    /// Stages per candidate at most before it is abandoned.
+    pub max_stages: usize,
+}
+
+impl Default for CorrectionConfig {
+    fn default() -> Self {
+        Self {
+            max_corrections: 8,
+            max_converged: 2,
+            growth: 4.0,
+            min_stage_obs: 6,
+            max_stages: 40,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct IodConfig {
     pub min_obs: usize,
@@ -1213,25 +1285,33 @@ pub struct IodConfig {
     pub velocity_method: VelocityMethod,
     /// Settings of the `Spans` selection method (ignored by the others).
     pub spans: SpanSearchConfig,
+    /// Prefit (legacy) or corrected acceptance. `Corrected` needs the time
+    /// and translation providers of the refinement and runs through
+    /// `run_iod_with` (`od_refine.rs`); [`run_iod`] alone is the prefit
+    /// search.
+    pub acceptance: IodAcceptance,
+    pub correction: CorrectionConfig,
 }
 
 impl Default for IodConfig {
     /// `NativeOrbitFitter`'s IOD settings: at least six observations over a
-    /// day, 20 % contamination, reduced chi2 200, every combination triplet
-    /// with light-time correction and the legacy triplet budget.
+    /// day, 20 % contamination, reduced chi2 200, span-bounded triplets with
+    /// light-time correction, corrected acceptance.
     fn default() -> Self {
         Self {
             min_obs: 6,
             min_arc_length: 1.0,
             contamination_percentage: 20.0,
             rchi2_threshold: 200.0,
-            observation_selection_method: ObservationSelectionMethod::Combinations,
+            observation_selection_method: ObservationSelectionMethod::Spans,
             light_time: true,
             mu: IOD_DEFAULT_MU,
             speed_of_light: IOD_DEFAULT_SPEED_OF_LIGHT,
             max_triplets: None,
             velocity_method: VelocityMethod::Gibbs,
             spans: SpanSearchConfig::default(),
+            acceptance: IodAcceptance::Corrected,
+            correction: CorrectionConfig::default(),
         }
     }
 }
@@ -1386,11 +1466,19 @@ pub struct IodCandidate {
     pub reduced_chi2: f64,
     pub num_obs: usize,
     pub arc_length: f64,
-    /// Reduced chi2 of the bounded differential correction on the window
-    /// (bead a6w.4); `None` under the current policy.
+    /// Reduced chi2 of the corrected orbit on the whole arc (corrected
+    /// acceptance); `None` when the candidate was not corrected or did not
+    /// reach the whole arc.
     pub postfit_reduced_chi2: Option<f64>,
-    /// Whether that correction converged; `false` under the current policy.
+    /// Whether the staged correction reached the whole arc within the
+    /// threshold at every stage.
     pub converged: bool,
+    /// The corrected state at `epoch` (corrected acceptance, converged).
+    pub corrected_state: Option<[f64; 6]>,
+    /// Correction stages run (0 when not corrected).
+    pub stages: usize,
+    /// Why the correction stopped short of the whole arc, if it did.
+    pub correction_note: Option<String>,
     pub accepted: bool,
     /// The per-observation evaluation, kept for the accepted candidate (and
     /// every converged one once a6w.4 lands); `None` for the rest so dense
@@ -1428,7 +1516,7 @@ impl IodResult {
         self.accepted.map(|index| &self.candidates[index])
     }
 
-    fn not_found(epoch_scale: crate::TimeScale, reason: String) -> Self {
+    pub(super) fn not_found(epoch_scale: crate::TimeScale, reason: String) -> Self {
         Self {
             candidates: Vec::new(),
             accepted: None,
@@ -1468,15 +1556,32 @@ impl IodResult {
                         num_obs: candidate.num_obs,
                         outlier: Vec::new(),
                     });
+                let corrected = candidate.corrected_state.is_some();
                 IodOutput {
                     found: true,
-                    state: candidate.state,
+                    state: candidate.corrected_state.unwrap_or(candidate.state),
                     epoch: Some(candidate.epoch),
                     epoch_scale: candidate.epoch_scale,
-                    arc_length: candidate.arc_length,
-                    num_obs: candidate.num_obs,
-                    chi2_total: candidate.chi2_total,
-                    reduced_chi2: candidate.reduced_chi2,
+                    arc_length: if corrected {
+                        evaluation.arc_length
+                    } else {
+                        candidate.arc_length
+                    },
+                    num_obs: if corrected {
+                        evaluation.num_obs
+                    } else {
+                        candidate.num_obs
+                    },
+                    chi2_total: if corrected {
+                        evaluation.orbit_chi2
+                    } else {
+                        candidate.chi2_total
+                    },
+                    reduced_chi2: if corrected {
+                        evaluation.reduced_chi2
+                    } else {
+                        candidate.reduced_chi2
+                    },
                     residuals: evaluation.residuals,
                     residual_chi2: evaluation.chi2,
                     residual_dof: evaluation.dof,
@@ -1589,7 +1694,49 @@ pub fn run_iod(
     let order = iod_observation_order(observed, observers)?;
     let sorted_observed = take_coordinate_batch(observed, &order)?;
     let sorted_observers = take_observer_batch(observers, &order)?;
-    let result = run_iod_sorted(iod_predictor, &sorted_observed, &sorted_observers, config)?;
+    let result = run_iod_sorted(
+        iod_predictor,
+        &sorted_observed,
+        &sorted_observers,
+        config,
+        false,
+    )?;
+    Ok(restore_input_order(result, &order))
+}
+
+/// Every candidate of the search, scored against all observations, with
+/// no acceptance and no outlier trial (the candidate pool of corrected
+/// acceptance). Rows are in the caller's order; `accepted` is None and
+/// `not_found_reason` describes the pool.
+pub(super) fn iod_candidate_pool(
+    iod_predictor: &dyn SphericalPredictor,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &IodConfig,
+) -> PropagationResultValue<IodResult> {
+    let n = observed.len();
+    if observers.len() != n {
+        return Err(PropagationError::InvalidRequest(
+            "observed and observers must have equal length".to_string(),
+        ));
+    }
+    let epoch_scale = observation_time_scale(observed)?;
+    if n == 0 || n < config.min_obs {
+        return Ok(IodResult::not_found(
+            epoch_scale,
+            format!("{n} observations, fewer than min_obs = {}", config.min_obs),
+        ));
+    }
+    let order = iod_observation_order(observed, observers)?;
+    let sorted_observed = take_coordinate_batch(observed, &order)?;
+    let sorted_observers = take_observer_batch(observers, &order)?;
+    let result = run_iod_sorted(
+        iod_predictor,
+        &sorted_observed,
+        &sorted_observers,
+        config,
+        true,
+    )?;
     Ok(restore_input_order(result, &order))
 }
 
@@ -1702,6 +1849,7 @@ fn run_iod_sorted(
     observed: &CoordinateBatch,
     observers: &ObserverBatch,
     config: &IodConfig,
+    collect_all: bool,
 ) -> PropagationResultValue<IodResult> {
     let n = observed.len();
     let observed_values = observed.values.spherical().ok_or_else(|| {
@@ -1832,10 +1980,19 @@ fn run_iod_sorted(
                 arc_length: evaluation.arc_length,
                 postfit_reduced_chi2: None,
                 converged: false,
+                corrected_state: None,
+                stages: 0,
+                correction_note: None,
                 accepted: false,
                 evaluation: None,
             };
 
+            if collect_all {
+                counters.best_reduced_chi2 =
+                    counters.best_reduced_chi2.min(evaluation.reduced_chi2);
+                candidates.push(record);
+                continue;
+            }
             if evaluation.reduced_chi2 <= config.rchi2_threshold {
                 record.accepted = true;
                 record.evaluation = Some(evaluation);
@@ -3142,6 +3299,8 @@ mod tests {
             max_triplets: None,
             velocity_method: VelocityMethod::Gibbs,
             spans: SpanSearchConfig::default(),
+            acceptance: IodAcceptance::Prefit,
+            correction: CorrectionConfig::default(),
         }
     }
 

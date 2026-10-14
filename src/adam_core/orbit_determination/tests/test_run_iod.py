@@ -32,7 +32,12 @@ def test_iod_is_the_accepted_orbit_of_run_iod(two_body_arc) -> None:  # noqa: F8
         two_body_arc, TwoBodyPropagator, min_obs=6, rchi2_threshold=1e4
     )
     orbit, members, report = run_iod(
-        two_body_arc, TwoBodyPropagator(), min_obs=6, rchi2_threshold=1e4
+        two_body_arc,
+        TwoBodyPropagator(),
+        min_obs=6,
+        rchi2_threshold=1e4,
+        observation_selection_method="combinations",
+        acceptance="prefit",
     )
     assert isinstance(report, IodReport) and report.found
     npt.assert_array_equal(legacy_orbit.coordinates.values, orbit.coordinates.values)
@@ -50,8 +55,9 @@ def test_run_iod_prefers_the_fused_work_unit(two_body_arc) -> None:  # noqa: F81
     _, _, via_callback = run_iod(two_body_arc, callback, min_obs=6, rchi2_threshold=1e4)
     assert (
         callback.calls
-        == via_callback.candidates_evaluated + via_callback.candidates_failed
-    )
+        > via_callback.candidates_evaluated + via_callback.candidates_failed
+    ), "scoring calls plus the correction stages"
+    assert via_callback.corrections_run >= 1
     _, _, fused = run_iod(
         two_body_arc, NativeTwoBodyPropagator(), min_obs=6, rchi2_threshold=1e4
     )
@@ -59,6 +65,12 @@ def test_run_iod_prefers_the_fused_work_unit(two_body_arc) -> None:  # noqa: F81
     assert [c.state for c in fused.candidates] == [
         c.state for c in via_callback.candidates
     ]
+    npt.assert_allclose(
+        fused.accepted_candidate.corrected_state,
+        via_callback.accepted_candidate.corrected_state,
+        rtol=0,
+        atol=1e-12,
+    )
 
 
 def test_run_iod_on_empty_observations() -> None:
@@ -113,8 +125,9 @@ def test_callback_route_honours_a_distinct_iod_propagator(
     report = output["iod"]
     assert (
         iod_propagator.calls
-        == report["candidates_evaluated"] + report["candidates_failed"]
-    )
+        > report["candidates_evaluated"] + report["candidates_failed"]
+    ), "candidate scoring and correction stages run on the IOD propagator"
+    assert report["corrections_run"] >= 1
     assert refine_propagator.calls > 0
     # Same dynamics on both: the same answer as a single propagator.
     single = _rust_native.full_od_ipc(
@@ -150,8 +163,8 @@ def test_fitter_initial_fit_runs_iod_on_the_configured_class(
 
 @pytest.mark.parametrize("velocity_method", ["gibbs", "herrick+gibbs", "auto"])
 def test_spans_search_finds_the_arc(
-    two_body_arc, velocity_method
-) -> None:  # noqa: F811
+    two_body_arc, velocity_method  # noqa: F811
+) -> None:
     orbit, members, report = run_iod(
         two_body_arc,
         TwoBodyPropagator(),
@@ -197,3 +210,55 @@ def test_fitter_forwards_the_velocity_method() -> None:
     iod_settings, _, _ = fitter.native_settings()
     assert iod_settings["velocity_method"] == "auto"
     assert iod_settings["observation_selection_method"] == "spans"
+
+
+def test_run_iod_defaults_to_corrected_acceptance(two_body_arc) -> None:  # noqa: F811
+    """The default `run_iod` corrects candidates in stages and returns the
+    corrected whole-arc orbit of the best converged one; `iod()` keeps the
+    legacy prefit gate."""
+    orbit, members, report = run_iod(two_body_arc, TwoBodyPropagator(), min_obs=6)
+    assert report.found and report.corrections_run >= 1
+    accepted = report.accepted_candidate
+    assert accepted.converged and accepted.stages >= 1
+    assert accepted.corrected_state is not None
+    npt.assert_array_equal(
+        np.concatenate([orbit.coordinates.r[0], orbit.coordinates.v[0]]),
+        np.asarray(accepted.corrected_state),
+    )
+    assert orbit.reduced_chi2[0].as_py() == pytest.approx(accepted.postfit_reduced_chi2)
+    assert not any(members.outlier.to_pylist()), "IOD rejects nothing"
+    for candidate in report.candidates:
+        if candidate.converged:
+            assert candidate.postfit_reduced_chi2 >= accepted.postfit_reduced_chi2
+    legacy, _ = iod(two_body_arc, TwoBodyPropagator, min_obs=6, rchi2_threshold=1e4)
+    assert len(legacy) == 1
+
+
+def test_corrected_acceptance_reports_why_nothing_converged(
+    two_body_arc,  # noqa: F811
+) -> None:
+    _, _, report = run_iod(
+        two_body_arc,
+        TwoBodyPropagator(),
+        min_obs=6,
+        rchi2_threshold=1e-12,
+        correction_settings={"max_corrections": 2},
+    )
+    assert not report.found
+    assert report.corrections_run == 2
+    assert "none reached the whole arc" in report.not_found_reason
+    assert sum(c.correction_note is not None for c in report.candidates) == 2
+
+
+def test_corrected_acceptance_is_invariant_to_observation_order(
+    two_body_arc,  # noqa: F811
+) -> None:
+    permutation = np.random.default_rng(11).permutation(len(two_body_arc))
+    orbit, _, report = run_iod(two_body_arc, TwoBodyPropagator(), min_obs=6)
+    shuffled, _, shuffled_report = run_iod(
+        two_body_arc.take(permutation), TwoBodyPropagator(), min_obs=6
+    )
+    assert report.accepted == shuffled_report.accepted
+    npt.assert_allclose(
+        shuffled.coordinates.values, orbit.coordinates.values, rtol=0, atol=1e-12
+    )
