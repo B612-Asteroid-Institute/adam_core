@@ -446,12 +446,9 @@
 <p><code class="docutils literal notranslate"><span class="pre">RustBackend</span></code> is a thin Python owner for the process-local Rust backend
 implemented in <code class="docutils literal notranslate"><span class="pre">adam_core_rs_spice</span></code> and exposed through
 <code class="docutils literal notranslate"><span class="pre">adam_core._rust_native.AdamCoreSpiceBackend</span></code>. Kernel registration,
-SPK/PCK reader dispatch, text-kernel name bindings, and last-loaded-wins
-semantics live in Rust so standalone <code class="docutils literal notranslate"><span class="pre">adam-core-rs</span></code> can use the same
-behavior without importing Python <code class="docutils literal notranslate"><span class="pre">spicekit</span></code>.</p>
-<p>Reader dispatch is per epoch, as in CSPICE. Coverage is the union over every
-loaded binary kernel, taken one epoch at a time, and load order only decides
-which file answers where two of them overlap.</p>
+SPK/PCK reader dispatch (per epoch, as in CSPICE), text-kernel name bindings,
+and last-loaded-wins semantics live in Rust so standalone <code class="docutils literal notranslate"><span class="pre">adam-core-rs</span></code> can
+use the same behavior without importing Python <code class="docutils literal notranslate"><span class="pre">spicekit</span></code>.</p>
 <p>Parity against CSPICE remains owned upstream by the public <code class="docutils literal notranslate"><span class="pre">spicekit</span></code>
 crate’s <code class="docutils literal notranslate"><span class="pre">spicekit-bench</span></code> suite. adam-core tests validate adam-core’s
 wiring and process-local backend semantics.</p>

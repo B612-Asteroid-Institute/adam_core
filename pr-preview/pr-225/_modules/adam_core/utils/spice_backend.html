@@ -435,13 +435,9 @@
 <span class="sd">``RustBackend`` is a thin Python owner for the process-local Rust backend</span>
 <span class="sd">implemented in ``adam_core_rs_spice`` and exposed through</span>
 <span class="sd">``adam_core._rust_native.AdamCoreSpiceBackend``. Kernel registration,</span>
-<span class="sd">SPK/PCK reader dispatch, text-kernel name bindings, and last-loaded-wins</span>
-<span class="sd">semantics live in Rust so standalone ``adam-core-rs`` can use the same</span>
-<span class="sd">behavior without importing Python ``spicekit``.</span>
-
-<span class="sd">Reader dispatch is per epoch, as in CSPICE. Coverage is the union over every</span>
-<span class="sd">loaded binary kernel, taken one epoch at a time, and load order only decides</span>
-<span class="sd">which file answers where two of them overlap.</span>
+<span class="sd">SPK/PCK reader dispatch (per epoch, as in CSPICE), text-kernel name bindings,</span>
+<span class="sd">and last-loaded-wins semantics live in Rust so standalone ``adam-core-rs`` can</span>
+<span class="sd">use the same behavior without importing Python ``spicekit``.</span>
 
 <span class="sd">Parity against CSPICE remains owned upstream by the public ``spicekit``</span>
 <span class="sd">crate's ``spicekit-bench`` suite. adam-core tests validate adam-core's</span>
@@ -464,17 +460,6 @@
 <span class="k">class</span><span class="w"> </span><span class="nc">NotCovered</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Raised when a SPICE request falls outside loaded kernel coverage."""</span></div>
 
-
-
-<span class="k">def</span><span class="w"> </span><span class="nf">_not_covered_detail</span><span class="p">(</span><span class="n">exc</span><span class="p">:</span> <span class="ne">BaseException</span><span class="p">,</span> <span class="n">fallback</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""Keep the backend's own wording when it has one.</span>
-
-<span class="sd">    The Rust backend resolves coverage per epoch and names the first epoch no</span>
-<span class="sd">    loaded kernel covers. That detail is the useful part of the message, so it</span>
-<span class="sd">    is passed through rather than replaced by the generic sentence.</span>
-<span class="sd">    """</span>
-    <span class="n">detail</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
-    <span class="k">return</span> <span class="n">detail</span> <span class="ow">or</span> <span class="n">fallback</span>
 
 
 <div class="viewcode-block" id="RustBackend">
@@ -562,13 +547,10 @@
                     <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span>
-                    <span class="n">_not_covered_detail</span><span class="p">(</span>
-                        <span class="n">exc</span><span class="p">,</span>
-                        <span class="sa">f</span><span class="s2">"rust SPK readers do not cover target=</span><span class="si">{</span><span class="n">target</span><span class="si">}</span><span class="s2"> "</span>
-                        <span class="sa">f</span><span class="s2">"observer=</span><span class="si">{</span><span class="n">observer</span><span class="si">}</span><span class="s2"> frame=</span><span class="si">{</span><span class="n">frame</span><span class="si">}</span><span class="s2"> across </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ets</span><span class="p">)</span><span class="si">}</span><span class="s2"> epochs"</span><span class="p">,</span>
-                    <span class="p">)</span>
-                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
+                <span class="c1"># Keep the backend's message: it names the target, the</span>
+                <span class="c1"># observer, the frame, and the first epoch that no loaded</span>
+                <span class="c1"># kernel covers.</span>
+                <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
 
 
 <div class="viewcode-block" id="RustBackend.pxform_batch">
@@ -587,12 +569,9 @@
                     <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span>
-                    <span class="n">_not_covered_detail</span><span class="p">(</span>
-                        <span class="n">exc</span><span class="p">,</span>
-                        <span class="sa">f</span><span class="s2">"rust PCK readers do not cover pxform(</span><span class="si">{</span><span class="n">frame_from</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="n">frame_to</span><span class="si">}</span><span class="s2">)"</span><span class="p">,</span>
-                    <span class="p">)</span>
-                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
+                <span class="c1"># Keep the backend's message: it names the frames and</span>
+                <span class="c1"># the first epoch that no loaded kernel covers.</span>
+                <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
 
 
 <div class="viewcode-block" id="RustBackend.sxform_batch">
@@ -611,12 +590,9 @@
                     <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">,</span>
                 <span class="p">)</span>
             <span class="k">except</span> <span class="p">(</span><span class="ne">RuntimeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc</span><span class="p">:</span>
-                <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span>
-                    <span class="n">_not_covered_detail</span><span class="p">(</span>
-                        <span class="n">exc</span><span class="p">,</span>
-                        <span class="sa">f</span><span class="s2">"rust PCK readers do not cover sxform(</span><span class="si">{</span><span class="n">frame_from</span><span class="si">}</span><span class="s2">,</span><span class="si">{</span><span class="n">frame_to</span><span class="si">}</span><span class="s2">)"</span><span class="p">,</span>
-                    <span class="p">)</span>
-                <span class="p">)</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
+                <span class="c1"># Keep the backend's message: it names the frames and</span>
+                <span class="c1"># the first epoch that no loaded kernel covers.</span>
+                <span class="k">raise</span> <span class="n">NotCovered</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">exc</span><span class="p">))</span> <span class="kn">from</span><span class="w"> </span><span class="nn">exc</span></div>
 
 
 <div class="viewcode-block" id="RustBackend.load_mpc_obscodes">
