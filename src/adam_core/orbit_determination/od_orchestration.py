@@ -35,17 +35,19 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from typing import Literal
+from typing import Literal, Optional
 
 import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 
+from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
 from ._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
     native_work_unit,
 )
+from .differential_correction import OD_DEFAULTS
 from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, ObservationAstrometry
 from .observation_uncertainty import (
@@ -502,3 +504,54 @@ def run_od(
         route="composed",
     )
     return fitted_orbits, fitted_orbit_members
+
+
+def refine(
+    orbit: Orbits | FittedOrbits,
+    observations: OrbitDeterminationObservations,
+    propagator: Propagator,
+    *,
+    rejection: Literal["cmc2003", "worst_residual", "none"] = OD_DEFAULTS["refinement"],
+    rejection_settings: Optional[dict] = None,
+    fit_settings: Optional[dict] = None,
+) -> tuple[FittedOrbits, FittedOrbitMembers]:
+    """
+    The refinement stage: differential correction of ``orbit`` (e.g. the
+    orbit `run_iod` returns) against every observation on ``propagator``.
+
+    With `run_iod` it is the stage contract `run_od` composes: ``run_iod`` →
+    ``refine``. ``rejection`` selects the outlier treatment: ``"cmc2003"``
+    (default; Carpino, Milani & Chesley 2003 with OrbFit's constants,
+    `cmc2003_fit`), ``"worst_residual"`` (`iterative_fit`) or ``"none"``
+    (`fit_least_squares`). ``rejection_settings`` override that loop's
+    settings (``OD_DEFAULTS["cmc2003"]`` / ``["worst_residual"]``);
+    ``fit_settings`` the solver's (``OD_DEFAULTS["fit"]``: ``jacobian``,
+    ``loss``, ``f_scale``, ``validate_covariance``, tolerances). Every loop
+    runs in Rust; a propagator whose `NativeBackend` declares the loop's
+    work unit runs it in one crossing.
+
+    When ``orbit`` is a `FittedOrbits` row from `run_iod`, its IOD provenance
+    (ambiguity) is carried onto the refined orbit.
+    """
+    from .differential_correction import fit_least_squares, iterative_fit
+    from .provenance import carry_iod_provenance
+    from .rejection import cmc2003_fit
+
+    seed = orbit.to_orbits() if isinstance(orbit, FittedOrbits) else orbit
+    settings = {**(fit_settings or {}), **(rejection_settings or {})}
+    if rejection == "cmc2003":
+        refined, members = cmc2003_fit(seed, observations, propagator, **settings)
+    elif rejection == "worst_residual":
+        refined, members = iterative_fit(seed, observations, propagator, **settings)
+    elif rejection == "none":
+        if rejection_settings:
+            raise ValueError("rejection='none' takes no rejection_settings")
+        refined, members = fit_least_squares(seed, observations, propagator, **settings)
+    else:
+        raise ValueError(
+            "rejection must be 'cmc2003', 'worst_residual' or 'none'; "
+            f"got {rejection!r}"
+        )
+    if isinstance(orbit, FittedOrbits):
+        refined = carry_iod_provenance(orbit, refined)
+    return refined, members

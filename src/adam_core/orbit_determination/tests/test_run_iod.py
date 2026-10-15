@@ -422,3 +422,36 @@ def test_refinement_signature_defaults_are_the_rust_defaults() -> None:
     )
     assert params["loss"].default == fit["loss"]
     assert params["outlier_rejection"].default == OD_DEFAULTS["refinement"]
+
+
+@pytest.mark.parametrize("rejection", ["cmc2003", "worst_residual", "none"])
+def test_run_iod_then_refine_is_the_stage_contract(
+    two_body_arc, rejection  # noqa: F811
+) -> None:
+    """run_iod -> refine: the refined orbit from the IOD seed, each rejection
+    loop matching its direct entry point, IOD provenance carried."""
+    from adam_core.orbit_determination import (
+        cmc2003_fit,
+        fit_least_squares,
+        iterative_fit,
+        refine,
+    )
+
+    iod_orbit, _, report = run_iod(two_body_arc, TwoBodyPropagator())
+    assert report.found
+    refined, members = refine(
+        iod_orbit, two_body_arc, TwoBodyPropagator(), rejection=rejection
+    )
+    direct = {
+        "cmc2003": cmc2003_fit,
+        "worst_residual": iterative_fit,
+        "none": fit_least_squares,
+    }[rejection]
+    expected, expected_members = direct(
+        iod_orbit.to_orbits(), two_body_arc, TwoBodyPropagator()
+    )
+    npt.assert_array_equal(refined.coordinates.values, expected.coordinates.values)
+    assert members.outlier.to_pylist() == expected_members.outlier.to_pylist()
+    assert refined.provenance.iod_ambiguous.to_pylist() == [False]
+    with pytest.raises(ValueError, match="rejection must be"):
+        refine(iod_orbit, two_body_arc, TwoBodyPropagator(), rejection="bogus")

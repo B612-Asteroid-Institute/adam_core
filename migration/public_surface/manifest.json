@@ -12,13 +12,13 @@
     "plotting_policy": "plotting/display may remain Python; all other symbols require review"
   },
   "summary": {
-    "symbols": 756,
+    "symbols": 757,
     "by_kind": {
       "class": 108,
       "classmethod": 36,
       "constant": 108,
       "constructor": 12,
-      "function": 258,
+      "function": 259,
       "method": 164,
       "property": 70
     },
@@ -29,7 +29,7 @@
       "missions": 16,
       "observations": 63,
       "observers": 19,
-      "orbit_determination": 120,
+      "orbit_determination": 121,
       "orbits": 115,
       "photometry": 69,
       "propagator": 8,
@@ -40,7 +40,7 @@
       "compatibility_data_or_external_generic": 214,
       "mixed_rust_python_gap": 105,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 283,
+      "python_gap_or_external_boundary": 284,
       "rust_veneer_candidate_see_domain_audit": 138
     },
     "plotting_exemption_candidates": 16,
@@ -49,7 +49,7 @@
   "frozen_updated_upstream_reconciliation": {
     "commit": "757c09fca86adf9e3d5899952db3d379e09413f6",
     "upstream_symbols": 600,
-    "current_symbols": 756,
+    "current_symbols": 757,
     "upstream_only_symbols": 22,
     "all_upstream_only_symbols_classified": true,
     "disposition": "The listed upstream implementation helpers are intentionally retired; their useful public workflows are Rust-backed or are explicit provider boundaries in the referenced domain audit.",
@@ -11853,7 +11853,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/od_orchestration.py",
-      "line": 83,
+      "line": 85,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11881,7 +11881,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/od_orchestration.py",
-      "line": 136,
+      "line": 138,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -11902,6 +11902,34 @@
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
     {
+      "id": "adam_core.orbit_determination.od_orchestration:refine",
+      "module": "adam_core.orbit_determination.od_orchestration",
+      "qualname": "refine",
+      "name": "refine",
+      "kind": "function",
+      "domain": "orbit_determination",
+      "source": "src/adam_core/orbit_determination/od_orchestration.py",
+      "line": 509,
+      "explicit_export": false,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": false,
+        "python_loop": false,
+        "numpy_reference": false,
+        "pyarrow_reference": false,
+        "quivr_reference": false,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "python_gap_or_external_boundary",
+      "rust_entrypoint": null,
+      "parity_coverage": "see_domain_audit",
+      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "tracking_issue": "personal-cmy.37.3",
+      "audit_document": "migration/public_surface/dynamics_od.md"
+    },
+    {
       "id": "adam_core.orbit_determination.od_orchestration:run_od",
       "module": "adam_core.orbit_determination.od_orchestration",
       "qualname": "run_od",
@@ -11909,7 +11937,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/od_orchestration.py",
-      "line": 317,
+      "line": 319,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {

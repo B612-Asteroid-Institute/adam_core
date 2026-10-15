@@ -176,6 +176,16 @@ This file contains notable changes in adam-core
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
 
+- Explicit OD stages (`run_iod` → `refine` → `run_od`). Rust:
+  `run_iod_barycentric<I>` now honours `IodConfig.acceptance` (it ran only
+  the prefit search) and takes the correction stages' fit settings;
+  `IodResult::seed_orbit()` is the typed hand-off (the accepted orbit at its
+  exact epoch); `refine_barycentric<R>` / `refine_with` are the refinement
+  stage; `full_od_with` is now literally their composition, and a test pins
+  full OD to `run_iod` then `refine`. Python: `refine(orbit, observations,
+  propagator, rejection="cmc2003"|"worst_residual"|"none",
+  rejection_settings=..., fit_settings=...)` refines a `run_iod` orbit
+  (carrying its IOD provenance) with any of the three loops.
 - Refinement defaults live once, in Rust: `OD_DEFAULTS` (binding
   `od_defaults()`) exports `WhitenedFitConfig`, `IterativeFitConfig` and
   `Cmc2003FitConfig` defaults and the default refinement loop, and the

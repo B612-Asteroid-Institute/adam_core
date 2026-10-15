@@ -29,21 +29,22 @@ pub use od::{
     candidate_orbit_batch, evaluate_orbit, evaluate_orbit_barycentric,
     fit_orbit_least_squares_barycentric, fit_orbit_least_squares_evaluated_barycentric, iod_fit,
     iod_fit_barycentric, iod_fit_linkages_barycentric, od_fit_barycentric, run_iod,
-    run_iod_barycentric, vallado_least_squares_barycentric, CorrectionConfig,
-    EvaluatedLeastSquaresFit, FitEvaluation, IodAcceptance, IodCandidate, IodConfig, IodOutput,
-    IodResult, ObservationSelectionMethod, OdConfig, OdMethod, OdOutput, OrbitGeometry,
-    PrefitScope, PropagatorPredictor, SpanSearchConfig, SphericalPredictor, ValladoConfig,
-    ValladoIteration, ValladoResult, ValladoStatus, VelocityMethod, INVALID_LIGHT_TIME_MESSAGE,
-    IOD_DEFAULT_MU, IOD_DEFAULT_SPEED_OF_LIGHT,
+    vallado_least_squares_barycentric, CorrectionConfig, EvaluatedLeastSquaresFit, FitEvaluation,
+    IodAcceptance, IodCandidate, IodConfig, IodOutput, IodResult, ObservationSelectionMethod,
+    OdConfig, OdMethod, OdOutput, OrbitGeometry, PrefitScope, PropagatorPredictor,
+    SpanSearchConfig, SphericalPredictor, ValladoConfig, ValladoIteration, ValladoResult,
+    ValladoStatus, VelocityMethod, INVALID_LIGHT_TIME_MESSAGE, IOD_DEFAULT_MU,
+    IOD_DEFAULT_SPEED_OF_LIGHT,
 };
 pub use od_refine::{
     cmc2003_fit_barycentric, cmc2003_fit_with, fit_orbit_whitened_barycentric,
     fit_orbit_whitened_with, full_od_barycentric, full_od_with, iterative_fit_barycentric,
-    iterative_fit_with, max_outliers, run_iod_corrected, run_iod_with, run_od_barycentric,
-    run_od_with, symmetric_eigen_6x6, validate_fit_covariance_with, AstrometrySnapshot,
-    Cmc2003FitConfig, Cmc2003FitOutput, CovarianceValidation, FullOdConfig, FullOdOutput,
-    IterativeFitConfig, IterativeFitOutput, JacobianMethod, RefinedOutput, RefinementConfig,
-    RunOdOutput, WhitenedFitConfig, WhitenedFitOutput, DELTA_CHI2_WINDOW,
+    iterative_fit_with, max_outliers, refine_barycentric, refine_with, run_iod_barycentric,
+    run_iod_corrected, run_iod_with, run_od_barycentric, run_od_with, symmetric_eigen_6x6,
+    validate_fit_covariance_with, AstrometrySnapshot, Cmc2003FitConfig, Cmc2003FitOutput,
+    CovarianceValidation, FullOdConfig, FullOdOutput, IterativeFitConfig, IterativeFitOutput,
+    JacobianMethod, RefinedOutput, RefinementConfig, RunOdOutput, WhitenedFitConfig,
+    WhitenedFitOutput, DELTA_CHI2_WINDOW,
 };
 pub use pipeline::{OrbitRow, PropagationResult};
 pub use request::{

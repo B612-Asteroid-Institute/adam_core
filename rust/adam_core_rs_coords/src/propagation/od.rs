@@ -1679,6 +1679,31 @@ impl IodResult {
         self.accepted.map(|index| &self.candidates[index])
     }
 
+    /// The typed hand-off to refinement: the accepted orbit (its corrected
+    /// state under corrected acceptance, else the Gauss state) as a
+    /// heliocentric ecliptic `OrbitBatch` at its exact epoch (days and
+    /// nanoseconds in `epoch_scale`); `None` when nothing was accepted.
+    pub fn seed_orbit(&self) -> PropagationResultValue<Option<OrbitBatch>> {
+        let Some(candidate) = self.accepted_candidate() else {
+            return Ok(None);
+        };
+        let coordinates = CoordinateBatch::cartesian(
+            vec![candidate.corrected_state.unwrap_or(candidate.state)],
+            Frame::Ecliptic,
+            OriginArray::repeat(crate::OriginId::from_code("SUN"), 1),
+            Some(TimeArray::new(
+                candidate.epoch_scale,
+                vec![candidate.epoch],
+            )?),
+            None,
+        )?;
+        Ok(Some(OrbitBatch::new(
+            vec![OrbitId("iod-orbit".to_string())],
+            vec![None],
+            coordinates,
+        )?))
+    }
+
     /// Whether another converged solution is distinct from the accepted
     /// one yet fits about as well.
     pub fn ambiguous(&self) -> bool {
@@ -1923,30 +1948,6 @@ pub(super) fn iod_candidate_pool(
         true,
     )?;
     Ok(restore_input_order(result, &order))
-}
-
-/// [`run_iod`] over the backend-generic barycentric ephemeris workflow of
-/// `iod_propagator`.
-pub fn run_iod_barycentric<P, T>(
-    iod_propagator: &P,
-    observed: &CoordinateBatch,
-    observers: &ObserverBatch,
-    config: &IodConfig,
-    options: &EphemerisOptions,
-    provider: &dyn TimeScaleProvider,
-    translation_provider: &T,
-) -> PropagationResultValue<IodResult>
-where
-    P: Propagator,
-    T: OriginTranslationProvider,
-{
-    let predictor = PropagatorPredictor {
-        propagator: iod_propagator,
-        options,
-        provider,
-        translation_provider,
-    };
-    run_iod(&predictor, observed, observers, config)
 }
 
 /// The legacy one-orbit view of [`run_iod`] (`IodOutput`): kept for the
