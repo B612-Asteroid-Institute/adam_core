@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy.typing as npt
@@ -9,6 +10,15 @@ if TYPE_CHECKING:
 
 BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
 BASE62_MAP = {BASE62[i]: i for i in range(len(BASE62))}
+
+
+@dataclass(frozen=True)
+class ADESDesignationParts:
+    """Validated ADES identity fields derived from one submitted MPC label."""
+
+    perm_id: str | None = None
+    prov_id: str | None = None
+    trk_sub: str | None = None
 
 
 def _astropy_time_class():
@@ -61,281 +71,128 @@ def convert_mpc_packed_dates(pf_tt: npt.ArrayLike) -> Time:
     return _astropy_time_class()(isot_tt, format="isot", scale="tt")
 
 
+def _rust_designation_call(name: str, designation: str) -> str:
+    """Call one strict scalar Rust designation codec."""
+    from adam_core import _rust_native as _rn
+
+    return getattr(_rn, name)(designation)
+
+
 def pack_numbered_designation(designation: str) -> str:
-    """
-    Pack a numbered MPC designation.
-
-    Runs in the Rust backend (legacy-exact port, W11 helper migration).
-
-    Examples of numbered designations:
-        Numbered      Packed
-        3202          03202
-        50000         50000
-        100345        A0345
-        360017        a0017
-        203289        K3289
-        620000        ~0000
-        620061        ~000z
-        3140113       ~AZaz
-        15396335      ~zzzz
-
-    Parameters
-    ----------
-    designation : str
-        MPC numbered designation.
-
-    Returns
-    -------
-    designation_pf : str
-        MPC packed numbered designation.
-
-    Raises
-    ------
-    ValueError : If the numbered designation cannot be packed.
-        If the numbered designation is larger than 15396335.
-    """
-    from adam_core import _rust_native as _rn
-
-    return _rn.pack_numbered_designation(designation)
-
-
-def pack_provisional_designation(designation: str) -> str:
-    """
-    Pack a provisional MPC designation.
-
-    Runs in the Rust backend (legacy-exact port, W11 helper migration).
-
-    Examples of provisional designations:
-        Provisional   Packed
-        1995 XA       J95X00A
-        1995 XL1      J95X01L
-        1995 FB13     J95F13B
-        1998 SQ108    J98SA8Q
-        1998 SV127    J98SC7V
-        1998 SS162    J98SG2S
-        2099 AZ193    K99AJ3Z
-        2008 AA360    K08Aa0A
-        2007 TA418    K07Tf8A
-
-    Parameters
-    ----------
-    designation : str
-        MPC provisional designation.
-
-    Returns
-    -------
-    designation_pf : str
-        MPC packed provisional designation.
-
-    Raises
-    ------
-    ValueError : If the provisional designation cannot be packed.
-        The provisional designations is not at least 6 characters long.
-        The first 4 characters of the provisional designation are not a year.
-        The 5th character of the provisional designation is not a space.
-        The provisional designation contains a hyphen.
-        The half-month letter is I or Z.
-    """
-    from adam_core import _rust_native as _rn
-
-    return _rn.pack_provisional_designation(designation)
-
-
-def pack_survey_designation(designation: str) -> str:
-    """
-    Pack a survey MPC designation.
-
-    Runs in the Rust backend (legacy-exact port, W11 helper migration).
-
-    Examples of survey designations:
-        Survey       Packed
-        2040 P-L     PLS2040
-        3138 T-1     T1S3138
-        1010 T-2     T2S1010
-        4101 T-3     T3S4101
-
-    Parameters
-    ----------
-    designation : str
-        MPC survey designation.
-
-    Returns
-    -------
-    designation_pf : str
-        MPC packed survey designation.
-
-    Raises
-    ------
-    ValueError : If the survey designation cannot be packed.
-        The survey designation does not start with P-L, T-1, T-2, or T-3.
-    """
-    from adam_core import _rust_native as _rn
-
-    return _rn.pack_survey_designation(designation)
-
-
-def pack_mpc_designation(designation: str) -> str:
-    """
-    Pack a unpacked MPC designation. For example, provisional
-    designation 1998 SS162 will be packed to J98SG2S. Permanent
-    designation 323 will be packed to 00323.
-
-    Runs in the Rust backend (legacy-exact port, W11 helper migration).
-
-    TODO: add support for comet and natural satellite designations
-
-    Parameters
-    ----------
-    designation : str
-        MPC unpacked designation.
-
-    Returns
-    -------
-    designation_pf : str
-        MPC packed form designation.
-
-    Raises
-    ------
-    ValueError : If designation cannot be packed.
-    """
-    from adam_core import _rust_native as _rn
-
-    return _rn.pack_mpc_designation(designation)
+    """Pack one canonical decimal minor-planet number."""
+    return _rust_designation_call("pack_numbered_designation", designation)
 
 
 def unpack_numbered_designation(designation_pf: str) -> str:
-    """
-    Unpack a numbered MPC designation.
+    """Unpack one canonical five-character numbered minor-planet identity."""
+    return _rust_designation_call("unpack_numbered_designation", designation_pf)
 
-    Runs in the Rust backend (legacy-exact port, W11 helper migration).
 
-    Examples of numbered designations:
-        Numbered      Unpacked
-        03202         3202
-        50000         50000
-        A0345         100345
-        a0017         360017
-        K3289         203289
-        ~0000         620000
-        ~000z         620061
-        ~AZaz         3140113
-        ~zzzz         15396335
-
-    Parameters
-    ----------
-    designation_pf : str
-        MPC packed numbered designation.
-
-    Returns
-    -------
-    designation : str
-        MPC unpacked numbered designation.
-
-    Raises
-    ------
-    ValueError : If the numbered designation cannot be unpacked.
-    """
-    from adam_core import _rust_native as _rn
-
-    return _rn.unpack_numbered_designation(designation_pf)
+def pack_provisional_designation(designation: str) -> str:
+    """Pack a canonical ordinary, extended, or A-prefix minor-planet provisional."""
+    return _rust_designation_call("pack_provisional_designation", designation)
 
 
 def unpack_provisional_designation(designation_pf: str) -> str:
-    """
-    Unpack a provisional MPC designation.
+    """Unpack a canonical ordinary or underscore-extended minor-planet provisional."""
+    return _rust_designation_call("unpack_provisional_designation", designation_pf)
 
-    Runs in the Rust backend (legacy-exact port, W11 helper migration).
 
-    Examples of provisional designations:
-        Provisional   Unpacked
-        J95X00A       1995 XA
-        J95X01L       1995 XL1
-        J95F13B       1995 FB13
-        J98SA8Q       1998 SQ108
-        J98SC7V       1998 SV127
-        J98SG2S       1998 SS162
-        K99AJ3Z       2099 AZ193
-        K08Aa0A       2008 AA360
-        K07Tf8A       2007 TA418
-
-    Parameters
-    ----------
-    designation_pf : str
-        MPC packed provisional designation.
-
-    Returns
-    -------
-    designation : str
-        MPC unpacked provisional designation.
-
-    Raises
-    ------
-    ValueError : If the provisional designation cannot be unpacked.
-        The packed provisional designation is not 7 characters long.
-        The packed provisional designation does not have a year.
-    """
-    from adam_core import _rust_native as _rn
-
-    return _rn.unpack_provisional_designation(designation_pf)
+def pack_survey_designation(designation: str) -> str:
+    """Pack a canonical P-L or T-1/T-2/T-3 survey designation."""
+    return _rust_designation_call("pack_survey_designation", designation)
 
 
 def unpack_survey_designation(designation_pf: str) -> str:
-    """
-    Unpack a survey MPC designation.
+    """Unpack a canonical PLS/T1S/T2S/T3S survey designation."""
+    return _rust_designation_call("unpack_survey_designation", designation_pf)
 
-    Runs in the Rust backend (legacy-exact port, W11 helper migration).
 
-    Examples of survey designations:
-        Survey       Packed
-        PLS2040      2040 P-L
-        T1S3138      3138 T-1
-        T2S1010      1010 T-2
-        T3S4101      4101 T-3
+def pack_numbered_comet_designation(designation: str) -> str:
+    """Pack a canonical numbered comet/interstellar identity and optional fragment."""
+    return _rust_designation_call("pack_numbered_comet_designation", designation)
 
-    Parameters
-    ----------
-    designation_pf : str
-        MPC packed survey designation.
 
-    Returns
-    -------
-    designation : str
-        MPC unpacked survey designation.
+def unpack_numbered_comet_designation(designation_pf: str) -> str:
+    """Unpack a canonical numbered comet/interstellar identity."""
+    return _rust_designation_call("unpack_numbered_comet_designation", designation_pf)
 
-    Raises
-    ------
-    ValueError : If the survey designation cannot be unpacked.
-        The packed survey designation does not start with PLS, T1S, T2S, or T3S.
-    """
-    from adam_core import _rust_native as _rn
 
-    return _rn.unpack_survey_designation(designation_pf)
+def pack_provisional_comet_designation(designation: str) -> str:
+    """Pack a modern, ancient, BCE, or 12-character combined comet identity."""
+    return _rust_designation_call("pack_provisional_comet_designation", designation)
+
+
+def unpack_provisional_comet_designation(designation_pf: str) -> str:
+    """Unpack a modern, ancient, BCE, or 12-character combined comet identity."""
+    return _rust_designation_call(
+        "unpack_provisional_comet_designation", designation_pf
+    )
+
+
+def pack_comet_designation(designation: str) -> str:
+    """Pack any supported canonical comet or interstellar designation."""
+    return _rust_designation_call("pack_comet_designation", designation)
+
+
+def unpack_comet_designation(designation_pf: str) -> str:
+    """Unpack any supported canonical comet or interstellar designation."""
+    return _rust_designation_call("unpack_comet_designation", designation_pf)
+
+
+def pack_permanent_satellite_designation(designation: str) -> str:
+    """Pack a permanent natural-satellite identity written with a Roman numeral."""
+    return _rust_designation_call("pack_permanent_satellite_designation", designation)
+
+
+def unpack_permanent_satellite_designation(designation_pf: str) -> str:
+    """Unpack a permanent natural-satellite identity to its official Roman numeral."""
+    return _rust_designation_call(
+        "unpack_permanent_satellite_designation", designation_pf
+    )
+
+
+def pack_provisional_satellite_designation(designation: str) -> str:
+    """Pack a canonical provisional natural-satellite designation."""
+    return _rust_designation_call("pack_provisional_satellite_designation", designation)
+
+
+def unpack_provisional_satellite_designation(designation_pf: str) -> str:
+    """Unpack a canonical provisional natural-satellite designation."""
+    return _rust_designation_call(
+        "unpack_provisional_satellite_designation", designation_pf
+    )
+
+
+def pack_satellite_designation(designation: str) -> str:
+    """Pack a permanent or provisional natural-satellite designation."""
+    return _rust_designation_call("pack_satellite_designation", designation)
+
+
+def unpack_satellite_designation(designation_pf: str) -> str:
+    """Unpack a permanent or provisional natural-satellite designation."""
+    return _rust_designation_call("unpack_satellite_designation", designation_pf)
+
+
+def pack_mpc_designation(designation: str) -> str:
+    """Strictly dispatch and pack any supported canonical MPC designation."""
+    return _rust_designation_call("pack_mpc_designation", designation)
 
 
 def unpack_mpc_designation(designation_pf: str) -> str:
-    """
-    Unpack a packed MPC designation. For example, provisional
-    designation J98SG2S will be unpacked to 1998 SS162. Permanent
-    designation 00323 will be unpacked to 323.
+    """Strictly dispatch and unpack any supported canonical MPC designation."""
+    return _rust_designation_call("unpack_mpc_designation", designation_pf)
 
-    Runs in the Rust backend (legacy-exact port, W11 helper migration).
 
-    TODO: add support for comet and natural satellite designations
+def parse_ades_designation(designation: str) -> ADESDesignationParts:
+    """Classify a canonical unpacked identity into ADES identity fields.
 
-    Parameters
-    ----------
-    designation_pf : str
-        MPC packed form designation.
-
-    Returns
-    -------
-    designation : str
-        MPC unpacked designation.
-
-    Raises
-    ------
-    ValueError : If designation_pf cannot be unpacked.
+    Official packed identities, malformed/noncanonical designations, and
+    ambiguous values are rejected before the bounded tracking-ID fallback.
+    Submitted unpacked identity is retained; a combined numbered/provisional
+    comet is represented by its two canonical ADES fields.
     """
     from adam_core import _rust_native as _rn
 
-    return _rn.unpack_mpc_designation(designation_pf)
+    perm_id, prov_id, trk_sub = _rn.parse_ades_designation(designation)
+    return ADESDesignationParts(perm_id=perm_id, prov_id=prov_id, trk_sub=trk_sub)

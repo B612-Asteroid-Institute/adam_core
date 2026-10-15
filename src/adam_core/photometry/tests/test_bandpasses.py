@@ -130,6 +130,18 @@ def test_map_to_canonical_filter_bands_resolves_mpc_prefixed_ps1_w_alias():
     assert resolved_native.tolist() == resolved.tolist()
 
 
+def test_map_to_canonical_filter_bands_resolves_atlas_tdo_w():
+    """ATLAS-TDO (Teide, MPC R17) reports a single wide ``w`` band
+    (~420-720 nm). With no measured w curve published, it maps to Bessell
+    ``V`` (Tonry et al. 2025, arXiv:2509.05562: "w ~ V is adequate"), not to
+    the Pan-STARRS ``PS1_w`` that F51/F52 ``w`` resolves to.
+    """
+    resolved = map_to_canonical_filter_bands(
+        ["R17"], ["w"], allow_fallback_filters=False
+    )
+    assert resolved.tolist() == ["V"]
+
+
 def test_map_to_canonical_filter_bands_strict_happy_path():
     resolved = map_to_canonical_filter_bands(
         ["W84", "I41", "X05"],

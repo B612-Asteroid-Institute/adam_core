@@ -6,6 +6,7 @@ from .cometary import CometaryCoordinates
 from .covariances import CoordinateCovariances
 from .geodetics import GeodeticCoordinates
 from .keplerian import KeplerianCoordinates
+from .local_orbital_frames import LocalFrameCovariances
 from .origin import Origin, OriginCodes
 from .residuals import Residuals
 from .spherical import SphericalCoordinates

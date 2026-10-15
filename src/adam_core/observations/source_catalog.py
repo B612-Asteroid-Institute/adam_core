@@ -1,8 +1,11 @@
+from typing import Any, Self
+
 import numpy as np
 import numpy.typing as npt
 import pyarrow as pa
 import pyarrow.compute as pc
 import quivr as qv
+from pyarrow import Table as ArrowTable
 from quivr.validators import and_, ge, le
 
 from ..coordinates.covariances import CoordinateCovariances
@@ -80,6 +83,38 @@ class SourceCatalog(qv.Table):
 
     #: ID of the source catalog
     catalog_id = qv.LargeStringColumn()
+    #: Canonical astrometric catalog provenance for the source position. Exact
+    #: source strings are preserved; null means unavailable.
+    astcat = qv.LargeStringColumn(nullable=True)
+    #: Canonical photometric catalog provenance for the source magnitude. Exact
+    #: source strings are preserved; null means unavailable.
+    photcat = qv.LargeStringColumn(nullable=True)
+
+    @classmethod
+    def from_pyarrow(
+        cls,
+        table: ArrowTable,
+        validate: bool = True,
+        permit_nulls: bool = False,
+        **kwargs: Any,
+    ) -> Self:
+        """Construct a source catalog across additive catalog fields.
+
+        SourceCatalog Parquet and Arrow artifacts written before ``astcat`` and
+        ``photcat`` were added remain valid. Missing fields are represented as
+        typed nulls; present values are preserved exactly.
+        """
+        for field_name in ("astcat", "photcat"):
+            if field_name not in table.column_names:
+                table = table.append_column(
+                    field_name, pa.nulls(table.num_rows, type=pa.large_string())
+                )
+        return super().from_pyarrow(
+            table,
+            validate=validate,
+            permit_nulls=permit_nulls,
+            **kwargs,
+        )
 
     def detections(self) -> PointSourceDetections:
         """

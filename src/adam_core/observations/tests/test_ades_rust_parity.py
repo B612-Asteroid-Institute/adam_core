@@ -4,9 +4,10 @@ checkout (no Rust work) via
 ``.legacy-venv/bin/python migration/scripts/generate_ades_parity_fixture.py``.
 
 The Rust-dispatched public ``ADES_to_string`` / ``ADES_string_to_tables`` must
-reproduce the legacy behavior except for two intentional ADES corrections:
-missing optional numerics serialize as empty PSV fields rather than ``nan``,
-and numeric ``nan`` tokens parse as null before validation."""
+reproduce the legacy behavior except for intentional ADES corrections: missing
+optional numerics serialize as empty PSV fields rather than ``nan``; numeric
+``nan`` tokens parse as null before validation; and ``rmsRA``/``rmsDec`` reduce
+fixed-point precision only as needed to fit ``PosDecimalTypeW7``."""
 
 import csv
 import io
@@ -73,8 +74,18 @@ OPTIONAL_NUMERIC_COLUMNS = {
 }
 
 
-def normalize_legacy_writer_nulls(ades_string: str) -> str:
-    """Apply the intentional ADES null-field correction to legacy output."""
+def _bounded_fixed(value: str, precision: int, max_width: int) -> str:
+    for bounded_precision in range(precision, -1, -1):
+        rendered = f"{float(value):.{bounded_precision}f}"
+        if len(rendered) <= max_width:
+            return rendered
+    return f"{float(value):.0f}"
+
+
+def normalize_legacy_writer_output(
+    ades_string: str, *, columns_precision: dict[str, int]
+) -> str:
+    """Apply intentional ADES null and bounded-RMS corrections to legacy output."""
     output = []
     headers = None
     for raw_line in ades_string.splitlines(keepends=True):
@@ -101,10 +112,18 @@ def normalize_legacy_writer_nulls(ades_string: str) -> str:
             output.append(raw_line)
             continue
 
-        corrected = [
-            "" if header in OPTIONAL_NUMERIC_COLUMNS and value == "nan" else value
-            for header, value in zip(headers, fields)
-        ]
+        corrected = []
+        for header, value in zip(headers, fields):
+            if header in OPTIONAL_NUMERIC_COLUMNS and value == "nan":
+                value = ""
+            if value and header in {"rmsRA", "rmsDec"}:
+                precision_key = "rmsRACosDec" if header == "rmsRA" else header
+                value = _bounded_fixed(
+                    value,
+                    columns_precision.get(precision_key, 16),
+                    7,
+                )
+            corrected.append(value)
         if corrected == fields:
             output.append(raw_line)
             continue
@@ -178,13 +197,20 @@ def test_fixture_exists():
     )
 
 
-def test_writer_matches_legacy_fixture_except_standard_null_fields(fixture):
+def test_writer_matches_legacy_fixture_except_documented_ades_corrections(fixture):
     contexts = build_contexts(fixture["context_spec"])
     for panel in fixture["panels"]:
         observations = observations_from_flat(panel["observations"])
         kwargs = dict(panel["options"]) if panel["options"] else {}
         actual = ADES_to_string(observations, contexts, **kwargs)
-        expected = normalize_legacy_writer_nulls(panel["ades_string"])
+        columns_precision = kwargs.get(
+            "columns_precision",
+            {"rmsRACosDec": 5, "rmsDec": 5},
+        )
+        expected = normalize_legacy_writer_output(
+            panel["ades_string"],
+            columns_precision=columns_precision,
+        )
         assert actual == expected, panel["name"]
 
 

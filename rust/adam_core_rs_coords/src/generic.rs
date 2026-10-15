@@ -250,7 +250,8 @@ fn wrap_two_pi<T: Scalar>(nu: T) -> T {
     out
 }
 
-/// Converts (a, e, i[deg], raan[deg], ap[deg], M[deg]) and mu to (x, y, z, vx, vy, vz).
+/// Converts (a, e, i, raan, ap, M), with angles in degrees, and mu to
+/// (x, y, z, vx, vy, vz).
 pub fn keplerian_to_cartesian6<T: Scalar>(v: &[T; 6], mu: T, max_iter: usize, tol: f64) -> [T; 6] {
     let inv_deg = T::from_f64(1.0 / RAD2DEG_F64);
     let a = v[0];
@@ -298,7 +299,7 @@ pub fn keplerian_to_cartesian6<T: Scalar>(v: &[T; 6], mu: T, max_iter: usize, to
 }
 
 /// Converts Cartesian (x, y, z, vx, vy, vz) and mu to 6 Keplerian elements
-/// (a, e, i[deg], raan[deg], ap[deg], M[deg]). Elliptic and hyperbolic cases
+/// (a, e, i, raan, ap, M), with angles in degrees. Elliptic and hyperbolic cases
 /// only; parabolic inputs return NaN for `a` matching legacy behavior.
 pub fn cartesian_to_keplerian6<T: Scalar>(v: &[T; 6], mu: T) -> [T; 6] {
     let float_tol = 1e-15_f64;
@@ -370,7 +371,8 @@ pub fn cartesian_to_keplerian6<T: Scalar>(v: &[T; 6], mu: T) -> [T; 6] {
     [a, e, i * k, raan * k, ap * k, m_anom * k]
 }
 
-/// Converts Cartesian to Cometary (q, e, i[deg], raan[deg], ap[deg], tp) matching the
+/// Converts Cartesian to Cometary (q, e, i, raan, ap, tp), with angles in degrees,
+/// matching the
 /// legacy JAX path: tp is placed so that |tp - t0| <= period/2 for elliptic orbits.
 pub fn cartesian_to_cometary6<T: Scalar>(v: &[T; 6], t0: T, mu: T) -> [T; 6] {
     let kep = cartesian_to_keplerian6(v, mu);
@@ -396,7 +398,8 @@ pub fn cartesian_to_cometary6<T: Scalar>(v: &[T; 6], t0: T, mu: T) -> [T; 6] {
     [q, e, i_deg, raan_deg, ap_deg, tp]
 }
 
-/// Converts Cometary (q, e, i[deg], raan[deg], ap[deg], tp) to Cartesian matching
+/// Converts Cometary (q, e, i in degrees, raan in degrees, ap in degrees, tp)
+/// to Cartesian matching
 /// legacy JAX path: the mean anomaly is wrapped via the same branch as the legacy
 /// `jnp.where(dtp > 0, 2π - dtp*n, -dtp*n)` rule.
 pub fn cometary_to_cartesian6<T: Scalar>(
