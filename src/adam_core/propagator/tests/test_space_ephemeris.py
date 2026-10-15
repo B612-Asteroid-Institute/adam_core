@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 import pyarrow.compute as pc
 import pytest
-from adam_assist import ASSISTPropagator
 
 from ...coordinates.cartesian import CartesianCoordinates
 from ...coordinates.origin import Origin
@@ -17,6 +16,8 @@ from ...orbits.orbits import Orbits
 from ...time import Timestamp
 from ...utils.helpers.orbits import make_real_orbits
 from ...utils.spice import register_spice_kernel, unregister_spice_kernel
+
+ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
 
 # JWST SPICE kernel paths
 JWST_KERNEL_DIR = (

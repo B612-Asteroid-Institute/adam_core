@@ -82,9 +82,9 @@ def test_release_matrix_generates_and_inspects_runtime_version() -> None:
     assert 'PYTHON_PREVIEW_VERSION: "0.6.0"' in workflow
 
     extended_coverage = workflow.split("  extended-coverage:", 1)[1]
-    assert "Verify exact ASSIST revision" in extended_coverage
-    assert ".ci/adam-assist/.cargo" not in extended_coverage
-    assert "pdm run assist-rust-develop" in extended_coverage
+    assert "adam-assist" not in extended_coverage
+    assert "adam_assist" not in extended_coverage
+    assert "assist-rust-develop" not in extended_coverage
 
 
 def test_kernel_data_constrains_icu_for_clean_rust_1_87_consumers() -> None:
@@ -185,6 +185,7 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     normal_ci = (workflows / "pip-build-lint-test-coverage.yml").read_text()
     crate_ci = (workflows / "rust-crate-release-candidate.yml").read_text()
     nightly = (workflows / "nightly-rust-benchmark.yml").read_text()
+    release_matrix = (workflows / "release-candidate-wheel-matrix.yml").read_text()
     tier1 = (workflows / "tier1-dependent-smoke.yml").read_text()
     assist_sha = "8c95fdfcaf2df68e7dc1b5c7ee540f938103bb8b"
 
@@ -193,15 +194,14 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "dtolnay/rust-toolchain@1.87.0" in crate_ci
     assert "components: rustfmt, clippy" in crate_ci
     assert "dtolnay/rust-toolchain@1.87.0" in tier1
-    assert assist_sha in normal_ci
-    assert assist_sha in nightly
+    assert "adam_assist_ref:" in release_matrix
     assert assist_sha in tier1
-    assert normal_ci.count("ref: ${{ env.ADAM_ASSIST_REF }}") == 3
-    assert normal_ci.count("pdm run assist-rust-develop") == 3
-    assert "ref: ${{ env.ADAM_ASSIST_REF }}" in nightly
-    assert "pdm run assist-rust-develop" in nightly
-    assert "dtolnay/rust-toolchain@1.87.0" in nightly
-    assert "components: rustfmt, clippy" in nightly
+    assert "adam-assist" not in normal_ci
+    assert "adam_assist" not in normal_ci
+    assert "adam-assist" not in nightly
+    assert "adam_assist" not in nightly
+    assert "Build adam-assist manylinux wheel" in release_matrix
+    assert "Build adam-assist native wheel" in release_matrix
     assert "python -m pip install --no-deps -e dependent" in tier1
     assert "jpl-small-bodies-de441-n16==2021.3.31.1" in tier1
 

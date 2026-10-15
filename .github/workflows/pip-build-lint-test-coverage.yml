@@ -10,9 +10,6 @@ on:
 permissions:
   contents: read
 
-env:
-  ADAM_ASSIST_REF: 8c95fdfcaf2df68e7dc1b5c7ee540f938103bb8b
-
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -132,16 +129,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install test dependencies
         run: pdm install -G test
-      - name: Checkout compatible adam-assist candidate
-        uses: actions/checkout@v4
-        with:
-          repository: B612-Asteroid-Institute/adam-assist
-          ref: ${{ env.ADAM_ASSIST_REF }}
-          path: .ci/adam-assist
-      - name: Build compatible downstream adam-assist
-        env:
-          ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/.ci/adam-assist
-        run: pdm run assist-rust-develop
       - name: Run tests (no coverage)
         if: matrix.python-version != '3.12'
         run: pdm run test
@@ -190,16 +177,6 @@ jobs:
           python-version: '3.12'
       - name: Install test dependencies
         run: pdm install -G test
-      - name: Checkout compatible adam-assist candidate
-        uses: actions/checkout@v4
-        with:
-          repository: B612-Asteroid-Institute/adam-assist
-          ref: ${{ env.ADAM_ASSIST_REF }}
-          path: .ci/adam-assist
-      - name: Build compatible downstream adam-assist
-        env:
-          ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/.ci/adam-assist
-        run: pdm run assist-rust-develop
       - name: PDM/CI script preflight
         run: pdm run script-preflight
       - name: Rust format check
@@ -255,16 +232,6 @@ jobs:
         uses: actions/checkout@v3
       - name: Get git tags
         run: git fetch --prune --unshallow --tags
-      - name: Set up Rust at the public-crate MSRV
-        uses: dtolnay/rust-toolchain@1.87.0
-        with:
-          components: rustfmt, clippy
-      - name: Checkout compatible adam-assist candidate
-        uses: actions/checkout@v4
-        with:
-          repository: B612-Asteroid-Institute/adam-assist
-          ref: ${{ env.ADAM_ASSIST_REF }}
-          path: .ci/adam-assist
       - name: Set up PDM (cached)
         if: ${{ hashFiles('**/pdm.lock') != '' }}
         uses: pdm-project/setup-pdm@v4
@@ -279,10 +246,6 @@ jobs:
           python-version: '3.12'
       - name: Install test dependencies
         run: pdm install -G test
-      - name: Build compatible downstream adam-assist
-        env:
-          ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/.ci/adam-assist
-        run: pdm run assist-rust-develop
       - name: Run benchmarks
         run: pdm run benchmark --benchmark-json bench.json
       - name: Upload benchmark artifact

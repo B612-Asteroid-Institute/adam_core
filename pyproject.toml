@@ -112,8 +112,6 @@ test = [
     "mypy",
     "ruff",
     "black",
-    # CI builds the exact compatible adam-assist source candidate after this
-    # environment is installed; do not let a published wheel replace it.
     "mpcq>=0.4.0; python_version < '3.13'",
     "google-cloud-bigquery",
     "google-cloud-bigquery-storage",
@@ -176,8 +174,7 @@ excludes = [
 
 [tool.uv]
 override-dependencies = [
-  # adam-assist is tested against this checkout, not the published adam-core
-  # version range embedded in the latest adam-assist wheel metadata.
+  # Keep this checkout authoritative while resolving test-only dependents.
   "adam-core",
 ]
 
@@ -223,7 +220,7 @@ rust-develop = { composite = [
 ] }
 rust-smoke = { composite = [
   "pdm run rust-develop",
-  "pytest -q src/adam_core/tests/test_rust_backends.py src/adam_core/utils/tests/test_spice_backend.py src/adam_core/utils/tests/test_spice.py src/adam_core/orbits/tests/test_spice_kernel.py src/adam_core/coordinates/tests/test_rust_covariance_autodiff.py src/adam_core/orbit_determination/tests/test_iod.py",
+  "pytest -q src/adam_core/tests/test_rust_backends.py src/adam_core/utils/tests/test_spice_backend.py src/adam_core/utils/tests/test_spice.py src/adam_core/orbits/tests/test_spice_kernel.py src/adam_core/coordinates/tests/test_rust_covariance_autodiff.py",
 ] }
 assist-public-semantics-residuals = "python migration/scripts/run_assist_public_semantics_residuals.py"
 assist-rust-develop = "python migration/scripts/develop_downstream_adam_assist.py"

@@ -268,18 +268,6 @@ jobs:
     steps:
       - name: Checkout adam-core candidate
         uses: actions/checkout@v4
-      - name: Checkout exact adam-assist candidate
-        uses: actions/checkout@v4
-        with:
-          repository: B612-Asteroid-Institute/adam-assist
-          ref: ${{ env.ADAM_ASSIST_REF }}
-          path: .ci/adam-assist
-      - name: Verify exact ASSIST revision
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]
-          test "$(git -C .ci/adam-assist rev-parse HEAD)" = "$ADAM_ASSIST_REF"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -289,10 +277,8 @@ jobs:
       - uses: pdm-project/setup-pdm@v4
         with:
           python-version: "3.12"
-      - name: Install exact source pair and optional test providers
-        run: |
-          pdm install -G test
-          ADAM_ASSIST_RUST_REPO="$GITHUB_WORKSPACE/.ci/adam-assist" pdm run assist-rust-develop
+      - name: Install Core and optional test providers
+        run: pdm install -G test
       - name: Run live Rust kernel-data integrations
         run: cargo test -p adam_core_rs_kernel_data -- --ignored
       - name: Run slow scientific validation fixtures

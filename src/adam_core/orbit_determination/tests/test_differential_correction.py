@@ -1,7 +1,9 @@
 import numpy as np
-from adam_assist import ASSISTPropagator
+import pytest
 
 from ..differential_correction import fit_least_squares
+
+ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
 
 
 def test_fit_least_squares_dispatches_to_fused_work_unit(pure_iod_orbit):

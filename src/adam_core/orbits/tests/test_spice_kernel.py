@@ -3,7 +3,6 @@ from pathlib import Path
 
 import numpy as np
 import pytest
-from adam_assist import ASSISTPropagator
 
 from ...constants import KM_P_AU, S_P_DAY
 from ...coordinates.cartesian import CartesianCoordinates
@@ -51,7 +50,7 @@ def test_orbits_to_spk(tmp_path):
         str(spk_file),
         start_time=t0,
         end_time=end_time,
-        propagator=ASSISTPropagator(),
+        propagator=pytest.importorskip("adam_assist").ASSISTPropagator(),
         step_days=1.0,
         window_days=10.0,
     )

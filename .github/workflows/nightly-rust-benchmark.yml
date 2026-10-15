@@ -8,9 +8,6 @@ on:
 permissions:
   contents: read
 
-env:
-  ADAM_ASSIST_REF: 8c95fdfcaf2df68e7dc1b5c7ee540f938103bb8b
-
 jobs:
   nightly-bench:
     runs-on: ubuntu-latest
@@ -26,12 +23,6 @@ jobs:
         uses: dtolnay/rust-toolchain@1.87.0
         with:
           components: rustfmt, clippy
-      - name: Checkout compatible adam-assist candidate
-        uses: actions/checkout@v4
-        with:
-          repository: B612-Asteroid-Institute/adam-assist
-          ref: ${{ env.ADAM_ASSIST_REF }}
-          path: .ci/adam-assist
       - name: Set up PDM (cached)
         if: ${{ hashFiles('**/pdm.lock') != '' }}
         uses: pdm-project/setup-pdm@v4
@@ -48,10 +39,6 @@ jobs:
         run: pdm install -G test
       - name: Build Rust extension
         run: pdm run rust-develop
-      - name: Build compatible downstream adam-assist
-        env:
-          ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/.ci/adam-assist
-        run: pdm run assist-rust-develop
       - name: Run full benchmarks
         run: pdm run benchmark --benchmark-json bench-nightly.json
       - name: Upload benchmark artifact

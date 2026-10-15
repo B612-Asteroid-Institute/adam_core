@@ -1,7 +1,6 @@
 import numpy as np
 import pyarrow.compute as pc
 import pytest
-from adam_assist import ASSISTPropagator
 
 from ...coordinates import (
     CartesianCoordinates,
@@ -137,7 +136,7 @@ def test_least_squares_adjusts(real_data, use_central_difference) -> None:
     observers, orbit = real_data
 
     # Make observations that fit the orbit perfectly
-    propagator = ASSISTPropagator()
+    propagator = pytest.importorskip("adam_assist").ASSISTPropagator()
     perfect_ephem = propagator.generate_ephemeris(
         orbit, observers, covariance=True, chunk_size=1, max_processes=1
     )
@@ -217,7 +216,7 @@ def test_least_squares_zero_base(real_data, use_central_difference) -> None:
     zeroed_value = orbit.coordinates.set_column("vz", [0.0])
     zeroed_orbit = orbit.set_column("coordinates", zeroed_value)
 
-    propagator = ASSISTPropagator()
+    propagator = pytest.importorskip("adam_assist").ASSISTPropagator()
     perfect_ephem = propagator.generate_ephemeris(
         orbit, observers, covariance=True, chunk_size=1, max_processes=1
     )
