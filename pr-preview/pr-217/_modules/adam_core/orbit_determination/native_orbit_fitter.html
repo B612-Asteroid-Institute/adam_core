@@ -439,6 +439,7 @@
           <h1>Source code for adam_core.orbit_determination.native_orbit_fitter</h1><div class="highlight"><pre>
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Type</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -463,14 +464,14 @@
     <span class="n">_emit_native_warnings</span><span class="p">,</span>
     <span class="n">_fit_settings</span><span class="p">,</span>
     <span class="n">_fitted_tables_from_native_output</span><span class="p">,</span>
-    <span class="n">iterative_fit</span><span class="p">,</span>
+    <span class="n">_iterative_fit</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span> <span class="n">evaluate_orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.iod</span><span class="w"> </span><span class="kn">import</span> <span class="n">IOD_DEFAULTS</span><span class="p">,</span> <span class="n">run_iod</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.orbit_fitter</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitFitter</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.provenance</span><span class="w"> </span><span class="kn">import</span> <span class="n">with_iod_provenance</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.rejection</span><span class="w"> </span><span class="kn">import</span> <span class="n">cmc2003_fit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.rejection</span><span class="w"> </span><span class="kn">import</span> <span class="n">_cmc2003_fit</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
@@ -529,18 +530,23 @@
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Orbit fitter using adam_core's native Gauss IOD and iterative least-squares DC.</span>
 
-<span class="sd">    This fitter is a thin wrapper that chains:</span>
-<span class="sd">    1. `iod()` — Gauss initial orbit determination (Milani 2008)</span>
-<span class="sd">    2. `iterative_fit()` — scipy least-squares differential correction with</span>
-<span class="sd">       outlier rejection</span>
+<span class="sd">    The `OrbitFitter` over adam_core's native stages: `run_iod` (Gauss</span>
+<span class="sd">    candidates accepted by staged correction; see the IOD policy) on the IOD</span>
+<span class="sd">    propagator, then `refine` (CMC2003 or worst-residual rejection) on the</span>
+<span class="sd">    propagator `full_od` / `run_od` receive. Every loop runs in Rust; a</span>
+<span class="sd">    propagator whose `NativeBackend` declares the work units runs the whole</span>
+<span class="sd">    pipeline in one crossing.</span>
 
 <span class="sd">    Parameters</span>
 <span class="sd">    ----------</span>
-<span class="sd">    propagator_class : Type[Propagator]</span>
-<span class="sd">        Propagator *class* (not instance) used during IOD ephemeris evaluation.</span>
+<span class="sd">    iod_propagator : Propagator</span>
+<span class="sd">        The propagator *instance* that scores and corrects the IOD candidates</span>
+<span class="sd">        (the refinement propagator is the one `full_od` / `run_od` receive).</span>
+<span class="sd">        Passing a propagator class, or ``propagator_class=`` /</span>
+<span class="sd">        ``propagator_kwargs=``, is deprecated: the class is instantiated with</span>
+<span class="sd">        the kwargs for each IOD run, as before.</span>
 <span class="sd">    propagator_kwargs : dict, optional</span>
-<span class="sd">        Keyword arguments forwarded to the propagator constructor / IOD call.</span>
-<span class="sd">        Copied; default None means no arguments.</span>
+<span class="sd">        Deprecated; only with a propagator class.</span>
 <span class="sd">    min_obs : int, optional</span>
 <span class="sd">        Minimum number of observations required for a valid fit.  Default 6.</span>
 <span class="sd">    min_arc_length : float, optional</span>
@@ -605,7 +611,7 @@
 
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">propagator_class</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Propagator</span><span class="p">],</span>
+        <span class="n">iod_propagator</span><span class="p">:</span> <span class="n">Propagator</span> <span class="o">|</span> <span class="n">Type</span><span class="p">[</span><span class="n">Propagator</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">propagator_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"min_obs"</span><span class="p">],</span>
         <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"min_arc_length"</span><span class="p">],</span>
@@ -625,14 +631,40 @@
             <span class="s2">"refinement"</span>
         <span class="p">],</span>
         <span class="n">rejection_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="o">*</span><span class="p">,</span>
+        <span class="n">propagator_class</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Type</span><span class="p">[</span><span class="n">Propagator</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">propagator_class</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">iod_propagator</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">"pass either iod_propagator or propagator_class"</span><span class="p">)</span>
+            <span class="n">iod_propagator</span> <span class="o">=</span> <span class="n">propagator_class</span>
+        <span class="k">if</span> <span class="n">iod_propagator</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">"NativeOrbitFitter needs an IOD propagator instance"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">iod_propagator</span><span class="p">,</span> <span class="nb">type</span><span class="p">):</span>
+            <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+                <span class="s2">"NativeOrbitFitter(propagator_class, propagator_kwargs) is "</span>
+                <span class="s2">"deprecated: pass a propagator instance, "</span>
+                <span class="s2">"NativeOrbitFitter(propagator_class(**propagator_kwargs))."</span><span class="p">,</span>
+                <span class="ne">DeprecationWarning</span><span class="p">,</span>
+                <span class="n">stacklevel</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_iod_instance</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Propagator</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">propagator_class</span> <span class="o">=</span> <span class="n">iod_propagator</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">propagator_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">propagator_kwargs</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span>
+                    <span class="s2">"propagator_kwargs only applies to a propagator class; "</span>
+                    <span class="s2">"configure the instance instead"</span>
+                <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_iod_instance</span> <span class="o">=</span> <span class="n">iod_propagator</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">propagator_class</span> <span class="o">=</span> <span class="nb">type</span><span class="p">(</span><span class="n">iod_propagator</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span> <span class="o">=</span> <span class="p">{}</span>
         <span class="k">if</span> <span class="n">outlier_rejection</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"worst_residual"</span><span class="p">,</span> <span class="s2">"cmc2003"</span><span class="p">):</span>
             <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
                 <span class="s2">"outlier_rejection must be 'worst_residual' or 'cmc2003'; "</span>
                 <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="n">outlier_rejection</span><span class="si">!r}</span><span class="s2">"</span>
             <span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">propagator_class</span> <span class="o">=</span> <span class="n">propagator_class</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">propagator_kwargs</span> <span class="ow">or</span> <span class="p">{})</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">min_obs</span> <span class="o">=</span> <span class="n">min_obs</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">min_arc_length</span> <span class="o">=</span> <span class="n">min_arc_length</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">contamination_percentage</span> <span class="o">=</span> <span class="n">contamination_percentage</span>
@@ -737,17 +769,27 @@
         <span class="k">return</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rejection_kwargs</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">loop_keys</span> <span class="o">|</span> <span class="n">_FUSED_LOOP_KWARGS</span></div>
 
 
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">iod_propagator</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Propagator</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The IOD propagator: the configured instance, or (deprecated</span>
+<span class="sd">        class form) a fresh ``propagator_class(**propagator_kwargs)``."""</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iod_instance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iod_instance</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">propagator_class</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span><span class="p">)</span>
+
 <div class="viewcode-block" id="NativeOrbitFitter.fused_propagator_matches">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.fused_propagator_matches">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">fused_propagator_matches</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""</span>
 <span class="sd">        Whether ``propagator`` is the IOD propagator this fitter is</span>
-<span class="sd">        configured for: an instance of ``propagator_class`` built without</span>
-<span class="sd">        extra keyword arguments. When it is, a fused work unit scores the</span>
-<span class="sd">        IOD candidates on ``propagator`` itself; otherwise</span>
-<span class="sd">        `iod_propagator_for` hands the fused work unit a fresh configured</span>
-<span class="sd">        instance, as the composition uses.</span>
+<span class="sd">        configured for: the configured instance itself, or (deprecated class</span>
+<span class="sd">        form) an instance of ``propagator_class`` built without extra keyword</span>
+<span class="sd">        arguments. When it is, a fused work unit scores the IOD candidates on</span>
+<span class="sd">        ``propagator`` itself; otherwise `iod_propagator_for` hands the fused</span>
+<span class="sd">        work unit the configured IOD propagator explicitly.</span>
 <span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iod_instance</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">propagator</span> <span class="ow">is</span> <span class="bp">self</span><span class="o">.</span><span class="n">_iod_instance</span>
         <span class="k">return</span> <span class="p">(</span>
             <span class="nb">isinstance</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">propagator_class</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span>
         <span class="p">)</span></div>
@@ -764,7 +806,7 @@
 <span class="sd">        """</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fused_propagator_matches</span><span class="p">(</span><span class="n">propagator</span><span class="p">):</span>
             <span class="k">return</span> <span class="kc">None</span>
-        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">propagator_class</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span><span class="p">)</span></div>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">iod_propagator</span></div>
 
 
 <div class="viewcode-block" id="NativeOrbitFitter.full_od">
@@ -804,6 +846,7 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">state</span><span class="o">.</span><span class="n">setdefault</span><span class="p">(</span><span class="s2">"_iod_instance"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
 
 <div class="viewcode-block" id="NativeOrbitFitter.initial_fit">
@@ -841,7 +884,7 @@
             <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">evaluate_orbits</span><span class="p">(</span>
                 <span class="n">reference_orbit</span><span class="p">,</span>
                 <span class="n">observations</span><span class="p">,</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">propagator_class</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span><span class="p">),</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">iod_propagator</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="k">if</span> <span class="n">fitted_orbits</span><span class="o">.</span><span class="n">object_id</span><span class="o">.</span><span class="n">null_count</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">fitted_orbits</span><span class="p">):</span>
                 <span class="n">fitted_orbits</span> <span class="o">=</span> <span class="n">fitted_orbits</span><span class="o">.</span><span class="n">set_column</span><span class="p">(</span>
@@ -857,7 +900,7 @@
 
         <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">fitted_orbit_members</span><span class="p">,</span> <span class="n">_report</span> <span class="o">=</span> <span class="n">run_iod</span><span class="p">(</span>
             <span class="n">observations</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">propagator_class</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span><span class="p">),</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">iod_propagator</span><span class="p">,</span>
             <span class="n">min_obs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">min_obs</span><span class="p">,</span>
             <span class="n">min_arc_length</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">min_arc_length</span><span class="p">,</span>
             <span class="n">contamination_percentage</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">contamination_percentage</span><span class="p">,</span>
@@ -899,7 +942,7 @@
         <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">fitted_orbit</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"refine_fit expects exactly one orbit"</span>
         <span class="n">orbit</span> <span class="o">=</span> <span class="n">fitted_orbit</span><span class="o">.</span><span class="n">to_orbits</span><span class="p">()</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">outlier_rejection</span> <span class="o">==</span> <span class="s2">"cmc2003"</span><span class="p">:</span>
-            <span class="k">return</span> <span class="n">cmc2003_fit</span><span class="p">(</span>
+            <span class="k">return</span> <span class="n">_cmc2003_fit</span><span class="p">(</span>
                 <span class="n">orbit</span><span class="p">,</span>
                 <span class="n">observations</span><span class="p">,</span>
                 <span class="n">propagator</span><span class="p">,</span>
@@ -907,7 +950,7 @@
                 <span class="n">f_scale</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">f_scale</span><span class="p">,</span>
                 <span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">rejection_kwargs</span><span class="p">,</span>
             <span class="p">)</span>
-        <span class="k">return</span> <span class="n">iterative_fit</span><span class="p">(</span>
+        <span class="k">return</span> <span class="n">_iterative_fit</span><span class="p">(</span>
             <span class="n">orbit</span><span class="p">,</span>
             <span class="n">observations</span><span class="p">,</span>
             <span class="n">propagator</span><span class="p">,</span>

@@ -457,7 +457,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.iter</span><span class="w"> </span><span class="kn">import</span> <span class="n">_iterate_chunks</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="n">native_work_unit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="n">deprecated</span><span class="p">,</span> <span class="n">native_work_unit</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">drop_duplicate_orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.gauss</span><span class="w"> </span><span class="kn">import</span> <span class="n">MU</span><span class="p">,</span> <span class="n">C</span>
@@ -660,7 +660,7 @@
     <span class="k">return</span> <span class="n">_tables_from_native_iod</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">iod_worker</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_iod_worker</span><span class="p">(</span>
     <span class="n">linkage_ids</span><span class="p">:</span> <span class="n">npt</span><span class="o">.</span><span class="n">NDArray</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">str_</span><span class="p">],</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
     <span class="n">linkage_members</span><span class="p">:</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span>
@@ -1061,7 +1061,7 @@
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">iod</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_iod</span><span class="p">(</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Propagator</span><span class="p">],</span>
     <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
@@ -1340,7 +1340,7 @@
         <span class="c1"># deterministic serial fallback instead of Python/Ray distribution.</span>
         <span class="k">del</span> <span class="n">max_processes</span>
         <span class="k">for</span> <span class="n">linkage_id_chunk</span> <span class="ow">in</span> <span class="n">_iterate_chunks</span><span class="p">(</span><span class="n">linkage_ids</span><span class="p">,</span> <span class="n">chunk_size</span><span class="p">):</span>
-            <span class="n">iod_orbits_chunk</span><span class="p">,</span> <span class="n">iod_orbit_members_chunk</span> <span class="o">=</span> <span class="n">iod_worker</span><span class="p">(</span>
+            <span class="n">iod_orbits_chunk</span><span class="p">,</span> <span class="n">iod_orbit_members_chunk</span> <span class="o">=</span> <span class="n">_iod_worker</span><span class="p">(</span>
                 <span class="n">linkage_id_chunk</span><span class="p">,</span>
                 <span class="n">observations</span><span class="p">,</span>
                 <span class="n">linkage_members</span><span class="p">,</span>
@@ -1416,6 +1416,24 @@
 
     <span class="k">return</span> <span class="n">iod_orbits</span><span class="p">,</span> <span class="n">iod_orbit_members</span></div>
 
+
+
+<span class="nd">@deprecated</span><span class="p">(</span>
+    <span class="n">_iod</span><span class="p">,</span>
+    <span class="s2">"run_iod(observations, propagator, acceptance='prefit', "</span>
+    <span class="s2">"observation_selection_method='combinations', velocity_method='gibbs') "</span>
+    <span class="s2">"for the legacy policy, or run_iod's defaults"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">iod</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>  <span class="c1"># pragma: no cover - replaced by the alias</span>
+<span class="w">    </span><span class="sd">"""Deprecated alias of `_iod`."""</span>
+
+
+<span class="nd">@deprecated</span><span class="p">(</span>
+    <span class="n">_iod_worker</span><span class="p">,</span>
+    <span class="s2">"initial_orbit_determination (or run_iod per linkage)"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">iod_worker</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>  <span class="c1"># pragma: no cover - replaced by the alias</span>
+<span class="w">    </span><span class="sd">"""Deprecated alias of `_iod_worker`."""</span>
 </pre></div>
         </article>
       </div>

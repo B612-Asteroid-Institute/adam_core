@@ -456,7 +456,11 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.spice</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_perturber_state</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">,</span> <span class="n">native_work_unit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">,</span>
+    <span class="n">deprecated</span><span class="p">,</span>
+    <span class="n">native_work_unit</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span> <span class="n">evaluate_orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.observation_uncertainty</span><span class="w"> </span><span class="kn">import</span> <span class="n">ObservationUncertaintyModel</span>
@@ -1141,9 +1145,7 @@
     <span class="p">)</span>
 
 
-<div class="viewcode-block" id="fit_least_squares">
-<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html#adam_core.orbit_determination.differential_correction.fit_least_squares">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">fit_least_squares</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_fit_least_squares</span><span class="p">(</span>
     <span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
@@ -1384,13 +1386,10 @@
     <span class="n">_emit_native_warnings</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">_fitted_tables_from_native_output</span><span class="p">(</span>
         <span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"weights"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="p">)</span></div>
+    <span class="p">)</span>
 
 
-
-<div class="viewcode-block" id="iterative_fit">
-<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html#adam_core.orbit_determination.differential_correction.iterative_fit">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">iterative_fit</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_iterative_fit</span><span class="p">(</span>
     <span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
@@ -1513,7 +1512,28 @@
     <span class="n">_emit_native_warnings</span><span class="p">(</span><span class="n">output</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">_fitted_tables_from_native_output</span><span class="p">(</span>
         <span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"weights"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="p">)</span></div>
+    <span class="p">)</span>
+
+
+<div class="viewcode-block" id="fit_least_squares">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html#adam_core.orbit_determination.differential_correction.fit_least_squares">[docs]</a>
+<span class="nd">@deprecated</span><span class="p">(</span>
+    <span class="n">_fit_least_squares</span><span class="p">,</span>
+    <span class="s2">"refine(orbit, observations, propagator, rejection='none')"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">fit_least_squares</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>  <span class="c1"># pragma: no cover - replaced by the alias</span>
+<span class="w">    </span><span class="sd">"""Deprecated alias of `_fit_least_squares`."""</span></div>
+
+
+
+<div class="viewcode-block" id="iterative_fit">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.differential_correction.html#adam_core.orbit_determination.differential_correction.iterative_fit">[docs]</a>
+<span class="nd">@deprecated</span><span class="p">(</span>
+    <span class="n">_iterative_fit</span><span class="p">,</span>
+    <span class="s2">"refine(orbit, observations, propagator, rejection='worst_residual')"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">iterative_fit</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>  <span class="c1"># pragma: no cover - replaced by the alias</span>
+<span class="w">    </span><span class="sd">"""Deprecated alias of `_iterative_fit`."""</span></div>
 
 </pre></div>
         </article>

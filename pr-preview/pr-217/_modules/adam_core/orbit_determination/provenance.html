@@ -616,7 +616,7 @@
         <span class="n">iod_backend</span> <span class="o">=</span> <span class="n">backend_identity</span><span class="p">(</span>
             <span class="n">propagator</span>
             <span class="k">if</span> <span class="n">fitter</span><span class="o">.</span><span class="n">fused_propagator_matches</span><span class="p">(</span><span class="n">propagator</span><span class="p">)</span>
-            <span class="k">else</span> <span class="n">fitter</span><span class="o">.</span><span class="n">propagator_class</span>
+            <span class="k">else</span> <span class="p">(</span><span class="n">fitter</span><span class="o">.</span><span class="n">_iod_instance</span> <span class="ow">or</span> <span class="n">fitter</span><span class="o">.</span><span class="n">propagator_class</span><span class="p">)</span>
         <span class="p">)</span>
 
     <span class="n">existing</span> <span class="o">=</span> <span class="n">fitted_orbits</span><span class="o">.</span><span class="n">table</span><span class="o">.</span><span class="n">column</span><span class="p">(</span><span class="s2">"provenance"</span><span class="p">)</span>

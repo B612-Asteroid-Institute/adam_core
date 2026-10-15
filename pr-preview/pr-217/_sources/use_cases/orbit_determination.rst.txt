@@ -27,10 +27,11 @@ poor fits, and feed validated solutions downstream.
 Implementation Options and Tradeoffs
 ------------------------------------
 
-* ``initial_orbit_determination`` only:
-  Fast triage and coarse fits for many candidates.
-* ``initial_orbit_determination`` + ``fit_least_squares``:
-  Higher-quality solutions and covariance updates, more compute and tuning.
+* ``run_od``: the whole step for one object (observation models, IOD,
+  refinement, provenance); the blessed entry point.
+* ``run_iod`` then ``refine``: the same two stages called separately, e.g. to
+  inspect the IOD candidates (``IodReport``) or choose the rejection loop.
+* ``initial_orbit_determination``: ``run_iod`` over many linkages at once.
 
 Runnable Example
 ----------------
@@ -44,8 +45,8 @@ Runnable Example
        FittedOrbits,
        OrbitDeterminationObservations,
        evaluate_orbits,
-       fit_least_squares,
        initial_orbit_determination,
+       refine,
    )
 
    observations: OrbitDeterminationObservations
@@ -71,12 +72,12 @@ Runnable Example
    # Inspect top candidates by quality metric.
    ranked_orbits = iod_orbits.sort_by([("reduced_chi2", "ascending")])
 
-   # Refine one candidate orbit with differential correction.
-   # (Converts one fitted row to Orbits for the least-squares fitter.)
-   fitted_orbit, fitted_members = fit_least_squares(
-       orbit=ranked_orbits.take([0]).to_orbits(),
-       observations=observations,
-       propagator=propagator,
+   # Refine one candidate orbit (CMC2003 rejection by default;
+   # rejection="worst_residual" or "none" select the other loops).
+   fitted_orbit, fitted_members = refine(
+       ranked_orbits.take([0]),
+       observations,
+       propagator,
    )
 
    # Evaluate an orbit set against the same observation bundle.
@@ -137,7 +138,7 @@ which is written out in its body and explained in its docstring:
 
    fitted_orbits, members = run_od(
        observations,
-       NativeOrbitFitter(ASSISTPropagator),
+       NativeOrbitFitter(ASSISTPropagator()),
        propagator=ASSISTPropagator(),
    )
 
@@ -187,11 +188,11 @@ model list built with your own tables needs no package.
        apparitions, 5% eigenvalue floor). Each refit shares a full-predictor
        central-difference Jacobian between covariance and rejection, even
        when optimizer steps use the analytic 2-body Jacobian.
-     - ``NativeOrbitFitter()`` (``outlier_rejection="cmc2003"``) / ``cmc2003_fit()``
+     - ``NativeOrbitFitter()`` (``outlier_rejection="cmc2003"``) / ``refine()``
    * - Differential correction
      - whitened residuals, exact 2-body Jacobian, weak-direction covariance
        probe, linear loss
-     - ``fit_least_squares()`` (``jacobian="analytic"``,
+     - ``refine()`` ``fit_settings`` (``jacobian="analytic"``,
        ``validate_covariance=True``, ``loss="linear"``)
    * - IOD
      - Gauss on span-bounded triplets (about 6 days), each orbit a seed for
@@ -286,6 +287,45 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
   policy stays selectable (``observation_selection_method="combinations"``,
   ``acceptance="prefit"``); ``iod()`` keeps it.
 
+Migrating to the native stages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The overlapping entry points converge on three stages, ``run_iod``,
+``refine`` and their composition ``run_od``. The old names still work and
+emit a ``DeprecationWarning`` naming their replacement; they will be removed
+in a later release.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 40 60
+
+   * - Deprecated
+     - Use
+   * - ``iod(observations, PropagatorClass, ...)``
+     - ``run_iod(observations, propagator, ...)``; the legacy policy is
+       ``acceptance="prefit", observation_selection_method="combinations",
+       velocity_method="gibbs"``
+   * - ``iod_worker(...)``
+     - ``initial_orbit_determination(...)`` (``run_iod`` per linkage)
+   * - ``fit_least_squares(orbit, observations, propagator, ...)``
+     - ``refine(orbit, observations, propagator, rejection="none",
+       fit_settings={...})``
+   * - ``iterative_fit(...)``
+     - ``refine(..., rejection="worst_residual", rejection_settings={...})``
+   * - ``cmc2003_fit(...)``
+     - ``refine(...)`` (``rejection="cmc2003"``, the default);
+       ``cmc2003_fit_detailed`` remains for the loop diagnostics
+   * - ``od.od``, ``od.differential_correction``, ``LeastSquares``
+     - ``refine`` (or ``run_od`` for the whole step)
+   * - ``NativeOrbitFitter(PropagatorClass, propagator_kwargs)``
+     - ``NativeOrbitFitter(PropagatorClass(**propagator_kwargs))``: the IOD
+       propagator is an instance
+
+``run_od``, ``run_iod``, ``refine``, ``initial_orbit_determination``,
+``evaluate_orbits``, ``cmc2003_fit_detailed`` and the ``OrbitFitter``
+interface (``NativeOrbitFitter``, plugins such as adam_fo) are not
+deprecated.
+
 The pieces, one by one
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -302,7 +342,7 @@ The pieces, one by one
    )
 
    fitter = NativeOrbitFitter(
-       propagator_class=ASSISTPropagator,
+       ASSISTPropagator(),
        outlier_rejection="cmc2003",      # Carpino-Milani-Chesley reject/re-include
    )
    models = CompositeModel(
@@ -343,7 +383,7 @@ for fusion. Further subclasses that change those methods must renew the
 explicit opt-in. The ordinary composition still uses Rust numerical drivers
 inside the built-in fitting stages.
 
-``fit_least_squares`` itself minimizes the whitened (lon, lat) residuals with
+The refinement solver (``refine``) minimizes the whitened (lon, lat) residuals with
 an exact two-body Jacobian (Rust autodiff) and validates the covariance along
 its weakest direction, so line-of-sight uncertainties are no longer fabricated
 by finite differences. Pass ``jacobian="2-point"`` to reach a propagator's
@@ -353,7 +393,7 @@ covariance.
 Solver budgets
 ~~~~~~~~~~~~~~
 
-``fit_least_squares`` accepts two independent limits: ``max_iterations``
+The solver accepts two independent limits (``refine`` ``fit_settings``): ``max_iterations``
 (default 100) caps optimizer iterations, while ``max_nfev`` (default None)
 caps solver residual-vector evaluations. Supplying both enforces both.
 The evaluation budget includes the initial state, rejected trial steps, and

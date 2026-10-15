@@ -471,10 +471,11 @@ poor fits, and feed validated solutions downstream.</p>
 <section id="implementation-options-and-tradeoffs">
 <h2>Implementation Options and Tradeoffs<a class="headerlink" href="#implementation-options-and-tradeoffs" title="Link to this heading">¶</a></h2>
 <ul class="simple">
-<li><p><code class="docutils literal notranslate"><span class="pre">initial_orbit_determination</span></code> only:
-Fast triage and coarse fits for many candidates.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">initial_orbit_determination</span></code> + <code class="docutils literal notranslate"><span class="pre">fit_least_squares</span></code>:
-Higher-quality solutions and covariance updates, more compute and tuning.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">run_od</span></code>: the whole step for one object (observation models, IOD,
+refinement, provenance); the blessed entry point.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">run_iod</span></code> then <code class="docutils literal notranslate"><span class="pre">refine</span></code>: the same two stages called separately, e.g. to
+inspect the IOD candidates (<code class="docutils literal notranslate"><span class="pre">IodReport</span></code>) or choose the rejection loop.</p></li>
+<li><p><code class="docutils literal notranslate"><span class="pre">initial_orbit_determination</span></code>: <code class="docutils literal notranslate"><span class="pre">run_iod</span></code> over many linkages at once.</p></li>
 </ul>
 </section>
 <section id="runnable-example">
@@ -486,8 +487,8 @@ Higher-quality solutions and covariance updates, more compute and tuning.</p></l
     <span class="n">FittedOrbits</span><span class="p">,</span>
     <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
     <span class="n">evaluate_orbits</span><span class="p">,</span>
-    <span class="n">fit_least_squares</span><span class="p">,</span>
     <span class="n">initial_orbit_determination</span><span class="p">,</span>
+    <span class="n">refine</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span>
@@ -513,12 +514,12 @@ Higher-quality solutions and covariance updates, more compute and tuning.</p></l
 <span class="c1"># Inspect top candidates by quality metric.</span>
 <span class="n">ranked_orbits</span> <span class="o">=</span> <span class="n">iod_orbits</span><span class="o">.</span><span class="n">sort_by</span><span class="p">([(</span><span class="s2">"reduced_chi2"</span><span class="p">,</span> <span class="s2">"ascending"</span><span class="p">)])</span>
 
-<span class="c1"># Refine one candidate orbit with differential correction.</span>
-<span class="c1"># (Converts one fitted row to Orbits for the least-squares fitter.)</span>
-<span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_members</span> <span class="o">=</span> <span class="n">fit_least_squares</span><span class="p">(</span>
-    <span class="n">orbit</span><span class="o">=</span><span class="n">ranked_orbits</span><span class="o">.</span><span class="n">take</span><span class="p">([</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">to_orbits</span><span class="p">(),</span>
-    <span class="n">observations</span><span class="o">=</span><span class="n">observations</span><span class="p">,</span>
-    <span class="n">propagator</span><span class="o">=</span><span class="n">propagator</span><span class="p">,</span>
+<span class="c1"># Refine one candidate orbit (CMC2003 rejection by default;</span>
+<span class="c1"># rejection="worst_residual" or "none" select the other loops).</span>
+<span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">fitted_members</span> <span class="o">=</span> <span class="n">refine</span><span class="p">(</span>
+    <span class="n">ranked_orbits</span><span class="o">.</span><span class="n">take</span><span class="p">([</span><span class="mi">0</span><span class="p">]),</span>
+    <span class="n">observations</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">,</span>
 <span class="p">)</span>
 
 <span class="c1"># Evaluate an orbit set against the same observation bundle.</span>
@@ -576,7 +577,7 @@ which is written out in its body and explained in its docstring:</p>
 
 <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">members</span> <span class="o">=</span> <span class="n">run_od</span><span class="p">(</span>
     <span class="n">observations</span><span class="p">,</span>
-    <span class="n">NativeOrbitFitter</span><span class="p">(</span><span class="n">ASSISTPropagator</span><span class="p">),</span>
+    <span class="n">NativeOrbitFitter</span><span class="p">(</span><span class="n">ASSISTPropagator</span><span class="p">()),</span>
     <span class="n">propagator</span><span class="o">=</span><span class="n">ASSISTPropagator</span><span class="p">(),</span>
 <span class="p">)</span>
 </pre></div>
@@ -638,12 +639,12 @@ positions before anything reads them)</p></td>
 apparitions, 5% eigenvalue floor). Each refit shares a full-predictor
 central-difference Jacobian between covariance and rejection, even
 when optimizer steps use the analytic 2-body Jacobian.</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter()</span></code> (<code class="docutils literal notranslate"><span class="pre">outlier_rejection=&quot;cmc2003&quot;</span></code>) / <code class="docutils literal notranslate"><span class="pre">cmc2003_fit()</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter()</span></code> (<code class="docutils literal notranslate"><span class="pre">outlier_rejection=&quot;cmc2003&quot;</span></code>) / <code class="docutils literal notranslate"><span class="pre">refine()</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p>Differential correction</p></td>
 <td><p>whitened residuals, exact 2-body Jacobian, weak-direction covariance
 probe, linear loss</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">fit_least_squares()</span></code> (<code class="docutils literal notranslate"><span class="pre">jacobian=&quot;analytic&quot;</span></code>,
+<td><p><code class="docutils literal notranslate"><span class="pre">refine()</span></code> <code class="docutils literal notranslate"><span class="pre">fit_settings</span></code> (<code class="docutils literal notranslate"><span class="pre">jacobian=&quot;analytic&quot;</span></code>,
 <code class="docutils literal notranslate"><span class="pre">validate_covariance=True</span></code>, <code class="docutils literal notranslate"><span class="pre">loss=&quot;linear&quot;</span></code>)</p></td>
 </tr>
 <tr class="row-odd"><td><p>IOD</p></td>
@@ -743,6 +744,58 @@ policy stays selectable (<code class="docutils literal notranslate"><span class=
 <code class="docutils literal notranslate"><span class="pre">acceptance=&quot;prefit&quot;</span></code>); <code class="docutils literal notranslate"><span class="pre">iod()</span></code> keeps it.</p></li>
 </ul>
 </section>
+<section id="migrating-to-the-native-stages">
+<h3>Migrating to the native stages<a class="headerlink" href="#migrating-to-the-native-stages" title="Link to this heading">¶</a></h3>
+<p>The overlapping entry points converge on three stages, <code class="docutils literal notranslate"><span class="pre">run_iod</span></code>,
+<code class="docutils literal notranslate"><span class="pre">refine</span></code> and their composition <code class="docutils literal notranslate"><span class="pre">run_od</span></code>. The old names still work and
+emit a <code class="docutils literal notranslate"><span class="pre">DeprecationWarning</span></code> naming their replacement; they will be removed
+in a later release.</p>
+<div class="table-wrapper colwidths-given docutils container">
+<table class="docutils align-default">
+<colgroup>
+<col style="width: 40.0%" />
+<col style="width: 60.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Deprecated</p></th>
+<th class="head"><p>Use</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">iod(observations,</span> <span class="pre">PropagatorClass,</span> <span class="pre">...)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">run_iod(observations,</span> <span class="pre">propagator,</span> <span class="pre">...)</span></code>; the legacy policy is
+<code class="docutils literal notranslate"><span class="pre">acceptance=&quot;prefit&quot;,</span> <span class="pre">observation_selection_method=&quot;combinations&quot;,</span>
+<span class="pre">velocity_method=&quot;gibbs&quot;</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">iod_worker(...)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">initial_orbit_determination(...)</span></code> (<code class="docutils literal notranslate"><span class="pre">run_iod</span></code> per linkage)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">fit_least_squares(orbit,</span> <span class="pre">observations,</span> <span class="pre">propagator,</span> <span class="pre">...)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">refine(orbit,</span> <span class="pre">observations,</span> <span class="pre">propagator,</span> <span class="pre">rejection=&quot;none&quot;,</span>
+<span class="pre">fit_settings={...})</span></code></p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">iterative_fit(...)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">refine(...,</span> <span class="pre">rejection=&quot;worst_residual&quot;,</span> <span class="pre">rejection_settings={...})</span></code></p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">cmc2003_fit(...)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">refine(...)</span></code> (<code class="docutils literal notranslate"><span class="pre">rejection=&quot;cmc2003&quot;</span></code>, the default);
+<code class="docutils literal notranslate"><span class="pre">cmc2003_fit_detailed</span></code> remains for the loop diagnostics</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">od.od</span></code>, <code class="docutils literal notranslate"><span class="pre">od.differential_correction</span></code>, <code class="docutils literal notranslate"><span class="pre">LeastSquares</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">refine</span></code> (or <code class="docutils literal notranslate"><span class="pre">run_od</span></code> for the whole step)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter(PropagatorClass,</span> <span class="pre">propagator_kwargs)</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter(PropagatorClass(**propagator_kwargs))</span></code>: the IOD
+propagator is an instance</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code class="docutils literal notranslate"><span class="pre">run_od</span></code>, <code class="docutils literal notranslate"><span class="pre">run_iod</span></code>, <code class="docutils literal notranslate"><span class="pre">refine</span></code>, <code class="docutils literal notranslate"><span class="pre">initial_orbit_determination</span></code>,
+<code class="docutils literal notranslate"><span class="pre">evaluate_orbits</span></code>, <code class="docutils literal notranslate"><span class="pre">cmc2003_fit_detailed</span></code> and the <code class="docutils literal notranslate"><span class="pre">OrbitFitter</span></code>
+interface (<code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter</span></code>, plugins such as adam_fo) are not
+deprecated.</p>
+</section>
 <section id="the-pieces-one-by-one">
 <h3>The pieces, one by one<a class="headerlink" href="#the-pieces-one-by-one" title="Link to this heading">¶</a></h3>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbit_determination</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -756,7 +809,7 @@ policy stays selectable (<code class="docutils literal notranslate"><span class=
 <span class="p">)</span>
 
 <span class="n">fitter</span> <span class="o">=</span> <span class="n">NativeOrbitFitter</span><span class="p">(</span>
-    <span class="n">propagator_class</span><span class="o">=</span><span class="n">ASSISTPropagator</span><span class="p">,</span>
+    <span class="n">ASSISTPropagator</span><span class="p">(),</span>
     <span class="n">outlier_rejection</span><span class="o">=</span><span class="s2">"cmc2003"</span><span class="p">,</span>      <span class="c1"># Carpino-Milani-Chesley reject/re-include</span>
 <span class="p">)</span>
 <span class="n">models</span> <span class="o">=</span> <span class="n">CompositeModel</span><span class="p">(</span>
@@ -797,7 +850,7 @@ leave <code class="docutils literal notranslate"><span class="pre">native_settin
 for fusion. Further subclasses that change those methods must renew the
 explicit opt-in. The ordinary composition still uses Rust numerical drivers
 inside the built-in fitting stages.</p>
-<p><code class="docutils literal notranslate"><span class="pre">fit_least_squares</span></code> itself minimizes the whitened (lon, lat) residuals with
+<p>The refinement solver (<code class="docutils literal notranslate"><span class="pre">refine</span></code>) minimizes the whitened (lon, lat) residuals with
 an exact two-body Jacobian (Rust autodiff) and validates the covariance along
 its weakest direction, so line-of-sight uncertainties are no longer fabricated
 by finite differences. Pass <code class="docutils literal notranslate"><span class="pre">jacobian=&quot;2-point&quot;</span></code> to reach a propagator’s
@@ -806,7 +859,7 @@ covariance.</p>
 </section>
 <section id="solver-budgets">
 <h3>Solver budgets<a class="headerlink" href="#solver-budgets" title="Link to this heading">¶</a></h3>
-<p><code class="docutils literal notranslate"><span class="pre">fit_least_squares</span></code> accepts two independent limits: <code class="docutils literal notranslate"><span class="pre">max_iterations</span></code>
+<p>The solver accepts two independent limits (<code class="docutils literal notranslate"><span class="pre">refine</span></code> <code class="docutils literal notranslate"><span class="pre">fit_settings</span></code>): <code class="docutils literal notranslate"><span class="pre">max_iterations</span></code>
 (default 100) caps optimizer iterations, while <code class="docutils literal notranslate"><span class="pre">max_nfev</span></code> (default None)
 caps solver residual-vector evaluations. Supplying both enforces both.
 The evaluation budget includes the initial state, rejected trial steps, and
@@ -902,6 +955,7 @@ cleanup of observation-to-orbit assignments.</p>
 <li><a class="reference internal" href="#fit-time-observation-models-and-provenance">Fit-Time Observation Models and Provenance</a><ul>
 <li><a class="reference internal" href="#the-shipped-defaults">The shipped defaults</a></li>
 <li><a class="reference internal" href="#the-iod-policy">The IOD policy</a></li>
+<li><a class="reference internal" href="#migrating-to-the-native-stages">Migrating to the native stages</a></li>
 <li><a class="reference internal" href="#the-pieces-one-by-one">The pieces, one by one</a></li>
 <li><a class="reference internal" href="#custom-models-and-fitters">Custom models and fitters</a></li>
 <li><a class="reference internal" href="#solver-budgets">Solver budgets</a></li>

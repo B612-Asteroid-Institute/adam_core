@@ -568,20 +568,19 @@ to the final orbit, <code class="docutils literal notranslate"><span class="pre"
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.orbit_determination.rejection.cmc2003_fit">
 <span class="sig-prename descclassname"><span class="pre">adam_core.orbit_determination.rejection.</span></span><span class="sig-name descname"><span class="pre">cmc2003_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">orbit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">observations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.evaluate.html#adam_core.orbit_determination.evaluate.OrbitDeterminationObservations" title="adam_core.orbit_determination.evaluate.OrbitDeterminationObservations"><span class="pre">OrbitDeterminationObservations</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">propagator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.Propagator" title="adam_core.propagator.propagator.Propagator"><span class="pre">Propagator</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#tuple" title="(in Python v3.15)"><span class="pre">tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits" title="adam_core.orbit_determination.fitted_orbits.FittedOrbits"><span class="pre">FittedOrbits</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers" title="adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers"><span class="pre">FittedOrbitMembers</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbit_determination/rejection.html#cmc2003_fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbit_determination.rejection.cmc2003_fit" title="Link to this definition">¶</a></dt>
-<dd><p>Differentially correct an orbit with CMC2003 outlier rejection and
+<dd><div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.6.0.</span></p>
+</div>
+<p>Use refine(orbit, observations, propagator) (rejection=’cmc2003’), or cmc2003_fit_detailed for the loop diagnostics.</p>
+<blockquote>
+<div><p>Differentially correct an orbit with CMC2003 outlier rejection and
 re-inclusion.</p>
 <p>Convenience wrapper around <cite>cmc2003_fit_detailed</cite> returning only the
 fitted orbit and members (rejected observations have <code class="docutils literal notranslate"><span class="pre">outlier</span></code> True).
 All keyword arguments are forwarded; see <cite>cmc2003_fit_detailed</cite>.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Returns<span class="colon">:</span></dt>
-<dd class="field-odd"><p><ul class="simple">
-<li><p><strong>fitted_orbit</strong> (<cite>FittedOrbits</cite> (1))</p></li>
-<li><p><strong>fitted_orbit_members</strong> (<cite>FittedOrbitMembers</cite> (N))</p></li>
-</ul>
-</p>
-</dd>
-</dl>
+<p>fitted_orbit : <cite>FittedOrbits</cite> (1)
+fitted_orbit_members : <cite>FittedOrbitMembers</cite> (N)</p>
+</div></blockquote>
 </dd></dl>
 
 <dl class="py function">

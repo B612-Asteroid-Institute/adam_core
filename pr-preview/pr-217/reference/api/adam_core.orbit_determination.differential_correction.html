@@ -499,22 +499,30 @@ and preserving the direction of each residual on the sky.</p>
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.orbit_determination.differential_correction.fit_least_squares">
 <span class="sig-prename descclassname"><span class="pre">adam_core.orbit_determination.differential_correction.</span></span><span class="sig-name descname"><span class="pre">fit_least_squares</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">orbit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">observations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.evaluate.html#adam_core.orbit_determination.evaluate.OrbitDeterminationObservations" title="adam_core.orbit_determination.evaluate.OrbitDeterminationObservations"><span class="pre">OrbitDeterminationObservations</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">propagator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.Propagator" title="adam_core.propagator.propagator.Propagator"><span class="pre">Propagator</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">ignore</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.15)"><span class="pre">List</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observatory_bias_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.observation_uncertainty.html#adam_core.orbit_determination.observation_uncertainty.ObservationUncertaintyModel" title="adam_core.orbit_determination.observation_uncertainty.ObservationUncertaintyModel"><span class="pre">ObservationUncertaintyModel</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">jacobian</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.15)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'analytic'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'central'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'2-point'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'analytic'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">validate_covariance</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loss</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.15)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'linear'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'huber'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'linear'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f_scale</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.345</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.15)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits" title="adam_core.orbit_determination.fitted_orbits.FittedOrbits"><span class="pre">FittedOrbits</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers" title="adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers"><span class="pre">FittedOrbitMembers</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbit_determination/differential_correction.html#fit_least_squares"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbit_determination.differential_correction.fit_least_squares" title="Link to this definition">¶</a></dt>
-<dd><p>Differentially correct an orbit using (optionally robust) least squares.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>orbit</strong> (<cite>~adam_core.orbits.Orbits</cite> (1)) – Orbit to differentially correct (heliocentric ecliptic Cartesian).</p></li>
-<li><p><strong>observations</strong> (<cite>~adam_core.orbit_determination.OrbitDeterminationObservations</cite> (N)) – Observations.</p></li>
-<li><p><strong>propagator</strong> (<cite>~adam_core.propagator.Propagator</cite>) – Propagator to use to generate ephemeris.</p></li>
-<li><p><strong>ignore</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#list" title="(in Python v3.15)"><em>list</em></a><em> of </em><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><em>str</em></a>) – List of observation IDs to ignore when fitting the orbit with least squares.
-These observations will be marked as outliers in the fitted orbit members.</p></li>
-<li><p><strong>observatory_bias_model</strong> (<cite>~adam_core.orbit_determination.ObservationUncertaintyModel</cite>, optional) – Observation uncertainty model applied to the observations before fitting
+<dd><div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.6.0.</span></p>
+</div>
+<p>Use refine(orbit, observations, propagator, rejection=’none’).</p>
+<blockquote>
+<div><p>Differentially correct an orbit using (optionally robust) least squares.</p>
+<dl>
+<dt>orbit<span class="classifier"><cite>~adam_core.orbits.Orbits</cite> (1)</span></dt><dd><p>Orbit to differentially correct (heliocentric ecliptic Cartesian).</p>
+</dd>
+<dt>observations<span class="classifier"><cite>~adam_core.orbit_determination.OrbitDeterminationObservations</cite> (N)</span></dt><dd><p>Observations.</p>
+</dd>
+<dt>propagator<span class="classifier"><cite>~adam_core.propagator.Propagator</cite></span></dt><dd><p>Propagator to use to generate ephemeris.</p>
+</dd>
+<dt>ignore<span class="classifier">list of str</span></dt><dd><p>List of observation IDs to ignore when fitting the orbit with least squares.
+These observations will be marked as outliers in the fitted orbit members.</p>
+</dd>
+<dt>observatory_bias_model<span class="classifier"><cite>~adam_core.orbit_determination.ObservationUncertaintyModel</cite>, optional</span></dt><dd><p>Observation uncertainty model applied to the observations before fitting
 (e.g. inflating per-station sigmas from an observatory bias table). Default
 None leaves the observations unchanged. The model is applied once at this
-entry point and is not forwarded to nested calls.</p></li>
-<li><p><strong>jacobian</strong> (<em>{&quot;analytic&quot;</em><em>, </em><em>&quot;central&quot;</em><em>, </em><em>&quot;2-point&quot;}</em><em>, </em><em>optional</em>) – <p>How the residual Jacobian is obtained for both the solver and the
+entry point and is not forwarded to nested calls.</p>
+</dd>
+<dt>jacobian<span class="classifier">{“analytic”, “central”, “2-point”}, optional</span></dt><dd><p>How the residual Jacobian is obtained for both the solver and the
 solution covariance.</p>
-<ul>
+<ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;analytic&quot;</span></code> (default): the observation partials (topocentric
 spherical projection including light time) chained with the 2-body
 state transition matrix, computed by forward-mode automatic
@@ -541,8 +549,8 @@ only path that dispatches to a propagator’s fused Rust
 </ul>
 <p>Passing an explicit <code class="docutils literal notranslate"><span class="pre">jac</span></code> in <code class="docutils literal notranslate"><span class="pre">**kwargs</span></code> overrides this parameter
 and computes the covariance from the solver-reported Jacobian.</p>
-</p></li>
-<li><p><strong>validate_covariance</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><em>bool</em></a><em>, </em><em>optional</em>) – If True (default), measure the actual chi2 change at a 1-sigma
+</dd>
+<dt>validate_covariance<span class="classifier">bool, optional</span></dt><dd><p>If True (default), measure the actual chi2 change at a 1-sigma
 displacement along the covariance’s weakest direction (two extra
 residual evaluations) and check it is ~1. On failure the analytic
 path falls back to the central-difference covariance; other paths
@@ -551,9 +559,10 @@ planetary encounters inside the arc invalidating the 2-body state
 transition matrix. On the fused Rust path (<code class="docutils literal notranslate"><span class="pre">jacobian=&quot;2-point&quot;</span></code>
 with a Rust-backed propagator) the check adds three residual
 evaluations to the single native crossing and warns on failure; pass
-<code class="docutils literal notranslate"><span class="pre">False</span></code> to keep that path to one crossing.</p></li>
-<li><p><strong>loss</strong> (<em>{&quot;linear&quot;</em><em>, </em><em>&quot;huber&quot;}</em><em>, </em><em>optional</em>) – <p>Loss applied to the whitened residual components.</p>
-<ul>
+<code class="docutils literal notranslate"><span class="pre">False</span></code> to keep that path to one crossing.</p>
+</dd>
+<dt>loss<span class="classifier">{“linear”, “huber”}, optional</span></dt><dd><p>Loss applied to the whitened residual components.</p>
+<ul class="simple">
 <li><p><code class="docutils literal notranslate"><span class="pre">&quot;linear&quot;</span></code> (default): ordinary weighted least squares; the
 objective is chi2. Outliers are handled only by hard rejection
 (<code class="docutils literal notranslate"><span class="pre">ignore</span></code> here, the rejection loop in <cite>iterative_fit</cite>).</p></li>
@@ -566,12 +575,13 @@ least-squares weight of <code class="docutils literal notranslate"><span class="
 reported on the members (see Notes). Requires
 <code class="docutils literal notranslate"><span class="pre">method='trf'</span></code> (default) or <code class="docutils literal notranslate"><span class="pre">'dogbox'</span></code>.</p></li>
 </ul>
-</p></li>
-<li><p><strong>f_scale</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>optional</em>) – Huber transition point in units of whitened (1-sigma) residual
+</dd>
+<dt>f_scale<span class="classifier">float, optional</span></dt><dd><p>Huber transition point in units of whitened (1-sigma) residual
 components. Default <cite>HUBER_F_SCALE_DEFAULT</cite> (1.345), the classical
 constant giving 95% asymptotic efficiency for Gaussian errors.
-Ignored for <code class="docutils literal notranslate"><span class="pre">loss=&quot;linear&quot;</span></code>.</p></li>
-<li><p><strong>**kwargs</strong> – Solver settings forwarded to the Rust driver: <code class="docutils literal notranslate"><span class="pre">xtol</span></code>, <code class="docutils literal notranslate"><span class="pre">ftol</span></code>,
+Ignored for <code class="docutils literal notranslate"><span class="pre">loss=&quot;linear&quot;</span></code>.</p>
+</dd>
+<dt><a href="#id1"><span class="problematic" id="id2">**</span></a>kwargs</dt><dd><p>Solver settings forwarded to the Rust driver: <code class="docutils literal notranslate"><span class="pre">xtol</span></code>, <code class="docutils literal notranslate"><span class="pre">ftol</span></code>,
 <code class="docutils literal notranslate"><span class="pre">gtol</span></code> (default 1e-12 each, scipy’s stopping rules), <code class="docutils literal notranslate"><span class="pre">max_iterations</span></code>
 (positive integer, default 100: optimizer iterations, one Jacobian
 each), and <code class="docutils literal notranslate"><span class="pre">max_nfev</span></code> (positive integer or None, default None:
@@ -582,21 +592,18 @@ budget, as in <code class="docutils literal notranslate"><span class="pre">scipy
 are still reported in the <code class="docutils literal notranslate"><span class="pre">iterations</span></code> column. Final covariance
 calculation/validation and fit reporting are outside both limits.
 Any other keyword raises a <cite>ValueError</cite>: the fit runs natively and no
-longer forwards arguments to <cite>scipy.optimize.least_squares</cite>.</p></li>
-</ul>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><ul class="simple">
-<li><p><strong>fitted_orbit</strong> (<cite>~adam_core.orbit_determination.FittedOrbits</cite> (1)) – Fitted orbit.</p></li>
-<li><p><strong>fitted_orbit_members</strong> (<cite>~adam_core.orbit_determination.FittedOrbitMembers</cite> (N)) – Fitted orbit members. <code class="docutils literal notranslate"><span class="pre">weight</span></code> holds each observation’s effective
-weight in the solution: 0 for ignored observations, 1 for fully
-weighted ones and, for <code class="docutils literal notranslate"><span class="pre">loss=&quot;huber&quot;</span></code>, the smaller of the two
-per-component Huber weights for downweighted observations.</p></li>
-</ul>
-</p>
+longer forwards arguments to <cite>scipy.optimize.least_squares</cite>.</p>
 </dd>
 </dl>
-<p class="rubric">Notes</p>
+<dl>
+<dt>fitted_orbit<span class="classifier"><cite>~adam_core.orbit_determination.FittedOrbits</cite> (1)</span></dt><dd><p>Fitted orbit.</p>
+</dd>
+<dt>fitted_orbit_members<span class="classifier"><cite>~adam_core.orbit_determination.FittedOrbitMembers</cite> (N)</span></dt><dd><p>Fitted orbit members. <code class="docutils literal notranslate"><span class="pre">weight</span></code> holds each observation’s effective
+weight in the solution: 0 for ignored observations, 1 for fully
+weighted ones and, for <code class="docutils literal notranslate"><span class="pre">loss=&quot;huber&quot;</span></code>, the smaller of the two
+per-component Huber weights for downweighted observations.</p>
+</dd>
+</dl>
 <p><strong>Solver contract.</strong> The optimizer is the trust-region Gauss-Newton
 method of <code class="docutils literal notranslate"><span class="pre">scipy.optimize.least_squares(method=&quot;trf&quot;,</span> <span class="pre">x_scale=&quot;jac&quot;)</span></code>
 without bounds, run natively: parameters are scaled by their Jacobian
@@ -629,60 +636,73 @@ cost (the convention of <cite>scipy.optimize.least_squares</cite>): components i
 the linear tail of the loss contribute no curvature, i.e. downweighted
 observations carry no information in the covariance, and the
 weak-direction consistency check probes the robust cost instead of chi2.</p>
+</div></blockquote>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.orbit_determination.differential_correction.iterative_fit">
 <span class="sig-prename descclassname"><span class="pre">adam_core.orbit_determination.differential_correction.</span></span><span class="sig-name descname"><span class="pre">iterative_fit</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">orbit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">observations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.evaluate.html#adam_core.orbit_determination.evaluate.OrbitDeterminationObservations" title="adam_core.orbit_determination.evaluate.OrbitDeterminationObservations"><span class="pre">OrbitDeterminationObservations</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">propagator</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.Propagator" title="adam_core.propagator.propagator.Propagator"><span class="pre">Propagator</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">rchi2_threshold</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_obs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">6</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_arc_length</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">contamination_percentage</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">20.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observatory_bias_model</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.observation_uncertainty.html#adam_core.orbit_determination.observation_uncertainty.ObservationUncertaintyModel" title="adam_core.orbit_determination.observation_uncertainty.ObservationUncertaintyModel"><span class="pre">ObservationUncertaintyModel</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">loss</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Literal" title="(in Python v3.15)"><span class="pre">Literal</span></a><span class="p"><span class="pre">[</span></span><span class="s"><span class="pre">'linear'</span></span><span class="p"><span class="pre">,</span></span><span class="w"> </span><span class="s"><span class="pre">'huber'</span></span><span class="p"><span class="pre">]</span></span></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">'linear'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">f_scale</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1.345</span></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.15)"><span class="pre">Tuple</span></a><span class="p"><span class="pre">[</span></span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits" title="adam_core.orbit_determination.fitted_orbits.FittedOrbits"><span class="pre">FittedOrbits</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers" title="adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers"><span class="pre">FittedOrbitMembers</span></a><span class="p"><span class="pre">]</span></span></span></span><a class="reference internal" href="../../_modules/adam_core/orbit_determination/differential_correction.html#iterative_fit"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbit_determination.differential_correction.iterative_fit" title="Link to this definition">¶</a></dt>
-<dd><p>Iteratively fit an orbit using least squares with outlier rejection.</p>
+<dd><div class="deprecated">
+<p><span class="versionmodified deprecated">Deprecated since version 0.6.0.</span></p>
+</div>
+<p>Use refine(orbit, observations, propagator, rejection=’worst_residual’).</p>
+<blockquote>
+<div><p>Iteratively fit an orbit using least squares with outlier rejection.</p>
 <p>Wraps <cite>fit_least_squares</cite> with an outlier rejection loop: after each fit,
 if the reduced chi2 exceeds <cite>rchi2_threshold</cite>, the observation with the
 worst residual is removed and the fit is repeated. This continues until
 the fit converges, no more outliers are allowed, or arc length / minimum
 observation constraints would be violated.</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><ul class="simple">
-<li><p><strong>orbit</strong> (<cite>~adam_core.orbits.Orbits</cite> (1)) – Initial orbit to differentially correct.</p></li>
-<li><p><strong>observations</strong> (<cite>~adam_core.orbit_determination.OrbitDeterminationObservations</cite> (N)) – Observations to fit against.</p></li>
-<li><p><strong>propagator</strong> (<cite>~adam_core.propagator.Propagator</cite>) – Propagator to use to generate ephemeris.</p></li>
-<li><p><strong>rchi2_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>optional</em>) – Reduced chi2 threshold below which the fit is considered converged.
-Default is 10.0.</p></li>
-<li><p><strong>min_obs</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><em>int</em></a><em>, </em><em>optional</em>) – Minimum number of observations required to retain the fit.
-Default is 6.</p></li>
-<li><p><strong>min_arc_length</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>optional</em>) – Minimum arc length in days required to retain the fit.
-Default is 1.0.</p></li>
-<li><p><strong>contamination_percentage</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>optional</em>) – Maximum percentage of observations that may be rejected as outliers.
-Range is [0, 100]. Default is 20.0.</p></li>
-<li><p><strong>observatory_bias_model</strong> (<cite>~adam_core.orbit_determination.ObservationUncertaintyModel</cite>, optional) – Observation uncertainty model applied to the observations before fitting
+<dl>
+<dt>orbit<span class="classifier"><cite>~adam_core.orbits.Orbits</cite> (1)</span></dt><dd><p>Initial orbit to differentially correct.</p>
+</dd>
+<dt>observations<span class="classifier"><cite>~adam_core.orbit_determination.OrbitDeterminationObservations</cite> (N)</span></dt><dd><p>Observations to fit against.</p>
+</dd>
+<dt>propagator<span class="classifier"><cite>~adam_core.propagator.Propagator</cite></span></dt><dd><p>Propagator to use to generate ephemeris.</p>
+</dd>
+<dt>rchi2_threshold<span class="classifier">float, optional</span></dt><dd><p>Reduced chi2 threshold below which the fit is considered converged.
+Default is 10.0.</p>
+</dd>
+<dt>min_obs<span class="classifier">int, optional</span></dt><dd><p>Minimum number of observations required to retain the fit.
+Default is 6.</p>
+</dd>
+<dt>min_arc_length<span class="classifier">float, optional</span></dt><dd><p>Minimum arc length in days required to retain the fit.
+Default is 1.0.</p>
+</dd>
+<dt>contamination_percentage<span class="classifier">float, optional</span></dt><dd><p>Maximum percentage of observations that may be rejected as outliers.
+Range is [0, 100]. Default is 20.0.</p>
+</dd>
+<dt>observatory_bias_model<span class="classifier"><cite>~adam_core.orbit_determination.ObservationUncertaintyModel</cite>, optional</span></dt><dd><p>Observation uncertainty model applied to the observations before fitting
 (e.g. inflating per-station sigmas from an observatory bias table). Default
 None leaves the observations unchanged. The model is applied once at this
-entry point and is not forwarded to nested calls.</p></li>
-<li><p><strong>loss</strong> (<em>{&quot;linear&quot;</em><em>, </em><em>&quot;huber&quot;}</em><em>, </em><em>optional</em>) – Loss used by every <cite>fit_least_squares</cite> call. <code class="docutils literal notranslate"><span class="pre">&quot;huber&quot;</span></code> bounds the
+entry point and is not forwarded to nested calls.</p>
+</dd>
+<dt>loss<span class="classifier">{“linear”, “huber”}, optional</span></dt><dd><p>Loss used by every <cite>fit_least_squares</cite> call. <code class="docutils literal notranslate"><span class="pre">&quot;huber&quot;</span></code> bounds the
 influence of large residuals by downweighting them instead of (or in
 addition to) removing observations; see <cite>fit_least_squares</cite>. To use
 Huber M-estimation as the sole outlier treatment, pass
 <code class="docutils literal notranslate"><span class="pre">contamination_percentage=0.0</span></code> so that the hard-rejection loop is
 disabled; with a non-zero contamination the two compose (a robust fit
 at every pass, with observations still removed while the reduced chi2
-exceeds <code class="docutils literal notranslate"><span class="pre">rchi2_threshold</span></code>).</p></li>
-<li><p><strong>f_scale</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><em>float</em></a><em>, </em><em>optional</em>) – Huber transition point in units of whitened (1-sigma) residual
-components; see <cite>fit_least_squares</cite>. Ignored for <code class="docutils literal notranslate"><span class="pre">loss=&quot;linear&quot;</span></code>.</p></li>
-<li><p><strong>**kwargs</strong> – Fit settings forwarded to every pass: <code class="docutils literal notranslate"><span class="pre">jacobian</span></code>,
-<code class="docutils literal notranslate"><span class="pre">validate_covariance</span></code> and the solver tolerances of
-<cite>fit_least_squares</cite>. Any other keyword raises a <cite>ValueError</cite>.</p></li>
-</ul>
+exceeds <code class="docutils literal notranslate"><span class="pre">rchi2_threshold</span></code>).</p>
 </dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><ul class="simple">
-<li><p><strong>fitted_orbit</strong> (<cite>~adam_core.orbit_determination.FittedOrbits</cite> (1)) – Best fitted orbit found: the lowest reduced chi2 among the passes
-whose fit succeeded (converged) or, if none did, the lowest reduced
-chi2 overall (<code class="docutils literal notranslate"><span class="pre">success</span></code> is then False).</p></li>
-<li><p><strong>fitted_orbit_members</strong> (<cite>~adam_core.orbit_determination.FittedOrbitMembers</cite> (N)) – Fitted orbit members with residuals, outlier flags and weights.</p></li>
-</ul>
-</p>
+<dt>f_scale<span class="classifier">float, optional</span></dt><dd><p>Huber transition point in units of whitened (1-sigma) residual
+components; see <cite>fit_least_squares</cite>. Ignored for <code class="docutils literal notranslate"><span class="pre">loss=&quot;linear&quot;</span></code>.</p>
+</dd>
+<dt><a href="#id3"><span class="problematic" id="id4">**</span></a>kwargs</dt><dd><p>Fit settings forwarded to every pass: <code class="docutils literal notranslate"><span class="pre">jacobian</span></code>,
+<code class="docutils literal notranslate"><span class="pre">validate_covariance</span></code> and the solver tolerances of
+<cite>fit_least_squares</cite>. Any other keyword raises a <cite>ValueError</cite>.</p>
 </dd>
 </dl>
+<dl>
+<dt>fitted_orbit<span class="classifier"><cite>~adam_core.orbit_determination.FittedOrbits</cite> (1)</span></dt><dd><p>Best fitted orbit found: the lowest reduced chi2 among the passes
+whose fit succeeded (converged) or, if none did, the lowest reduced
+chi2 overall (<code class="docutils literal notranslate"><span class="pre">success</span></code> is then False).</p>
+</dd>
+<dt>fitted_orbit_members<span class="classifier"><cite>~adam_core.orbit_determination.FittedOrbitMembers</cite> (N)</span></dt><dd><p>Fitted orbit members with residuals, outlier flags and weights.</p>
+</dd>
+</dl>
+</div></blockquote>
 </dd></dl>
 
 </section>

@@ -516,6 +516,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">,</span>
+    <span class="n">deprecated</span><span class="p">,</span>
     <span class="n">native_work_unit</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -853,9 +854,7 @@
 
 
 
-<div class="viewcode-block" id="cmc2003_fit">
-<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.rejection.html#adam_core.orbit_determination.rejection.cmc2003_fit">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">cmc2003_fit</span><span class="p">(</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_cmc2003_fit</span><span class="p">(</span>
     <span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
@@ -875,7 +874,18 @@
 <span class="sd">    fitted_orbit_members : `FittedOrbitMembers` (N)</span>
 <span class="sd">    """</span>
     <span class="n">result</span> <span class="o">=</span> <span class="n">cmc2003_fit_detailed</span><span class="p">(</span><span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">propagator</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">fitted_orbit_members</span></div>
+    <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">fitted_orbit</span><span class="p">,</span> <span class="n">result</span><span class="o">.</span><span class="n">fitted_orbit_members</span>
+
+
+<div class="viewcode-block" id="cmc2003_fit">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.rejection.html#adam_core.orbit_determination.rejection.cmc2003_fit">[docs]</a>
+<span class="nd">@deprecated</span><span class="p">(</span>
+    <span class="n">_cmc2003_fit</span><span class="p">,</span>
+    <span class="s2">"refine(orbit, observations, propagator) (rejection='cmc2003'), or "</span>
+    <span class="s2">"cmc2003_fit_detailed for the loop diagnostics"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">cmc2003_fit</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>  <span class="c1"># pragma: no cover - replaced by the alias</span>
+<span class="w">    </span><span class="sd">"""Deprecated alias of `_cmc2003_fit`."""</span></div>
 
 </pre></div>
         </article>
