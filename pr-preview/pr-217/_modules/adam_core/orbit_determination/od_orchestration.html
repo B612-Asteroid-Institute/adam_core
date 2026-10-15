@@ -474,17 +474,19 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">collections.abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">Sequence</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">,</span>
     <span class="n">native_work_unit</span><span class="p">,</span>
 <span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="n">OD_DEFAULTS</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">ObservationAstrometry</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.observation_uncertainty</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -950,6 +952,57 @@
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">fitted_orbit_members</span></div>
 
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">refine</span><span class="p">(</span>
+    <span class="n">orbit</span><span class="p">:</span> <span class="n">Orbits</span> <span class="o">|</span> <span class="n">FittedOrbits</span><span class="p">,</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">rejection</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"cmc2003"</span><span class="p">,</span> <span class="s2">"worst_residual"</span><span class="p">,</span> <span class="s2">"none"</span><span class="p">]</span> <span class="o">=</span> <span class="n">OD_DEFAULTS</span><span class="p">[</span><span class="s2">"refinement"</span><span class="p">],</span>
+    <span class="n">rejection_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">fit_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    The refinement stage: differential correction of ``orbit`` (e.g. the</span>
+<span class="sd">    orbit `run_iod` returns) against every observation on ``propagator``.</span>
+
+<span class="sd">    With `run_iod` it is the stage contract `run_od` composes: ``run_iod`` →</span>
+<span class="sd">    ``refine``. ``rejection`` selects the outlier treatment: ``"cmc2003"``</span>
+<span class="sd">    (default; Carpino, Milani &amp; Chesley 2003 with OrbFit's constants,</span>
+<span class="sd">    `cmc2003_fit`), ``"worst_residual"`` (`iterative_fit`) or ``"none"``</span>
+<span class="sd">    (`fit_least_squares`). ``rejection_settings`` override that loop's</span>
+<span class="sd">    settings (``OD_DEFAULTS["cmc2003"]`` / ``["worst_residual"]``);</span>
+<span class="sd">    ``fit_settings`` the solver's (``OD_DEFAULTS["fit"]``: ``jacobian``,</span>
+<span class="sd">    ``loss``, ``f_scale``, ``validate_covariance``, tolerances). Every loop</span>
+<span class="sd">    runs in Rust; a propagator whose `NativeBackend` declares the loop's</span>
+<span class="sd">    work unit runs it in one crossing.</span>
+
+<span class="sd">    When ``orbit`` is a `FittedOrbits` row from `run_iod`, its IOD provenance</span>
+<span class="sd">    (ambiguity) is carried onto the refined orbit.</span>
+<span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="n">fit_least_squares</span><span class="p">,</span> <span class="n">iterative_fit</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.provenance</span><span class="w"> </span><span class="kn">import</span> <span class="n">carry_iod_provenance</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">.rejection</span><span class="w"> </span><span class="kn">import</span> <span class="n">cmc2003_fit</span>
+
+    <span class="n">seed</span> <span class="o">=</span> <span class="n">orbit</span><span class="o">.</span><span class="n">to_orbits</span><span class="p">()</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbit</span><span class="p">,</span> <span class="n">FittedOrbits</span><span class="p">)</span> <span class="k">else</span> <span class="n">orbit</span>
+    <span class="n">settings</span> <span class="o">=</span> <span class="p">{</span><span class="o">**</span><span class="p">(</span><span class="n">fit_settings</span> <span class="ow">or</span> <span class="p">{}),</span> <span class="o">**</span><span class="p">(</span><span class="n">rejection_settings</span> <span class="ow">or</span> <span class="p">{})}</span>
+    <span class="k">if</span> <span class="n">rejection</span> <span class="o">==</span> <span class="s2">"cmc2003"</span><span class="p">:</span>
+        <span class="n">refined</span><span class="p">,</span> <span class="n">members</span> <span class="o">=</span> <span class="n">cmc2003_fit</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">propagator</span><span class="p">,</span> <span class="o">**</span><span class="n">settings</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">rejection</span> <span class="o">==</span> <span class="s2">"worst_residual"</span><span class="p">:</span>
+        <span class="n">refined</span><span class="p">,</span> <span class="n">members</span> <span class="o">=</span> <span class="n">iterative_fit</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">propagator</span><span class="p">,</span> <span class="o">**</span><span class="n">settings</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">rejection</span> <span class="o">==</span> <span class="s2">"none"</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">rejection_settings</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">"rejection='none' takes no rejection_settings"</span><span class="p">)</span>
+        <span class="n">refined</span><span class="p">,</span> <span class="n">members</span> <span class="o">=</span> <span class="n">fit_least_squares</span><span class="p">(</span><span class="n">seed</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">propagator</span><span class="p">,</span> <span class="o">**</span><span class="n">settings</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
+            <span class="s2">"rejection must be 'cmc2003', 'worst_residual' or 'none'; "</span>
+            <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="n">rejection</span><span class="si">!r}</span><span class="s2">"</span>
+        <span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">orbit</span><span class="p">,</span> <span class="n">FittedOrbits</span><span class="p">):</span>
+        <span class="n">refined</span> <span class="o">=</span> <span class="n">carry_iod_provenance</span><span class="p">(</span><span class="n">orbit</span><span class="p">,</span> <span class="n">refined</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">refined</span><span class="p">,</span> <span class="n">members</span>
 </pre></div>
         </article>
       </div>
