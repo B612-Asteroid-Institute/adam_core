@@ -731,11 +731,14 @@ Gibbs otherwise; candidates record the method used.</p></li>
 <li><p><strong>acceptance</strong> (<em>{&quot;corrected&quot;</em><em>, </em><em>&quot;prefit&quot;}</em>) – See above.</p></li>
 <li><p><strong>correction_settings</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em>, </em><em>optional</em>) – Overrides of the corrected acceptance (keys <code class="docutils literal notranslate"><span class="pre">max_corrections</span></code>,
 <code class="docutils literal notranslate"><span class="pre">max_converged</span></code>, <code class="docutils literal notranslate"><span class="pre">correction_growth</span></code>, <code class="docutils literal notranslate"><span class="pre">min_stage_obs</span></code>,
-<code class="docutils literal notranslate"><span class="pre">max_stages</span></code>, <code class="docutils literal notranslate"><span class="pre">stage_loss</span></code>); missing keys keep the Rust
-<code class="docutils literal notranslate"><span class="pre">CorrectionConfig</span></code> defaults. <code class="docutils literal notranslate"><span class="pre">stage_loss</span></code> is the loss of the
-stages before the whole arc: <code class="docutils literal notranslate"><span class="pre">&quot;huber&quot;</span></code> (default) down-weights
+<code class="docutils literal notranslate"><span class="pre">max_stages</span></code>, <code class="docutils literal notranslate"><span class="pre">stage_loss</span></code>, <code class="docutils literal notranslate"><span class="pre">prefit_scope</span></code>); missing keys keep
+the Rust <code class="docutils literal notranslate"><span class="pre">CorrectionConfig</span></code> defaults. <code class="docutils literal notranslate"><span class="pre">stage_loss</span></code> is the loss of
+the stages before the whole arc: <code class="docutils literal notranslate"><span class="pre">&quot;huber&quot;</span></code> (default) down-weights
 observations a partial orbit predicts badly and gates each stage on
-its robust cost; <code class="docutils literal notranslate"><span class="pre">&quot;linear&quot;</span></code> turns that off.</p></li>
+its robust cost; <code class="docutils literal notranslate"><span class="pre">&quot;linear&quot;</span></code> turns that off. <code class="docutils literal notranslate"><span class="pre">prefit_scope</span></code> is
+where each raw Gauss orbit is scored to order the corrections:
+<code class="docutils literal notranslate"><span class="pre">&quot;local&quot;</span></code> (default), the observations of its first stage, or
+<code class="docutils literal notranslate"><span class="pre">&quot;whole_arc&quot;</span></code>, every observation (the legacy order).</p></li>
 <li><p><strong>fit_settings</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#dict" title="(in Python v3.15)"><em>dict</em></a><em>, </em><em>optional</em>) – Solver settings of the correction stages (as <cite>fit_least_squares</cite>’s;
 the whole-arc stage uses the linear loss, the earlier ones
 <code class="docutils literal notranslate"><span class="pre">stage_loss</span></code>; all skip covariance validation).</p></li>

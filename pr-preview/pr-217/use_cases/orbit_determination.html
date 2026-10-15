@@ -702,8 +702,11 @@ days, at most one per pair of nights, 32 triplets in all
 <li><p><strong>Velocity.</strong> Gibbs by default; <code class="docutils literal notranslate"><span class="pre">velocity_method=&quot;auto&quot;</span></code> switches to
 Herrick-Gibbs when consecutive positions are within 5 degrees (Vallado
 2013, sec. 7.5.2).</p></li>
-<li><p><strong>Correction.</strong> In increasing prefit reduced chi2, up to 8 candidates are
-corrected in stages: the triplet’s span (at least 6 observations), then
+<li><p><strong>Correction.</strong> Each raw Gauss orbit is scored on the observations near
+its own triplet (<code class="docutils literal notranslate"><span class="pre">prefit_scope=&quot;local&quot;</span></code>; <code class="docutils literal notranslate"><span class="pre">&quot;whole_arc&quot;</span></code> is the legacy
+order), which is how good it is where it was built rather than how far
+it extrapolates. In that order, up to 8 candidates are corrected in
+stages: the triplet’s span (at least 6 observations), then
 spans grown fourfold (an apparition gap jumps to the nearest night), each
 stage within <code class="docutils literal notranslate"><span class="pre">rchi2_threshold</span></code>. Stages before the whole arc reject
 nothing and down-weight with Huber’s loss (<code class="docutils literal notranslate"><span class="pre">correction_settings=</span>
