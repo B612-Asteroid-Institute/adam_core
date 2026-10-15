@@ -165,7 +165,7 @@ pub fn local_frame_covariances(
 }
 
 fn state_count(values: &[f64], mu: &[f64], frame: LocalFrame) -> SchemaResult<usize> {
-    if values.len() % 6 != 0 {
+    if !values.len().is_multiple_of(6) {
         return Err(invalid(format!(
             "values must hold 6 entries per state (x, y, z, vx, vy, vz), got {}",
             values.len()
