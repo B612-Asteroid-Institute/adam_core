@@ -176,6 +176,14 @@ This file contains notable changes in adam-core
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
 
+- Corrected IOD orders its corrections by each raw Gauss orbit's reduced
+  chi2 on the observations of its first stage (`CorrectionConfig.prefit_scope
+  = PrefitScope::Local`; Python `correction_settings={"prefit_scope": ...}`)
+  instead of on the whole arc, where a Gauss orbit from three observations
+  days apart mostly measures its extrapolation error (2002 RV112's roots
+  scored 1e4, 4e5 and 3e9) and needs a full-arc propagation per candidate.
+  `"whole_arc"` keeps the legacy order. `IodCandidate.prefit_*`, `num_obs`
+  and `arc_length` then describe the first-stage observations.
 - IOD audit fixes. Corrected IOD refuses an arc shorter than
   `min_arc_length` and a whole-arc fit whose rejection leaves one. Gauss
   takes its geometry in the frames it assumes: ecliptic observations and

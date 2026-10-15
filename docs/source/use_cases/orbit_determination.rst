@@ -247,8 +247,11 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
 * **Velocity.** Gibbs by default; ``velocity_method="auto"`` switches to
   Herrick-Gibbs when consecutive positions are within 5 degrees (Vallado
   2013, sec. 7.5.2).
-* **Correction.** In increasing prefit reduced chi2, up to 8 candidates are
-  corrected in stages: the triplet's span (at least 6 observations), then
+* **Correction.** Each raw Gauss orbit is scored on the observations near
+  its own triplet (``prefit_scope="local"``; ``"whole_arc"`` is the legacy
+  order), which is how good it is where it was built rather than how far
+  it extrapolates. In that order, up to 8 candidates are corrected in
+  stages: the triplet's span (at least 6 observations), then
   spans grown fourfold (an apparition gap jumps to the nearest night), each
   stage within ``rchi2_threshold``. Stages before the whole arc reject
   nothing and down-weight with Huber's loss (``correction_settings=

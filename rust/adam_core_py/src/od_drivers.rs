@@ -30,9 +30,10 @@ use adam_core_rs_coords::propagation::{
     run_od_with, validate_fit_covariance_with, AstrometrySnapshot, Cmc2003FitConfig,
     CorrectionConfig, CovariancePropagation, EphemerisOptions, EpochPolicy, FullOdConfig,
     FullOdOutput, IodAcceptance, IodCandidate, IodConfig, IodResult, IterativeFitConfig,
-    JacobianMethod, ObservationSelectionMethod, PropagationOptions, PropagationResultValue,
-    PropagatorPredictor, RefinementConfig, SpanSearchConfig, SphericalPredictor, TwoBodyPropagator,
-    TwoBodyPropagatorConfig, VelocityMethod, WhitenedFitConfig, WhitenedFitOutput,
+    JacobianMethod, ObservationSelectionMethod, PrefitScope, PropagationOptions,
+    PropagationResultValue, PropagatorPredictor, RefinementConfig, SpanSearchConfig,
+    SphericalPredictor, TwoBodyPropagator, TwoBodyPropagatorConfig, VelocityMethod,
+    WhitenedFitConfig, WhitenedFitOutput,
 };
 use adam_core_rs_coords::veres2017::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
 use adam_core_rs_coords::{
@@ -239,6 +240,7 @@ pub fn iod_defaults(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     out.set_item("min_stage_obs", config.correction.min_stage_obs)?;
     out.set_item("max_stages", config.correction.max_stages)?;
     out.set_item("stage_loss", config.correction.stage_loss.as_str())?;
+    out.set_item("prefit_scope", config.correction.prefit_scope.as_str())?;
     out.set_item("huber_f_scale", HUBER_F_SCALE_DEFAULT)?;
     Ok(out)
 }
@@ -308,6 +310,10 @@ fn parse_iod_settings_over(
             stage_loss: match setting::<Option<String>>(settings, "stage_loss", None)? {
                 Some(value) => LossType::parse(&value).map_err(value_error)?,
                 None => defaults.correction.stage_loss,
+            },
+            prefit_scope: match setting::<Option<String>>(settings, "prefit_scope", None)? {
+                Some(value) => PrefitScope::parse(&value).map_err(value_error)?,
+                None => defaults.correction.prefit_scope,
             },
         },
     })

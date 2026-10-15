@@ -71,8 +71,11 @@
 //!   spurious zero-range root and negative ranges are dropped). When one
 //!   converges, its sibling roots are corrected too.
 //! * **Acceptance** ([`IodAcceptance::Corrected`], [`CorrectionConfig`]).
-//!   Candidates are corrected in increasing prefit reduced chi2, at most 8,
-//!   until 2 reach the whole arc. Each is corrected in stages from its
+//!   Candidates are corrected in increasing prefit reduced chi2, each raw
+//!   Gauss orbit scored on the observations of its first stage
+//!   ([`PrefitScope::Local`]: how good it is where it was built, not how far
+//!   it extrapolates over a long arc), at most 8, until 2 reach the whole
+//!   arc. Each is corrected in stages from its
 //!   triplet's span (at least 6 observations), growing the span fourfold or
 //!   jumping an apparition gap to the nearest night, each stage within
 //!   `rchi2_threshold` (200, the legacy IOD gate and the ladder's first).
@@ -1310,6 +1313,40 @@ impl IodAcceptance {
     }
 }
 
+/// Which observations score a Gauss candidate's preliminary orbit, the
+/// order in which corrected acceptance corrects candidates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PrefitScope {
+    /// The observations of the candidate's first correction stage (its
+    /// triplet's span, grown to `min_stage_obs`): how good the orbit is
+    /// where it was built. A Gauss orbit from three observations days apart
+    /// extrapolates poorly, so its chi2 over a long arc mostly measures the
+    /// extrapolation (2002 RV112's three roots: 1e4, 4e5 and 3e9), and
+    /// scoring it there costs a full-arc propagation per candidate.
+    Local,
+    /// Every observation (the legacy score).
+    WholeArc,
+}
+
+impl PrefitScope {
+    pub fn parse(value: &str) -> Result<Self, String> {
+        match value {
+            "local" => Ok(Self::Local),
+            "whole_arc" => Ok(Self::WholeArc),
+            other => Err(format!(
+                "prefit_scope must be one of 'local', 'whole_arc'; got {other:?}"
+            )),
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::WholeArc => "whole_arc",
+        }
+    }
+}
+
 /// Settings of [`IodAcceptance::Corrected`]: the staged correction of
 /// each candidate, ported from the seeding ladder of the 2026-10-12
 /// walk-forward (`od_walkforward.py` `_arc_seed` / `_arc_expand`), which
@@ -1352,6 +1389,9 @@ pub struct CorrectionConfig {
     /// `Linear` fits and gates on plain chi2. The whole-arc stage is always
     /// linear, followed by CMC2003 rejection when above the threshold.
     pub stage_loss: LossType,
+    /// Observations that score each candidate's preliminary orbit, which
+    /// orders the corrections (see [`PrefitScope`]).
+    pub prefit_scope: PrefitScope,
 }
 
 impl Default for CorrectionConfig {
@@ -1363,6 +1403,7 @@ impl Default for CorrectionConfig {
             min_stage_obs: 6,
             max_stages: 40,
             stage_loss: LossType::Huber,
+            prefit_scope: PrefitScope::Local,
         }
     }
 }
@@ -1558,7 +1599,10 @@ pub struct IodCandidate {
     pub root_index: usize,
     pub root_count: usize,
     pub velocity_method: VelocityMethod,
-    /// Two-body score of the preliminary orbit against every observation.
+    /// Score of the preliminary orbit (through the IOD predictor) against
+    /// every observation, or, under corrected acceptance with
+    /// `PrefitScope::Local`, against the observations of its first
+    /// correction stage (`num_obs` and `arc_length` then describe those).
     pub prefit_chi2: f64,
     pub prefit_reduced_chi2: f64,
     /// Rows the outlier trial removed to reach acceptance (empty otherwise).
@@ -2080,6 +2124,7 @@ fn run_iod_sorted(
     let times = observed_times_mjd(observed)?;
     let epoch_scale = observation_time_scale(observed)?;
 
+    let nights = observation_nights(&times, Some(&observers.code));
     let max_outliers =
         (((n as f64) * (config.contamination_percentage / 100.0)) as usize).min(n - config.min_obs);
     // The legacy `iod()` loop tries `3 * (max_outliers + 1)` triplets
@@ -2100,12 +2145,7 @@ fn run_iod_sorted(
     };
     let triplets: Vec<([usize; 3], (usize, usize))> =
         if config.observation_selection_method == ObservationSelectionMethod::Spans {
-            span_triplets(
-                &times,
-                &observation_nights(&times, Some(&observers.code)),
-                &config.spans,
-                budget,
-            )
+            span_triplets(&times, &nights, &config.spans, budget)
         } else {
             select_observation_triplets_bounded(&times, config.observation_selection_method, budget)
                 .into_iter()
@@ -2123,6 +2163,12 @@ fn run_iod_sorted(
         best_reduced_chi2: f64::INFINITY,
         ..SearchCounters::default()
     };
+    // Corrected acceptance with a local prefit scores each candidate on its
+    // first correction stage only (the same rows `run_iod_corrected` starts
+    // from), predicting just those observations.
+    let local_prefit = collect_all
+        && config.acceptance == IodAcceptance::Corrected
+        && config.correction.prefit_scope == PrefitScope::Local;
     let mut candidates: Vec<IodCandidate> = Vec::new();
     for (triplet, window) in triplets {
         counters.triplets_tried += 1;
@@ -2141,6 +2187,21 @@ fn run_iod_sorted(
             config.speed_of_light,
         );
         let candidate_count = gauss.len();
+        let scope: Option<(Vec<usize>, CoordinateBatch, ObserverBatch)> = if local_prefit {
+            let mask =
+                super::od_refine::first_stage_mask(&times, &nights, triplet, &config.correction);
+            let rows: Vec<usize> = (0..n).filter(|&row| mask[row]).collect();
+            let scoped_observed = take_coordinate_batch(observed, &rows)?;
+            let scoped_observers = take_observer_batch(observers, &rows)?;
+            Some((rows, scoped_observed, scoped_observers))
+        } else {
+            None
+        };
+        let (score_observed, score_observers) = match &scope {
+            Some((_, scoped_observed, scoped_observers)) => (scoped_observed, scoped_observers),
+            None => (observed, observers),
+        };
+        let score_n = score_observed.len();
         for (candidate, root) in gauss.iter().enumerate() {
             let state = root.state;
             if !state.iter().all(|value| value.is_finite()) {
@@ -2164,9 +2225,9 @@ fn run_iod_sorted(
                 predictor,
                 state,
                 &orbit,
-                observed,
-                observers,
-                &vec![false; n],
+                score_observed,
+                score_observers,
+                &vec![false; score_n],
                 6,
             ) {
                 Ok(evaluation) => evaluation,

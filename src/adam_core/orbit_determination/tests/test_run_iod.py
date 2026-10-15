@@ -333,6 +333,7 @@ def test_signature_defaults_are_the_rust_defaults(two_body_arc) -> None:  # noqa
             "min_stage_obs",
             "max_stages",
             "stage_loss",
+            "prefit_scope",
         )
     }
     _, _, implicit = run_iod(two_body_arc, TwoBodyPropagator())

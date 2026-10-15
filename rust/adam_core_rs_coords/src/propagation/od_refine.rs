@@ -1993,7 +1993,7 @@ fn stage_fit<T: OriginTranslationProvider>(
 /// nothing (an apparition gap) the observing night (`nights`, see
 /// `observation_nights`) of the observation nearest the current span,
 /// earliest on ties, joins instead, with everything observed during it.
-fn grow_stage(times: &[f64], nights: &[usize], mask: &[bool], growth: f64) -> Vec<bool> {
+pub(super) fn grow_stage(times: &[f64], nights: &[usize], mask: &[bool], growth: f64) -> Vec<bool> {
     let included = times
         .iter()
         .zip(mask)
@@ -2117,6 +2117,32 @@ fn is_ambiguous_with(best: &super::od::IodCandidate, other: &super::od::IodCandi
     distance2.is_finite() && distance2 > AMBIGUITY_DELTA_CHI2
 }
 
+/// The first correction stage of a candidate: the observations its triplet
+/// spans, grown with [`grow_stage`] until there are `min_stage_obs` of them
+/// (or the arc's all).
+pub(super) fn first_stage_mask(
+    times: &[f64],
+    nights: &[usize],
+    triplet: [usize; 3],
+    correction: &super::od::CorrectionConfig,
+) -> Vec<bool> {
+    let (t_lo, t_hi) = triplet
+        .iter()
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &row| {
+            (lo.min(times[row]), hi.max(times[row]))
+        });
+    let mut mask: Vec<bool> = times.iter().map(|&t| t >= t_lo && t <= t_hi).collect();
+    let count = |m: &[bool]| m.iter().filter(|&&keep| keep).count();
+    while count(&mask) < correction.min_stage_obs.min(times.len()) {
+        let grown = grow_stage(times, nights, &mask, correction.growth);
+        if count(&grown) == count(&mask) {
+            break;
+        }
+        mask = grown;
+    }
+    mask
+}
+
 /// Corrected acceptance ([`super::od::IodAcceptance::Corrected`]): score
 /// every candidate of the search, then, in increasing prefit reduced chi2
 /// (index order on ties), correct up to `correction.max_corrections` of
@@ -2215,21 +2241,7 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
             vec![None],
             seed_coordinates,
         )?;
-        let (t_lo, t_hi) = candidate
-            .triplet
-            .iter()
-            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &row| {
-                (lo.min(times[row]), hi.max(times[row]))
-            });
-        let mut mask: Vec<bool> = times.iter().map(|&t| t >= t_lo && t <= t_hi).collect();
-        let count = |m: &[bool]| m.iter().filter(|&&keep| keep).count();
-        while count(&mask) < correction.min_stage_obs.min(n) {
-            let grown = grow_stage(&times, &nights, &mask, correction.growth);
-            if count(&grown) == count(&mask) {
-                break;
-            }
-            mask = grown;
-        }
+        let mut mask = first_stage_mask(&times, &nights, candidate.triplet, &correction);
         let mut stages = 0_usize;
         let mut note: Option<String> = None;
         let mut last_fit: Option<WhitenedFitOutput> = None;
@@ -4143,13 +4155,16 @@ mod tests {
         assert!(accepted.converged && accepted.stages >= 2);
         let rchi2 = accepted.postfit_reduced_chi2.unwrap();
         assert!(rchi2 <= 50.0);
-        // The lowest final reduced chi2 among the converged, index on ties.
+        // The lowest whole-arc score among the converged, index on ties.
+        let score = accepted.whole_arc_score.unwrap();
         for candidate in result.candidates.iter().filter(|c| c.converged) {
-            assert!(candidate.postfit_reduced_chi2.unwrap() >= rchi2);
+            assert!(candidate.whole_arc_score.unwrap() >= score * (1.0 - 1e-6));
         }
+        // The search stops at `max_converged`, but the sibling roots of the
+        // triplet that reached it are still corrected (up to two more).
         assert!(
             result.candidates.iter().filter(|c| c.converged).count()
-                <= config.correction.max_converged
+                <= config.correction.max_converged + 2
         );
         // The unrejected full-arc minimum: the same orbit a fit started from
         // the truth (propagated to the Gauss epoch) reaches on all
@@ -4264,6 +4279,11 @@ mod tests {
             let config = super::super::od::IodConfig {
                 correction: super::super::od::CorrectionConfig {
                     stage_loss,
+                    // Candidates whose stages hold the outlier come first in
+                    // the whole-arc order; a local prefit ranks the ones
+                    // that avoid it first, and both losses then succeed at
+                    // once.
+                    prefit_scope: super::super::od::PrefitScope::WholeArc,
                     ..super::super::od::CorrectionConfig::default()
                 },
                 contamination_percentage: 20.0,
@@ -4417,6 +4437,50 @@ mod tests {
             accepted.accepted_candidate().unwrap().removed,
             vec![NUM_OBS - 1]
         );
+    }
+
+    #[test]
+    fn local_prefit_scores_each_candidate_on_its_first_stage() {
+        let observed = synthetic_observations(None);
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let pool = |prefit_scope| {
+            super::super::od::iod_candidate_pool(
+                &predictor,
+                &observed,
+                &observers(),
+                &super::super::od::IodConfig {
+                    correction: super::super::od::CorrectionConfig {
+                        prefit_scope,
+                        ..super::super::od::CorrectionConfig::default()
+                    },
+                    ..corrected_iod_config(50.0)
+                },
+            )
+            .unwrap()
+        };
+        let local = pool(super::super::od::PrefitScope::Local);
+        let whole = pool(super::super::od::PrefitScope::WholeArc);
+        assert_eq!(local.candidates.len(), whole.candidates.len());
+        let times = super::super::od::observed_times_mjd(&observed).unwrap();
+        let nights = super::super::od::observation_nights(&times, Some(&observers().code));
+        let correction = super::super::od::CorrectionConfig::default();
+        for (l, w) in local.candidates.iter().zip(&whole.candidates) {
+            assert_eq!((l.triplet, l.root_index), (w.triplet, w.root_index));
+            assert_eq!(w.num_obs, NUM_OBS);
+            let stage = first_stage_mask(&times, &nights, l.triplet, &correction);
+            assert_eq!(l.num_obs, stage.iter().filter(|&&k| k).count());
+            assert!(l.num_obs >= correction.min_stage_obs && l.num_obs <= NUM_OBS);
+            // Same orbit, a subset of the observations: never a larger chi2.
+            assert!(l.prefit_chi2 <= w.prefit_chi2 * (1.0 + 1e-12));
+        }
+        // Triplets from the dense windows are scored on part of the arc.
+        assert!(local.candidates.iter().any(|c| c.num_obs < NUM_OBS));
     }
 
     #[test]
