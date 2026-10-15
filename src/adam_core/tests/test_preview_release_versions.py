@@ -204,6 +204,21 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "Build adam-assist native wheel" in release_matrix
     assert "python -m pip install --no-deps -e dependent" in tier1
     assert "jpl-small-bodies-de441-n16==2021.3.31.1" in tier1
+    builder_name = "Build reference propagator in the Core test environment"
+    patcher_name = "Patch unpublished Core crates into the dependent"
+    assert builder_name in tier1
+    assert tier1.index(builder_name) < tier1.index(patcher_name)
+    assert "ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/dependent" in tier1
+    assert "run: pdm run assist-rust-develop" in tier1
+    assert "Verify Core test environment candidate installations" in tier1
+    assert 'test_python="$(pdm info --python)"' in tier1
+    assert (
+        tier1.count('assert version("adam-core") == adam_core.__version__ == "0.6.0"')
+        == 2
+    )
+    assert (
+        tier1.count('assert version("adam-assist") == assist_version == "0.5.0"') == 2
+    )
     assert "Run Core integration tests with the reference propagator" in tier1
     for test_path in (
         "src/adam_core/propagator/tests/test_propagator.py",
