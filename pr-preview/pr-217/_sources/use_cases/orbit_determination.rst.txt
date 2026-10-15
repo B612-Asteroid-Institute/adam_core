@@ -247,15 +247,18 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
   nothing and down-weight with Huber's loss (``correction_settings=
   {"stage_loss": "linear"}`` turns that off); the whole-arc stage is a plain
   fit with Carpino, Milani & Chesley (2003) rejection when above the
-  threshold. The search stops after 2 candidates reach the whole arc
+  threshold, rejecting at most ``contamination_percentage`` (20 %) of the
+  arc. The search stops after 2 candidates reach the whole arc
   (``correction_settings``).
 * **Multiple roots.** Every physical root of a triplet's Gauss polynomial is
   a candidate (Charlier: up to three); the other roots of a converged
   candidate's triplet are corrected too.
-* **Ranking and ambiguity.** The lowest whole-arc reduced chi2 wins (ties
-  within 1e-6 go to the earliest candidate). ``IodReport.ambiguous_with``
-  lists converged solutions outside the accepted orbit's 3-sigma region
-  whose chi2 is within the same margin (Gronchi 2009).
+* **Ranking and ambiguity.** Candidates are compared on the whole arc:
+  every observation's chi2 clipped at the CMC2003 rejection threshold, so a
+  rejected observation still counts. The lowest score wins (ties within
+  1e-6 go to the earliest candidate). ``IodReport.ambiguous_with`` lists
+  converged solutions outside the accepted orbit's 3-sigma region whose
+  score is within the same margin (Gronchi 2009).
 * **Failure.** A candidate whose prediction fails is skipped and counted;
   when nothing is accepted, ``IodReport.not_found_reason`` says why.
 * **Evidence.** On the first solutions of 126 walk-forward objects

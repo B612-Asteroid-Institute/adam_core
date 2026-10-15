@@ -781,8 +781,8 @@
     <span class="n">reduced_chi2</span><span class="p">:</span> <span class="nb">float</span>
     <span class="n">num_obs</span><span class="p">:</span> <span class="nb">int</span>
     <span class="n">arc_length</span><span class="p">:</span> <span class="nb">float</span>
-    <span class="c1">#: Corrected acceptance: reduced chi2 of the corrected orbit on the whole</span>
-    <span class="c1">#: arc (None when not corrected or stalled), whether the staged</span>
+    <span class="c1">#: Corrected acceptance: reduced chi2 of the corrected orbit on the</span>
+    <span class="c1">#: observations it kept (None when not corrected or stalled), whether the staged</span>
     <span class="c1">#: correction reached the whole arc, the corrected state, the stages</span>
     <span class="c1">#: run and why it stopped short, if it did.</span>
     <span class="n">postfit_reduced_chi2</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
@@ -790,6 +790,10 @@
     <span class="n">accepted</span><span class="p">:</span> <span class="nb">bool</span>
     <span class="n">corrected_state</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">stages</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="c1">#: Whole-arc score that ranks converged candidates: every observation's</span>
+    <span class="c1">#: chi2 clipped at CMC2003's rejection threshold, over the whole arc's</span>
+    <span class="c1">#: degrees of freedom (None when not converged).</span>
+    <span class="n">whole_arc_score</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
     <span class="n">correction_note</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span></div>
 
 
@@ -854,6 +858,7 @@
             <span class="n">num_obs</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"num_obs"</span><span class="p">]),</span>
             <span class="n">arc_length</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"arc_length"</span><span class="p">]),</span>
             <span class="n">postfit_reduced_chi2</span><span class="o">=</span><span class="n">candidate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"postfit_reduced_chi2"</span><span class="p">),</span>
+            <span class="n">whole_arc_score</span><span class="o">=</span><span class="n">candidate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"whole_arc_score"</span><span class="p">),</span>
             <span class="n">converged</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"converged"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)),</span>
             <span class="n">accepted</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"accepted"</span><span class="p">]),</span>
             <span class="n">corrected_state</span><span class="o">=</span><span class="p">(</span>

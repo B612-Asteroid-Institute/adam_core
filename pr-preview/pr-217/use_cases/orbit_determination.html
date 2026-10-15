@@ -702,15 +702,18 @@ stage within <code class="docutils literal notranslate"><span class="pre">rchi2_
 nothing and down-weight with Huber’s loss (<code class="docutils literal notranslate"><span class="pre">correction_settings=</span>
 <span class="pre">{&quot;stage_loss&quot;:</span> <span class="pre">&quot;linear&quot;}</span></code> turns that off); the whole-arc stage is a plain
 fit with Carpino, Milani &amp; Chesley (2003) rejection when above the
-threshold. The search stops after 2 candidates reach the whole arc
+threshold, rejecting at most <code class="docutils literal notranslate"><span class="pre">contamination_percentage</span></code> (20 %) of the
+arc. The search stops after 2 candidates reach the whole arc
 (<code class="docutils literal notranslate"><span class="pre">correction_settings</span></code>).</p></li>
 <li><p><strong>Multiple roots.</strong> Every physical root of a triplet’s Gauss polynomial is
 a candidate (Charlier: up to three); the other roots of a converged
 candidate’s triplet are corrected too.</p></li>
-<li><p><strong>Ranking and ambiguity.</strong> The lowest whole-arc reduced chi2 wins (ties
-within 1e-6 go to the earliest candidate). <code class="docutils literal notranslate"><span class="pre">IodReport.ambiguous_with</span></code>
-lists converged solutions outside the accepted orbit’s 3-sigma region
-whose chi2 is within the same margin (Gronchi 2009).</p></li>
+<li><p><strong>Ranking and ambiguity.</strong> Candidates are compared on the whole arc:
+every observation’s chi2 clipped at the CMC2003 rejection threshold, so a
+rejected observation still counts. The lowest score wins (ties within
+1e-6 go to the earliest candidate). <code class="docutils literal notranslate"><span class="pre">IodReport.ambiguous_with</span></code> lists
+converged solutions outside the accepted orbit’s 3-sigma region whose
+score is within the same margin (Gronchi 2009).</p></li>
 <li><p><strong>Failure.</strong> A candidate whose prediction fails is skipped and counted;
 when nothing is accepted, <code class="docutils literal notranslate"><span class="pre">IodReport.not_found_reason</span></code> says why.</p></li>
 <li><p><strong>Evidence.</strong> On the first solutions of 126 walk-forward objects
