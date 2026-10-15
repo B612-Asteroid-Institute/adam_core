@@ -107,6 +107,42 @@ def drop_duplicate_orbits(
     return filtered, filtered_orbit_members
 
 
+class OdProvenance(qv.Table):
+    """
+    Compact provenance of one fitted orbit: what produced it and how.
+
+    Written by `~adam_core.orbit_determination.run_od` (every field) and by
+    the IOD stage (``iod_*``); null for orbits produced by other entry points.
+    Configurations and model descriptors are compact JSON; model tables are
+    identified by content hash, not copied.
+    """
+
+    #: adam-core version that produced the orbit.
+    adam_core_version = qv.LargeStringColumn(nullable=True)
+    #: ``"fused"`` (one native ``run_od`` crossing) or ``"composed"``.
+    route = qv.LargeStringColumn(nullable=True)
+    #: The `OrbitFitter` class (``module.qualname``).
+    fitter = qv.LargeStringColumn(nullable=True)
+    #: Backend of the IOD stage and of the refinement (``name version``; a
+    #: propagator without a `NativeBackend` is ``python:module.qualname``).
+    iod_backend = qv.LargeStringColumn(nullable=True)
+    refinement_backend = qv.LargeStringColumn(nullable=True)
+    #: IOD, refinement and solver settings (JSON), when the fitter exposes
+    #: them (`NativeOrbitFitter.native_settings`).
+    settings = qv.LargeStringColumn(nullable=True)
+    #: Observation models applied at fit time (JSON list of descriptors:
+    #: type, scalar parameters, SHA-256 of each table).
+    models = qv.LargeStringColumn(nullable=True)
+    #: Whether the IOD found another converged solution, distinct from the
+    #: accepted one yet fitting about as well, and how many.
+    iod_ambiguous = qv.BooleanColumn(nullable=True)
+    iod_alternatives = qv.Int64Column(nullable=True)
+    #: Observations rejected as outliers by the final fit, and their
+    #: fraction of the observations it was given.
+    num_rejected = qv.Int64Column(nullable=True)
+    rejected_fraction = qv.Float64Column(nullable=True)
+
+
 class FittedOrbits(qv.Table):
 
     orbit_id = qv.LargeStringColumn(default=lambda: uuid.uuid4().hex)
@@ -119,6 +155,8 @@ class FittedOrbits(qv.Table):
     iterations = qv.Int64Column(nullable=True)
     success = qv.BooleanColumn(nullable=True)
     status_code = qv.Int64Column(nullable=True)
+    #: Compact provenance (`OdProvenance`); null outside `run_od` and IOD.
+    provenance = OdProvenance.as_column(nullable=True)
 
     def to_orbits(self) -> Orbits:
         """

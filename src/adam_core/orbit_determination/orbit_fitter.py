@@ -165,4 +165,7 @@ class OrbitFitter(ABC):
         iod_orbit, iod_members = self.initial_fit(object_id, observations)
         if len(iod_orbit) == 0:
             return iod_orbit, iod_members
-        return self.refine_fit(iod_orbit, observations, propagator)
+        from .provenance import carry_iod_provenance
+
+        refined, refined_members = self.refine_fit(iod_orbit, observations, propagator)
+        return carry_iod_provenance(iod_orbit, refined), refined_members

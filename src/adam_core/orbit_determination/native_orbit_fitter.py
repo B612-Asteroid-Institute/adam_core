@@ -29,6 +29,7 @@ from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .iod import IOD_DEFAULTS, run_iod
 from .orbit_fitter import OrbitFitter
+from .provenance import with_iod_provenance
 from .rejection import cmc2003_fit
 
 logger = logging.getLogger(__name__)
@@ -73,9 +74,10 @@ def tables_from_native_full_od(
     )
     fit = output["fit"]
     _emit_native_warnings(fit)
-    return _fitted_tables_from_native_output(
+    fitted_orbits, members = _fitted_tables_from_native_output(
         seed, observations, fit, np.asarray(fit["weights"], dtype=np.float64)
     )
+    return with_iod_provenance(fitted_orbits, iod.get("ambiguous_with")), members
 
 
 class NativeOrbitFitter(OrbitFitter):

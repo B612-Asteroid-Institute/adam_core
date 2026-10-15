@@ -57,6 +57,7 @@ from .observation_uncertainty import (
     native_model_specs,
 )
 from .orbit_fitter import OrbitFitter
+from .provenance import complete_provenance
 from .veres2017 import SigmaFillModel
 
 __all__ = [
@@ -244,6 +245,14 @@ def _default_models() -> list[ObservationUncertaintyModel]:
     return models
 
 
+def _model_list(models: ObservationModels) -> list[ObservationUncertaintyModel]:
+    if models is None:
+        return []
+    if isinstance(models, ObservationUncertaintyModel):
+        return [models]
+    return list(models)
+
+
 def _fused_run_od(
     observations: OrbitDeterminationObservations,
     fitter: OrbitFitter,
@@ -264,12 +273,7 @@ def _fused_run_od(
         return None
     if not fitter.supports_native_full_od():
         return None
-    if models is None:
-        model_list: list[ObservationUncertaintyModel] = []
-    elif isinstance(models, ObservationUncertaintyModel):
-        model_list = [models]
-    else:
-        model_list = list(models)
+    model_list = _model_list(models)
     specs = native_model_specs(model_list)
     if specs is None:
         return None
@@ -367,6 +371,11 @@ def run_od(
     -------
     fitted_orbits : `FittedOrbits` (1 or 0)
         Orbit(s) found by the backend (empty if the fit failed).
+        Its ``provenance`` (`OdProvenance`) records the adam-core version,
+        the route (fused or composed), the fitter, the IOD and refinement
+        backends, the settings, the observation models (with a SHA-256 of
+        each table), whether the IOD was ambiguous, and the number and
+        fraction of observations the final fit rejected.
     fitted_orbit_members : `FittedOrbitMembers` (M)
         Members with residuals and flags from the fitter and with
         ``original_astrometry``, ``used_astrometry`` and ``astcat``
@@ -459,7 +468,18 @@ def run_od(
     # veneer keeps id validation, object ids and table assembly.
     fused = _fused_run_od(observations, fitter, models, propagator, object_id)
     if fused is not None:
-        return fused
+        fitted_orbits, fitted_orbit_members = fused
+        return (
+            complete_provenance(
+                fitted_orbits,
+                fitted_orbit_members,
+                fitter=fitter,
+                propagator=propagator,
+                models=_model_list(models),
+                route="fused",
+            ),
+            fitted_orbit_members,
+        )
 
     used = apply_observation_models(observations, models)
 
@@ -472,5 +492,13 @@ def run_od(
 
     fitted_orbit_members = attach_observation_provenance(
         fitted_orbit_members, observations, used
+    )
+    fitted_orbits = complete_provenance(
+        fitted_orbits,
+        fitted_orbit_members,
+        fitter=fitter,
+        propagator=propagator,
+        models=_model_list(models),
+        route="composed",
     )
     return fitted_orbits, fitted_orbit_members

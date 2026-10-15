@@ -23,6 +23,7 @@ from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, drop_duplicate_orbits
 from .gauss import MU, C
 from .observation_uncertainty import ObservationUncertaintyModel
+from .provenance import with_iod_provenance
 
 #: The IOD defaults, read once from Rust's ``IodConfig::default()`` (with its
 #: span search and correction settings, under the keys of ``run_iod``'s
@@ -800,7 +801,7 @@ def tables_from_iod_output(
         solution=output["solution"],
         outlier=output["outlier"],
     )
-    return orbit, members
+    return with_iod_provenance(orbit, output.get("ambiguous_with")), members
 
 
 def initial_orbit_determination(

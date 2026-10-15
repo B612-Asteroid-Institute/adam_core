@@ -204,6 +204,11 @@ model list built with your own tables needs no package.
      - ``FittedOrbitMembers`` record original vs used astrometry, ``astcat``
        and ``weight``; the models act on the fit only. Judge a held-out
        observation against its nominal position and original sigma.
+       ``FittedOrbits.provenance`` (``OdProvenance``) records the
+       adam-core version, route, fitter, IOD and refinement backends,
+       settings, model descriptors with table hashes, IOD ambiguity, and the
+       number and fraction of observations rejected (CMC2003 may reject up
+       to half the arc; the fraction shows how much it did).
      - ``run_od``
 
 Kept as options but not defaults: ``loss="huber"`` (open covariance pathology

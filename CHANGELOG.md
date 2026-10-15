@@ -176,6 +176,14 @@ This file contains notable changes in adam-core
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
 
+- Run-level OD provenance: `FittedOrbits.provenance` (`OdProvenance`, a
+  nullable column) records, on both `run_od` routes, the adam-core version,
+  route, fitter, IOD and refinement backend identities, IOD / refinement /
+  solver settings (JSON), the observation models (type, scalar parameters
+  and a SHA-256 of each table; tables are not copied), whether the IOD was
+  ambiguous and how many alternatives it had (carried through refinement),
+  and the number and fraction of observations the final fit rejected.
+  Other entry points leave it null.
 - Native OD dispatch follows a declared backend identity, not method
   presence. A propagator class declares `native_backend = NativeBackend(name,
   version, work_units)` (new in `adam_core.propagator`); `run_iod`,
