@@ -458,6 +458,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_FUSED_LOOP_KWARGS</span><span class="p">,</span>
     <span class="n">HUBER_F_SCALE_DEFAULT</span><span class="p">,</span>
+    <span class="n">OD_DEFAULTS</span><span class="p">,</span>
     <span class="n">LossType</span><span class="p">,</span>
     <span class="n">_emit_native_warnings</span><span class="p">,</span>
     <span class="n">_fit_settings</span><span class="p">,</span>
@@ -609,7 +610,7 @@
         <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"min_obs"</span><span class="p">],</span>
         <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"min_arc_length"</span><span class="p">],</span>
         <span class="n">contamination_percentage</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"contamination_percentage"</span><span class="p">],</span>
-        <span class="n">rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">OD_DEFAULTS</span><span class="p">[</span><span class="s2">"worst_residual"</span><span class="p">][</span><span class="s2">"rchi2_threshold"</span><span class="p">],</span>
         <span class="n">iod_rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"rchi2_threshold"</span><span class="p">],</span>
         <span class="n">observation_selection_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span>
             <span class="s2">"combinations"</span><span class="p">,</span> <span class="s2">"first+middle+last"</span><span class="p">,</span> <span class="s2">"thirds"</span><span class="p">,</span> <span class="s2">"spans"</span>
@@ -618,9 +619,11 @@
             <span class="s2">"gauss"</span><span class="p">,</span> <span class="s2">"gibbs"</span><span class="p">,</span> <span class="s2">"herrick+gibbs"</span><span class="p">,</span> <span class="s2">"auto"</span>
         <span class="p">]</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"velocity_method"</span><span class="p">],</span>
         <span class="n">iod_acceptance</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"corrected"</span><span class="p">,</span> <span class="s2">"prefit"</span><span class="p">]</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"acceptance"</span><span class="p">],</span>
-        <span class="n">loss</span><span class="p">:</span> <span class="n">LossType</span> <span class="o">=</span> <span class="s2">"linear"</span><span class="p">,</span>
+        <span class="n">loss</span><span class="p">:</span> <span class="n">LossType</span> <span class="o">=</span> <span class="n">OD_DEFAULTS</span><span class="p">[</span><span class="s2">"fit"</span><span class="p">][</span><span class="s2">"loss"</span><span class="p">],</span>
         <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">HUBER_F_SCALE_DEFAULT</span><span class="p">,</span>
-        <span class="n">outlier_rejection</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"worst_residual"</span><span class="p">,</span> <span class="s2">"cmc2003"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"cmc2003"</span><span class="p">,</span>
+        <span class="n">outlier_rejection</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"worst_residual"</span><span class="p">,</span> <span class="s2">"cmc2003"</span><span class="p">]</span> <span class="o">=</span> <span class="n">OD_DEFAULTS</span><span class="p">[</span>
+            <span class="s2">"refinement"</span>
+        <span class="p">],</span>
         <span class="n">rejection_kwargs</span><span class="p">:</span> <span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">if</span> <span class="n">outlier_rejection</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"worst_residual"</span><span class="p">,</span> <span class="s2">"cmc2003"</span><span class="p">):</span>
