@@ -36,7 +36,7 @@ This file contains notable changes in adam-core
 - The Rust OEM surface is intentionally source-breaking: the old
   `oem_write_kvn` export is removed; `oem_to_kvn` accepts comments and decimal
   precision; and `oem_render_orbits_kvn` / `oem_write_orbits_kvn` accept
-  `OemWriteOptions` while reporting the emitted warning count.
+  `OemWriteOptions` while reporting the number of rounded OEM epochs.
 - The private CPython native symbol `_rust_native.oem_write_kvn` is removed;
   supported Python callers continue through `orbit_to_oem` and `orbit_from_oem`.
 - These Rust API changes require the Python package and all six public Rust

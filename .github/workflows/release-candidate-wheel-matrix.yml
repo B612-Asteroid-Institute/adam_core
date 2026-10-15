@@ -274,21 +274,12 @@ jobs:
           repository: B612-Asteroid-Institute/adam-assist
           ref: ${{ env.ADAM_ASSIST_REF }}
           path: .ci/adam-assist
-      - name: Verify exact ASSIST revision and patch unpublished Core crates
+      - name: Verify exact ASSIST revision
         shell: bash
         run: |
           set -euo pipefail
           [[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]
           test "$(git -C .ci/adam-assist rev-parse HEAD)" = "$ADAM_ASSIST_REF"
-          mkdir -p .ci/adam-assist/.cargo
-          cat > .ci/adam-assist/.cargo/config.toml <<'EOF'
-          [patch.crates-io]
-          adam_core_rs_autodiff = { path = "../../rust/adam_core_rs_autodiff" }
-          adam_core_rs_coords = { path = "../../rust/adam_core_rs_coords" }
-          adam_core_rs_kernel_data = { path = "../../rust/adam_core_rs_kernel_data" }
-          adam_core_rs_orbit_determination = { path = "../../rust/adam_core_rs_orbit_determination" }
-          adam_core_rs_spice = { path = "../../rust/adam_core_rs_spice" }
-          EOF
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
