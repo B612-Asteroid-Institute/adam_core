@@ -176,6 +176,18 @@ This file contains notable changes in adam-core
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
 
+- Native OD dispatch follows a declared backend identity, not method
+  presence. A propagator class declares `native_backend = NativeBackend(name,
+  version, work_units)` (new in `adam_core.propagator`); `run_iod`,
+  `full_od`, `run_od`, `iterative_fit`, `cmc2003_fit`, the fused
+  least-squares fits and the linkage batch use a work unit only when it is
+  declared and the declaration still covers the instance: a subclass or
+  instance that overrides a propagation method or a work unit runs the
+  composed path on its own dynamics unless it declares again. Released
+  propagators without a declaration (adam-assist 0.4.x) take the composed
+  path. In Rust, `Propagator::backend()` returns a `BackendIdentity` (name,
+  version, `two_body_dynamics`; the default names the type) and
+  `SphericalPredictor::backend()` reports the backend behind a predictor.
 - `initial_orbit_determination` (the linkage batch) runs `run_iod` on each
   linkage with the same policy and `IOD_DEFAULTS` as `run_iod` and
   `NativeOrbitFitter` (span search, corrected acceptance, `rchi2_threshold`

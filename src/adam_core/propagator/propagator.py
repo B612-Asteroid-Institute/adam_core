@@ -20,6 +20,7 @@ the downstream ``adam-assist`` Rust/parity test suites.
 
 import logging
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import ClassVar, Literal, Optional, Union
 
 from ..constants import Constants as _Constants
@@ -107,6 +108,26 @@ class EphemerisMixin(ABC):
         ...
 
 
+@dataclass(frozen=True)
+class NativeBackend:
+    """
+    A propagator class's declaration that it provides compiled orbit
+    determination work units running its own dynamics.
+
+    ``name`` and ``version`` identify the backend (recorded in OD
+    provenance); ``work_units`` names the methods that run natively
+    (``run_iod``, ``full_od``, ``run_od``, ``iterative_fit``,
+    ``cmc2003_fit``, ``fit_least_squares_whitened``,
+    ``fit_least_squares_evaluated``, ``fit_least_squares``,
+    ``initial_orbit_determination``). OD dispatches to a work unit only when
+    it is declared here: having a method of that name is not enough.
+    """
+
+    name: str
+    version: str
+    work_units: frozenset = field(default_factory=frozenset)
+
+
 class Propagator(EphemerisMixin):
     """Abstract base for orbit propagators.
 
@@ -124,6 +145,12 @@ class Propagator(EphemerisMixin):
     #: analytic Jacobian is requested, and ``jacobian="central"`` differences
     #: the propagator itself instead.
     two_body_dynamics: ClassVar[bool] = False
+
+    #: The compiled OD work units this class provides (`NativeBackend`), or
+    #: None. The declaration covers the class's own propagation and
+    #: work-unit methods: a subclass that overrides any of them is not
+    #: covered (it runs the composed path) unless it declares again.
+    native_backend: ClassVar[Optional[NativeBackend]] = None
 
     @abstractmethod
     def propagate_orbits(

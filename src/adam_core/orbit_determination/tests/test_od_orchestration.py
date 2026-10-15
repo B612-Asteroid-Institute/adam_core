@@ -945,6 +945,8 @@ class TestFusedRunOd:
                 return super().generate_ephemeris(orbits, observers, **kwargs)
 
         class CountingNativePropagator(NativeTwoBodyPropagator):
+            native_backend = NativeTwoBodyPropagator.native_backend
+
             def __init__(self) -> None:
                 super().__init__()
                 self.fused_run_od_calls = 0

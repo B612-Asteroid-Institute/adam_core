@@ -42,7 +42,10 @@ import pyarrow as pa
 import pyarrow.compute as pc
 
 from ..propagator.propagator import Propagator
-from ._native_dispatch import _warn_if_analytic_jacobian_mismatches
+from ._native_dispatch import (
+    _warn_if_analytic_jacobian_mismatches,
+    native_work_unit,
+)
 from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, ObservationAstrometry
 from .observation_uncertainty import (
@@ -256,7 +259,7 @@ def _fused_run_od(
     """
     from .native_orbit_fitter import NativeOrbitFitter, tables_from_native_full_od
 
-    fused = getattr(propagator, "run_od", None)
+    fused = native_work_unit(propagator, "run_od")
     if fused is None or not isinstance(fitter, NativeOrbitFitter):
         return None
     if not fitter.supports_native_full_od():

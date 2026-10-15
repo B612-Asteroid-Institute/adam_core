@@ -3056,6 +3056,16 @@ pub trait SphericalPredictor {
         geometry: &OrbitGeometry,
         observers: &ObserverBatch,
     ) -> PropagationResultValue<Result<Vec<f64>, String>>;
+
+    /// The propagation backend behind the predictions (for provenance and
+    /// derivative compatibility). The default names the adapter type.
+    fn backend(&self) -> super::BackendIdentity {
+        super::BackendIdentity {
+            name: std::any::type_name::<Self>().to_string(),
+            version: "unknown".to_string(),
+            two_body_dynamics: false,
+        }
+    }
 }
 
 /// [`SphericalPredictor`] over a Rust [`Propagator`]: one
@@ -3072,6 +3082,10 @@ where
     P: Propagator,
     T: OriginTranslationProvider,
 {
+    fn backend(&self) -> super::BackendIdentity {
+        self.propagator.backend()
+    }
+
     fn predict_spherical(
         &self,
         states: &[[f64; 6]],
@@ -4127,6 +4141,18 @@ mod tests {
                 assert_eq!(epochs.len(), 3, "coincident epochs in {triplet:?}");
             }
         }
+    }
+
+    #[test]
+    fn predictors_report_the_propagator_behind_them() {
+        let propagator = TwoBodyPropagator::default();
+        let identity = propagator.backend();
+        assert_eq!(identity.name, "adam_core.two_body");
+        assert!(identity.two_body_dynamics);
+        assert_eq!(identity.version, env!("CARGO_PKG_VERSION"));
+        let options = ephemeris_options();
+        let predictor = two_body_predictor(&propagator, &options);
+        assert_eq!(predictor.backend(), identity);
     }
 
     #[test]

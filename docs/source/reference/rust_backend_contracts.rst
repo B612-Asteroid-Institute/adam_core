@@ -178,7 +178,11 @@ Current Migrated APIs
     observations, original / used astrometry snapshots for the members).
   - Dispatch: ``iterative_fit``, ``cmc2003_fit_detailed`` and ``run_iod``
     (and ``iod``, which wraps it) route to a propagator's ``iterative_fit`` /
-    ``cmc2003_fit`` / ``run_iod`` work units when it has them and otherwise
+    ``cmc2003_fit`` / ``run_iod`` work units when its ``native_backend``
+    (``NativeBackend``) declares them, and the declaration still covers the
+    instance (no propagation method or work unit overridden below the
+    declaring class); a method of that name alone is not enough. Otherwise
+    they
     run the same Rust loop through the callback route
     (``iterative_fit_ipc`` / ``cmc2003_fit_ipc`` / ``run_iod_ipc`` with the
     propagator object); ``initial_orbit_determination`` runs ``run_iod`` per

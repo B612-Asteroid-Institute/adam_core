@@ -21,7 +21,7 @@ from ...dynamics.propagation import propagate_2body
 from ...observers import Observers
 from ...orbits.ephemeris import Ephemeris
 from ...orbits.orbits import Orbits
-from ...propagator.propagator import Propagator
+from ...propagator.propagator import NativeBackend, Propagator
 from ...time import Timestamp
 from ..differential_correction import (
     _analytic_jacobian,
@@ -99,6 +99,21 @@ class NativeTwoBodyPropagator(TwoBodyPropagator):
     exposes. Its `generate_ephemeris` stays the Python two-body pipeline, so
     the scipy path and the fused path can be compared on identical dynamics.
     """
+
+    native_backend = NativeBackend(
+        name="adam_core.tests.native_two_body",
+        version="0",
+        work_units=frozenset(
+            {
+                "fit_least_squares_whitened",
+                "iterative_fit",
+                "cmc2003_fit",
+                "run_iod",
+                "full_od",
+                "run_od",
+            }
+        ),
+    )
 
     @staticmethod
     def _problem(orbit, observations):
@@ -711,6 +726,12 @@ class FusedTwoBodyPropagator(TwoBodyPropagator):
     the evaluation columns filled from `evaluate_orbits` at that state.
     """
 
+    native_backend = NativeBackend(
+        name="adam_core.tests.fused_two_body",
+        version="0",
+        work_units=frozenset({"fit_least_squares_evaluated"}),
+    )
+
     def __init__(self, state, covariance):
         self._state = np.asarray(state, dtype=np.float64)
         self._covariance = np.asarray(covariance, dtype=np.float64)
@@ -930,7 +951,13 @@ class TestFusedWhitenedFit:
             calls.append(kwargs)
             return original(*args, **kwargs)
 
-        monkeypatch.setattr(propagator, "fit_least_squares_whitened", spy)
+        # Patched on the declaring class: an instance-level replacement is not
+        # covered by its native_backend declaration.
+        monkeypatch.setattr(
+            NativeTwoBodyPropagator,
+            "fit_least_squares_whitened",
+            lambda self, *args, **kwargs: spy(*args, **kwargs),
+        )
         fit_least_squares(make_initial_guess(), observations, propagator, ftol=1e-10)
         assert len(calls) == 1 and calls[0]["fit_settings"]["ftol"] == 1e-10
 

@@ -162,6 +162,14 @@ impl TwoBodyPropagator {
 impl Propagator for TwoBodyPropagator {
     type Shard = TwoBodyShard;
 
+    fn backend(&self) -> super::BackendIdentity {
+        super::BackendIdentity {
+            name: "adam_core.two_body".to_string(),
+            version: env!("CARGO_PKG_VERSION").to_string(),
+            two_body_dynamics: true,
+        }
+    }
+
     fn integration_time_scale(&self) -> TimeScale {
         TimeScale::Tdb
     }

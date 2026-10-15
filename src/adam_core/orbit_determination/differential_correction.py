@@ -16,7 +16,7 @@ from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
 from ..time.time import Timestamp
 from ..utils.spice import get_perturber_state
-from ._native_dispatch import _warn_if_analytic_jacobian_mismatches
+from ._native_dispatch import _warn_if_analytic_jacobian_mismatches, native_work_unit
 from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .observation_uncertainty import ObservationUncertaintyModel
@@ -575,7 +575,7 @@ def _fused_whitened_fit(
     `RuntimeWarning`s. Returns None when the propagator exposes no such work
     unit.
     """
-    fused = getattr(propagator, "fit_least_squares_whitened", None)
+    fused = native_work_unit(propagator, "fit_least_squares_whitened")
     if fused is None:
         return None
     ignore_mask = (
@@ -612,7 +612,7 @@ def _native_fit_least_squares(
     neither. Only reachable for the legacy forward-difference Jacobian with
     the linear loss; see `fit_least_squares`.
     """
-    fused_fit = getattr(propagator, "fit_least_squares_evaluated", None)
+    fused_fit = native_work_unit(propagator, "fit_least_squares_evaluated")
     if fused_fit is not None:
         ignore_mask = (
             pc.is_in(observations.id, pa.array(ignore)).to_pylist()
@@ -625,7 +625,7 @@ def _native_fit_least_squares(
             orbit, observations, output, (~outlier).astype(np.float64)
         )
 
-    native_fit = getattr(propagator, "fit_least_squares", None)
+    native_fit = native_work_unit(propagator, "fit_least_squares")
     if native_fit is not None:
         fitted, _chi2, iterations, converged = native_fit(
             orbit, observations_to_include, **kwargs
@@ -1033,7 +1033,7 @@ def iterative_fit(
     # Rust-backed propagators run the whole rejection loop in one crossing
     # (``iterative_fit`` work unit); every other propagator runs the same Rust
     # loop through the callback route. The facade only wraps the selected pass.
-    fused = getattr(propagator, "iterative_fit", None)
+    fused = native_work_unit(propagator, "iterative_fit")
     if fused is not None:
         output = fused(orbit, observations, fit_settings=fit_settings, **loop_settings)
     else:

@@ -14,6 +14,7 @@ from ..time import Timestamp
 from ._native_dispatch import (
     _has_compatible_native_spec,
     _warn_if_analytic_jacobian_mismatches,
+    native_work_unit,
 )
 from .differential_correction import (
     _FUSED_LOOP_KWARGS,
@@ -321,7 +322,7 @@ class NativeOrbitFitter(OrbitFitter):
         itself. Otherwise `initial_fit` and `refine_fit` are chained,
         honoring subclass overrides.
         """
-        fused = getattr(propagator, "full_od", None)
+        fused = native_work_unit(propagator, "full_od")
         if fused is not None and self.supports_native_full_od():
             iod_settings, refinement, fit_settings = self.native_settings()
             _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])

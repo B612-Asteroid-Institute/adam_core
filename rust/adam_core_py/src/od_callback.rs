@@ -13,6 +13,7 @@
 //! once the driver has unwound.
 
 use crate::coordinates::write_orbit_ipc;
+use adam_core_rs_coords::propagation::BackendIdentity;
 use adam_core_rs_coords::propagation::{
     candidate_orbit_batch, OrbitGeometry, PropagationError, PropagationResultValue,
     SphericalPredictor,
@@ -37,6 +38,8 @@ pub(crate) struct PyEphemerisPredictor {
     propagator: Py<PyAny>,
     helper: Py<PyAny>,
     error: Mutex<Option<PyErr>>,
+    /// The Python class behind the callbacks (`python:<module>.<qualname>`).
+    backend: BackendIdentity,
 }
 
 impl PyEphemerisPredictor {
@@ -45,10 +48,25 @@ impl PyEphemerisPredictor {
             .import(CALLBACK_MODULE)?
             .getattr("predict_spherical")?
             .unbind();
+        let cls = propagator.get_type();
+        let attr = |name: &str| -> String {
+            cls.getattr(name)
+                .and_then(|value| value.extract())
+                .unwrap_or_else(|_| "?".to_string())
+        };
+        let backend = BackendIdentity {
+            name: format!("python:{}.{}", attr("__module__"), attr("__qualname__")),
+            version: "unknown".to_string(),
+            two_body_dynamics: propagator
+                .getattr("two_body_dynamics")
+                .and_then(|value| value.extract())
+                .unwrap_or(false),
+        };
         Ok(Self {
             propagator: propagator.clone().unbind(),
             helper,
             error: Mutex::new(None),
+            backend,
         })
     }
 
@@ -70,6 +88,10 @@ fn ipc_bytes(batch: arrow_array::RecordBatch) -> PropagationResultValue<Vec<u8>>
 }
 
 impl SphericalPredictor for PyEphemerisPredictor {
+    fn backend(&self) -> BackendIdentity {
+        self.backend.clone()
+    }
+
     fn predict_spherical(
         &self,
         states: &[[f64; 6]],

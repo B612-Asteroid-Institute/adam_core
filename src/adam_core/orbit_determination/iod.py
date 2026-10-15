@@ -18,6 +18,7 @@ from ..orbits.orbits import Orbits
 from ..propagator import Propagator
 from ..time import Timestamp
 from ..utils.iter import _iterate_chunks
+from ._native_dispatch import native_work_unit
 from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, drop_duplicate_orbits
 from .gauss import MU, C
@@ -587,7 +588,7 @@ def run_iod(
         **(correction_settings or {}),
     }
     orbit_id = uuid.uuid4().hex
-    fused = getattr(propagator, "run_iod", None)
+    fused = native_work_unit(propagator, "run_iod")
     if fused is not None:
         output = fused(
             observations, iod_settings=iod_settings, fit_settings=fit_settings
@@ -856,7 +857,9 @@ def initial_orbit_determination(
     # only for signature compatibility (native execution replaces Ray).
     native_prop = propagator(**propagator_kwargs)
     # The compiled batch work unit implements the legacy prefit policy only.
-    if acceptance == "prefit" and hasattr(native_prop, "initial_orbit_determination"):
+    if acceptance == "prefit" and native_work_unit(
+        native_prop, "initial_orbit_determination"
+    ):
         if len(observations) == 0 or len(linkage_members) == 0:
             return FittedOrbits.empty(), FittedOrbitMembers.empty()
         linkage_ids = linkage_members.column(linkage_id_col).unique().to_pylist()

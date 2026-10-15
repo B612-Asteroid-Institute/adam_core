@@ -104,8 +104,31 @@ impl From<SchemaError> for PropagationError {
     }
 }
 
+/// Who a [`Propagator`] is: recorded in orbit-determination provenance and
+/// used to decide which derivatives are exact for it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BackendIdentity {
+    /// Stable backend name (e.g. `adam_core.two_body`, `adam_assist`).
+    pub name: String,
+    /// Backend version (its crate or package version).
+    pub version: String,
+    /// Whether the backend integrates exactly the Kepler two-body problem, so
+    /// the analytic two-body Jacobian is its exact derivative.
+    pub two_body_dynamics: bool,
+}
+
 pub trait Propagator: Sync {
     type Shard: PropagatorShard;
+
+    /// The backend's identity. The default names the implementing type with
+    /// an unknown version and no two-body declaration; backends override it.
+    fn backend(&self) -> BackendIdentity {
+        BackendIdentity {
+            name: std::any::type_name::<Self>().to_string(),
+            version: "unknown".to_string(),
+            two_body_dynamics: false,
+        }
+    }
 
     fn integration_time_scale(&self) -> TimeScale;
     fn supports(&self, mode: CovariancePropagation) -> bool;
