@@ -8,6 +8,7 @@
 
 mod diagnostics;
 mod ephemeris;
+mod external;
 mod od;
 mod od_ranging;
 mod od_refine;
@@ -25,6 +26,10 @@ pub use ephemeris::{
     generate_ephemeris, generate_ephemeris_barycentric, generate_ephemeris_translated,
     EphemerisDiagnostics, EphemerisFailureCode, EphemerisOptions, EphemerisPhotometryOptions,
     EphemerisResult, EphemerisRowDiagnostic,
+};
+pub use external::{
+    two_body_reference, ExternalPropagator, ExternalPropagatorV1, PropagateRequestV1,
+    EXTERNAL_PROPAGATOR_ABI_VERSION, EXTERNAL_PROPAGATOR_CAPSULE,
 };
 pub use od::{
     candidate_orbit_batch, evaluate_orbit, evaluate_orbit_barycentric,

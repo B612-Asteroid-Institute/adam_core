@@ -176,6 +176,16 @@ This file contains notable changes in adam-core
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
 
+- External native propagators (C ABI v1, `propagation::external`): a
+  backend compiled in another extension (adam-assist's ASSIST) exposes its
+  propagation as an `ExternalPropagatorV1` table in a capsule named
+  `adam_core.propagator.v1` and declares the `propagator_capsule` work unit
+  in its `NativeBackend`; the OD entry points (`run_iod`, `refine` and its
+  loops, `run_od`, the fits) then run every stage in Rust over an
+  `ExternalPropagator` (a `Propagator`) with the backend's dynamics, no
+  Python call per prediction. `two_body_propagator_capsule()` is the
+  reference implementation; OD through it matches the native two-body
+  propagator.
 - Systematic ranging for arcs Gauss cannot handle (phase 1;
   `propagation::od_ranging`, `IodConfig::ranging` / `ranging_settings`).
   The attributable (position and rates at the arc's midpoint observation,

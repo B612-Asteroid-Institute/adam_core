@@ -4884,6 +4884,66 @@ mod tests {
     }
 
     #[test]
+    fn external_propagators_run_the_od_stages_like_native_ones() {
+        // adam-core's two-body propagator behind the C ABI (as a plugin such
+        // as ASSIST exposes its own) gives the same IOD and refinement as
+        // the propagator itself, and reports the external identity.
+        let table = super::super::two_body_reference::table(TwoBodyPropagator::default());
+        let external = unsafe { super::super::ExternalPropagator::from_raw(table) }.unwrap();
+        let identity = external.backend();
+        assert_eq!(identity.name, "adam_core.two_body.external");
+        assert!(identity.two_body_dynamics);
+        let (propagator, options) = two_body();
+        let observed = synthetic_observations(Some(3));
+        let config = FullOdConfig {
+            iod: super::super::od::IodConfig {
+                contamination_percentage: 20.0,
+                ..corrected_iod_config(50.0)
+            },
+            refinement: RefinementConfig::default(),
+        };
+        let run = |iod: &dyn Fn() -> FullOdOutput| iod();
+        let native = run(&|| {
+            full_od_barycentric(
+                &propagator,
+                &propagator,
+                &observed,
+                &observers(),
+                &config,
+                &options,
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap()
+        });
+        let via_abi = run(&|| {
+            full_od_barycentric(
+                &external,
+                &external,
+                &observed,
+                &observers(),
+                &config,
+                &options,
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap()
+        });
+        let (a, b) = (native.refined.unwrap(), via_abi.refined.unwrap());
+        assert!(max_abs_diff(&a.fit.state, &b.fit.state) < 1e-12);
+        assert_eq!(a.fit.evaluation.outlier, b.fit.evaluation.outlier);
+        assert_eq!(native.iod.accepted, via_abi.iod.accepted);
+        // The predictor reports the external backend.
+        let predictor = PropagatorPredictor {
+            propagator: &external,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        assert_eq!(predictor.backend(), identity);
+    }
+
+    #[test]
     fn corrected_acceptance_reports_stalled_candidates() {
         let observed = synthetic_observations(None);
         let (propagator, options) = two_body();

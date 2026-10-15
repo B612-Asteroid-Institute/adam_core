@@ -78,6 +78,7 @@ from ..propagator.propagator import Propagator
 from ._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
     deprecated,
+    native_propagator,
     native_work_unit,
 )
 from .differential_correction import (
@@ -390,7 +391,7 @@ def cmc2003_fit_detailed(
         from adam_core import _rust_native
 
         output = _rust_native.cmc2003_fit_ipc(
-            propagator,
+            native_propagator(propagator),
             *_native_problem(orbit, observations),
             fit_settings=fit_settings,
             **loop_settings,

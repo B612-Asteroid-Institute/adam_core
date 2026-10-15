@@ -20,6 +20,7 @@ from ..utils.spice import get_perturber_state
 from ._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
     deprecated,
+    native_propagator,
     native_work_unit,
 )
 from .evaluate import OrbitDeterminationObservations, evaluate_orbits
@@ -417,7 +418,7 @@ def _probe_covariance(
 
     method = "2-point" if jacobian_method == "solver" else jacobian_method
     return _rust_native.validate_fit_covariance_ipc(
-        propagator,
+        native_propagator(propagator),
         *_native_problem(_orbit_at(state_vector, mjd_tdb), observations),
         [False] * len(observations),
         np.ascontiguousarray(covariance_matrix, dtype=np.float64).reshape(6, 6),
@@ -934,7 +935,7 @@ def _fit_least_squares(
         [False] * len(observations) if mask is None else pc.invert(mask).to_pylist()
     )
     output = _rust_native.fit_orbit_whitened_ipc(
-        propagator,
+        native_propagator(propagator),
         *_native_problem(orbit, observations),
         ignore_mask,
         fit_settings=_fit_settings(
@@ -1062,7 +1063,7 @@ def _iterative_fit(
         from adam_core import _rust_native
 
         output = _rust_native.iterative_fit_ipc(
-            propagator,
+            native_propagator(propagator),
             *_native_problem(orbit, observations),
             fit_settings=fit_settings,
             **loop_settings,

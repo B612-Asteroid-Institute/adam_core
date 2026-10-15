@@ -28,12 +28,13 @@ use adam_core_rs_coords::observation_uncertainty::{
 use adam_core_rs_coords::propagation::{
     cmc2003_fit_with, fit_orbit_whitened_with, full_od_with, iterative_fit_with, run_iod_with,
     run_od_with, validate_fit_covariance_with, AstrometrySnapshot, Cmc2003FitConfig,
-    CorrectionConfig, CovariancePropagation, EphemerisOptions, EpochPolicy, FullOdConfig,
-    FullOdOutput, IodAcceptance, IodCandidate, IodConfig, IodResult, IterativeFitConfig,
-    JacobianMethod, ObservationSelectionMethod, PrefitScope, PropagationOptions,
-    PropagationResultValue, PropagatorPredictor, RangingConfig, RangingResult, RangingSample,
-    RefinementConfig, SpanSearchConfig, SphericalPredictor, TwoBodyPropagator,
+    CorrectionConfig, CovariancePropagation, EphemerisOptions, EpochPolicy, ExternalPropagator,
+    ExternalPropagatorV1, FullOdConfig, FullOdOutput, IodAcceptance, IodCandidate, IodConfig,
+    IodResult, IterativeFitConfig, JacobianMethod, ObservationSelectionMethod, PrefitScope,
+    PropagationOptions, PropagationResultValue, PropagatorPredictor, RangingConfig, RangingResult,
+    RangingSample, RefinementConfig, SpanSearchConfig, SphericalPredictor, TwoBodyPropagator,
     TwoBodyPropagatorConfig, VelocityMethod, WhitenedFitConfig, WhitenedFitOutput,
+    EXTERNAL_PROPAGATOR_CAPSULE,
 };
 use adam_core_rs_coords::veres2017::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
 use adam_core_rs_coords::{
@@ -46,7 +47,7 @@ use adam_core_rs_coords::{
 use numpy::{IntoPyArray, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyDict, PyList};
+use pyo3::types::{PyBytes, PyCapsule, PyDict, PyList};
 use std::sync::Arc;
 
 fn value_error(message: impl Into<String>) -> PyErr {
@@ -557,10 +558,71 @@ fn covariance_36(covariance: &PyReadonlyArray2<'_, f64>) -> PyResult<[f64; 36]> 
 // Running a driver over the chosen backend
 // ---------------------------------------------------------------------------
 
-/// Run `driver` with the GIL released, over a Python propagator wrapped as a
-/// callback predictor (`propagator` given) or adam_core's two-body
-/// propagator (`None`). Errors map to Python exceptions; an exception raised
-/// inside the callback is re-raised unchanged.
+/// A propagator handed to a driver: an external native propagator (a
+/// capsule named `EXTERNAL_PROPAGATOR_CAPSULE`, e.g. ASSIST's), run as a
+/// Rust `Propagator` with no Python per prediction; or a Python propagator
+/// wrapped as a callback predictor.
+enum PySource {
+    External {
+        propagator: ExternalPropagator,
+        // Keeps the capsule (and the backend's context) alive.
+        _capsule: Py<PyAny>,
+    },
+    Callback(PyEphemerisPredictor),
+}
+
+impl PySource {
+    fn new(py: Python<'_>, object: &Bound<'_, PyAny>) -> PyResult<Self> {
+        if let Ok(capsule) = object.downcast::<PyCapsule>() {
+            let name = capsule
+                .name()?
+                .map(|name| name.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            if name != EXTERNAL_PROPAGATOR_CAPSULE {
+                return Err(PyValueError::new_err(format!(
+                    "expected a {EXTERNAL_PROPAGATOR_CAPSULE:?} capsule, got {name:?}"
+                )));
+            }
+            let raw = capsule.pointer() as *const ExternalPropagatorV1;
+            // SAFETY: a capsule of this name holds an `ExternalPropagatorV1`
+            // whose context lives as long as the capsule, kept alive here.
+            let propagator =
+                unsafe { ExternalPropagator::from_raw(raw) }.map_err(|err| od_error(err, None))?;
+            return Ok(Self::External {
+                propagator,
+                _capsule: object.clone().unbind(),
+            });
+        }
+        Ok(Self::Callback(PyEphemerisPredictor::new(py, object)?))
+    }
+
+    fn callback(&self) -> Option<&PyEphemerisPredictor> {
+        match self {
+            Self::Callback(callback) => Some(callback),
+            Self::External { .. } => None,
+        }
+    }
+}
+
+/// [`PropagatorPredictor`] over an external propagator with the driver's
+/// ephemeris settings and adam-core's time and SPICE providers.
+fn external_predictor<'a>(
+    propagator: &'a ExternalPropagator,
+    settings: &'a FitSettings,
+) -> PropagatorPredictor<'a, ExternalPropagator, LockingSpiceTranslation> {
+    PropagatorPredictor {
+        propagator,
+        options: &settings.options,
+        provider: &ErfaTimeProvider,
+        translation_provider: &LockingSpiceTranslation,
+    }
+}
+
+/// Run `driver` with the GIL released, over an external native propagator
+/// (capsule), a Python propagator wrapped as a callback predictor, or
+/// adam_core's two-body propagator (`None`). Errors map to Python
+/// exceptions; an exception raised inside the callback is re-raised
+/// unchanged.
 fn run_with_predictor<R: Send>(
     py: Python<'_>,
     propagator: Option<&Bound<'_, PyAny>>,
@@ -568,11 +630,17 @@ fn run_with_predictor<R: Send>(
     driver: impl for<'p> FnOnce(&'p dyn SphericalPredictor) -> PropagationResultValue<R> + Send,
 ) -> PyResult<R> {
     match propagator {
-        Some(object) => {
-            let predictor = PyEphemerisPredictor::new(py, object)?;
-            py.allow_threads(|| driver(&predictor))
-                .map_err(|err| od_error(err, Some(&predictor)))
-        }
+        Some(object) => match PySource::new(py, object)? {
+            PySource::External {
+                propagator,
+                _capsule,
+            } => py
+                .allow_threads(|| driver(&external_predictor(&propagator, settings)))
+                .map_err(|err| od_error(err, None)),
+            PySource::Callback(predictor) => py
+                .allow_threads(|| driver(&predictor))
+                .map_err(|err| od_error(err, Some(&predictor))),
+        },
         None => py
             .allow_threads(|| {
                 let predictor = PropagatorPredictor {
@@ -602,11 +670,11 @@ fn run_with_predictors<R: Send>(
         ) -> PropagationResultValue<R>
         + Send,
 ) -> PyResult<R> {
-    let iod_callback = iod_propagator
-        .map(|object| PyEphemerisPredictor::new(py, object))
+    let iod_source = iod_propagator
+        .map(|object| PySource::new(py, object))
         .transpose()?;
-    let refine_callback = propagator
-        .map(|object| PyEphemerisPredictor::new(py, object))
+    let refine_source = propagator
+        .map(|object| PySource::new(py, object))
         .transpose()?;
     let result = py.allow_threads(|| {
         let two_body = PropagatorPredictor {
@@ -615,24 +683,39 @@ fn run_with_predictors<R: Send>(
             provider: &ErfaTimeProvider,
             translation_provider: &LockingSpiceTranslation,
         };
-        let refine: &dyn SphericalPredictor = match &refine_callback {
-            Some(callback) => callback,
-            None => &two_body,
+        let refine_external = match &refine_source {
+            Some(PySource::External { propagator, .. }) => {
+                Some(external_predictor(propagator, settings))
+            }
+            _ => None,
         };
-        let iod: &dyn SphericalPredictor = match &iod_callback {
-            Some(callback) => callback,
-            None => refine,
+        let iod_external = match &iod_source {
+            Some(PySource::External { propagator, .. }) => {
+                Some(external_predictor(propagator, settings))
+            }
+            _ => None,
+        };
+        let refine: &dyn SphericalPredictor = match (&refine_source, &refine_external) {
+            (_, Some(external)) => external,
+            (Some(PySource::Callback(callback)), _) => callback,
+            _ => &two_body,
+        };
+        let iod: &dyn SphericalPredictor = match (&iod_source, &iod_external) {
+            (_, Some(external)) => external,
+            (Some(PySource::Callback(callback)), _) => callback,
+            _ => refine,
         };
         driver(iod, refine)
     });
     result.map_err(|err| {
-        if let Some(py_err) = iod_callback
+        if let Some(py_err) = iod_source
             .as_ref()
+            .and_then(PySource::callback)
             .and_then(PyEphemerisPredictor::take_error)
         {
             return py_err;
         }
-        od_error(err, refine_callback.as_ref())
+        od_error(err, refine_source.as_ref().and_then(PySource::callback))
     })
 }
 
@@ -1455,7 +1538,39 @@ fn run_od_2body_ipc<'py>(
     )
 }
 
+/// `ExternalPropagatorV1` by value inside a capsule (the capsule pointer is
+/// the table's address).
+#[repr(transparent)]
+struct ExternalTable(ExternalPropagatorV1);
+
+// SAFETY: the table's pointers are to process-lifetime reference data.
+unsafe impl Send for ExternalTable {}
+
+/// adam-core's two-body propagator as an external-propagator capsule: the
+/// reference implementation of the ABI plugins expose (and a test double of
+/// the external route).
+#[pyfunction]
+pub fn two_body_propagator_capsule(py: Python<'_>) -> PyResult<Bound<'_, PyCapsule>> {
+    let table =
+        adam_core_rs_coords::propagation::two_body_reference::table(TwoBodyPropagator::default());
+    let name = std::ffi::CString::new(EXTERNAL_PROPAGATOR_CAPSULE).expect("no NUL");
+    PyCapsule::new(
+        py,
+        ExternalTable(ExternalPropagatorV1 {
+            abi_version: table.abi_version,
+            integration_time_scale: table.integration_time_scale,
+            two_body_dynamics: table.two_body_dynamics,
+            name: table.name,
+            version: table.version,
+            context: table.context,
+            propagate: table.propagate,
+        }),
+        Some(name),
+    )
+}
+
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(two_body_propagator_capsule, m)?)?;
     m.add_function(wrap_pyfunction!(fit_orbit_whitened_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(fit_orbit_whitened_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(validate_fit_covariance_ipc, m)?)?;

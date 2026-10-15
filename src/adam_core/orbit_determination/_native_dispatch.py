@@ -111,6 +111,19 @@ def native_work_unit(propagator: object, name: str):
     return getattr(propagator, name, None)
 
 
+def native_propagator(propagator: object):
+    """What the Rust drivers receive for ``propagator``: the external-
+    propagator capsule (``adam_core.propagator.v1``) when its `NativeBackend`
+    declares the ``propagator_capsule`` work unit, so every OD stage runs
+    natively with its dynamics (no Python call per prediction); otherwise the
+    propagator itself (the callback route). None stays None (adam-core's
+    two-body propagator)."""
+    if propagator is None:
+        return None
+    capsule = native_work_unit(propagator, "propagator_capsule")
+    return propagator if capsule is None else capsule()
+
+
 def _warn_if_analytic_jacobian_mismatches(propagator: object, jacobian: str) -> None:
     """
     Make the analytic two-body Jacobian audible on other dynamics.

@@ -19,7 +19,7 @@ from ..orbits.variants import VariantOrbits
 from ..propagator import Propagator
 from ..time import Timestamp
 from ..utils.iter import _iterate_chunks
-from ._native_dispatch import deprecated, native_work_unit
+from ._native_dispatch import deprecated, native_propagator, native_work_unit
 from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, drop_duplicate_orbits
 from .gauss import MU, C
@@ -695,7 +695,7 @@ def run_iod(
             _placeholder_orbit(observations), observations
         )
         output = _rust_native.run_iod_ipc(
-            propagator,
+            native_propagator(propagator),
             observed_ipc,
             observers_ipc,
             iod_settings=iod_settings,

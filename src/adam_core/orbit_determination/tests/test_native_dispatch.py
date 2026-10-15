@@ -323,3 +323,91 @@ def test_overlapping_entry_points_are_deprecated_aliases(module, name, replaceme
             None,
             propagator=TwoBodyPropagator(),
         )
+
+
+class CapsuleTwoBody(TwoBodyPropagator):
+    """A Python propagator whose dynamics live in a native extension and are
+    exposed as an external-propagator capsule (as ASSIST does): every OD
+    stage runs them natively, never calling back into Python."""
+
+    from adam_core.propagator import NativeBackend as _NativeBackend
+
+    native_backend = _NativeBackend(
+        name="adam_core.two_body.external",
+        version="test",
+        work_units=frozenset({"propagator_capsule"}),
+    )
+    ephemeris_calls = 0
+
+    def propagator_capsule(self):
+        from adam_core import _rust_native
+
+        return _rust_native.two_body_propagator_capsule()
+
+    def generate_ephemeris(self, orbits, observers, **kwargs):
+        type(self).ephemeris_calls += 1
+        return super().generate_ephemeris(orbits, observers, **kwargs)
+
+
+def test_external_propagator_capsule_runs_od_natively():
+    import numpy.testing as _npt
+
+    observations = make_synthetic_observations()
+    CapsuleTwoBody.ephemeris_calls = 0
+    propagator = CapsuleTwoBody()
+    native, native_members = run_od(
+        observations,
+        NativeOrbitFitter(propagator, iod_rchi2_threshold=1e6),
+        None,
+        propagator=propagator,
+    )
+    assert CapsuleTwoBody.ephemeris_calls == 0
+    callback, callback_members = run_od(
+        observations,
+        NativeOrbitFitter(TwoBodyPropagator(), iod_rchi2_threshold=1e6),
+        None,
+        propagator=TwoBodyPropagator(),
+    )
+    _npt.assert_allclose(
+        native.coordinates.values, callback.coordinates.values, rtol=0, atol=1e-8
+    )
+    assert native_members.outlier.to_pylist() == callback_members.outlier.to_pylist()
+    # Provenance names the external backend.
+    assert (
+        native.provenance.refinement_backend[0]
+        .as_py()
+        .startswith("adam_core.two_body.external")
+    )
+    # A capsule of another name is refused.
+    with pytest.raises(ValueError, match="capsule"):
+        _check_bad_capsule()
+
+
+def _check_bad_capsule():
+    import ctypes
+
+    from adam_core.orbit_determination.differential_correction import (
+        fit_least_squares,
+    )
+    from adam_core.orbit_determination.tests.test_differential_correction import (
+        make_initial_guess,
+    )
+
+    class Wrong(TwoBodyPropagator):
+        from adam_core.propagator import NativeBackend as _NativeBackend
+
+        native_backend = _NativeBackend(
+            name="wrong", version="0", work_units=frozenset({"propagator_capsule"})
+        )
+
+        def propagator_capsule(self):
+            PyCapsule_New = ctypes.pythonapi.PyCapsule_New
+            PyCapsule_New.restype = ctypes.py_object
+            PyCapsule_New.argtypes = (ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p)
+            return PyCapsule_New(ctypes.c_void_p(1), b"not.a.propagator", None)
+
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        fit_least_squares(make_initial_guess(), make_synthetic_observations(), Wrong())
