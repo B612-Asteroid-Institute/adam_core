@@ -17,7 +17,11 @@ from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
 from ..time.time import Timestamp
 from ..utils.spice import get_perturber_state
-from ._native_dispatch import _warn_if_analytic_jacobian_mismatches, native_work_unit
+from ._native_dispatch import (
+    _warn_if_analytic_jacobian_mismatches,
+    deprecated,
+    native_work_unit,
+)
 from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .observation_uncertainty import ObservationUncertaintyModel
@@ -699,7 +703,7 @@ def _validate_native_covariance(
     )
 
 
-def fit_least_squares(
+def _fit_least_squares(
     orbit: Orbits,
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
@@ -943,7 +947,7 @@ def fit_least_squares(
     )
 
 
-def iterative_fit(
+def _iterative_fit(
     orbit: Orbits,
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
@@ -1067,3 +1071,19 @@ def iterative_fit(
     return _fitted_tables_from_native_output(
         orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
     )
+
+
+@deprecated(
+    _fit_least_squares,
+    "refine(orbit, observations, propagator, rejection='none')",
+)
+def fit_least_squares(*args, **kwargs):  # pragma: no cover - replaced by the alias
+    """Deprecated alias of `_fit_least_squares`."""
+
+
+@deprecated(
+    _iterative_fit,
+    "refine(orbit, observations, propagator, rejection='worst_residual')",
+)
+def iterative_fit(*args, **kwargs):  # pragma: no cover - replaced by the alias
+    """Deprecated alias of `_iterative_fit`."""

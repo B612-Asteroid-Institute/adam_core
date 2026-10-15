@@ -95,7 +95,7 @@ def observations():
 
 
 def make_fitter(cls=NativeOrbitFitter, **kwargs):
-    return cls(propagator_class=TwoBodyPropagator, iod_rchi2_threshold=1e6, **kwargs)
+    return cls(TwoBodyPropagator(), iod_rchi2_threshold=1e6, **kwargs)
 
 
 @pytest.mark.parametrize("backend", [TwoBodyPropagator, RecordingNativePropagator])
@@ -279,7 +279,47 @@ def test_overridden_dynamics_run_the_composed_path():
 
     propagator = Spy()
     orbits, _ = run_od(
-        observations, NativeOrbitFitter(Spy), None, propagator=propagator
+        observations, NativeOrbitFitter(Spy()), None, propagator=propagator
     )
     assert calls == []
     assert len(orbits) == 1
+
+
+@pytest.mark.parametrize(
+    "module, name, replacement",
+    [
+        ("differential_correction", "fit_least_squares", "rejection='none'"),
+        ("differential_correction", "iterative_fit", "rejection='worst_residual'"),
+        ("rejection", "cmc2003_fit", "refine("),
+        ("iod", "iod", "run_iod("),
+        ("iod", "iod_worker", "initial_orbit_determination"),
+    ],
+)
+def test_overlapping_entry_points_are_deprecated_aliases(module, name, replacement):
+    """The overlapping entry points warn and name the stage they converge on;
+    their signature is the implementation's, which internal code calls
+    without a warning."""
+    import importlib
+    import inspect
+    import warnings
+
+    mod = importlib.import_module(f"adam_core.orbit_determination.{module}")
+    alias = getattr(mod, name)
+    implementation = getattr(mod, f"_{name}")
+    assert inspect.signature(alias) == inspect.signature(implementation)
+    assert alias.__doc__.startswith(".. deprecated::")
+    with pytest.warns(DeprecationWarning, match=replacement.replace("(", r"\(")):
+        try:
+            alias()
+        except TypeError:
+            pass
+    # The run_od stack itself never goes through a deprecated alias.
+    observations = make_synthetic_observations()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", DeprecationWarning)
+        run_od(
+            observations,
+            NativeOrbitFitter(TwoBodyPropagator(), iod_rchi2_threshold=1e6),
+            None,
+            propagator=TwoBodyPropagator(),
+        )

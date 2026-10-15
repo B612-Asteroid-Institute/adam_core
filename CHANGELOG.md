@@ -176,6 +176,16 @@ This file contains notable changes in adam-core
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
 
+- API consolidation onto the native stages (`run_iod`, `refine`, `run_od`).
+  `iod`, `iod_worker`, `fit_least_squares`, `iterative_fit` and
+  `cmc2003_fit` are deprecated aliases (same signature, a
+  `DeprecationWarning` naming the replacement; internal code calls the
+  implementations); `od.od`, `od.differential_correction` and `LeastSquares`
+  were already deprecated. `cmc2003_fit_detailed` stays as the diagnostic
+  form of `refine(rejection="cmc2003")`. `NativeOrbitFitter` takes the IOD
+  propagator as an instance (`NativeOrbitFitter(ASSISTPropagator())`); the
+  class-plus-kwargs form is deprecated. The use-case page has a migration
+  table.
 - Explicit OD stages (`run_iod` → `refine` → `run_od`). Rust:
   `run_iod_barycentric<I>` now honours `IodConfig.acceptance` (it ran only
   the prefit search) and takes the correction stages' fit settings;

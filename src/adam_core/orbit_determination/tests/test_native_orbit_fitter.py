@@ -18,16 +18,45 @@ def test_native_orbit_fitter_is_orbit_fitter():
 
 
 def test_native_orbit_fitter_propagator_kwargs_are_not_shared():
-    """The default propagator_kwargs must not be one dict shared by every
-    default-constructed fitter, and a caller's dict must be copied."""
-    first = NativeOrbitFitter(propagator_class=Propagator)
-    first.propagator_kwargs["mutated"] = True
-    assert NativeOrbitFitter(propagator_class=Propagator).propagator_kwargs == {}
+    """Deprecated class form: the default propagator_kwargs must not be one
+    dict shared by every default-constructed fitter, and a caller's dict
+    must be copied."""
+    with pytest.warns(DeprecationWarning, match="pass a propagator instance"):
+        first = NativeOrbitFitter(propagator_class=Propagator)
+        first.propagator_kwargs["mutated"] = True
+        assert NativeOrbitFitter(propagator_class=Propagator).propagator_kwargs == {}
 
-    supplied = {"a": 1}
-    fitter = NativeOrbitFitter(propagator_class=Propagator, propagator_kwargs=supplied)
+        supplied = {"a": 1}
+        fitter = NativeOrbitFitter(
+            propagator_class=Propagator, propagator_kwargs=supplied
+        )
     supplied["b"] = 2
     assert fitter.propagator_kwargs == {"a": 1}
+
+
+def test_native_orbit_fitter_takes_a_propagator_instance():
+    """The IOD propagator is an instance: kept as given, matched by identity,
+    pickled with the fitter; kwargs only belong to the deprecated class form."""
+    import warnings as _warnings
+
+    from .test_differential_correction import TwoBodyPropagator
+
+    instance = TwoBodyPropagator()
+    with _warnings.catch_warnings():
+        _warnings.simplefilter("error", DeprecationWarning)
+        fitter = NativeOrbitFitter(instance, min_obs=6)
+    assert fitter.iod_propagator is instance
+    assert fitter.propagator_class is TwoBodyPropagator
+    assert fitter.fused_propagator_matches(instance)
+    assert not fitter.fused_propagator_matches(TwoBodyPropagator())
+    assert fitter.iod_propagator_for(TwoBodyPropagator()) is instance
+    restored = pickle.loads(pickle.dumps(fitter))
+    assert isinstance(restored.iod_propagator, TwoBodyPropagator)
+    assert restored.min_obs == 6
+    with pytest.raises(TypeError, match="propagator_kwargs only applies"):
+        NativeOrbitFitter(instance, propagator_kwargs={"a": 1})
+    with pytest.raises(TypeError, match="needs an IOD propagator"):
+        NativeOrbitFitter()
 
 
 @pytest.mark.skipif(PYOORBPropagator is None, reason="PYOORBPropagator not available")

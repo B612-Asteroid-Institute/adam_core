@@ -163,7 +163,7 @@ def complete_provenance(
         iod_backend = backend_identity(
             propagator
             if fitter.fused_propagator_matches(propagator)
-            else fitter.propagator_class
+            else (fitter._iod_instance or fitter.propagator_class)
         )
 
     existing = fitted_orbits.table.column("provenance")

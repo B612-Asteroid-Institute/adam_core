@@ -101,9 +101,7 @@ def test_fused_route_warns_too(two_body_arc) -> None:  # noqa: F811
         fit_least_squares(orbit, observations, UndeclaredNativeDynamics())
     assert len(mismatch_warnings(caught)) == 1
 
-    fitter = NativeOrbitFitter(
-        propagator_class=UndeclaredNativeDynamics, iod_rchi2_threshold=1e4
-    )
+    fitter = NativeOrbitFitter(UndeclaredNativeDynamics(), iod_rchi2_threshold=1e4)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         fitted, _ = run_od(
@@ -112,9 +110,7 @@ def test_fused_route_warns_too(two_body_arc) -> None:  # noqa: F811
     assert len(fitted) == 1
     assert len(mismatch_warnings(caught)) == 1
 
-    declared = NativeOrbitFitter(
-        propagator_class=NativeTwoBodyPropagator, iod_rchi2_threshold=1e4
-    )
+    declared = NativeOrbitFitter(NativeTwoBodyPropagator(), iod_rchi2_threshold=1e4)
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         run_od(two_body_arc, declared, None, propagator=NativeTwoBodyPropagator())

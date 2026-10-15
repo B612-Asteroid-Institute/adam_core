@@ -43,7 +43,7 @@ def test_run_od_records_provenance(propagator_class, route):
     )
     orbits, members = run_od(
         observations,
-        NativeOrbitFitter(propagator_class),
+        NativeOrbitFitter(propagator_class()),
         [model],
         propagator=propagator_class(),
     )
@@ -119,7 +119,7 @@ def test_ambiguous_iod_survives_refinement():
     observations = make_synthetic_observations()
     orbits, _ = run_od(
         observations,
-        NativeOrbitFitter(TwoBodyPropagator),
+        NativeOrbitFitter(TwoBodyPropagator()),
         None,
         propagator=TwoBodyPropagator(),
     )

@@ -533,20 +533,22 @@ def refine(
     When ``orbit`` is a `FittedOrbits` row from `run_iod`, its IOD provenance
     (ambiguity) is carried onto the refined orbit.
     """
-    from .differential_correction import fit_least_squares, iterative_fit
+    from .differential_correction import _fit_least_squares, _iterative_fit
     from .provenance import carry_iod_provenance
-    from .rejection import cmc2003_fit
+    from .rejection import _cmc2003_fit
 
     seed = orbit.to_orbits() if isinstance(orbit, FittedOrbits) else orbit
     settings = {**(fit_settings or {}), **(rejection_settings or {})}
     if rejection == "cmc2003":
-        refined, members = cmc2003_fit(seed, observations, propagator, **settings)
+        refined, members = _cmc2003_fit(seed, observations, propagator, **settings)
     elif rejection == "worst_residual":
-        refined, members = iterative_fit(seed, observations, propagator, **settings)
+        refined, members = _iterative_fit(seed, observations, propagator, **settings)
     elif rejection == "none":
         if rejection_settings:
             raise ValueError("rejection='none' takes no rejection_settings")
-        refined, members = fit_least_squares(seed, observations, propagator, **settings)
+        refined, members = _fit_least_squares(
+            seed, observations, propagator, **settings
+        )
     else:
         raise ValueError(
             "rejection must be 'cmc2003', 'worst_residual' or 'none'; "

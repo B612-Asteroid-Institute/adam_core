@@ -77,7 +77,7 @@ def null_covariance_arc(two_body_arc):
 
 def fitter() -> NativeOrbitFitter:
     return NativeOrbitFitter(
-        propagator_class=TwoBodyPropagator,
+        TwoBodyPropagator(),
         min_obs=6,
         rchi2_threshold=10.0,
         iod_rchi2_threshold=1e4,

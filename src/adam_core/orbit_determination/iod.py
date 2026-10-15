@@ -18,7 +18,7 @@ from ..orbits.orbits import Orbits
 from ..propagator import Propagator
 from ..time import Timestamp
 from ..utils.iter import _iterate_chunks
-from ._native_dispatch import native_work_unit
+from ._native_dispatch import deprecated, native_work_unit
 from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, drop_duplicate_orbits
 from .gauss import MU, C
@@ -221,7 +221,7 @@ def _native_initial_orbit_determination(
     return _tables_from_native_iod(output)
 
 
-def iod_worker(
+def _iod_worker(
     linkage_ids: npt.NDArray[np.str_],
     observations: OrbitDeterminationObservations,
     linkage_members: FittedOrbitMembers,
@@ -613,7 +613,7 @@ def run_iod(
     return orbit, members, report_from_iod_output(output)
 
 
-def iod(
+def _iod(
     observations: OrbitDeterminationObservations,
     propagator: Type[Propagator],
     min_obs: int = 6,
@@ -890,7 +890,7 @@ def initial_orbit_determination(
         # deterministic serial fallback instead of Python/Ray distribution.
         del max_processes
         for linkage_id_chunk in _iterate_chunks(linkage_ids, chunk_size):
-            iod_orbits_chunk, iod_orbit_members_chunk = iod_worker(
+            iod_orbits_chunk, iod_orbit_members_chunk = _iod_worker(
                 linkage_id_chunk,
                 observations,
                 linkage_members,
@@ -965,3 +965,21 @@ def initial_orbit_determination(
     )
 
     return iod_orbits, iod_orbit_members
+
+
+@deprecated(
+    _iod,
+    "run_iod(observations, propagator, acceptance='prefit', "
+    "observation_selection_method='combinations', velocity_method='gibbs') "
+    "for the legacy policy, or run_iod's defaults",
+)
+def iod(*args, **kwargs):  # pragma: no cover - replaced by the alias
+    """Deprecated alias of `_iod`."""
+
+
+@deprecated(
+    _iod_worker,
+    "initial_orbit_determination (or run_iod per linkage)",
+)
+def iod_worker(*args, **kwargs):  # pragma: no cover - replaced by the alias
+    """Deprecated alias of `_iod_worker`."""

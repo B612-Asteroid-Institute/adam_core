@@ -1,5 +1,6 @@
 import logging
 import uuid
+import warnings
 from typing import Any, Literal, Optional, Tuple, Type
 
 import numpy as np
@@ -24,14 +25,14 @@ from .differential_correction import (
     _emit_native_warnings,
     _fit_settings,
     _fitted_tables_from_native_output,
-    iterative_fit,
+    _iterative_fit,
 )
 from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .iod import IOD_DEFAULTS, run_iod
 from .orbit_fitter import OrbitFitter
 from .provenance import with_iod_provenance
-from .rejection import cmc2003_fit
+from .rejection import _cmc2003_fit
 
 logger = logging.getLogger(__name__)
 
@@ -85,18 +86,23 @@ class NativeOrbitFitter(OrbitFitter):
     """
     Orbit fitter using adam_core's native Gauss IOD and iterative least-squares DC.
 
-    This fitter is a thin wrapper that chains:
-    1. `iod()` — Gauss initial orbit determination (Milani 2008)
-    2. `iterative_fit()` — scipy least-squares differential correction with
-       outlier rejection
+    The `OrbitFitter` over adam_core's native stages: `run_iod` (Gauss
+    candidates accepted by staged correction; see the IOD policy) on the IOD
+    propagator, then `refine` (CMC2003 or worst-residual rejection) on the
+    propagator `full_od` / `run_od` receive. Every loop runs in Rust; a
+    propagator whose `NativeBackend` declares the work units runs the whole
+    pipeline in one crossing.
 
     Parameters
     ----------
-    propagator_class : Type[Propagator]
-        Propagator *class* (not instance) used during IOD ephemeris evaluation.
+    iod_propagator : Propagator
+        The propagator *instance* that scores and corrects the IOD candidates
+        (the refinement propagator is the one `full_od` / `run_od` receive).
+        Passing a propagator class, or ``propagator_class=`` /
+        ``propagator_kwargs=``, is deprecated: the class is instantiated with
+        the kwargs for each IOD run, as before.
     propagator_kwargs : dict, optional
-        Keyword arguments forwarded to the propagator constructor / IOD call.
-        Copied; default None means no arguments.
+        Deprecated; only with a propagator class.
     min_obs : int, optional
         Minimum number of observations required for a valid fit.  Default 6.
     min_arc_length : float, optional
@@ -161,7 +167,7 @@ class NativeOrbitFitter(OrbitFitter):
 
     def __init__(
         self,
-        propagator_class: Type[Propagator],
+        iod_propagator: Propagator | Type[Propagator] | None = None,
         propagator_kwargs: Optional[dict[str, Any]] = None,
         min_obs: int = IOD_DEFAULTS["min_obs"],
         min_arc_length: float = IOD_DEFAULTS["min_arc_length"],
@@ -181,14 +187,40 @@ class NativeOrbitFitter(OrbitFitter):
             "refinement"
         ],
         rejection_kwargs: dict[str, Any] | None = None,
+        *,
+        propagator_class: Optional[Type[Propagator]] = None,
     ) -> None:
+        if propagator_class is not None:
+            if iod_propagator is not None:
+                raise TypeError("pass either iod_propagator or propagator_class")
+            iod_propagator = propagator_class
+        if iod_propagator is None:
+            raise TypeError("NativeOrbitFitter needs an IOD propagator instance")
+        if isinstance(iod_propagator, type):
+            warnings.warn(
+                "NativeOrbitFitter(propagator_class, propagator_kwargs) is "
+                "deprecated: pass a propagator instance, "
+                "NativeOrbitFitter(propagator_class(**propagator_kwargs)).",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self._iod_instance: Optional[Propagator] = None
+            self.propagator_class = iod_propagator
+            self.propagator_kwargs = dict(propagator_kwargs or {})
+        else:
+            if propagator_kwargs:
+                raise TypeError(
+                    "propagator_kwargs only applies to a propagator class; "
+                    "configure the instance instead"
+                )
+            self._iod_instance = iod_propagator
+            self.propagator_class = type(iod_propagator)
+            self.propagator_kwargs = {}
         if outlier_rejection not in ("worst_residual", "cmc2003"):
             raise ValueError(
                 "outlier_rejection must be 'worst_residual' or 'cmc2003'; "
                 f"got {outlier_rejection!r}"
             )
-        self.propagator_class = propagator_class
-        self.propagator_kwargs = dict(propagator_kwargs or {})
         self.min_obs = min_obs
         self.min_arc_length = min_arc_length
         self.contamination_percentage = contamination_percentage
@@ -287,15 +319,25 @@ class NativeOrbitFitter(OrbitFitter):
         }
         return set(self.rejection_kwargs) <= loop_keys | _FUSED_LOOP_KWARGS
 
+    @property
+    def iod_propagator(self) -> Propagator:
+        """The IOD propagator: the configured instance, or (deprecated
+        class form) a fresh ``propagator_class(**propagator_kwargs)``."""
+        if self._iod_instance is not None:
+            return self._iod_instance
+        return self.propagator_class(**self.propagator_kwargs)
+
     def fused_propagator_matches(self, propagator: Propagator) -> bool:
         """
         Whether ``propagator`` is the IOD propagator this fitter is
-        configured for: an instance of ``propagator_class`` built without
-        extra keyword arguments. When it is, a fused work unit scores the
-        IOD candidates on ``propagator`` itself; otherwise
-        `iod_propagator_for` hands the fused work unit a fresh configured
-        instance, as the composition uses.
+        configured for: the configured instance itself, or (deprecated class
+        form) an instance of ``propagator_class`` built without extra keyword
+        arguments. When it is, a fused work unit scores the IOD candidates on
+        ``propagator`` itself; otherwise `iod_propagator_for` hands the fused
+        work unit the configured IOD propagator explicitly.
         """
+        if self._iod_instance is not None:
+            return propagator is self._iod_instance
         return (
             isinstance(propagator, self.propagator_class) and not self.propagator_kwargs
         )
@@ -309,7 +351,7 @@ class NativeOrbitFitter(OrbitFitter):
         """
         if self.fused_propagator_matches(propagator):
             return None
-        return self.propagator_class(**self.propagator_kwargs)
+        return self.iod_propagator
 
     def full_od(
         self,
@@ -345,6 +387,7 @@ class NativeOrbitFitter(OrbitFitter):
         return self.__dict__.copy()
 
     def __setstate__(self, state: dict) -> None:
+        state.setdefault("_iod_instance", None)
         self.__dict__.update(state)
 
     def initial_fit(
@@ -380,7 +423,7 @@ class NativeOrbitFitter(OrbitFitter):
             fitted_orbits, fitted_orbit_members = evaluate_orbits(
                 reference_orbit,
                 observations,
-                self.propagator_class(**self.propagator_kwargs),
+                self.iod_propagator,
             )
             if fitted_orbits.object_id.null_count == len(fitted_orbits):
                 fitted_orbits = fitted_orbits.set_column(
@@ -396,7 +439,7 @@ class NativeOrbitFitter(OrbitFitter):
 
         fitted_orbits, fitted_orbit_members, _report = run_iod(
             observations,
-            self.propagator_class(**self.propagator_kwargs),
+            self.iod_propagator,
             min_obs=self.min_obs,
             min_arc_length=self.min_arc_length,
             contamination_percentage=self.contamination_percentage,
@@ -435,7 +478,7 @@ class NativeOrbitFitter(OrbitFitter):
         assert len(fitted_orbit) == 1, "refine_fit expects exactly one orbit"
         orbit = fitted_orbit.to_orbits()
         if self.outlier_rejection == "cmc2003":
-            return cmc2003_fit(
+            return _cmc2003_fit(
                 orbit,
                 observations,
                 propagator,
@@ -443,7 +486,7 @@ class NativeOrbitFitter(OrbitFitter):
                 f_scale=self.f_scale,
                 **self.rejection_kwargs,
             )
-        return iterative_fit(
+        return _iterative_fit(
             orbit,
             observations,
             propagator,

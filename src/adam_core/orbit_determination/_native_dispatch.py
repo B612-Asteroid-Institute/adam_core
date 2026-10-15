@@ -1,6 +1,40 @@
 """Keep native specifications paired with the Python behavior they describe."""
 
+import functools
 import warnings
+
+
+def deprecated(implementation, replacement: str):
+    """Decorator form of `deprecated_alias` for a public ``def`` stub (so the
+    public-surface audit still lists the name): the stub's body is unused."""
+
+    def decorate(stub):
+        return deprecated_alias(implementation, stub.__name__, replacement)
+
+    return decorate
+
+
+def deprecated_alias(implementation, name: str, replacement: str):
+    """The public, deprecated name of ``implementation``: same signature and
+    docstring, plus a `DeprecationWarning` naming ``replacement`` (the
+    canonical stage it converges on). Internal callers use the
+    implementation and stay silent."""
+
+    @functools.wraps(implementation)
+    def alias(*args, **kwargs):
+        warnings.warn(
+            f"{name} is deprecated; use {replacement}.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return implementation(*args, **kwargs)
+
+    alias.__name__ = name
+    alias.__qualname__ = name
+    alias.__doc__ = f".. deprecated:: 0.6.0\n   Use {replacement}.\n\n" + (
+        implementation.__doc__ or ""
+    )
+    return alias
 
 
 def _has_compatible_native_spec(

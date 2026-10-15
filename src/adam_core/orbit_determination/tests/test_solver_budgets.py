@@ -145,7 +145,7 @@ def test_rejection_loops_forward_the_evaluation_budget(
 
 def test_fitter_serializes_both_solver_limits():
     fitter = NativeOrbitFitter(
-        propagator_class=TwoBodyPropagator,
+        TwoBodyPropagator(),
         outlier_rejection="worst_residual",
         rejection_kwargs={"max_nfev": 11, "max_iterations": 3},
     )

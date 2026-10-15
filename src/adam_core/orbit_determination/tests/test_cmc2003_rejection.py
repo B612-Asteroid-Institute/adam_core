@@ -295,14 +295,14 @@ class TestTwoBodyIntegration:
 
 class TestNativeOrbitFitterDispatch:
     def test_default_is_cmc2003(self) -> None:
-        fitter = NativeOrbitFitter(propagator_class=TwoBodyPropagator)
+        fitter = NativeOrbitFitter(TwoBodyPropagator())
         assert fitter.outlier_rejection == "cmc2003"
         assert fitter.rejection_kwargs == {}
 
     def test_unknown_scheme_raises(self) -> None:
         with pytest.raises(ValueError, match="outlier_rejection"):
             NativeOrbitFitter(
-                propagator_class=TwoBodyPropagator,
+                TwoBodyPropagator(),
                 outlier_rejection="cmc2004",  # type: ignore[arg-type]
             )
 
@@ -310,7 +310,7 @@ class TestNativeOrbitFitterDispatch:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         fitter = NativeOrbitFitter(
-            propagator_class=TwoBodyPropagator,
+            TwoBodyPropagator(),
             outlier_rejection="cmc2003",
             loss="huber",
             f_scale=2.0,
@@ -328,7 +328,7 @@ class TestNativeOrbitFitterDispatch:
             captured.update(kwargs)
             return FittedOrbits.empty(), FittedOrbitMembers.empty()
 
-        monkeypatch.setattr(native_module, "cmc2003_fit", fake_cmc2003_fit)
+        monkeypatch.setattr(native_module, "_cmc2003_fit", fake_cmc2003_fit)
         fitted = FittedOrbits.from_kwargs(
             orbit_id=["o"],
             coordinates=make_initial_guess().coordinates,
@@ -348,9 +348,7 @@ class TestNativeOrbitFitterDispatch:
         }
 
     def test_cmc2003_end_to_end_through_refine_fit(self) -> None:
-        fitter = NativeOrbitFitter(
-            propagator_class=TwoBodyPropagator, outlier_rejection="cmc2003"
-        )
+        fitter = NativeOrbitFitter(TwoBodyPropagator(), outlier_rejection="cmc2003")
         start = FittedOrbits.from_kwargs(
             orbit_id=["o"],
             coordinates=make_initial_guess().coordinates,

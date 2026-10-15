@@ -157,7 +157,7 @@ def test_fitter_initial_fit_runs_iod_on_the_configured_class(
             super().__init__()
             type(self).instances.append(self)
 
-    fitter = NativeOrbitFitter(propagator_class=Configured, iod_rchi2_threshold=1e4)
+    fitter = NativeOrbitFitter(Configured(), iod_rchi2_threshold=1e4)
     orbit, members = fitter.initial_fit("x", two_body_arc)
     assert len(orbit) == 1 and len(members) == len(two_body_arc)
     assert len(Configured.instances) == 1 and Configured.instances[0].calls > 0
@@ -205,7 +205,7 @@ def test_spans_settings_reach_the_search(two_body_arc) -> None:  # noqa: F811
 
 def test_fitter_forwards_the_velocity_method() -> None:
     fitter = NativeOrbitFitter(
-        propagator_class=TwoBodyPropagator,
+        TwoBodyPropagator(),
         observation_selection_method="spans",
         velocity_method="auto",
     )

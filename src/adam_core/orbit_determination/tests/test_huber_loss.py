@@ -388,7 +388,7 @@ class TestIterativeFitAndFitter:
         # The worst-residual path forwards through iterative_fit (the default
         # CMC2003 path is covered in test_cmc2003_rejection).
         fitter = NativeOrbitFitter(
-            propagator_class=TwoBodyPropagator,
+            TwoBodyPropagator(),
             loss="huber",
             f_scale=2.0,
             outlier_rejection="worst_residual",
@@ -404,7 +404,7 @@ class TestIterativeFitAndFitter:
             captured.update(kwargs)
             return FittedOrbits.empty(), FittedOrbitMembers.empty()
 
-        monkeypatch.setattr(native_module, "iterative_fit", fake_iterative_fit)
+        monkeypatch.setattr(native_module, "_iterative_fit", fake_iterative_fit)
         fitted = FittedOrbits.from_kwargs(
             orbit_id=["o"],
             coordinates=orbit_at(TRUTH_STATE).coordinates,
@@ -420,7 +420,7 @@ class TestIterativeFitAndFitter:
         assert captured["f_scale"] == 2.0
 
     def test_default_fitter_is_linear(self) -> None:
-        fitter = NativeOrbitFitter(propagator_class=TwoBodyPropagator)
+        fitter = NativeOrbitFitter(TwoBodyPropagator())
         assert fitter.loss == "linear"
         assert fitter.f_scale == HUBER_F_SCALE_DEFAULT
 

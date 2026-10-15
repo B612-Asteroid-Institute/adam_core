@@ -553,7 +553,7 @@ def native_fitter() -> NativeOrbitFitter:
     # at 0.3" sigmas, so the IOD acceptance threshold is relaxed; DC then
     # converges to the two-body truth.
     return NativeOrbitFitter(
-        propagator_class=TwoBodyPropagator,
+        TwoBodyPropagator(),
         min_obs=6,
         rchi2_threshold=10.0,
         iod_rchi2_threshold=1e4,
@@ -733,9 +733,7 @@ def test_run_od_with_the_default_stack(
     observations = with_astcat(
         two_body_observations, ["UCAC4"] * len(two_body_observations)
     )
-    fitter = NativeOrbitFitter(
-        propagator_class=TwoBodyPropagator, iod_rchi2_threshold=1e6
-    )
+    fitter = NativeOrbitFitter(TwoBodyPropagator(), iod_rchi2_threshold=1e6)
     assert fitter.outlier_rejection == "cmc2003"
     fitted, members = run_od(
         observations, fitter, propagator=TwoBodyPropagator(), object_id="defaults"
@@ -862,9 +860,7 @@ class TestFusedRunOd:
 
     @staticmethod
     def _fitter(**kwargs):
-        return NativeOrbitFitter(
-            propagator_class=TwoBodyPropagator, iod_rchi2_threshold=1e6, **kwargs
-        )
+        return NativeOrbitFitter(TwoBodyPropagator(), iod_rchi2_threshold=1e6, **kwargs)
 
     def _run(self, observations, models, **fitter_kwargs):
         with warnings.catch_warnings():
@@ -933,9 +929,9 @@ class TestFusedRunOd:
     ) -> None:
         """The IOD propagator is explicit on the fused route: when the
         refining propagator is the fitter's configured IOD propagator the
-        work unit scores candidates on it; otherwise it receives a fresh
-        ``propagator_class(**propagator_kwargs)`` instance, as the
-        composition uses, and the fused route is still taken."""
+        work unit scores candidates on it; otherwise it receives the
+        fitter's IOD propagator instance explicitly, as the composition
+        uses, and the fused route is still taken."""
 
         class OtherTwoBodyPropagator(TwoBodyPropagator):
             ephemeris_calls = 0
@@ -963,24 +959,22 @@ class TestFusedRunOd:
                 self.iod_propagators.append(kwargs.get("iod_propagator"))
                 return super().full_od(*args, **kwargs)
 
-        matching = NativeOrbitFitter(
-            propagator_class=TwoBodyPropagator, iod_rchi2_threshold=1e6
-        )
-        other_class = NativeOrbitFitter(
-            propagator_class=OtherTwoBodyPropagator, iod_rchi2_threshold=1e6
-        )
-        with_kwargs = NativeOrbitFitter(
-            propagator_class=TwoBodyPropagator,
-            propagator_kwargs={"chunk_size": 1},
-            iod_rchi2_threshold=1e6,
-        )
         propagator = CountingNativePropagator()
+        # The fitter's IOD propagator is an instance: the refining propagator
+        # matches only when it is that instance.
+        matching = NativeOrbitFitter(propagator, iod_rchi2_threshold=1e6)
+        iod_instance = OtherTwoBodyPropagator()
+        other_class = NativeOrbitFitter(iod_instance, iod_rchi2_threshold=1e6)
+        with pytest.warns(DeprecationWarning, match="pass a propagator instance"):
+            with_kwargs = NativeOrbitFitter(
+                TwoBodyPropagator,
+                propagator_kwargs={"chunk_size": 1},
+                iod_rchi2_threshold=1e6,
+            )
         assert matching.fused_propagator_matches(propagator)
         assert matching.iod_propagator_for(propagator) is None
         assert not other_class.fused_propagator_matches(propagator)
-        assert isinstance(
-            other_class.iod_propagator_for(propagator), OtherTwoBodyPropagator
-        )
+        assert other_class.iod_propagator_for(propagator) is iod_instance
         assert not with_kwargs.fused_propagator_matches(propagator)
 
         with warnings.catch_warnings():

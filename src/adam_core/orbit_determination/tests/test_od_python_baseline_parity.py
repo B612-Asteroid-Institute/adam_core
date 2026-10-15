@@ -571,7 +571,7 @@ class TestFits:
         expected = fixture["products"]["run_od_composite"]
         observations = _observations(fixture["inputs"])
         fitter = NativeOrbitFitter(
-            propagator_class=TwoBodyPropagator,
+            TwoBodyPropagator(),
             min_obs=6,
             rchi2_threshold=10.0,
             iod_rchi2_threshold=1e6,

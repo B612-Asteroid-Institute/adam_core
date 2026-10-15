@@ -77,6 +77,7 @@ from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
 from ._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
+    deprecated,
     native_work_unit,
 )
 from .differential_correction import (
@@ -408,7 +409,7 @@ def cmc2003_fit_detailed(
     )
 
 
-def cmc2003_fit(
+def _cmc2003_fit(
     orbit: Orbits,
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
@@ -429,3 +430,12 @@ def cmc2003_fit(
     """
     result = cmc2003_fit_detailed(orbit, observations, propagator, **kwargs)
     return result.fitted_orbit, result.fitted_orbit_members
+
+
+@deprecated(
+    _cmc2003_fit,
+    "refine(orbit, observations, propagator) (rejection='cmc2003'), or "
+    "cmc2003_fit_detailed for the loop diagnostics",
+)
+def cmc2003_fit(*args, **kwargs):  # pragma: no cover - replaced by the alias
+    """Deprecated alias of `_cmc2003_fit`."""
