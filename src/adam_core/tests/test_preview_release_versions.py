@@ -220,6 +220,8 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
         tier1.count('assert version("adam-assist") == assist_version == "0.5.0"') == 2
     )
     assert "Run Core integration tests with the reference propagator" in tier1
+    assert "for test_path in \\" in tier1
+    assert 'pdm run test -- "$test_path"' in tier1
     for test_path in (
         "src/adam_core/propagator/tests/test_propagator.py",
         "src/adam_core/propagator/tests/test_space_ephemeris.py",

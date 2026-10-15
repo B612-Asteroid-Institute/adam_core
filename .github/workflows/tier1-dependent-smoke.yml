@@ -88,7 +88,8 @@ jobs:
           PY
       - name: Run Core integration tests with the reference propagator
         run: |
-          pdm run test -- \
+          set -euo pipefail
+          for test_path in \
             src/adam_core/propagator/tests/test_propagator.py \
             src/adam_core/propagator/tests/test_space_ephemeris.py \
             src/adam_core/dynamics/tests/test_impact_viz_data.py \
@@ -99,6 +100,9 @@ jobs:
             src/adam_core/orbit_determination/tests/test_od.py \
             src/adam_core/orbits/tests/test_oem.py \
             src/adam_core/orbits/tests/test_spice_kernel.py
+          do
+            pdm run test -- "$test_path"
+          done
       - name: Run orbit determination smoke
         run: |
           python - <<'PY'
