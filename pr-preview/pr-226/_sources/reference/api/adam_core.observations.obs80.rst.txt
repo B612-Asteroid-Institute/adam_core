@@ -1,0 +1,7 @@
+adam\_core.observations.obs80 module
+====================================
+
+.. automodule:: adam_core.observations.obs80
+   :members:
+   :show-inheritance:
+   :undoc-members:
