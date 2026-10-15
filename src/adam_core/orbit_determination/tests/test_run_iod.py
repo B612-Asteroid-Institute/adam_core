@@ -192,6 +192,8 @@ def test_spans_settings_reach_the_search(two_body_arc) -> None:  # noqa: F811
         rchi2_threshold=1e-30,
         observation_selection_method="spans",
         span_settings={"span_max_triplets": 3},
+        # The Gauss search alone (no ranging fallback after it fails).
+        ranging_settings={"ranging_enabled": False},
     )
     assert not report.found and report.triplets_tried == 3
     times = two_body_arc.coordinates.time.mjd().to_numpy(zero_copy_only=False)
@@ -249,6 +251,7 @@ def test_corrected_acceptance_reports_why_nothing_converged(
         min_obs=6,
         rchi2_threshold=1e-12,
         correction_settings={"max_corrections": 2},
+        ranging_settings={"ranging_enabled": False},
     )
     assert not report.found
     assert report.corrections_run == 2
@@ -455,3 +458,60 @@ def test_run_iod_then_refine_is_the_stage_contract(
     assert refined.provenance.iod_ambiguous.to_pylist() == [False]
     with pytest.raises(ValueError, match="rejection must be"):
         refine(iod_orbit, two_body_arc, TwoBodyPropagator(), rejection="bogus")
+
+
+def test_ranging_for_short_arcs_and_gauss_failures(two_body_arc) -> None:  # noqa: F811
+    """Corrected IOD routes arcs Gauss cannot handle to systematic ranging:
+    a too-short arc returns the ranging sample instead of an orbit, and a
+    search with no Gauss candidate accepts a corrected ranging orbit."""
+    from adam_core.orbit_determination import IOD_DEFAULTS, RangingSample
+
+    # The fixture spans 21 days; ranging's 5-day arc limit is raised.
+    long_ranging = {"ranging_max_arc_days": 100.0}
+    orbit, _, short = run_iod(
+        two_body_arc,
+        TwoBodyPropagator(),
+        min_obs=6,
+        min_arc_length=100.0,
+        ranging_settings=long_ranging,
+    )
+    assert len(orbit) == 0 and not short.found
+    assert isinstance(short.ranging, RangingSample)
+    sample = short.ranging
+    assert sample.states.shape == (len(sample.weight), 6) and len(sample.weight) > 0
+    assert sample.weight.sum() == pytest.approx(1.0)
+    assert sample.best == int(np.argmin(sample.chi2))
+    variants = sample.to_variant_orbits("arc")
+    assert len(variants) == len(sample.weight)
+    assert "ranging sample attached" in short.not_found_reason
+
+    no_gauss_settings = {"span_max_days": 1e-3}
+    orbit, _, report = run_iod(
+        two_body_arc,
+        TwoBodyPropagator(),
+        min_obs=6,
+        span_settings=no_gauss_settings,
+        ranging_settings=long_ranging,
+    )
+    assert report.found and report.accepted_candidate.source == "ranging"
+    # The same orbit Gauss finds, compared at the Gauss orbit's epoch.
+    from adam_core.dynamics.propagation import propagate_2body
+
+    expected, _, _ = run_iod(two_body_arc, TwoBodyPropagator(), min_obs=6)
+    moved = propagate_2body(orbit.to_orbits(), expected.coordinates.time)
+    np.testing.assert_allclose(
+        moved.coordinates.r[0], expected.coordinates.r[0], rtol=0, atol=1e-6
+    )
+    assert orbit.reduced_chi2[0].as_py() == pytest.approx(
+        expected.reduced_chi2[0].as_py(), rel=1e-4
+    )
+
+    _, _, disabled = run_iod(
+        two_body_arc,
+        TwoBodyPropagator(),
+        min_obs=6,
+        span_settings=no_gauss_settings,
+        ranging_settings={**long_ranging, "ranging_enabled": False},
+    )
+    assert not disabled.found and disabled.ranging is None
+    assert IOD_DEFAULTS["ranging_enabled"] is True

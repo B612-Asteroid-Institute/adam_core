@@ -12,14 +12,14 @@
     "plotting_policy": "plotting/display may remain Python; all other symbols require review"
   },
   "summary": {
-    "symbols": 758,
+    "symbols": 760,
     "by_kind": {
-      "class": 108,
+      "class": 109,
       "classmethod": 36,
       "constant": 108,
       "constructor": 12,
       "function": 259,
-      "method": 164,
+      "method": 165,
       "property": 71
     },
     "by_domain": {
@@ -29,7 +29,7 @@
       "missions": 16,
       "observations": 63,
       "observers": 19,
-      "orbit_determination": 122,
+      "orbit_determination": 124,
       "orbits": 115,
       "photometry": 69,
       "propagator": 8,
@@ -37,10 +37,10 @@
       "utils": 70
     },
     "by_implementation_class": {
-      "compatibility_data_or_external_generic": 214,
+      "compatibility_data_or_external_generic": 215,
       "mixed_rust_python_gap": 103,
       "plotting_exemption_candidate": 16,
-      "python_gap_or_external_boundary": 287,
+      "python_gap_or_external_boundary": 288,
       "rust_veneer_candidate_see_domain_audit": 138
     },
     "plotting_exemption_candidates": 16,
@@ -49,7 +49,7 @@
   "frozen_updated_upstream_reconciliation": {
     "commit": "757c09fca86adf9e3d5899952db3d379e09413f6",
     "upstream_symbols": 600,
-    "current_symbols": 758,
+    "current_symbols": 760,
     "upstream_only_symbols": 22,
     "all_upstream_only_symbols_classified": true,
     "disposition": "The listed upstream implementation helpers are intentionally retired; their useful public workflows are Rust-backed or are explicit provider boundaries in the referenced domain audit.",
@@ -10285,7 +10285,7 @@
       "kind": "constant",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 34,
+      "line": 35,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10313,7 +10313,7 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 337,
+      "line": 338,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10341,13 +10341,13 @@
       "kind": "class",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 385,
+      "line": 459,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
         "plotting": false,
         "rust_reference": false,
-        "python_loop": false,
+        "python_loop": true,
         "numpy_reference": false,
         "pyarrow_reference": false,
         "quivr_reference": false,
@@ -10369,7 +10369,7 @@
       "kind": "property",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 415,
+      "line": 492,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10397,7 +10397,7 @@
       "kind": "property",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 411,
+      "line": 488,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10425,7 +10425,7 @@
       "kind": "property",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 407,
+      "line": 484,
       "explicit_export": null,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10446,6 +10446,62 @@
       "audit_document": "migration/public_surface/dynamics_od.md"
     },
     {
+      "id": "adam_core.orbit_determination.iod:RangingSample",
+      "module": "adam_core.orbit_determination.iod",
+      "qualname": "RangingSample",
+      "name": "RangingSample",
+      "kind": "class",
+      "domain": "orbit_determination",
+      "source": "src/adam_core/orbit_determination/iod.py",
+      "line": 390,
+      "explicit_export": false,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": false,
+        "python_loop": true,
+        "numpy_reference": true,
+        "pyarrow_reference": false,
+        "quivr_reference": false,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "compatibility_data_or_external_generic",
+      "rust_entrypoint": null,
+      "parity_coverage": "compatibility_or_schema_see_domain_audit",
+      "native_timing": "not_applicable_data_or_generic",
+      "tracking_issue": "personal-cmy.37.3",
+      "audit_document": "migration/public_surface/dynamics_od.md"
+    },
+    {
+      "id": "adam_core.orbit_determination.iod:RangingSample.to_variant_orbits",
+      "module": "adam_core.orbit_determination.iod",
+      "qualname": "RangingSample.to_variant_orbits",
+      "name": "to_variant_orbits",
+      "kind": "method",
+      "domain": "orbit_determination",
+      "source": "src/adam_core/orbit_determination/iod.py",
+      "line": 410,
+      "explicit_export": null,
+      "plotting_exemption_candidate": false,
+      "signals": {
+        "plotting": false,
+        "rust_reference": false,
+        "python_loop": true,
+        "numpy_reference": true,
+        "pyarrow_reference": false,
+        "quivr_reference": false,
+        "external_io_reference": false
+      },
+      "review_status": "domain_audited",
+      "implementation_class": "python_gap_or_external_boundary",
+      "rust_entrypoint": null,
+      "parity_coverage": "see_domain_audit",
+      "native_timing": "missing_or_not_applicable_see_domain_audit",
+      "tracking_issue": "personal-cmy.37.3",
+      "audit_document": "migration/public_surface/dynamics_od.md"
+    },
+    {
       "id": "adam_core.orbit_determination.iod:initial_orbit_determination",
       "module": "adam_core.orbit_determination.iod",
       "qualname": "initial_orbit_determination",
@@ -10453,7 +10509,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 807,
+      "line": 899,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10481,7 +10537,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 976,
+      "line": 1068,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10509,7 +10565,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 984,
+      "line": 1076,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10537,7 +10593,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 419,
+      "line": 496,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10565,7 +10621,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 471,
+      "line": 550,
       "explicit_export": true,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10593,7 +10649,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 94,
+      "line": 95,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10621,7 +10677,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 41,
+      "line": 42,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {
@@ -10649,7 +10705,7 @@
       "kind": "function",
       "domain": "orbit_determination",
       "source": "src/adam_core/orbit_determination/iod.py",
-      "line": 742,
+      "line": 834,
       "explicit_export": false,
       "plotting_exemption_candidate": false,
       "signals": {

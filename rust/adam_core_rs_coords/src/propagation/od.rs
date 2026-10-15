@@ -93,6 +93,12 @@
 //!   candidate index. A converged solution outside the accepted one's
 //!   3-sigma region yet within the same score margin (6-dof 99.73 %
 //!   quantile, 20.06) is reported in `IodResult::ambiguous_with`.
+//! * **Ranging** ([`super::od_ranging`], `IodConfig::ranging`). An arc
+//!   shorter than `min_arc_length` gets the systematic-ranging sample over
+//!   its admissible region (Milani et al. 2004; Farnocchia, Chesley &
+//!   Micheli 2015) instead of an orbit; when no Gauss candidate converges,
+//!   the 3 best ranging orbits are corrected like Gauss candidates. Ranging
+//!   runs on arcs of at most 5 days (`RangingConfig::max_arc_days`).
 //! * **Continuation and failure.** A candidate whose prediction fails is
 //!   counted and skipped; caller errors propagate. When nothing is accepted
 //!   the result says why (`not_found_reason`), naming the last stall.
@@ -1435,6 +1441,11 @@ pub struct IodConfig {
     /// search.
     pub acceptance: IodAcceptance,
     pub correction: CorrectionConfig,
+    /// Systematic ranging for arcs Gauss cannot handle (corrected
+    /// acceptance): an arc shorter than `min_arc_length` gets the ranging
+    /// sample instead of an orbit; an arc where no Gauss candidate converges
+    /// has its best ranging orbits corrected like Gauss candidates.
+    pub ranging: super::od_ranging::RangingConfig,
 }
 
 impl Default for IodConfig {
@@ -1459,6 +1470,7 @@ impl Default for IodConfig {
             spans: SpanSearchConfig::default(),
             acceptance: IodAcceptance::Corrected,
             correction: CorrectionConfig::default(),
+            ranging: super::od_ranging::RangingConfig::default(),
         }
     }
 }
@@ -1588,6 +1600,8 @@ impl VelocityMethod {
 /// index is in the caller's observation order.
 #[derive(Debug, Clone)]
 pub struct IodCandidate {
+    /// Gauss root or ranging orbit.
+    pub source: CandidateSource,
     /// Heliocentric ecliptic Cartesian state at `epoch`.
     pub state: [f64; 6],
     /// Gauss epoch of the candidate, exact to the nanosecond in `epoch_scale`.
@@ -1645,6 +1659,26 @@ pub struct IodCandidate {
     pub evaluation: Option<FitEvaluation>,
 }
 
+/// Where an IOD candidate's preliminary orbit came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CandidateSource {
+    /// A Gauss root of `triplet`.
+    Gauss,
+    /// A systematic-ranging orbit (`IodResult::ranging`); `triplet` repeats
+    /// the attributable's reference row and `root_index` is the sample's
+    /// rank by χ².
+    Ranging,
+}
+
+impl CandidateSource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Gauss => "gauss",
+            Self::Ranging => "ranging",
+        }
+    }
+}
+
 /// Product of [`run_iod`]: every scored candidate, which one was accepted,
 /// the search counters and the reason when none was.
 #[derive(Debug, Clone)]
@@ -1668,6 +1702,9 @@ pub struct IodResult {
     /// about as good as the accepted one (corrected acceptance; see
     /// `run_iod_corrected`). Non-empty means the IOD is ambiguous.
     pub ambiguous_with: Vec<usize>,
+    /// The systematic-ranging sample, when ranging ran (corrected
+    /// acceptance on a short arc or after every Gauss candidate failed).
+    pub ranging: Option<super::od_ranging::RangingResult>,
 }
 
 impl IodResult {
@@ -1721,6 +1758,7 @@ impl IodResult {
             corrections_run: 0,
             not_found_reason: Some(reason),
             ambiguous_with: Vec::new(),
+            ranging: None,
         }
     }
 
@@ -1977,7 +2015,7 @@ fn observation_time_scale(observed: &CoordinateBatch) -> PropagationResultValue<
 
 /// Permutation putting the observations in the canonical IOD search order:
 /// epoch (days, then nanoseconds), station code, input row.
-fn iod_observation_order(
+pub(super) fn iod_observation_order(
     observed: &CoordinateBatch,
     observers: &ObserverBatch,
 ) -> PropagationResultValue<Vec<usize>> {
@@ -2031,7 +2069,7 @@ fn restore_input_order(mut result: IodResult, order: &[usize]) -> IodResult {
 
 /// J2000 obliquity of the ecliptic (IAU 1976, 84381.448 arcsec), the
 /// rotation the Gauss kernel applies to its equatorial directions.
-const GAUSS_OBLIQUITY_RAD: f64 = 84_381.448 / 3600.0 * std::f64::consts::PI / 180.0;
+pub(super) const GAUSS_OBLIQUITY_RAD: f64 = 84_381.448 / 3600.0 * std::f64::consts::PI / 180.0;
 
 /// The geometry the Gauss kernel assumes: equatorial (RA, Dec) directions in
 /// degrees and heliocentric ecliptic observer positions (au). Ecliptic
@@ -2039,10 +2077,10 @@ const GAUSS_OBLIQUITY_RAD: f64 = 84_381.448 / 3600.0 * std::f64::consts::PI / 18
 /// observers not centred on the Sun, are refused (the kernel would silently
 /// use them as heliocentric: a barycentric observer is about 0.005 au off).
 /// Equatorial (RA, Dec) directions (degrees) and heliocentric ecliptic
-/// observer positions (au), row for row.
-type GaussGeometry = (Vec<[f64; 2]>, Vec<[f64; 3]>);
+/// observer states (au, au/day), row for row.
+pub(super) type GaussGeometry = (Vec<[f64; 2]>, Vec<[f64; 6]>);
 
-fn gauss_geometry(
+pub(super) fn gauss_geometry(
     observed: &CoordinateBatch,
     observers: &ObserverBatch,
 ) -> PropagationResultValue<GaussGeometry> {
@@ -2090,11 +2128,8 @@ fn gauss_geometry(
     let positions = coordinates.values.cartesian().ok_or_else(|| {
         PropagationError::InvalidRequest("IOD requires Cartesian observer coordinates".to_string())
     })?;
-    let observer_positions: Vec<[f64; 3]> = match coordinates.frame {
-        Frame::Ecliptic => positions
-            .iter()
-            .map(|row| [row[0], row[1], row[2]])
-            .collect(),
+    let observer_positions: Vec<[f64; 6]> = match coordinates.frame {
+        Frame::Ecliptic => positions.to_vec(),
         Frame::Equatorial => positions
             .iter()
             .map(|row| {
@@ -2102,6 +2137,9 @@ fn gauss_geometry(
                     row[0],
                     cos_e * row[1] + sin_e * row[2],
                     -sin_e * row[1] + cos_e * row[2],
+                    row[3],
+                    cos_e * row[4] + sin_e * row[5],
+                    -sin_e * row[4] + cos_e * row[5],
                 ]
             })
             .collect(),
@@ -2179,7 +2217,10 @@ fn run_iod_sorted(
         let ra = std::array::from_fn(|slot| gauss_directions[triplet[slot]][0]);
         let dec = std::array::from_fn(|slot| gauss_directions[triplet[slot]][1]);
         let triplet_times = std::array::from_fn(|slot| times[triplet[slot]]);
-        let triplet_observers = std::array::from_fn(|slot| gauss_observers[triplet[slot]]);
+        let triplet_observers = std::array::from_fn(|slot| {
+            let row = gauss_observers[triplet[slot]];
+            [row[0], row[1], row[2]]
+        });
         let gauss = gauss_iod_candidates(
             ra,
             dec,
@@ -2249,6 +2290,7 @@ fn run_iod_sorted(
             };
             counters.candidates_evaluated += 1;
             let mut record = IodCandidate {
+                source: CandidateSource::Gauss,
                 state,
                 epoch,
                 epoch_scale,
@@ -2294,6 +2336,7 @@ fn run_iod_sorted(
                     candidates_failed: 0,
                     corrections_run: 0,
                     ambiguous_with: Vec::new(),
+                    ranging: None,
                     not_found_reason: None,
                 }
                 .with_search_counters(&counters));
@@ -2339,6 +2382,7 @@ fn run_iod_sorted(
                         candidates_failed: 0,
                         corrections_run: 0,
                         ambiguous_with: Vec::new(),
+                        ranging: None,
                         not_found_reason: None,
                     }
                     .with_search_counters(&counters));
@@ -2380,6 +2424,7 @@ fn run_iod_sorted(
         candidates_failed: 0,
         corrections_run: 0,
         ambiguous_with: Vec::new(),
+        ranging: None,
         not_found_reason: Some(reason),
     }
     .with_search_counters(&counters))
@@ -3666,6 +3711,7 @@ mod tests {
             spans: SpanSearchConfig::default(),
             acceptance: IodAcceptance::Prefit,
             correction: CorrectionConfig::default(),
+            ranging: super::super::od_ranging::RangingConfig::default(),
         }
     }
 
@@ -4241,8 +4287,8 @@ mod tests {
                             cos_e * row[1] - sin_e * row[2],
                             sin_e * row[1] + cos_e * row[2],
                             row[3],
-                            row[4],
-                            row[5],
+                            cos_e * row[4] - sin_e * row[5],
+                            sin_e * row[4] + cos_e * row[5],
                         ]
                     })
                     .collect(),
@@ -4260,7 +4306,7 @@ mod tests {
             for axis in 0..2 {
                 assert!((rotated_directions[row][axis] - directions[row][axis]).abs() < 1e-10);
             }
-            for axis in 0..3 {
+            for axis in 0..6 {
                 assert!((rotated_positions[row][axis] - positions[row][axis]).abs() < 1e-14);
             }
         }

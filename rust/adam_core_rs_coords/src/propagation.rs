@@ -9,6 +9,7 @@
 mod diagnostics;
 mod ephemeris;
 mod od;
+mod od_ranging;
 mod od_refine;
 mod pipeline;
 mod request;
@@ -35,6 +36,10 @@ pub use od::{
     SpanSearchConfig, SphericalPredictor, ValladoConfig, ValladoIteration, ValladoResult,
     ValladoStatus, VelocityMethod, INVALID_LIGHT_TIME_MESSAGE, IOD_DEFAULT_MU,
     IOD_DEFAULT_SPEED_OF_LIGHT,
+};
+pub use od_ranging::{
+    admissible_rho_dot_interval, attributable, ranging_state, systematic_ranging_with,
+    Attributable, RangingConfig, RangingResult, RangingSample, RANGING_EARTH_MU,
 };
 pub use od_refine::{
     cmc2003_fit_barycentric, cmc2003_fit_with, fit_orbit_whitened_barycentric,

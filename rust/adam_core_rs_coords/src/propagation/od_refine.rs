@@ -251,7 +251,7 @@ pub struct WhitenedFitOutput {
 
 /// The included subset of a whitened least-squares problem together with
 /// everything needed to evaluate its residual vector and Jacobians.
-struct WhitenedProblem<'a> {
+pub(super) struct WhitenedProblem<'a> {
     predictor: &'a dyn SphericalPredictor,
     geometry: OrbitGeometry,
     epoch_mjd_tdb: f64,
@@ -265,7 +265,7 @@ struct WhitenedProblem<'a> {
 
 impl<'a> WhitenedProblem<'a> {
     #[allow(clippy::too_many_arguments)]
-    fn new<T: OriginTranslationProvider>(
+    pub(super) fn new<T: OriginTranslationProvider>(
         predictor: &'a dyn SphericalPredictor,
         orbit: &OrbitBatch,
         observed: &CoordinateBatch,
@@ -329,7 +329,7 @@ impl<'a> WhitenedProblem<'a> {
     /// Whitened residual vectors (`2M` each) of `states`, predicted in one
     /// ephemeris crossing. Outer `Err` is a request failure; inner `Err` a
     /// per-row numerical failure of the backend.
-    fn residuals(
+    pub(super) fn residuals(
         &self,
         states: &[[f64; 6]],
     ) -> PropagationResultValue<Result<Vec<Vec<f64>>, String>> {
@@ -2168,6 +2168,13 @@ pub(super) fn first_stage_mask(
 /// reported as outliers. Converged candidates that are distinct solutions
 /// fitting about as well (`is_ambiguous_with`) are listed in
 /// `ambiguous_with`.
+///
+/// Arcs Gauss cannot handle get systematic ranging (`config.ranging`,
+/// `super::od_ranging`): an arc shorter than `min_arc_length` (or with too
+/// few observations) is not searched and returns the ranging sample in
+/// `IodResult::ranging`; when no Gauss candidate converges, the best
+/// `ranging.max_corrections` ranging orbits are corrected exactly like
+/// Gauss candidates (`CandidateSource::Ranging`).
 #[allow(clippy::too_many_arguments)]
 pub fn run_iod_corrected<T: OriginTranslationProvider>(
     iod_predictor: &dyn SphericalPredictor,
@@ -2179,9 +2186,153 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
     translation_provider: &T,
 ) -> PropagationResultValue<super::od::IodResult> {
     let mut result = super::od::iod_candidate_pool(iod_predictor, observed, observers, config)?;
-    if result.candidates.is_empty() {
-        return Ok(result);
+    if !result.candidates.is_empty() {
+        let pool: Vec<usize> = (0..result.candidates.len()).collect();
+        correct_candidates(
+            iod_predictor,
+            observed,
+            observers,
+            config,
+            fit,
+            provider,
+            translation_provider,
+            &mut result,
+            &pool,
+        )?;
     }
+    if result.accepted.is_none() && config.ranging.enabled {
+        ranging_fallback(
+            iod_predictor,
+            observed,
+            observers,
+            config,
+            fit,
+            provider,
+            translation_provider,
+            &mut result,
+        )?;
+    }
+    Ok(result)
+}
+
+/// Systematic ranging when Gauss found nothing: attach the sample, and on an
+/// arc long enough to accept an orbit correct its best orbits as candidates.
+#[allow(clippy::too_many_arguments)]
+fn ranging_fallback<T: OriginTranslationProvider>(
+    iod_predictor: &dyn SphericalPredictor,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &super::od::IodConfig,
+    fit: &WhitenedFitConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+    result: &mut super::od::IodResult,
+) -> PropagationResultValue<()> {
+    let times = super::od::observed_times_mjd(observed)?;
+    let span = times.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+        - times.iter().copied().fold(f64::INFINITY, f64::min);
+    if span.is_nan() || span > config.ranging.max_arc_days {
+        return Ok(());
+    }
+    let ranging = match super::od_ranging::systematic_ranging_with(
+        iod_predictor,
+        observed,
+        observers,
+        &config.ranging,
+        config.mu,
+        provider,
+        translation_provider,
+    ) {
+        Ok(ranging) => ranging,
+        // Too little data for an attributable (one epoch): nothing to add.
+        Err(PropagationError::InvalidRequest(_)) => return Ok(()),
+        Err(err) => return Err(err),
+    };
+    let n = observed.len();
+    let (first, last) = (0..n).fold((0, 0), |(lo, hi), row| {
+        (
+            if times[row] < times[lo] { row } else { lo },
+            if times[row] > times[hi] { row } else { hi },
+        )
+    });
+    let arc = times[last] - times[first];
+    let long_enough = n >= config.min_obs && arc >= config.min_arc_length;
+    if long_enough && !ranging.samples.is_empty() {
+        let attributable = &ranging.attributable;
+        let ranked: Vec<usize> = ranging
+            .ranked()
+            .into_iter()
+            .take(config.ranging.max_corrections.max(1))
+            .collect();
+        let count = ranked.len();
+        let dof = (2 * n).saturating_sub(6).max(1) as f64;
+        let start = result.candidates.len();
+        for (rank, &index) in ranked.iter().enumerate() {
+            let sample = &ranging.samples[index];
+            result.candidates.push(super::od::IodCandidate {
+                source: super::od::CandidateSource::Ranging,
+                state: sample.state,
+                epoch: attributable.epoch,
+                epoch_scale: attributable.epoch_scale,
+                window: (first, last),
+                triplet: [attributable.reference_row; 3],
+                root_index: rank,
+                root_count: count,
+                velocity_method: config.velocity_method,
+                prefit_chi2: sample.chi2,
+                prefit_reduced_chi2: sample.chi2 / dof,
+                removed: Vec::new(),
+                chi2_total: sample.chi2,
+                reduced_chi2: sample.chi2 / dof,
+                num_obs: n,
+                arc_length: arc,
+                postfit_reduced_chi2: None,
+                whole_arc_score: None,
+                converged: false,
+                corrected_state: None,
+                corrected_covariance: None,
+                stages: 0,
+                correction_note: None,
+                accepted: false,
+                evaluation: None,
+            });
+        }
+        let pool: Vec<usize> = (start..result.candidates.len()).collect();
+        correct_candidates(
+            iod_predictor,
+            observed,
+            observers,
+            config,
+            fit,
+            provider,
+            translation_provider,
+            result,
+            &pool,
+        )?;
+    } else if let Some(reason) = result.not_found_reason.as_mut() {
+        reason.push_str(&format!(
+            "; ranging sample attached ({} admissible orbits)",
+            ranging.samples.len()
+        ));
+    }
+    result.ranging = Some(ranging);
+    Ok(())
+}
+
+/// Correct the candidates in `pool` (see [`run_iod_corrected`]) and select
+/// the accepted one among every converged candidate of `result`.
+#[allow(clippy::too_many_arguments)]
+fn correct_candidates<T: OriginTranslationProvider>(
+    iod_predictor: &dyn SphericalPredictor,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    config: &super::od::IodConfig,
+    fit: &WhitenedFitConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+    result: &mut super::od::IodResult,
+    pool: &[usize],
+) -> PropagationResultValue<()> {
     let n = observed.len();
     let times = super::od::observed_times_mjd(observed)?;
     let nights = super::od::observation_nights(&times, Some(&observers.code));
@@ -2195,7 +2346,7 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
         loss: correction.stage_loss,
         ..stage_config
     };
-    let mut order: Vec<usize> = (0..result.candidates.len()).collect();
+    let mut order: Vec<usize> = pool.to_vec();
     order.sort_by(|&a, &b| {
         result.candidates[a]
             .prefit_reduced_chi2
@@ -2422,7 +2573,7 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
             ));
         }
     }
-    Ok(result)
+    Ok(())
 }
 
 /// The IOD stage over `iod_propagator` (the canonical `run_iod` stage of
@@ -2960,8 +3111,9 @@ mod tests {
                     theta.cos(),
                     theta.sin(),
                     0.0,
-                    -0.0172 * theta.sin(),
-                    0.0172 * theta.cos(),
+                    // Consistent with the positions (0.01725 rad/day).
+                    -0.01725 * theta.sin(),
+                    0.01725 * theta.cos(),
                     0.0,
                 ]
             })
@@ -4146,6 +4298,7 @@ mod tests {
                 spans: super::super::od::SpanSearchConfig::default(),
                 acceptance: super::super::od::IodAcceptance::Prefit,
                 correction: super::super::od::CorrectionConfig::default(),
+                ranging: super::super::od_ranging::RangingConfig::default(),
             },
             refinement,
         }
@@ -4560,6 +4713,176 @@ mod tests {
         assert!(local.candidates.iter().any(|c| c.num_obs < NUM_OBS));
     }
 
+    /// The truth's topocentric range and range rate at the attributable's
+    /// reference observation.
+    fn truth_range(attributable: &super::super::od_ranging::Attributable) -> (f64, f64) {
+        let mu = crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap();
+        let truth = crate::propagate_2body_row::<f64>(
+            TRUTH_STATE,
+            attributable.epoch.mjd() - 60_000.0,
+            mu,
+            1000,
+            1e-14,
+        );
+        let q = attributable.observer;
+        let d: [f64; 6] = std::array::from_fn(|i| truth[i] - q[i]);
+        let rho = (d[0] * d[0] + d[1] * d[1] + d[2] * d[2]).sqrt();
+        (rho, (d[0] * d[3] + d[1] * d[4] + d[2] * d[5]) / rho)
+    }
+
+    #[test]
+    fn ranging_samples_the_admissible_region_around_the_truth() {
+        // Eleven days of noise-free observations: the attributable's rates
+        // are the truth's, the truth (bound) lies in the admissible region,
+        // and the best grid orbit sits next to it in log range.
+        // Four observations over three days: a short arc, the regime
+        // ranging serves.
+        let rows: Vec<usize> = (4..8).collect();
+        let observed =
+            super::super::od::take_coordinate_batch(&synthetic_observations_spaced(1, None), &rows)
+                .unwrap();
+        let observers = super::super::od::take_observer_batch(&observers_spaced(1), &rows).unwrap();
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let mu = crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap();
+        let config = super::super::od_ranging::RangingConfig::default();
+        let result = super::super::od_ranging::systematic_ranging_with(
+            &predictor,
+            &observed,
+            &observers,
+            &config,
+            mu,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        let (rho, rho_dot) = truth_range(&result.attributable);
+        let (lo, hi) =
+            super::super::od_ranging::admissible_rho_dot_interval(&result.attributable, rho, mu)
+                .unwrap();
+        assert!(lo < rho_dot && rho_dot < hi, "{lo} {rho_dot} {hi}");
+        assert_eq!(result.grid_points, config.n_rho * config.n_rho_dot);
+        assert!(result.admissible_points > 0 && result.admissible_points <= result.grid_points);
+        let total: f64 = result.samples.iter().map(|s| s.weight).sum();
+        assert!((total - 1.0).abs() < 1e-12);
+        let best = result.best_sample().unwrap();
+        // The best node is the grid node nearest the truth's range (the
+        // log grid steps by a factor ~1.26).
+        assert!(
+            (best.rho_au / rho).ln().abs() < 0.25,
+            "best rho {} vs truth {rho}",
+            best.rho_au
+        );
+        assert!((best.rho_dot_au_per_day - rho_dot).abs() < 1e-4);
+        // The truth's own (rho, rho_dot) completes the attributable to an
+        // orbit near the truth (within the light-time displacement, as the
+        // truth's range here is geometric at reception).
+        let state = super::super::od_ranging::ranging_state(&result.attributable, rho, rho_dot);
+        let truth = crate::propagate_2body_row::<f64>(
+            TRUTH_STATE,
+            result.attributable.epoch.mjd() - 60_000.0,
+            mu,
+            1000,
+            1e-14,
+        );
+        assert!(max_abs_diff(&state[..3], &truth[..3]) < 5e-5);
+        assert!(max_abs_diff(&state[3..], &truth[3..]) < 1e-6);
+    }
+
+    #[test]
+    fn short_arcs_get_the_ranging_sample_and_gauss_failures_its_corrections() {
+        let observed = synthetic_observations(None);
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let run = |config: &super::super::od::IodConfig| {
+            run_iod_with(
+                &predictor,
+                &observed,
+                &observers(),
+                config,
+                &WhitenedFitConfig::default(),
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap()
+        };
+        // Shorter than min_arc_length: no orbit, the ranging sample instead.
+        // The fixture spans 44 days; ranging's arc limit is raised to reach it.
+        let long_ranging = super::super::od_ranging::RangingConfig {
+            max_arc_days: 100.0,
+            ..super::super::od_ranging::RangingConfig::default()
+        };
+        let short = run(&super::super::od::IodConfig {
+            min_arc_length: 100.0,
+            ranging: long_ranging,
+            ..corrected_iod_config(50.0)
+        });
+        assert!(!short.found());
+        assert!(short.candidates.is_empty());
+        assert!(!short.ranging.as_ref().unwrap().samples.is_empty());
+        let reason = short.not_found_reason.unwrap();
+        assert!(reason.contains("ranging sample attached"), "{reason}");
+        // No Gauss triplet at all (spans capped below every pair): the
+        // ranging orbits are corrected like candidates and one is accepted.
+        let no_gauss = run(&super::super::od::IodConfig {
+            spans: super::super::od::SpanSearchConfig {
+                max_span_days: 1e-3,
+                ..super::super::od::SpanSearchConfig::default()
+            },
+            ranging: long_ranging,
+            ..corrected_iod_config(50.0)
+        });
+        // At the default 5-day limit ranging does not run on this arc.
+        let default_limit = run(&super::super::od::IodConfig {
+            spans: super::super::od::SpanSearchConfig {
+                max_span_days: 1e-3,
+                ..super::super::od::SpanSearchConfig::default()
+            },
+            ..corrected_iod_config(50.0)
+        });
+        assert!(!default_limit.found() && default_limit.ranging.is_none());
+        let accepted = no_gauss
+            .accepted_candidate()
+            .unwrap_or_else(|| panic!("{:?}", no_gauss.not_found_reason));
+        assert_eq!(accepted.source, super::super::od::CandidateSource::Ranging);
+        assert!(accepted.converged);
+        let mu = crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")).unwrap();
+        let truth = crate::propagate_2body_row::<f64>(
+            TRUTH_STATE,
+            accepted.epoch.mjd() - 60_000.0,
+            mu,
+            1000,
+            1e-14,
+        );
+        // The same least-squares minimum the Gauss path reaches (the
+        // fixture's small noise puts it ~1e-5 au from the truth).
+        assert!(max_abs_diff(&accepted.corrected_state.unwrap()[..3], &truth[..3]) < 1e-4);
+        assert!(accepted.postfit_reduced_chi2.unwrap() < 0.05);
+        // Disabled: the Gauss failure stands.
+        let disabled = run(&super::super::od::IodConfig {
+            spans: super::super::od::SpanSearchConfig {
+                max_span_days: 1e-3,
+                ..super::super::od::SpanSearchConfig::default()
+            },
+            ranging: super::super::od_ranging::RangingConfig {
+                enabled: false,
+                ..super::super::od_ranging::RangingConfig::default()
+            },
+            ..corrected_iod_config(50.0)
+        });
+        assert!(!disabled.found() && disabled.ranging.is_none());
+    }
+
     #[test]
     fn corrected_acceptance_reports_stalled_candidates() {
         let observed = synthetic_observations(None);
@@ -4575,6 +4898,11 @@ mod tests {
                 max_corrections: 3,
                 ..super::super::od::CorrectionConfig::default()
             },
+            // Ranging on this 44-day fixture, to exercise the fallback.
+            ranging: super::super::od_ranging::RangingConfig {
+                max_arc_days: 100.0,
+                ..super::super::od_ranging::RangingConfig::default()
+            },
             ..corrected_iod_config(1e-9)
         };
         let result = run_iod_with(
@@ -4588,7 +4916,26 @@ mod tests {
         )
         .unwrap();
         assert!(!result.found());
-        assert_eq!(result.corrections_run, 3.min(result.candidates.len()));
+        // Three Gauss candidates, then (nothing converged) the ranging
+        // fallback's best orbits, which stall the same way.
+        let gauss = |c: &&super::super::od::IodCandidate| {
+            c.source == super::super::od::CandidateSource::Gauss
+        };
+        let gauss_corrected = result
+            .candidates
+            .iter()
+            .filter(gauss)
+            .filter(|c| c.stages > 0)
+            .count();
+        assert_eq!(gauss_corrected, 3);
+        let ranging = result.ranging.as_ref().expect("ranging fallback ran");
+        let ranging_candidates =
+            result.candidates.len() - result.candidates.iter().filter(gauss).count();
+        assert_eq!(
+            ranging_candidates,
+            config.ranging.max_corrections.min(ranging.samples.len())
+        );
+        assert_eq!(result.corrections_run, gauss_corrected + ranging_candidates);
         let noted = result
             .candidates
             .iter()

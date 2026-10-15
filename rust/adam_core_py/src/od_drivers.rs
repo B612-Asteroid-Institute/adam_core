@@ -31,9 +31,9 @@ use adam_core_rs_coords::propagation::{
     CorrectionConfig, CovariancePropagation, EphemerisOptions, EpochPolicy, FullOdConfig,
     FullOdOutput, IodAcceptance, IodCandidate, IodConfig, IodResult, IterativeFitConfig,
     JacobianMethod, ObservationSelectionMethod, PrefitScope, PropagationOptions,
-    PropagationResultValue, PropagatorPredictor, RefinementConfig, SpanSearchConfig,
-    SphericalPredictor, TwoBodyPropagator, TwoBodyPropagatorConfig, VelocityMethod,
-    WhitenedFitConfig, WhitenedFitOutput,
+    PropagationResultValue, PropagatorPredictor, RangingConfig, RangingResult, RangingSample,
+    RefinementConfig, SpanSearchConfig, SphericalPredictor, TwoBodyPropagator,
+    TwoBodyPropagatorConfig, VelocityMethod, WhitenedFitConfig, WhitenedFitOutput,
 };
 use adam_core_rs_coords::veres2017::{SigmaFillModel, VeresFloorModel, VeresReplaceModel};
 use adam_core_rs_coords::{
@@ -242,6 +242,14 @@ pub fn iod_defaults(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     out.set_item("max_stages", config.correction.max_stages)?;
     out.set_item("stage_loss", config.correction.stage_loss.as_str())?;
     out.set_item("prefit_scope", config.correction.prefit_scope.as_str())?;
+    out.set_item("ranging_enabled", config.ranging.enabled)?;
+    out.set_item("ranging_rho_min_au", config.ranging.rho_min_au)?;
+    out.set_item("ranging_rho_max_au", config.ranging.rho_max_au)?;
+    out.set_item("ranging_n_rho", config.ranging.n_rho)?;
+    out.set_item("ranging_n_rho_dot", config.ranging.n_rho_dot)?;
+    out.set_item("ranging_max_corrections", config.ranging.max_corrections)?;
+    out.set_item("ranging_chunk_size", config.ranging.chunk_size)?;
+    out.set_item("ranging_max_arc_days", config.ranging.max_arc_days)?;
     out.set_item("huber_f_scale", HUBER_F_SCALE_DEFAULT)?;
     Ok(out)
 }
@@ -367,6 +375,24 @@ fn parse_iod_settings_over(
                 Some(value) => PrefitScope::parse(&value).map_err(value_error)?,
                 None => defaults.correction.prefit_scope,
             },
+        },
+        ranging: RangingConfig {
+            enabled: setting(settings, "ranging_enabled", defaults.ranging.enabled)?,
+            rho_min_au: setting(settings, "ranging_rho_min_au", defaults.ranging.rho_min_au)?,
+            rho_max_au: setting(settings, "ranging_rho_max_au", defaults.ranging.rho_max_au)?,
+            n_rho: setting(settings, "ranging_n_rho", defaults.ranging.n_rho)?,
+            n_rho_dot: setting(settings, "ranging_n_rho_dot", defaults.ranging.n_rho_dot)?,
+            max_corrections: setting(
+                settings,
+                "ranging_max_corrections",
+                defaults.ranging.max_corrections,
+            )?,
+            chunk_size: setting(settings, "ranging_chunk_size", defaults.ranging.chunk_size)?,
+            max_arc_days: setting(
+                settings,
+                "ranging_max_arc_days",
+                defaults.ranging.max_arc_days,
+            )?,
         },
     })
 }
@@ -659,6 +685,42 @@ fn fit_output_dict<'py>(
 
 /// One scored IOD candidate: orbit, exact epoch, provenance (window,
 /// triplet rows, root, velocity method), prefit and post-trial statistics.
+/// The systematic-ranging sample of an IOD stage: the attributable, the
+/// grid counts, and per admissible orbit its state, range, range rate, chi2
+/// and weight (arrays), with the index of the best.
+fn ranging_dict<'py>(py: Python<'py>, ranging: &RangingResult) -> PyResult<Bound<'py, PyDict>> {
+    let out = PyDict::new(py);
+    let a = &ranging.attributable;
+    let attributable = PyDict::new(py);
+    attributable.set_item("reference_row", a.reference_row)?;
+    attributable.set_item("epoch_days", a.epoch.days)?;
+    attributable.set_item("epoch_nanos", a.epoch.nanos)?;
+    attributable.set_item("epoch_scale", a.epoch_scale.as_str())?;
+    attributable.set_item("ra_deg", a.ra_deg)?;
+    attributable.set_item("dec_deg", a.dec_deg)?;
+    attributable.set_item("ra_rate_deg_per_day", a.ra_rate_deg_per_day)?;
+    attributable.set_item("dec_rate_deg_per_day", a.dec_rate_deg_per_day)?;
+    attributable.set_item("arc_days", a.arc_days)?;
+    out.set_item("attributable", attributable)?;
+    let states: Vec<f64> = ranging.samples.iter().flat_map(|s| s.state).collect();
+    out.set_item(
+        "states",
+        ndarray::Array2::from_shape_vec((ranging.samples.len(), 6), states)
+            .map_err(|err| PyValueError::new_err(err.to_string()))?
+            .into_pyarray(py),
+    )?;
+    let column = |f: fn(&RangingSample) -> f64| ranging.samples.iter().map(f).collect::<Vec<f64>>();
+    out.set_item("rho_au", column(|s| s.rho_au))?;
+    out.set_item("rho_dot_au_per_day", column(|s| s.rho_dot_au_per_day))?;
+    out.set_item("chi2", column(|s| s.chi2))?;
+    out.set_item("weight", column(|s| s.weight))?;
+    out.set_item("best", ranging.best)?;
+    out.set_item("grid_points", ranging.grid_points)?;
+    out.set_item("admissible_points", ranging.admissible_points)?;
+    out.set_item("num_obs", ranging.num_obs)?;
+    Ok(out)
+}
+
 fn candidate_dict<'py>(py: Python<'py>, candidate: &IodCandidate) -> PyResult<Bound<'py, PyDict>> {
     let out = PyDict::new(py);
     out.set_item(
@@ -682,6 +744,7 @@ fn candidate_dict<'py>(py: Python<'py>, candidate: &IodCandidate) -> PyResult<Bo
     out.set_item("arc_length", candidate.arc_length)?;
     out.set_item("postfit_reduced_chi2", candidate.postfit_reduced_chi2)?;
     out.set_item("whole_arc_score", candidate.whole_arc_score)?;
+    out.set_item("source", candidate.source.as_str())?;
     out.set_item("converged", candidate.converged)?;
     out.set_item(
         "corrected_state",
@@ -738,6 +801,14 @@ fn iod_dict<'py>(py: Python<'py>, result: IodResult, n: usize) -> PyResult<Bound
     out.set_item("not_found_reason", iod.not_found_reason)?;
     out.set_item("accepted", result.accepted)?;
     out.set_item("ambiguous_with", result.ambiguous_with.clone())?;
+    out.set_item(
+        "ranging",
+        result
+            .ranging
+            .as_ref()
+            .map(|ranging| ranging_dict(py, ranging))
+            .transpose()?,
+    )?;
     let candidates = PyList::empty(py);
     for candidate in &result.candidates {
         candidates.append(candidate_dict(py, candidate)?)?;

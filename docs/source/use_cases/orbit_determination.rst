@@ -277,6 +277,18 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
   1e-6 go to the earliest candidate). ``IodReport.ambiguous_with`` lists
   converged solutions outside the accepted orbit's 3-sigma region whose
   score is within the same margin (Gronchi 2009).
+* **Short arcs and Gauss failures: ranging.** An arc too short for an
+  orbit (``min_arc_length``) returns no orbit but the systematic-ranging
+  sample (``IodReport.ranging``): the attributable (position and rates) is
+  completed at every range and range rate of the admissible region (bound
+  to the Sun, not to the Earth; Milani et al. 2004), each orbit scored on
+  the observations and weighted by ``exp(-delta_chi2/2)`` (Farnocchia,
+  Chesley & Micheli 2015). ``RangingSample.to_variant_orbits`` gives the
+  sample as weighted ``VariantOrbits``. When no Gauss candidate converges,
+  the best 3 ranging orbits are corrected exactly like Gauss candidates
+  (``IodCandidate.source == "ranging"``). Ranging runs on arcs of at most
+  5 days (a few nights; ``ranging_max_arc_days``); ``ranging_settings``
+  tunes or disables it.
 * **Failure.** A candidate whose prediction fails is skipped and counted;
   when nothing is accepted, ``IodReport.not_found_reason`` says why.
 * **Evidence.** On the first solutions of 126 walk-forward objects

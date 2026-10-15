@@ -15,6 +15,7 @@ from ..coordinates import CartesianCoordinates
 from ..coordinates.origin import Origin
 from ..coordinates.residuals import Residuals
 from ..orbits.orbits import Orbits
+from ..orbits.variants import VariantOrbits
 from ..propagator import Propagator
 from ..time import Timestamp
 from ..utils.iter import _iterate_chunks
@@ -379,6 +380,79 @@ class IodCandidate:
     #: degrees of freedom (None when not converged).
     whole_arc_score: Optional[float] = None
     correction_note: Optional[str] = None
+    #: ``"gauss"`` (a Gauss root of ``triplet``) or ``"ranging"`` (a
+    #: systematic-ranging orbit; ``triplet`` repeats the attributable's
+    #: reference row and ``root_index`` is its rank by chi2).
+    source: str = "gauss"
+
+
+@dataclass(frozen=True)
+class RangingSample:
+    """
+    The systematic-ranging sample of an arc Gauss could not handle: the
+    attributable (position and rates at the reference observation), and per
+    orbit in the admissible region its heliocentric ecliptic state at the
+    attributable's epoch, range, range rate, chi2 and weight
+    ``exp(-delta_chi2 / 2)`` (normalized).
+    """
+
+    attributable: dict
+    states: np.ndarray
+    rho_au: np.ndarray
+    rho_dot_au_per_day: np.ndarray
+    chi2: np.ndarray
+    weight: np.ndarray
+    best: Optional[int]
+    grid_points: int
+    admissible_points: int
+    num_obs: int
+
+    def to_variant_orbits(self, object_id: Optional[str] = None) -> VariantOrbits:
+        """The sample as weighted `VariantOrbits` of one orbit
+        (``orbit_id`` ``"ranging"``), for propagating or screening it."""
+        n = len(self.weight)
+        a = self.attributable
+        time = Timestamp.from_kwargs(
+            days=[int(a["epoch_days"])] * n,
+            nanos=[int(a["epoch_nanos"])] * n,
+            scale=a["epoch_scale"],
+        )
+        states = np.asarray(self.states, dtype=np.float64).reshape(n, 6)
+        return VariantOrbits.from_kwargs(
+            orbit_id=["ranging"] * n,
+            object_id=[object_id] * n,
+            variant_id=[str(i) for i in range(n)],
+            weights=self.weight,
+            weights_cov=self.weight,
+            coordinates=CartesianCoordinates.from_kwargs(
+                x=states[:, 0],
+                y=states[:, 1],
+                z=states[:, 2],
+                vx=states[:, 3],
+                vy=states[:, 4],
+                vz=states[:, 5],
+                time=time,
+                origin=Origin.from_kwargs(code=["SUN"] * n),
+                frame="ecliptic",
+            ),
+        )
+
+
+def _ranging_from_output(ranging: Optional[dict]) -> Optional[RangingSample]:
+    if ranging is None:
+        return None
+    return RangingSample(
+        attributable=dict(ranging["attributable"]),
+        states=np.asarray(ranging["states"], dtype=np.float64).reshape(-1, 6),
+        rho_au=np.asarray(ranging["rho_au"], dtype=np.float64),
+        rho_dot_au_per_day=np.asarray(ranging["rho_dot_au_per_day"], dtype=np.float64),
+        chi2=np.asarray(ranging["chi2"], dtype=np.float64),
+        weight=np.asarray(ranging["weight"], dtype=np.float64),
+        best=None if ranging["best"] is None else int(ranging["best"]),
+        grid_points=int(ranging["grid_points"]),
+        admissible_points=int(ranging["admissible_points"]),
+        num_obs=int(ranging["num_obs"]),
+    )
 
 
 @dataclass(frozen=True)
@@ -402,6 +476,9 @@ class IodReport:
     #: the accepted orbit's 3-sigma region) fitting about as well (chi2
     #: within the same margin); non-empty means the IOD is ambiguous.
     ambiguous_with: tuple[int, ...] = ()
+    #: The systematic-ranging sample (`RangingSample`) when ranging ran: the
+    #: arc was too short for an orbit, or no Gauss candidate converged.
+    ranging: Optional[RangingSample] = None
 
     @property
     def found(self) -> bool:
@@ -439,6 +516,7 @@ def report_from_iod_output(output: dict) -> IodReport:
             arc_length=float(candidate["arc_length"]),
             postfit_reduced_chi2=candidate.get("postfit_reduced_chi2"),
             whole_arc_score=candidate.get("whole_arc_score"),
+            source=candidate.get("source", "gauss"),
             converged=bool(candidate.get("converged", False)),
             accepted=bool(candidate["accepted"]),
             corrected_state=(
@@ -461,6 +539,7 @@ def report_from_iod_output(output: dict) -> IodReport:
         corrections_run=int(output.get("corrections_run", 0)),
         not_found_reason=output.get("not_found_reason"),
         ambiguous_with=tuple(int(i) for i in output.get("ambiguous_with") or ()),
+        ranging=_ranging_from_output(output.get("ranging")),
     )
 
 
@@ -487,6 +566,7 @@ def run_iod(
     span_settings: Optional[dict] = None,
     acceptance: Literal["corrected", "prefit"] = IOD_DEFAULTS["acceptance"],
     correction_settings: Optional[dict] = None,
+    ranging_settings: Optional[dict] = None,
     fit_settings: Optional[dict] = None,
     observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers, IodReport]:
@@ -547,6 +627,17 @@ def run_iod(
         where each raw Gauss orbit is scored to order the corrections:
         ``"local"`` (default), the observations of its first stage, or
         ``"whole_arc"``, every observation (the legacy order).
+    ranging_settings : dict, optional
+        Overrides of systematic ranging (keys ``ranging_enabled``,
+        ``ranging_rho_min_au``, ``ranging_rho_max_au``, ``ranging_n_rho``,
+        ``ranging_n_rho_dot``, ``ranging_max_corrections``,
+        ``ranging_chunk_size``, ``ranging_max_arc_days``; Rust
+        ``RangingConfig`` defaults otherwise). Ranging runs on arcs of at
+        most ``ranging_max_arc_days`` (5).
+        Under corrected acceptance an arc shorter than ``min_arc_length``
+        returns no orbit but the ranging sample (``IodReport.ranging``), and
+        when no Gauss candidate converges the best ranging orbits are
+        corrected like candidates (``IodCandidate.source == "ranging"``).
     fit_settings : dict, optional
         Solver settings of the correction stages (as `fit_least_squares`'s;
         the whole-arc stage uses the linear loss, the earlier ones
@@ -587,6 +678,7 @@ def run_iod(
         "acceptance": acceptance,
         **(span_settings or {}),
         **(correction_settings or {}),
+        **(ranging_settings or {}),
     }
     orbit_id = uuid.uuid4().hex
     fused = native_work_unit(propagator, "run_iod")

@@ -176,6 +176,20 @@ This file contains notable changes in adam-core
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
 
+- Systematic ranging for arcs Gauss cannot handle (phase 1;
+  `propagation::od_ranging`, `IodConfig::ranging` / `ranging_settings`).
+  The attributable (position and rates at the arc's midpoint observation,
+  from a weighted polynomial) is completed at a log-spaced range by uniform
+  range-rate grid inside the admissible region (heliocentrically bound, not
+  bound to the Earth; Milani et al. 2004), each orbit scored on the
+  observations and weighted `exp(-delta_chi2/2)` (Farnocchia, Chesley &
+  Micheli 2015). Under corrected acceptance an arc shorter than
+  `min_arc_length` returns the sample (`IodResult::ranging`, Python
+  `IodReport.ranging` / `RangingSample.to_variant_orbits`) instead of an
+  orbit, and when no Gauss candidate converges the best 3 ranging orbits
+  are corrected like candidates (`CandidateSource::Ranging`). Ranging runs
+  on arcs of at most 5 days (`max_arc_days`). Phase 2 (the per-node fit of
+  the other four parameters) is not implemented.
 - API consolidation onto the native stages (`run_iod`, `refine`, `run_od`).
   `iod`, `iod_worker`, `fit_least_squares`, `iterative_fit` and
   `cmc2003_fit` are deprecated aliases (same signature, a
