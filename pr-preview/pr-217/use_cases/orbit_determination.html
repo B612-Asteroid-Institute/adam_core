@@ -802,6 +802,12 @@ in a later release.</p>
 <td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter(PropagatorClass(**propagator_kwargs))</span></code>: the IOD
 propagator is an instance</p></td>
 </tr>
+<tr class="row-odd"><td><p>OD with a Python-only propagator (predictions through
+<code class="docutils literal notranslate"><span class="pre">generate_ephemeris</span></code>)</p></td>
+<td><p>Not supported: OD runs natively and raises <code class="docutils literal notranslate"><span class="pre">TypeError</span></code>. Use
+adam-core’s two-body propagator or a native backend that declares an
+external propagator (adam-assist &gt;= 0.5’s <code class="docutils literal notranslate"><span class="pre">ASSISTPropagator</span></code>)</p></td>
+</tr>
 </tbody>
 </table>
 </div>

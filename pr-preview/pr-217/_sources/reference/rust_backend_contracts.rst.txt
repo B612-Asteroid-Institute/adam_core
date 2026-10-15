@@ -120,16 +120,25 @@ Current Migrated APIs
   - Backend default: legacy path, with Rust path held in ``dual`` mode pending +20% p50/p95 perf gate.
   - Error behavior: velocity-method validation raises ``ValueError`` for unsupported solver names.
 
-- ``orbit_determination.fit_least_squares`` (whitened residuals, analytic Jacobian, robust loss)
+- ``orbit_determination.fit_least_squares`` (whitened residuals, Jacobian that follows the dynamics, robust loss)
+  - Derivatives: ``jacobian="auto"`` (default) resolves to ``"analytic"`` for
+    declared two-body dynamics, ``"propagator"`` when the backend supplies
+    state-transition matrices (``Propagator::propagate_stm``), and
+    ``"central"`` otherwise. The propagator route takes optimizer steps with
+    the two-body Jacobian, then converges and evaluates the covariance with
+    the backend's STMs, so the reported solution and covariance carry the
+    selected dynamics' exact derivatives.
   - Boundary: nested Arrow IPC of the orbit, observed coordinates and
     observers plus a ``fit_settings`` dict in; a dict of scalars, lists and
     NumPy arrays out. The complete work unit (solver, Jacobian, loss,
     covariance probe, final evaluation) runs in Rust; Python converts tables
     and re-emits the driver's diagnostics as ``RuntimeWarning``. The supplied
     ``Propagator`` is driven from Rust: through its own fused work unit when it
-    has one, otherwise through the callback route
-    (``adam_core.orbit_determination._native_callback.predict_spherical``
-    calling its ``generate_ephemeris``).
+    declares one, otherwise through its external-propagator capsule
+    (``propagator_capsule``); a propagator with neither raises ``TypeError``
+    (the callback adapter calling ``generate_ephemeris``,
+    ``adam_core.orbit_determination._native_callback``, is private to the test
+    suite).
   - Rust entrypoints: ``adam_core._rust_native.observation_whitening_matrices_numpy``
     (``(N, 6, 6)`` covariance + ``(N,)`` latitude -> ``(N, 2, 2)`` inverse Cholesky
     factors), ``whiten_residual_pairs_numpy``, ``whitened_2body_jacobian_numpy``
@@ -150,9 +159,9 @@ Current Migrated APIs
     fallback, the fused final evaluation; diagnostics return as strings the
     veneer re-emits as ``RuntimeWarning``). The in-tree implementation over the
     two-body backend is ``adam_core._rust_native.fit_orbit_whitened_2body_ipc``.
-    Every other propagator runs the same driver through the callback route
-    (``adam_core._rust_native.fit_orbit_whitened_ipc`` with the propagator
-    object; ``propagator=None`` selects the two-body backend). Only the
+    Every other native propagator runs the same driver with its external
+    propagator capsule (``adam_core._rust_native.fit_orbit_whitened_ipc``;
+    ``propagator=None`` selects the two-body backend). Only the
     solver settings ``xtol``, ``ftol``, ``gtol`` and ``max_nfev`` are
     accepted; any other keyword raises ``ValueError`` (there is no scipy
     path). ``jacobian="2-point"`` with ``loss="linear"`` on a propagator
@@ -195,7 +204,9 @@ Current Migrated APIs
     instance (no propagation method or work unit overridden below the
     declaring class); a method of that name alone is not enough. Otherwise
     they
-    run the same Rust loop through the callback route
+    (test suite only) run the same Rust loop through the private callback
+    adapter; outside the test suite a propagator without a native backend
+    raises ``TypeError``
     (``iterative_fit_ipc`` / ``cmc2003_fit_ipc`` / ``run_iod_ipc`` with the
     propagator object); ``initial_orbit_determination`` runs ``run_iod`` per
     linkage, and a propagator's batch ``initial_orbit_determination`` work
@@ -209,8 +220,8 @@ Current Migrated APIs
     ``OrbitFitter`` plugin boundary, table loading and table assembly.
     Settings that only the scipy solver understood raise ``ValueError``.
   - Error behavior: driver errors raise ``ValueError`` for invalid inputs and
-    ``RuntimeError`` for backend failures; an exception raised by a Python
-    propagator inside the callback is re-raised unchanged.
+    ``RuntimeError`` for backend failures; a propagator without a native
+    backend raises ``TypeError``.
   - CMC2003 finalization uses one central-difference Jacobian through the
     full predictor for all observations. Selected rows form the covariance;
     all rows supply rejection/recovery projections. The solver Jacobian

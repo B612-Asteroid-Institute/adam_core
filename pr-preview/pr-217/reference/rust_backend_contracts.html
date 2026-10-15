@@ -561,19 +561,28 @@ non-positive-definite covariance input.</p></li>
 - Rust entrypoint: <code class="docutils literal notranslate"><span class="pre">adam_core._rust_native.gauss_iod_orbits_numpy</span></code> (candidate-generation kernel from precomputed roots).
 - Backend default: legacy path, with Rust path held in <code class="docutils literal notranslate"><span class="pre">dual</span></code> mode pending +20% p50/p95 perf gate.
 - Error behavior: velocity-method validation raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> for unsupported solver names.</p></li>
-<li><p><code class="docutils literal notranslate"><span class="pre">orbit_determination.fit_least_squares</span></code> (whitened residuals, analytic Jacobian, robust loss)
-- Boundary: nested Arrow IPC of the orbit, observed coordinates and</p>
+<li><p><code class="docutils literal notranslate"><span class="pre">orbit_determination.fit_least_squares</span></code> (whitened residuals, Jacobian that follows the dynamics, robust loss)
+- Derivatives: <code class="docutils literal notranslate"><span class="pre">jacobian=&quot;auto&quot;</span></code> (default) resolves to <code class="docutils literal notranslate"><span class="pre">&quot;analytic&quot;</span></code> for</p>
 <blockquote>
-<div><p>observers plus a <code class="docutils literal notranslate"><span class="pre">fit_settings</span></code> dict in; a dict of scalars, lists and
+<div><p>declared two-body dynamics, <code class="docutils literal notranslate"><span class="pre">&quot;propagator&quot;</span></code> when the backend supplies
+state-transition matrices (<code class="docutils literal notranslate"><span class="pre">Propagator::propagate_stm</span></code>), and
+<code class="docutils literal notranslate"><span class="pre">&quot;central&quot;</span></code> otherwise. The propagator route takes optimizer steps with
+the two-body Jacobian, then converges and evaluates the covariance with
+the backend’s STMs, so the reported solution and covariance carry the
+selected dynamics’ exact derivatives.</p>
+</div></blockquote>
+<ul class="simple">
+<li><p>Boundary: nested Arrow IPC of the orbit, observed coordinates and
+observers plus a <code class="docutils literal notranslate"><span class="pre">fit_settings</span></code> dict in; a dict of scalars, lists and
 NumPy arrays out. The complete work unit (solver, Jacobian, loss,
 covariance probe, final evaluation) runs in Rust; Python converts tables
 and re-emits the driver’s diagnostics as <code class="docutils literal notranslate"><span class="pre">RuntimeWarning</span></code>. The supplied
 <code class="docutils literal notranslate"><span class="pre">Propagator</span></code> is driven from Rust: through its own fused work unit when it
-has one, otherwise through the callback route
-(<code class="docutils literal notranslate"><span class="pre">adam_core.orbit_determination._native_callback.predict_spherical</span></code>
-calling its <code class="docutils literal notranslate"><span class="pre">generate_ephemeris</span></code>).</p>
-</div></blockquote>
-<ul class="simple">
+declares one, otherwise through its external-propagator capsule
+(<code class="docutils literal notranslate"><span class="pre">propagator_capsule</span></code>); a propagator with neither raises <code class="docutils literal notranslate"><span class="pre">TypeError</span></code>
+(the callback adapter calling <code class="docutils literal notranslate"><span class="pre">generate_ephemeris</span></code>,
+<code class="docutils literal notranslate"><span class="pre">adam_core.orbit_determination._native_callback</span></code>, is private to the test
+suite).</p></li>
 <li><p>Rust entrypoints: <code class="docutils literal notranslate"><span class="pre">adam_core._rust_native.observation_whitening_matrices_numpy</span></code>
 (<code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">6,</span> <span class="pre">6)</span></code> covariance + <code class="docutils literal notranslate"><span class="pre">(N,)</span></code> latitude -&gt; <code class="docutils literal notranslate"><span class="pre">(N,</span> <span class="pre">2,</span> <span class="pre">2)</span></code> inverse Cholesky
 factors), <code class="docutils literal notranslate"><span class="pre">whiten_residual_pairs_numpy</span></code>, <code class="docutils literal notranslate"><span class="pre">whitened_2body_jacobian_numpy</span></code>
@@ -594,9 +603,9 @@ rules, <code class="docutils literal notranslate"><span class="pre">inv(JᵀJ)</
 fallback, the fused final evaluation; diagnostics return as strings the
 veneer re-emits as <code class="docutils literal notranslate"><span class="pre">RuntimeWarning</span></code>). The in-tree implementation over the
 two-body backend is <code class="docutils literal notranslate"><span class="pre">adam_core._rust_native.fit_orbit_whitened_2body_ipc</span></code>.
-Every other propagator runs the same driver through the callback route
-(<code class="docutils literal notranslate"><span class="pre">adam_core._rust_native.fit_orbit_whitened_ipc</span></code> with the propagator
-object; <code class="docutils literal notranslate"><span class="pre">propagator=None</span></code> selects the two-body backend). Only the
+Every other native propagator runs the same driver with its external
+propagator capsule (<code class="docutils literal notranslate"><span class="pre">adam_core._rust_native.fit_orbit_whitened_ipc</span></code>;
+<code class="docutils literal notranslate"><span class="pre">propagator=None</span></code> selects the two-body backend). Only the
 solver settings <code class="docutils literal notranslate"><span class="pre">xtol</span></code>, <code class="docutils literal notranslate"><span class="pre">ftol</span></code>, <code class="docutils literal notranslate"><span class="pre">gtol</span></code> and <code class="docutils literal notranslate"><span class="pre">max_nfev</span></code> are
 accepted; any other keyword raises <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> (there is no scipy
 path). <code class="docutils literal notranslate"><span class="pre">jacobian=&quot;2-point&quot;</span></code> with <code class="docutils literal notranslate"><span class="pre">loss=&quot;linear&quot;</span></code> on a propagator
@@ -643,7 +652,9 @@ reference implementation.</p></li>
 instance (no propagation method or work unit overridden below the
 declaring class); a method of that name alone is not enough. Otherwise
 they
-run the same Rust loop through the callback route
+(test suite only) run the same Rust loop through the private callback
+adapter; outside the test suite a propagator without a native backend
+raises <code class="docutils literal notranslate"><span class="pre">TypeError</span></code>
 (<code class="docutils literal notranslate"><span class="pre">iterative_fit_ipc</span></code> / <code class="docutils literal notranslate"><span class="pre">cmc2003_fit_ipc</span></code> / <code class="docutils literal notranslate"><span class="pre">run_iod_ipc</span></code> with the
 propagator object); <code class="docutils literal notranslate"><span class="pre">initial_orbit_determination</span></code> runs <code class="docutils literal notranslate"><span class="pre">run_iod</span></code> per
 linkage, and a propagator’s batch <code class="docutils literal notranslate"><span class="pre">initial_orbit_determination</span></code> work
@@ -657,8 +668,8 @@ determination loop remains in Python: Python owns ids, the
 <code class="docutils literal notranslate"><span class="pre">OrbitFitter</span></code> plugin boundary, table loading and table assembly.
 Settings that only the scipy solver understood raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code>.</p></li>
 <li><p>Error behavior: driver errors raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> for invalid inputs and
-<code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> for backend failures; an exception raised by a Python
-propagator inside the callback is re-raised unchanged.</p></li>
+<code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> for backend failures; a propagator without a native
+backend raises <code class="docutils literal notranslate"><span class="pre">TypeError</span></code>.</p></li>
 <li><p>CMC2003 finalization uses one central-difference Jacobian through the
 full predictor for all observations. Selected rows form the covariance;
 all rows supply rejection/recovery projections. The solver Jacobian
