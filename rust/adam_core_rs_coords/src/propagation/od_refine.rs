@@ -54,8 +54,19 @@ pub const DELTA_CHI2_WINDOW: (f64, f64) = (0.1, 10.0);
 /// How the residual Jacobian is obtained for the solver and the covariance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JacobianMethod {
-    /// Exact 2-body state-transition Jacobian by forward-mode autodiff.
+    /// Derivatives that follow the selected dynamics (the default): the
+    /// exact two-body Jacobian when the backend declares two-body dynamics,
+    /// the backend's own state-transition matrices when it supplies them
+    /// (`Propagator`), central differences through the full predictor
+    /// otherwise. Resolved once per fit.
+    Auto,
+    /// Exact 2-body state-transition Jacobian by forward-mode autodiff (exact
+    /// only for two-body dynamics).
     Analytic,
+    /// The propagation backend's state-transition matrices (e.g. ASSIST's
+    /// variational equations) chained through the exact light-time and
+    /// projection derivatives: exact for the backend's dynamics.
+    Propagator,
     /// Central differences through the full residual pipeline.
     Central,
     /// scipy's forward-difference `"2-point"` Jacobian.
@@ -65,20 +76,35 @@ pub enum JacobianMethod {
 impl JacobianMethod {
     pub fn parse(value: &str) -> Result<Self, String> {
         match value {
+            "auto" => Ok(Self::Auto),
             "analytic" => Ok(Self::Analytic),
+            "propagator" => Ok(Self::Propagator),
             "central" => Ok(Self::Central),
             "2-point" => Ok(Self::TwoPoint),
             _ => Err(format!(
-                "jacobian must be one of 'analytic', 'central', '2-point'; got {value:?}"
+                "jacobian must be one of 'auto', 'analytic', 'propagator', 'central', \
+                 '2-point'; got {value:?}"
             )),
         }
     }
 
     pub fn as_str(self) -> &'static str {
         match self {
+            Self::Auto => "auto",
             Self::Analytic => "analytic",
+            Self::Propagator => "propagator",
             Self::Central => "central",
             Self::TwoPoint => "2-point",
+        }
+    }
+
+    /// The concrete method for `predictor` (see [`JacobianMethod::Auto`]).
+    pub fn resolve(self, predictor: &dyn SphericalPredictor) -> Self {
+        match self {
+            Self::Auto if predictor.backend().two_body_dynamics => Self::Analytic,
+            Self::Auto if predictor.supports_stm() => Self::Propagator,
+            Self::Auto => Self::Central,
+            other => other,
         }
     }
 }
@@ -171,7 +197,7 @@ impl Default for WhitenedFitConfig {
         Self {
             loss: LossType::Linear,
             f_scale: HUBER_F_SCALE_DEFAULT,
-            jacobian: JacobianMethod::Analytic,
+            jacobian: JacobianMethod::Auto,
             validate_covariance: true,
             xtol: 1e-12,
             ftol: 1e-12,
@@ -259,6 +285,8 @@ pub(super) struct WhitenedProblem<'a> {
     observers: ObserverBatch,
     whiteners: Vec<[f64; 4]>,
     analytic_terms: Option<TwoBodyJacobianTerms>,
+    /// `config.jacobian` resolved for the predictor (never `Auto`).
+    pub(super) jacobian_method: JacobianMethod,
     two_body: TwoBodyModelConfig,
     m: usize,
 }
@@ -300,7 +328,11 @@ impl<'a> WhitenedProblem<'a> {
         let whiteners = observation_whitening_matrices(&observed_cov, &lat_deg)
             .map_err(|err| PropagationError::InvalidRequest(err.to_string()))?;
 
-        let analytic_terms = if config.jacobian == JacobianMethod::Analytic {
+        let jacobian_method = config.jacobian.resolve(predictor);
+        let analytic_terms = if matches!(
+            jacobian_method,
+            JacobianMethod::Analytic | JacobianMethod::Propagator
+        ) {
             Some(analytic_jacobian_terms(
                 &geometry,
                 observers,
@@ -321,6 +353,7 @@ impl<'a> WhitenedProblem<'a> {
             observers: observers.clone(),
             whiteners,
             analytic_terms,
+            jacobian_method,
             two_body: config.two_body,
             m,
         })
@@ -365,6 +398,7 @@ impl<'a> WhitenedProblem<'a> {
         base: &[f64],
     ) -> PropagationResultValue<Vec<f64>> {
         match method {
+            JacobianMethod::Auto => self.jacobian(self.jacobian_method, state, base),
             JacobianMethod::Analytic => {
                 let terms = self.analytic_terms.as_ref().ok_or_else(|| {
                     PropagationError::InvalidRequest(
@@ -373,6 +407,41 @@ impl<'a> WhitenedProblem<'a> {
                 })?;
                 whitened_2body_jacobian(*state, self.epoch_mjd_tdb, terms, &self.two_body)
                     .map_err(PropagationError::Backend)
+            }
+            JacobianMethod::Propagator => {
+                let terms = self.analytic_terms.as_ref().ok_or_else(|| {
+                    PropagationError::InvalidRequest(
+                        "propagator Jacobian terms were not prepared".to_string(),
+                    )
+                })?;
+                if self.geometry.frame != crate::types::Frame::Ecliptic
+                    || !super::ephemeris::is_sun_origin(&self.geometry.origin)
+                {
+                    return Err(PropagationError::InvalidRequest(
+                        "jacobian='propagator' needs a heliocentric ecliptic orbit".to_string(),
+                    ));
+                }
+                let epoch = super::od::mjd_epoch(self.epoch_mjd_tdb);
+                let times: Vec<crate::Epoch> = terms
+                    .times_mjd_tdb
+                    .iter()
+                    .map(|&t| super::od::mjd_epoch(t))
+                    .collect();
+                let rows = self.predictor.propagate_stm(*state, epoch, &times)?;
+                if rows.len() != times.len() || rows.iter().any(|row| !row.valid) {
+                    // A failed row: non-finite, so the solver's non-finite
+                    // handling (central-difference continuation) applies.
+                    return Ok(vec![f64::NAN; 2 * self.m * 6]);
+                }
+                let states: Vec<[f64; 6]> = rows.iter().map(|row| row.state).collect();
+                let stms: Vec<[f64; 36]> = rows.iter().map(|row| row.stm).collect();
+                crate::differential_correction::whitened_stm_jacobian(
+                    &states,
+                    &stms,
+                    terms,
+                    &self.two_body,
+                )
+                .map_err(PropagationError::Backend)
             }
             JacobianMethod::Central => {
                 // h_k = 1e-6 * max(|x_k|, 1e-3): `_central_difference_jacobian`.
@@ -770,7 +839,10 @@ fn solve_with_fallback(
 ) -> PropagationResultValue<(Solution, JacobianMethod)> {
     let solution = solve(problem, initial_state, config)?;
     if solution.status != STATUS_NON_FINITE
-        || config.jacobian != JacobianMethod::Analytic
+        || !matches!(
+            config.jacobian,
+            JacobianMethod::Analytic | JacobianMethod::Propagator
+        )
         || !solution.residuals.iter().all(|r| r.is_finite())
     {
         return Ok((solution, config.jacobian));
@@ -815,7 +887,7 @@ fn solve(
     let mut trials = 1_usize;
     let max_trials = config.max_nfev.unwrap_or(usize::MAX);
     let jacobian_nfev = match config.jacobian {
-        JacobianMethod::Analytic => 0,
+        JacobianMethod::Analytic | JacobianMethod::Propagator | JacobianMethod::Auto => 0,
         JacobianMethod::Central => 12,
         JacobianMethod::TwoPoint => 6,
     };
@@ -1097,7 +1169,7 @@ fn validated_covariance(
             ));
             Ok(covariance)
         }
-        JacobianMethod::Central => {
+        JacobianMethod::Central | JacobianMethod::Propagator | JacobianMethod::Auto => {
             warnings.push(format!(
                 "The fit covariance failed the weak-direction consistency check (measured \
                  delta-chi2 = {delta:.3} at a 1-sigma displacement along the weakest axis; \
@@ -1215,6 +1287,12 @@ fn fit_orbit_whitened_impl<T: OriginTranslationProvider>(
         provider,
         translation_provider,
     )?;
+    // The fit runs with the method resolved for this predictor.
+    let resolved = WhitenedFitConfig {
+        jacobian: problem.jacobian_method,
+        ..*config
+    };
+    let config = &resolved;
 
     let mut warnings = Vec::new();
     let (solution, jacobian_method) =
@@ -3398,6 +3476,7 @@ mod tests {
                 max_nfev: Some(budget),
                 // Even very loose xtol must not turn budget exhaustion into success.
                 xtol: 1.0,
+                jacobian: JacobianMethod::Analytic,
                 ..WhitenedFitConfig::default()
             };
             let (solution, batches) = solve_counted(&config, true);
@@ -3442,7 +3521,10 @@ mod tests {
             translation_provider: &ZeroTranslationProvider,
         };
         let observed = synthetic_observations(None);
-        let config = WhitenedFitConfig::default();
+        let config = WhitenedFitConfig {
+            jacobian: JacobianMethod::Analytic,
+            ..WhitenedFitConfig::default()
+        };
         let mut problem = WhitenedProblem::new(
             &predictor,
             &perturbed_start(),
@@ -3591,8 +3673,13 @@ mod tests {
         // per rejection until the step is below the xtol resolution, which
         // ends the fit as a numerical minimum (status 3) at the start state,
         // never as a stall and well inside the attempt limit.
-        let (solution, batches) =
-            solve_counted_mode(&WhitenedFitConfig::default(), PredictorMode::WorseTrials);
+        let (solution, batches) = solve_counted_mode(
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::Analytic,
+                ..WhitenedFitConfig::default()
+            },
+            PredictorMode::WorseTrials,
+        );
         assert_eq!(solution.status, 3, "{batches:?}");
         assert_eq!(
             solution.state,
@@ -4941,6 +5028,128 @@ mod tests {
             translation_provider: &ZeroTranslationProvider,
         };
         assert_eq!(predictor.backend(), identity);
+    }
+
+    /// A predictor with the two-body dynamics and STMs that does not declare
+    /// them two-body (ASSIST's position: exact derivatives of non-two-body
+    /// dynamics), or (`stm = false`) supplies no derivatives at all.
+    struct UndeclaredBackend<'a> {
+        inner: &'a dyn SphericalPredictor,
+        stm: bool,
+    }
+
+    impl SphericalPredictor for UndeclaredBackend<'_> {
+        fn predict_spherical(
+            &self,
+            states: &[[f64; 6]],
+            geometry: &OrbitGeometry,
+            observers: &ObserverBatch,
+        ) -> PropagationResultValue<Result<Vec<f64>, String>> {
+            self.inner.predict_spherical(states, geometry, observers)
+        }
+
+        fn supports_stm(&self) -> bool {
+            self.stm
+        }
+
+        fn propagate_stm(
+            &self,
+            state: [f64; 6],
+            epoch_tdb: crate::Epoch,
+            times_tdb: &[crate::Epoch],
+        ) -> PropagationResultValue<Vec<super::super::StmRow>> {
+            self.inner.propagate_stm(state, epoch_tdb, times_tdb)
+        }
+    }
+
+    #[test]
+    fn propagator_jacobian_is_exact_and_auto_follows_the_dynamics() {
+        let observed = synthetic_observations(None);
+        let (propagator, options) = two_body();
+        let native = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        // Two-body STMs chained through the projection equal the analytic
+        // autodiff Jacobian.
+        let problem = WhitenedProblem::new(
+            &native,
+            &perturbed_start(),
+            &observed,
+            &observers(),
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::Propagator,
+                ..WhitenedFitConfig::default()
+            },
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        let state = problem.geometry.state;
+        let analytic = problem
+            .jacobian(JacobianMethod::Analytic, &state, &[])
+            .unwrap();
+        let from_stm = problem
+            .jacobian(JacobianMethod::Propagator, &state, &[])
+            .unwrap();
+        let scale = analytic.iter().fold(0.0_f64, |m, v| m.max(v.abs()));
+        assert!(max_abs_diff(&analytic, &from_stm) < 1e-9 * scale);
+
+        // Auto: declared two-body -> analytic; exact derivatives of other
+        // dynamics -> the propagator's; neither -> central differences.
+        let with_stm = UndeclaredBackend {
+            inner: &native,
+            stm: true,
+        };
+        let without = UndeclaredBackend {
+            inner: &native,
+            stm: false,
+        };
+        assert_eq!(
+            JacobianMethod::Auto.resolve(&native),
+            JacobianMethod::Analytic
+        );
+        assert_eq!(
+            JacobianMethod::Auto.resolve(&with_stm),
+            JacobianMethod::Propagator
+        );
+        assert_eq!(
+            JacobianMethod::Auto.resolve(&without),
+            JacobianMethod::Central
+        );
+        // The fits reach the same minimum on every route.
+        let fit_with = |predictor: &dyn SphericalPredictor| {
+            fit_orbit_whitened_with(
+                predictor,
+                &perturbed_start(),
+                &observed,
+                &observers(),
+                &[false; NUM_OBS],
+                &WhitenedFitConfig::default(),
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap()
+        };
+        let reference = fit_with(&native);
+        for predictor in [&with_stm as &dyn SphericalPredictor, &without] {
+            let other = fit_with(predictor);
+            assert!(other.converged);
+            assert!(max_abs_diff(&other.state, &reference.state) < 1e-9);
+        }
+        // Through the external C ABI the two-body reference supplies STMs.
+        let table = super::super::two_body_reference::table(TwoBodyPropagator::default());
+        let external = unsafe { super::super::ExternalPropagator::from_raw(table) }.unwrap();
+        assert!(external.supports_stm());
+        let epoch = super::super::od::mjd_epoch(60_000.0);
+        let times = [super::super::od::mjd_epoch(60_010.0)];
+        let via_abi = external.propagate_stm(TRUTH_STATE, epoch, &times).unwrap();
+        let direct = propagator
+            .propagate_stm(TRUTH_STATE, epoch, &times)
+            .unwrap();
+        assert_eq!(via_abi, direct);
     }
 
     #[test]

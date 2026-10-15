@@ -3103,6 +3103,25 @@ pub trait SphericalPredictor {
         observers: &ObserverBatch,
     ) -> PropagationResultValue<Result<Vec<f64>, String>>;
 
+    /// Whether the backend behind the predictions supplies state-transition
+    /// matrices (see [`Propagator::propagate_stm`]).
+    fn supports_stm(&self) -> bool {
+        false
+    }
+
+    /// The backend's states and state-transition matrices for one
+    /// heliocentric ecliptic state (see [`Propagator::propagate_stm`]).
+    fn propagate_stm(
+        &self,
+        _state: [f64; 6],
+        _epoch_tdb: crate::Epoch,
+        _times_tdb: &[crate::Epoch],
+    ) -> PropagationResultValue<Vec<super::StmRow>> {
+        Err(PropagationError::InvalidRequest(
+            "the prediction backend provides no state-transition matrices".to_string(),
+        ))
+    }
+
     /// The propagation backend behind the predictions (for provenance and
     /// derivative compatibility). The default names the adapter type.
     fn backend(&self) -> super::BackendIdentity {
@@ -3130,6 +3149,19 @@ where
 {
     fn backend(&self) -> super::BackendIdentity {
         self.propagator.backend()
+    }
+
+    fn supports_stm(&self) -> bool {
+        self.propagator.supports_stm()
+    }
+
+    fn propagate_stm(
+        &self,
+        state: [f64; 6],
+        epoch_tdb: crate::Epoch,
+        times_tdb: &[crate::Epoch],
+    ) -> PropagationResultValue<Vec<super::StmRow>> {
+        self.propagator.propagate_stm(state, epoch_tdb, times_tdb)
     }
 
     fn predict_spherical(

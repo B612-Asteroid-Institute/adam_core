@@ -29,7 +29,7 @@ pub use ephemeris::{
 };
 pub use external::{
     two_body_reference, ExternalContext, ExternalPropagator, ExternalPropagatorV1,
-    OwnedExternalPropagator, PropagateRequestV1, EXTERNAL_PROPAGATOR_ABI_VERSION,
+    OwnedExternalPropagator, PropagateRequestV1, PropagateStmV1, EXTERNAL_PROPAGATOR_ABI_VERSION,
     EXTERNAL_PROPAGATOR_CAPSULE,
 };
 pub use od::{
@@ -129,8 +129,38 @@ pub struct BackendIdentity {
     pub two_body_dynamics: bool,
 }
 
+/// One propagated row with its state-transition matrix.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct StmRow {
+    /// Heliocentric ecliptic state at the target time.
+    pub state: [f64; 6],
+    /// Row-major `d state(t) / d state(epoch)`.
+    pub stm: [f64; 36],
+    pub valid: bool,
+}
+
 pub trait Propagator: Sync {
     type Shard: PropagatorShard;
+
+    /// Whether [`Propagator::propagate_stm`] is implemented: the backend
+    /// supplies exact derivatives of its own dynamics, which orbit
+    /// determination then uses (`JacobianMethod::Propagator`).
+    fn supports_stm(&self) -> bool {
+        false
+    }
+
+    /// One heliocentric (SUN) ecliptic state at `epoch_tdb`, propagated to
+    /// each of `times_tdb` (TDB) with its state-transition matrix.
+    fn propagate_stm(
+        &self,
+        _state: [f64; 6],
+        _epoch_tdb: crate::Epoch,
+        _times_tdb: &[crate::Epoch],
+    ) -> PropagationResultValue<Vec<StmRow>> {
+        Err(PropagationError::InvalidRequest(
+            "this propagator provides no state-transition matrices".to_string(),
+        ))
+    }
 
     /// The backend's identity. The default names the implementing type with
     /// an unknown version and no two-body declaration; backends override it.

@@ -372,6 +372,70 @@ pub fn whitened_2body_jacobian(
     Ok(jacobian)
 }
 
+/// Jacobian of the whitened residual vector with respect to the epoch state,
+/// `(2N, 6)` row-major, from the propagator's own dynamics: `states[i]` and
+/// `stms[i]` (row-major `d x(t_i) / d x(epoch)`) are the heliocentric
+/// ecliptic state at `terms.times_mjd_tdb[i]` and its state-transition matrix,
+/// supplied by the propagation backend (e.g. ASSIST's variational
+/// equations). The light-time and topocentric projection from there to the
+/// whitened angles are differentiated exactly as in
+/// [`whitened_2body_jacobian`]; only the propagation to the observation
+/// times is the backend's.
+pub fn whitened_stm_jacobian(
+    states: &[[f64; 6]],
+    stms: &[[f64; 36]],
+    terms: &TwoBodyJacobianTerms,
+    config: &TwoBodyModelConfig,
+) -> Result<Vec<f64>, String> {
+    terms.validate()?;
+    let n = terms.len();
+    if states.len() != n || stms.len() != n {
+        return Err(format!(
+            "whitened_stm_jacobian: {} states and {} STMs for {n} observations",
+            states.len(),
+            stms.len()
+        ));
+    }
+    let mu_bary = Dual::<6>::from_f64(terms.mu_bary);
+    let mut jacobian = Vec::with_capacity(2 * n * 6);
+    for i in 0..n {
+        let seeded: [Dual<6>; 6] = Dual::seed(states[i]);
+        let mut barycentric = [Dual::<6>::from_f64(0.0); 6];
+        let mut observer = [Dual::<6>::from_f64(0.0); 6];
+        for k in 0..6 {
+            barycentric[k] = seeded[k] + Dual::from_f64(terms.sun_states[i][k]);
+            observer[k] = Dual::from_f64(terms.observer_states[i][k]);
+        }
+        let (spherical, _light_time, _aberrated) = generate_ephemeris_2body_row::<Dual<6>>(
+            barycentric,
+            observer,
+            mu_bary,
+            config.lt_tol,
+            config.ephemeris_max_iter,
+            config.ephemeris_tol,
+            false,
+            config.max_lt_iter,
+        );
+        let corrected_lon = spherical[1] * Dual::from_f64(terms.cos_lats[i]);
+        let lat = spherical[2];
+        let w = terms.whiteners[i];
+        let components = [
+            Dual::from_f64(w[0]) * corrected_lon + Dual::from_f64(w[1]) * lat,
+            Dual::from_f64(w[2]) * corrected_lon + Dual::from_f64(w[3]) * lat,
+        ];
+        let stm = &stms[i];
+        for component in components {
+            // d(angle)/d x0 = d(angle)/d x(t_i) . d x(t_i)/d x0; residuals
+            // are observed - predicted, hence the negation.
+            for b in 0..6 {
+                let value: f64 = (0..6).map(|a| component.du[a] * stm[a * 6 + b]).sum();
+                jacobian.push(-value);
+            }
+        }
+    }
+    Ok(jacobian)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

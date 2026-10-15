@@ -291,7 +291,7 @@ class NativeOrbitFitter(OrbitFitter):
         fit_settings = _fit_settings(
             self.loss,
             self.f_scale,
-            fit_kwargs.get("jacobian", "analytic"),
+            fit_kwargs.get("jacobian", OD_DEFAULTS["fit"]["jacobian"]),
             fit_kwargs.get("validate_covariance", True),
             fit_kwargs,
         )

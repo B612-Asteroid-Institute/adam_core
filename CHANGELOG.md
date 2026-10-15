@@ -176,6 +176,20 @@ This file contains notable changes in adam-core
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
 
+- Derivatives follow the selected dynamics (PR 217 review). The default
+  Jacobian is `"auto"` (`JacobianMethod::Auto`, from Rust's
+  `WhitenedFitConfig::default()`): the exact two-body Jacobian when the
+  propagator declares two-body dynamics, the propagation backend's own
+  state-transition matrices when it supplies them (`"propagator"`,
+  `JacobianMethod::Propagator`: `Propagator::propagate_stm` chained through
+  the exact light-time and projection derivatives,
+  `whitened_stm_jacobian`), and central differences through the full
+  predictor otherwise; the two-body Jacobian no longer accompanies other
+  dynamics by default (explicit `"analytic"` still warns). `TwoBodyPropagator`
+  supplies STMs by automatic differentiation (equal to the analytic
+  Jacobian), and the external C ABI carries an optional `propagate_stm`, so
+  native backends (ASSIST's variational equations) give exact derivatives at
+  about one propagation per iteration instead of twelve.
 - External native propagators (C ABI v1, `propagation::external`): a
   backend compiled in another extension (adam-assist's ASSIST) exposes its
   propagation as an `ExternalPropagatorV1` table in a capsule named

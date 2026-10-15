@@ -710,9 +710,9 @@ def _fit_least_squares(
     propagator: Propagator,
     ignore: Optional[List[str]] = None,
     observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
-    jacobian: Literal["analytic", "central", "2-point"] = OD_DEFAULTS["fit"][
-        "jacobian"
-    ],
+    jacobian: Literal[
+        "auto", "analytic", "propagator", "central", "2-point"
+    ] = OD_DEFAULTS["fit"]["jacobian"],
     validate_covariance: bool = OD_DEFAULTS["fit"]["validate_covariance"],
     loss: LossType = OD_DEFAULTS["fit"]["loss"],
     f_scale: float = HUBER_F_SCALE_DEFAULT,
@@ -737,11 +737,20 @@ def _fit_least_squares(
         (e.g. inflating per-station sigmas from an observatory bias table). Default
         None leaves the observations unchanged. The model is applied once at this
         entry point and is not forwarded to nested calls.
-    jacobian : {"analytic", "central", "2-point"}, optional
+    jacobian : {"auto", "analytic", "propagator", "central", "2-point"}, optional
         How the residual Jacobian is obtained for both the solver and the
         solution covariance.
 
-        - ``"analytic"`` (default): the observation partials (topocentric
+        - ``"auto"`` (default): derivatives that follow the selected
+          dynamics: ``"analytic"`` when the propagator declares two-body
+          dynamics (``Propagator.two_body_dynamics``), ``"propagator"`` when
+          its native backend supplies state-transition matrices (ASSIST's
+          variational equations), ``"central"`` otherwise.
+        - ``"propagator"``: the propagation backend's own state-transition
+          matrices chained through the exact light-time and projection
+          derivatives: exact for that backend's dynamics, at about the cost
+          of one propagation per iteration.
+        - ``"analytic"``: the observation partials (topocentric
           spherical projection including light time) chained with the 2-body
           state transition matrix, computed by forward-mode automatic
           differentiation in the Rust backend and passed to
@@ -859,10 +868,10 @@ def _fit_least_squares(
     """
     assert len(orbit) == 1, "Only one orbit can be differentially corrected"
     _validate_loss(loss, f_scale)
-    if jacobian not in ("analytic", "central", "2-point"):
+    if jacobian not in ("auto", "analytic", "propagator", "central", "2-point"):
         raise ValueError(
-            f"jacobian must be one of 'analytic', 'central', '2-point'; "
-            f"got {jacobian!r}"
+            f"jacobian must be one of 'auto', 'analytic', 'propagator', 'central', "
+            f"'2-point'; got {jacobian!r}"
         )
 
     if observatory_bias_model is not None:
@@ -1041,7 +1050,7 @@ def _iterative_fit(
     fit_settings = _fit_settings(
         loss,
         f_scale,
-        kwargs.get("jacobian", "analytic"),
+        kwargs.get("jacobian", OD_DEFAULTS["fit"]["jacobian"]),
         kwargs.get("validate_covariance", True),
         kwargs,
     )

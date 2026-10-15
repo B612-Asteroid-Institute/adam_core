@@ -74,7 +74,29 @@ pub struct ExternalPropagatorV1 {
     pub context: *const c_void,
     pub propagate:
         unsafe extern "C" fn(context: *const c_void, request: *const PropagateRequestV1) -> i32,
+    /// Optional (null when absent): one heliocentric ecliptic state at an
+    /// epoch (TDB days, nanoseconds) propagated to `n_times` TDB times with
+    /// state-transition matrices. Writes `n_times * 6` states, `n_times *
+    /// 36` row-major STMs and `n_times` validity flags; returns 0 on
+    /// success, else writes `error` like `propagate`.
+    pub propagate_stm: Option<PropagateStmV1>,
 }
+
+/// Signature of [`ExternalPropagatorV1::propagate_stm`].
+pub type PropagateStmV1 = unsafe extern "C" fn(
+    context: *const c_void,
+    state: *const f64,
+    epoch_days: i64,
+    epoch_nanos: i64,
+    n_times: usize,
+    time_days: *const i64,
+    time_nanos: *const i64,
+    out_states: *mut f64,
+    out_stm: *mut f64,
+    out_valid: *mut u8,
+    error: *mut c_char,
+    error_len: usize,
+) -> i32;
 
 fn c_string(pointer: *const c_char, field: &str) -> PropagationResultValue<String> {
     if pointer.is_null() {
@@ -163,6 +185,66 @@ impl Propagator for ExternalPropagator {
 
     fn integration_time_scale(&self) -> TimeScale {
         self.integration_scale
+    }
+
+    fn supports_stm(&self) -> bool {
+        // SAFETY: the table outlives `self`.
+        unsafe { (*self.raw).propagate_stm.is_some() }
+    }
+
+    fn propagate_stm(
+        &self,
+        state: [f64; 6],
+        epoch_tdb: Epoch,
+        times_tdb: &[Epoch],
+    ) -> PropagationResultValue<Vec<super::StmRow>> {
+        // SAFETY: the table outlives `self`.
+        let Some(function) = (unsafe { (*self.raw).propagate_stm }) else {
+            return Err(PropagationError::InvalidRequest(format!(
+                "{} provides no state-transition matrices",
+                self.identity.name
+            )));
+        };
+        let n = times_tdb.len();
+        let days: Vec<i64> = times_tdb.iter().map(|e| e.days).collect();
+        let nanos: Vec<i64> = times_tdb.iter().map(|e| e.nanos).collect();
+        let mut states = vec![f64::NAN; n * 6];
+        let mut stms = vec![f64::NAN; n * 36];
+        let mut valid = vec![0_u8; n];
+        let mut error = vec![0 as c_char; 1024];
+        // SAFETY: every pointer is valid and sized as the ABI states.
+        let status = unsafe {
+            function(
+                (*self.raw).context,
+                state.as_ptr(),
+                epoch_tdb.days,
+                epoch_tdb.nanos,
+                n,
+                days.as_ptr(),
+                nanos.as_ptr(),
+                states.as_mut_ptr(),
+                stms.as_mut_ptr(),
+                valid.as_mut_ptr(),
+                error.as_mut_ptr(),
+                error.len(),
+            )
+        };
+        if status != 0 {
+            *error.last_mut().expect("non-empty") = 0;
+            // SAFETY: NUL-terminated by the line above.
+            let message = unsafe { CStr::from_ptr(error.as_ptr()) }.to_string_lossy();
+            return Err(PropagationError::Backend(format!(
+                "{} {}: {message}",
+                self.identity.name, self.identity.version
+            )));
+        }
+        Ok((0..n)
+            .map(|i| super::StmRow {
+                state: std::array::from_fn(|k| states[i * 6 + k]),
+                stm: std::array::from_fn(|k| stms[i * 36 + k]),
+                valid: valid[i] != 0,
+            })
+            .collect())
     }
 
     fn supports(&self, mode: CovariancePropagation) -> bool {
@@ -373,6 +455,10 @@ impl<P: Propagator + Send + 'static> OwnedExternalPropagator<P> {
             version: context.version.as_ptr(),
             context: &*context as *const ExternalContext<P> as *const c_void,
             propagate: propagate_with::<P>,
+            propagate_stm: context
+                .propagator
+                .supports_stm()
+                .then_some(propagate_stm_with::<P> as PropagateStmV1),
         };
         Self { table, context }
     }
@@ -411,6 +497,66 @@ unsafe extern "C" fn propagate_with<P: Propagator>(
         }
         Err(_) => {
             write_error(request, "external propagator panicked");
+            2
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+unsafe extern "C" fn propagate_stm_with<P: Propagator>(
+    context: *const c_void,
+    state: *const f64,
+    epoch_days: i64,
+    epoch_nanos: i64,
+    n_times: usize,
+    time_days: *const i64,
+    time_nanos: *const i64,
+    out_states: *mut f64,
+    out_stm: *mut f64,
+    out_valid: *mut u8,
+    error: *mut c_char,
+    error_len: usize,
+) -> i32 {
+    let context = &*(context as *const ExternalContext<P>);
+    let state: [f64; 6] = std::array::from_fn(|i| *state.add(i));
+    let times: Vec<Epoch> = (0..n_times)
+        .map(|i| Epoch::new(*time_days.add(i), *time_nanos.add(i)))
+        .collect();
+    let report = |message: &str| {
+        if !error.is_null() && error_len > 0 {
+            let bytes = message.as_bytes();
+            let n = bytes.len().min(error_len - 1);
+            std::ptr::copy_nonoverlapping(bytes.as_ptr() as *const c_char, error, n);
+            *error.add(n) = 0;
+        }
+    };
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        context
+            .propagator
+            .propagate_stm(state, Epoch::new(epoch_days, epoch_nanos), &times)
+    }));
+    match result {
+        Ok(Ok(rows)) if rows.len() == n_times => {
+            let states = std::slice::from_raw_parts_mut(out_states, n_times * 6);
+            let stms = std::slice::from_raw_parts_mut(out_stm, n_times * 36);
+            let valid = std::slice::from_raw_parts_mut(out_valid, n_times);
+            for (i, row) in rows.iter().enumerate() {
+                states[i * 6..i * 6 + 6].copy_from_slice(&row.state);
+                stms[i * 36..i * 36 + 36].copy_from_slice(&row.stm);
+                valid[i] = u8::from(row.valid);
+            }
+            0
+        }
+        Ok(Ok(rows)) => {
+            report(&format!("expected {n_times} STM rows, got {}", rows.len()));
+            1
+        }
+        Ok(Err(err)) => {
+            report(&err.to_string());
+            1
+        }
+        Err(_) => {
+            report("external propagator panicked");
             2
         }
     }

@@ -190,9 +190,11 @@ model list built with your own tables needs no package.
        when optimizer steps use the analytic 2-body Jacobian.
      - ``NativeOrbitFitter()`` (``outlier_rejection="cmc2003"``) / ``refine()``
    * - Differential correction
-     - whitened residuals, exact 2-body Jacobian, weak-direction covariance
-       probe, linear loss
-     - ``refine()`` ``fit_settings`` (``jacobian="analytic"``,
+     - whitened residuals, derivatives that follow the dynamics,
+       weak-direction covariance probe, linear loss
+     - ``refine()`` ``fit_settings`` (``jacobian="auto"``: analytic for
+       two-body propagators, the backend's state-transition matrices for
+       native backends such as ASSIST, central differences otherwise;
        ``validate_covariance=True``, ``loss="linear"``)
    * - IOD
      - Gauss on span-bounded triplets (about 6 days), each orbit a seed for

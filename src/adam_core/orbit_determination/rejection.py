@@ -366,7 +366,7 @@ def cmc2003_fit_detailed(
     fit_settings = _fit_settings(
         loss,
         f_scale,
-        kwargs.get("jacobian", "analytic"),
+        kwargs.get("jacobian", OD_DEFAULTS["fit"]["jacobian"]),
         validate_covariance,
         kwargs,
     )

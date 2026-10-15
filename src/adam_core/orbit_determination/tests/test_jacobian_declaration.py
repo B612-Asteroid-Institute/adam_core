@@ -81,14 +81,18 @@ def test_callback_route_entry_points_warn_once(entry: str) -> None:
             orbit, observations, p, **kw
         ),
     }[entry]
+    # Asking for the two-body Jacobian on other dynamics warns once.
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
-        run(UndeclaredDynamics())
+        run(UndeclaredDynamics(), jacobian="analytic")
     assert len(mismatch_warnings(caught)) == 1, mismatch_warnings(caught)
 
+    # The default ("auto") follows the dynamics: central differences for
+    # undeclared dynamics, the analytic Jacobian for declared two-body.
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         run(TwoBodyPropagator())
+        run(UndeclaredDynamics())
         run(UndeclaredDynamics(), jacobian="central")
     assert mismatch_warnings(caught) == []
 
@@ -98,10 +102,17 @@ def test_fused_route_warns_too(two_body_arc) -> None:  # noqa: F811
     observations = make_synthetic_observations()
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
+        fit_least_squares(
+            orbit, observations, UndeclaredNativeDynamics(), jacobian="analytic"
+        )
         fit_least_squares(orbit, observations, UndeclaredNativeDynamics())
     assert len(mismatch_warnings(caught)) == 1
 
-    fitter = NativeOrbitFitter(UndeclaredNativeDynamics(), iod_rchi2_threshold=1e4)
+    fitter = NativeOrbitFitter(
+        UndeclaredNativeDynamics(),
+        iod_rchi2_threshold=1e4,
+        rejection_kwargs={"jacobian": "analytic"},
+    )
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         fitted, _ = run_od(
