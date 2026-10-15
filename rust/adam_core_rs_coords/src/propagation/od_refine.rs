@@ -837,6 +837,46 @@ fn solve_with_fallback(
     config: &WhitenedFitConfig,
     warnings: &mut Vec<String>,
 ) -> PropagationResultValue<(Solution, JacobianMethod)> {
+    // The backend's state-transition matrices are exact but cost a
+    // variational integration each: the solver steps with the cheap two-body
+    // Jacobian, then converges with the exact one. A fit with the two-body
+    // Jacobian alone stops at that Jacobian's fixed point, not at the minimum
+    // of the backend's dynamics; the exact iterations move it there, so the
+    // solution and its covariance are exact at a few STM evaluations.
+    if config.jacobian == JacobianMethod::Propagator && problem.analytic_terms.is_some() {
+        let approximate = solve(
+            problem,
+            initial_state,
+            &WhitenedFitConfig {
+                jacobian: JacobianMethod::Analytic,
+                ..*config
+            },
+        )?;
+        let start = if approximate.state.iter().all(|v| v.is_finite()) {
+            approximate.state
+        } else {
+            initial_state
+        };
+        let (exact, method) = solve_with_nonfinite_fallback(problem, start, config, warnings)?;
+        return Ok((
+            Solution {
+                nfev: approximate.nfev + exact.nfev,
+                ..exact
+            },
+            method,
+        ));
+    }
+    solve_with_nonfinite_fallback(problem, initial_state, config, warnings)
+}
+
+/// [`solve`], continued with central differences when an analytic or
+/// backend Jacobian turns non-finite at an iterate with finite residuals.
+fn solve_with_nonfinite_fallback(
+    problem: &WhitenedProblem<'_>,
+    initial_state: [f64; 6],
+    config: &WhitenedFitConfig,
+    warnings: &mut Vec<String>,
+) -> PropagationResultValue<(Solution, JacobianMethod)> {
     let solution = solve(problem, initial_state, config)?;
     if solution.status != STATUS_NON_FINITE
         || !matches!(
@@ -847,11 +887,15 @@ fn solve_with_fallback(
     {
         return Ok((solution, config.jacobian));
     }
-    warnings.push(
-        "The analytic two-body Jacobian was non-finite at the current iterate; the fit \
-         continued with central differences through the propagator."
-            .to_string(),
-    );
+    warnings.push(format!(
+        "The {} Jacobian was non-finite at the current iterate; the fit continued \
+             with central differences through the propagator.",
+        if config.jacobian == JacobianMethod::Analytic {
+            "analytic two-body"
+        } else {
+            "propagator's"
+        }
+    ));
     let central = WhitenedFitConfig {
         jacobian: JacobianMethod::Central,
         ..*config
