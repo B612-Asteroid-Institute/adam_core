@@ -411,3 +411,36 @@ def _check_bad_capsule():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         fit_least_squares(make_initial_guess(), make_synthetic_observations(), Wrong())
+
+
+@pytest.mark.native_only
+def test_python_propagators_are_refused():
+    """Orbit determination never calls back into Python per prediction: a
+    propagator without a native backend is refused with a clear error; the
+    native routes (adam-core's two-body propagator, a declared external
+    propagator capsule) run."""
+    from adam_core.orbit_determination import refine, run_iod
+
+    observations = make_synthetic_observations()
+    with pytest.raises(TypeError, match="no native orbit-determination backend"):
+        run_iod(observations, TwoBodyPropagator())
+    with pytest.raises(TypeError, match="no native orbit-determination backend"):
+        run_od(
+            observations,
+            NativeOrbitFitter(TwoBodyPropagator(), iod_rchi2_threshold=1e6),
+            None,
+            propagator=TwoBodyPropagator(),
+        )
+    # A declared capsule runs natively, and a subclass that changes the
+    # dynamics is not covered by it.
+    orbit, _, report = run_iod(observations, CapsuleTwoBody(), rchi2_threshold=1e6)
+    assert report.found
+    refined, _ = refine(orbit, observations, CapsuleTwoBody())
+    assert refined.success[0].as_py()
+
+    class ChangedCapsule(CapsuleTwoBody):
+        def propagate_orbits(self, *args, **kwargs):
+            return super().propagate_orbits(*args, **kwargs)
+
+    with pytest.raises(TypeError, match="not covered"):
+        run_iod(observations, ChangedCapsule())

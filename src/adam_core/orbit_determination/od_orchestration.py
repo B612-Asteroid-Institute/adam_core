@@ -45,6 +45,7 @@ from ..orbits.orbits import Orbits
 from ..propagator.propagator import Propagator
 from ._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
+    native_propagator,
     native_work_unit,
 )
 from .differential_correction import OD_DEFAULTS
@@ -290,7 +291,7 @@ def _fused_run_od(
         refinement=refinement,
         fit_settings=fit_settings,
         # The configured IOD propagator, explicit when it is not `propagator`.
-        iod_propagator=fitter.iod_propagator_for(propagator),
+        iod_propagator=native_propagator(fitter.iod_propagator_for(propagator)),
     )
     fitted_orbits, members = tables_from_native_full_od(
         backend_object_id, observations, output

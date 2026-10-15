@@ -150,6 +150,7 @@ norecursedirs = ["__pypackages__", ".ci"]
 markers = [
     "integration: exercises installed data/runtime integrations rather than a hermetic unit seam",
     "profile: long-running scientific validation and profiling fixture",
+    "native_only: run without the OD test suite's private Python-propagator adapter",
 ]
 
 [tool.ruff]

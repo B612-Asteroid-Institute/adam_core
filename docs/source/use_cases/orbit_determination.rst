@@ -334,6 +334,11 @@ in a later release.
    * - ``NativeOrbitFitter(PropagatorClass, propagator_kwargs)``
      - ``NativeOrbitFitter(PropagatorClass(**propagator_kwargs))``: the IOD
        propagator is an instance
+   * - OD with a Python-only propagator (predictions through
+       ``generate_ephemeris``)
+     - Not supported: OD runs natively and raises ``TypeError``. Use
+       adam-core's two-body propagator or a native backend that declares an
+       external propagator (adam-assist >= 0.5's ``ASSISTPropagator``)
 
 ``run_od``, ``run_iod``, ``refine``, ``initial_orbit_determination``,
 ``evaluate_orbits``, ``cmc2003_fit_detailed`` and the ``OrbitFitter``

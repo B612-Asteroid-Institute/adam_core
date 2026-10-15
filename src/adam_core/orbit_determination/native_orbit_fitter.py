@@ -15,6 +15,7 @@ from ..time import Timestamp
 from ._native_dispatch import (
     _has_compatible_native_spec,
     _warn_if_analytic_jacobian_mismatches,
+    native_propagator,
     native_work_unit,
 )
 from .differential_correction import (
@@ -378,7 +379,7 @@ class NativeOrbitFitter(OrbitFitter):
                 iod_settings=iod_settings,
                 refinement=refinement,
                 fit_settings=fit_settings,
-                iod_propagator=self.iod_propagator_for(propagator),
+                iod_propagator=native_propagator(self.iod_propagator_for(propagator)),
             )
             return tables_from_native_full_od(object_id, observations, output)
         return super().full_od(object_id, observations, propagator)

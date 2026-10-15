@@ -1,7 +1,25 @@
 """Keep native specifications paired with the Python behavior they describe."""
 
+import contextlib
+import contextvars
 import functools
 import warnings
+
+# Test-only: lets the OD test suite exercise the Rust loops with Python
+# dynamics (linear, counting, failing propagators) through the private
+# callback adapter. Not part of the supported surface.
+_PYTHON_PROPAGATORS = contextvars.ContextVar("_python_propagators", default=False)
+
+
+@contextlib.contextmanager
+def _allow_python_propagators():
+    """Test-only: let OD predict through a Python propagator's
+    ``generate_ephemeris`` (one Python call per prediction)."""
+    token = _PYTHON_PROPAGATORS.set(True)
+    try:
+        yield
+    finally:
+        _PYTHON_PROPAGATORS.reset(token)
 
 
 def deprecated(implementation, replacement: str):
@@ -115,13 +133,28 @@ def native_propagator(propagator: object):
     """What the Rust drivers receive for ``propagator``: the external-
     propagator capsule (``adam_core.propagator.v1``) when its `NativeBackend`
     declares the ``propagator_capsule`` work unit, so every OD stage runs
-    natively with its dynamics (no Python call per prediction); otherwise the
-    propagator itself (the callback route). None stays None (adam-core's
-    two-body propagator)."""
+    natively with its dynamics (no Python call per prediction). None stays
+    None (adam-core's two-body propagator).
+
+    Orbit determination does not call back into Python per prediction: a
+    propagator without a native backend raises `TypeError`."""
     if propagator is None:
         return None
     capsule = native_work_unit(propagator, "propagator_capsule")
-    return propagator if capsule is None else capsule()
+    if capsule is not None:
+        return capsule()
+    if _PYTHON_PROPAGATORS.get():
+        return propagator
+    cls = type(propagator)
+    raise TypeError(
+        f"{cls.__module__}.{cls.__qualname__} has no native orbit-determination "
+        "backend: OD runs natively, without calling back into Python for each "
+        "prediction. Use adam-core's two-body propagator (propagator=None in the "
+        "low-level drivers) or a propagator whose NativeBackend declares the "
+        "'propagator_capsule' work unit (adam-assist >= 0.5's ASSISTPropagator). "
+        "A subclass that overrides propagation is not covered by its parent's "
+        "declaration."
+    )
 
 
 def _warn_if_analytic_jacobian_mismatches(propagator: object, jacobian: str) -> None:

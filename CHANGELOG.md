@@ -176,6 +176,15 @@ This file contains notable changes in adam-core
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
 
+- Orbit determination no longer calls back into Python per prediction (PR
+  217 review: "Unsupported Python-only propagators should fail clearly
+  rather than entering a callback compatibility path"). `run_iod`, `refine`
+  and its loops, `run_od`, the fits and the fused work units accept
+  adam-core's two-body propagator or a propagator whose `NativeBackend`
+  declares the `propagator_capsule` work unit (adam-assist >= 0.5's
+  `ASSISTPropagator`); any other propagator raises `TypeError`. The callback
+  adapter remains private, enabled only inside adam-core's test suite to
+  exercise the Rust loops with Python test dynamics.
 - Derivatives follow the selected dynamics (PR 217 review). The default
   Jacobian is `"auto"` (`JacobianMethod::Auto`, from Rust's
   `WhitenedFitConfig::default()`): the exact two-body Jacobian when the
