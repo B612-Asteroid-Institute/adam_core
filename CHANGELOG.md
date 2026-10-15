@@ -176,6 +176,12 @@ This file contains notable changes in adam-core
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
 
+- Refinement defaults live once, in Rust: `OD_DEFAULTS` (binding
+  `od_defaults()`) exports `WhitenedFitConfig`, `IterativeFitConfig` and
+  `Cmc2003FitConfig` defaults and the default refinement loop, and the
+  signature defaults of `fit_least_squares`, `iterative_fit`,
+  `cmc2003_fit_detailed`, `NativeOrbitFitter` and the `CMC2003_*` constants
+  are read from it (as `IOD_DEFAULTS` does for IOD).
 - Run-level OD provenance: `FittedOrbits.provenance` (`OdProvenance`, a
   nullable column) records, on both `run_od` routes, the adam-core version,
   route, fitter, IOD and refinement backend identities, IOD / refinement /

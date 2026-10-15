@@ -19,6 +19,7 @@ from ._native_dispatch import (
 from .differential_correction import (
     _FUSED_LOOP_KWARGS,
     HUBER_F_SCALE_DEFAULT,
+    OD_DEFAULTS,
     LossType,
     _emit_native_warnings,
     _fit_settings,
@@ -165,7 +166,7 @@ class NativeOrbitFitter(OrbitFitter):
         min_obs: int = IOD_DEFAULTS["min_obs"],
         min_arc_length: float = IOD_DEFAULTS["min_arc_length"],
         contamination_percentage: float = IOD_DEFAULTS["contamination_percentage"],
-        rchi2_threshold: float = 10.0,
+        rchi2_threshold: float = OD_DEFAULTS["worst_residual"]["rchi2_threshold"],
         iod_rchi2_threshold: float = IOD_DEFAULTS["rchi2_threshold"],
         observation_selection_method: Literal[
             "combinations", "first+middle+last", "thirds", "spans"
@@ -174,9 +175,11 @@ class NativeOrbitFitter(OrbitFitter):
             "gauss", "gibbs", "herrick+gibbs", "auto"
         ] = IOD_DEFAULTS["velocity_method"],
         iod_acceptance: Literal["corrected", "prefit"] = IOD_DEFAULTS["acceptance"],
-        loss: LossType = "linear",
+        loss: LossType = OD_DEFAULTS["fit"]["loss"],
         f_scale: float = HUBER_F_SCALE_DEFAULT,
-        outlier_rejection: Literal["worst_residual", "cmc2003"] = "cmc2003",
+        outlier_rejection: Literal["worst_residual", "cmc2003"] = OD_DEFAULTS[
+            "refinement"
+        ],
         rejection_kwargs: dict[str, Any] | None = None,
     ) -> None:
         if outlier_rejection not in ("worst_residual", "cmc2003"):

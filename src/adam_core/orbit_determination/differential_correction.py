@@ -1,4 +1,5 @@
 import warnings
+from types import MappingProxyType
 from typing import Any, List, Literal, Optional, Tuple
 
 import numpy as np
@@ -36,6 +37,19 @@ LossType = Literal["linear", "huber"]
 # for Gaussian errors (Huber 1981; Huber & Ronchetti 2009, sec. 4.5); the
 # value is Rust's ``HUBER_F_SCALE_DEFAULT``.
 HUBER_F_SCALE_DEFAULT = _rust_native.iod_defaults()["huber_f_scale"]
+
+#: The refinement defaults, read once from Rust's config types: ``fit``
+#: (`WhitenedFitConfig`), ``worst_residual`` (`IterativeFitConfig`),
+#: ``cmc2003`` (`Cmc2003FitConfig`, OrbFit's ``reject.def``) and
+#: ``refinement`` (the default loop). The signature defaults of
+#: `fit_least_squares`, `iterative_fit`, `cmc2003_fit_detailed` and
+#: `NativeOrbitFitter` are these values.
+OD_DEFAULTS = MappingProxyType(
+    {
+        key: MappingProxyType(value) if isinstance(value, dict) else value
+        for key, value in _rust_native.od_defaults().items()
+    }
+)
 
 # Fused native fitter kwargs (bead personal-cmy.7 / personal-dqk): the Rust
 # Gauss-Newton work units accept only these tuning parameters.
@@ -691,9 +705,11 @@ def fit_least_squares(
     propagator: Propagator,
     ignore: Optional[List[str]] = None,
     observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
-    jacobian: Literal["analytic", "central", "2-point"] = "analytic",
-    validate_covariance: bool = True,
-    loss: LossType = "linear",
+    jacobian: Literal["analytic", "central", "2-point"] = OD_DEFAULTS["fit"][
+        "jacobian"
+    ],
+    validate_covariance: bool = OD_DEFAULTS["fit"]["validate_covariance"],
+    loss: LossType = OD_DEFAULTS["fit"]["loss"],
     f_scale: float = HUBER_F_SCALE_DEFAULT,
     **kwargs,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
@@ -931,12 +947,14 @@ def iterative_fit(
     orbit: Orbits,
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
-    rchi2_threshold: float = 10.0,
-    min_obs: int = 6,
-    min_arc_length: float = 1.0,
-    contamination_percentage: float = 20.0,
+    rchi2_threshold: float = OD_DEFAULTS["worst_residual"]["rchi2_threshold"],
+    min_obs: int = OD_DEFAULTS["worst_residual"]["min_obs"],
+    min_arc_length: float = OD_DEFAULTS["worst_residual"]["min_arc_length"],
+    contamination_percentage: float = OD_DEFAULTS["worst_residual"][
+        "contamination_percentage"
+    ],
     observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
-    loss: LossType = "linear",
+    loss: LossType = OD_DEFAULTS["fit"]["loss"],
     f_scale: float = HUBER_F_SCALE_DEFAULT,
     **kwargs,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:

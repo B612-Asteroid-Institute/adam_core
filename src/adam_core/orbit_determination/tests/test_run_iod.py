@@ -393,3 +393,32 @@ def test_initial_orbit_determination_runs_run_iod_per_linkage(
     npt.assert_allclose(
         legacy.coordinates.values, reference.coordinates.values, rtol=0, atol=1e-12
     )
+
+
+def test_refinement_signature_defaults_are_the_rust_defaults() -> None:
+    """`OD_DEFAULTS` is Rust's refinement config defaults; the refinement
+    entry points' signature defaults are its values."""
+    import inspect
+
+    from adam_core.orbit_determination import OD_DEFAULTS, iterative_fit
+    from adam_core.orbit_determination.differential_correction import (
+        fit_least_squares,
+    )
+    from adam_core.orbit_determination.rejection import cmc2003_fit_detailed
+
+    fit = OD_DEFAULTS["fit"]
+    params = inspect.signature(fit_least_squares).parameters
+    for key in ("jacobian", "validate_covariance", "loss", "f_scale"):
+        assert params[key].default == fit[key], key
+    params = inspect.signature(iterative_fit).parameters
+    for key, value in OD_DEFAULTS["worst_residual"].items():
+        assert params[key].default == value, key
+    params = inspect.signature(cmc2003_fit_detailed).parameters
+    for key, value in OD_DEFAULTS["cmc2003"].items():
+        assert params[key].default == value, key
+    params = inspect.signature(NativeOrbitFitter).parameters
+    assert params["rchi2_threshold"].default == (
+        OD_DEFAULTS["worst_residual"]["rchi2_threshold"]
+    )
+    assert params["loss"].default == fit["loss"]
+    assert params["outlier_rejection"].default == OD_DEFAULTS["refinement"]

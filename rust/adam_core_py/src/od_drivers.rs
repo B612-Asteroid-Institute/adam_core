@@ -246,6 +246,57 @@ pub fn iod_defaults(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     Ok(out)
 }
 
+/// The refinement defaults of the Rust config types: ``fit``
+/// (`WhitenedFitConfig::default()`), ``worst_residual`` (the loop settings of
+/// `IterativeFitConfig::default()`), ``cmc2003`` (the loop settings of
+/// `Cmc2003FitConfig::default()`, OrbFit's ``reject.def``) and ``refinement``
+/// (the method of `RefinementConfig::default()`): the one source of the
+/// Python signature defaults of the refinement entry points.
+#[pyfunction]
+pub fn od_defaults(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
+    let fit = WhitenedFitConfig::default();
+    let fit_dict = PyDict::new(py);
+    fit_dict.set_item("loss", fit.loss.as_str())?;
+    fit_dict.set_item("f_scale", fit.f_scale)?;
+    fit_dict.set_item("jacobian", fit.jacobian.as_str())?;
+    fit_dict.set_item("validate_covariance", fit.validate_covariance)?;
+    fit_dict.set_item("xtol", fit.xtol)?;
+    fit_dict.set_item("ftol", fit.ftol)?;
+    fit_dict.set_item("gtol", fit.gtol)?;
+    fit_dict.set_item("max_iterations", fit.max_iterations)?;
+    fit_dict.set_item("max_nfev", fit.max_nfev)?;
+    let iterative = IterativeFitConfig::default();
+    let worst = PyDict::new(py);
+    worst.set_item("rchi2_threshold", iterative.rchi2_threshold)?;
+    worst.set_item("min_obs", iterative.min_obs)?;
+    worst.set_item("min_arc_length", iterative.min_arc_length)?;
+    worst.set_item(
+        "contamination_percentage",
+        iterative.contamination_percentage,
+    )?;
+    let cmc = Cmc2003FitConfig::default();
+    let cmc_dict = PyDict::new(py);
+    cmc_dict.set_item("chi2_reject", cmc.chi2_reject)?;
+    cmc_dict.set_item("chi2_recover", cmc.chi2_recover)?;
+    cmc_dict.set_item("chi2_frac", cmc.chi2_frac)?;
+    cmc_dict.set_item("max_iterations", cmc.max_iterations)?;
+    cmc_dict.set_item("max_rejected_fraction", cmc.max_rejected_fraction)?;
+    cmc_dict.set_item("apparition_gap_days", cmc.apparition_gap_days)?;
+    cmc_dict.set_item("psd_floor_frac", cmc.psd_floor_frac)?;
+    let out = PyDict::new(py);
+    out.set_item("fit", fit_dict)?;
+    out.set_item("worst_residual", worst)?;
+    out.set_item("cmc2003", cmc_dict)?;
+    out.set_item(
+        "refinement",
+        match RefinementConfig::default() {
+            RefinementConfig::WorstResidual(_) => "worst_residual",
+            RefinementConfig::Cmc2003(_) => "cmc2003",
+        },
+    )?;
+    Ok(out)
+}
+
 /// `IodConfig` from the ``iod_settings`` dict over `defaults`.
 fn parse_iod_settings_over(
     settings: Option<&Bound<'_, PyDict>>,
@@ -1344,6 +1395,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(iod_fit_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_iod_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(iod_defaults, m)?)?;
+    m.add_function(wrap_pyfunction!(od_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(run_iod_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(full_od_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(full_od_2body_ipc, m)?)?;

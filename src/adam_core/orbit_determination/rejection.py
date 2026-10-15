@@ -83,6 +83,7 @@ from .differential_correction import (
     _FUSED_LOOP_KWARGS,
     _NATIVE_FIT_KWARGS,
     HUBER_F_SCALE_DEFAULT,
+    OD_DEFAULTS,
     LossType,
     _emit_native_warnings,
     _fit_settings,
@@ -109,15 +110,16 @@ __all__ = [
 ]
 
 # OrbFit lib/reject.def defaults
-CMC2003_CHI2_REJECT = 8.0
-CMC2003_CHI2_RECOVER = 7.0
-CMC2003_CHI2_FRAC = 0.25
-CMC2003_MAX_ITERATIONS = 15
-CMC2003_MAX_REJECTED_FRACTION = 0.5
-CMC2003_APPARITION_GAP_DAYS = 180.0
+# The values are Rust's `Cmc2003FitConfig::default()` (`OD_DEFAULTS`).
+CMC2003_CHI2_REJECT = OD_DEFAULTS["cmc2003"]["chi2_reject"]
+CMC2003_CHI2_RECOVER = OD_DEFAULTS["cmc2003"]["chi2_recover"]
+CMC2003_CHI2_FRAC = OD_DEFAULTS["cmc2003"]["chi2_frac"]
+CMC2003_MAX_ITERATIONS = OD_DEFAULTS["cmc2003"]["max_iterations"]
+CMC2003_MAX_REJECTED_FRACTION = OD_DEFAULTS["cmc2003"]["max_rejected_fraction"]
+CMC2003_APPARITION_GAP_DAYS = OD_DEFAULTS["cmc2003"]["apparition_gap_days"]
 # Eigenvalue floor on the expected residual covariance, as a fraction of the
 # (whitened, i.e. unit) observation variance.
-CMC2003_PSD_FLOOR_FRAC = 0.05
+CMC2003_PSD_FLOOR_FRAC = OD_DEFAULTS["cmc2003"]["psd_floor_frac"]
 
 _N_PARAMETERS = 6
 # OrbFit: no rejection at all when n <= round(0.5 * n_params)
