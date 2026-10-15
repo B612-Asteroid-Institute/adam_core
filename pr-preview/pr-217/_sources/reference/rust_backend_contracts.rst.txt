@@ -176,6 +176,18 @@ Current Migrated APIs
     loop followed by the refinement loop) and ``run_od_barycentric`` /
     ``run_od_2body_ipc`` (observation models in order, full OD on the used
     observations, original / used astrometry snapshots for the members).
+  - External native propagators: a backend compiled in another extension
+    (adam-assist) exposes its propagation as a C-ABI table
+    (``ExternalPropagatorV1``: ABI version, identity, integration time
+    scale, two-body flag, and a thread-safe ``propagate`` over flat arrays
+    of states, epochs, frame, origin and target times, cross-product or
+    pairwise) in a capsule named ``adam_core.propagator.v1``, declared with
+    the ``propagator_capsule`` work unit of its ``NativeBackend``. The OD
+    entry points then hand the capsule to Rust, which runs every stage
+    (``run_iod``, the refinement loops, the fits) natively with that
+    backend's dynamics, with the GIL released and no Python call per
+    prediction. ``_rust_native.two_body_propagator_capsule()`` is the
+    reference implementation.
   - Dispatch: ``iterative_fit``, ``cmc2003_fit_detailed`` and ``run_iod``
     (and ``iod``, which wraps it) route to a propagator's ``iterative_fit`` /
     ``cmc2003_fit`` / ``run_iod`` work units when its ``native_backend``

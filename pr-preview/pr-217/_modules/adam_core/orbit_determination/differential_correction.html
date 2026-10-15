@@ -459,6 +459,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">,</span>
     <span class="n">deprecated</span><span class="p">,</span>
+    <span class="n">native_propagator</span><span class="p">,</span>
     <span class="n">native_work_unit</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span> <span class="n">evaluate_orbits</span>
@@ -859,7 +860,7 @@
 
     <span class="n">method</span> <span class="o">=</span> <span class="s2">"2-point"</span> <span class="k">if</span> <span class="n">jacobian_method</span> <span class="o">==</span> <span class="s2">"solver"</span> <span class="k">else</span> <span class="n">jacobian_method</span>
     <span class="k">return</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">validate_fit_covariance_ipc</span><span class="p">(</span>
-        <span class="n">propagator</span><span class="p">,</span>
+        <span class="n">native_propagator</span><span class="p">(</span><span class="n">propagator</span><span class="p">),</span>
         <span class="o">*</span><span class="n">_native_problem</span><span class="p">(</span><span class="n">_orbit_at</span><span class="p">(</span><span class="n">state_vector</span><span class="p">,</span> <span class="n">mjd_tdb</span><span class="p">),</span> <span class="n">observations</span><span class="p">),</span>
         <span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span>
         <span class="n">np</span><span class="o">.</span><span class="n">ascontiguousarray</span><span class="p">(</span><span class="n">covariance_matrix</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
@@ -1151,9 +1152,9 @@
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
     <span class="n">ignore</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">observatory_bias_model</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ObservationUncertaintyModel</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-    <span class="n">jacobian</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"analytic"</span><span class="p">,</span> <span class="s2">"central"</span><span class="p">,</span> <span class="s2">"2-point"</span><span class="p">]</span> <span class="o">=</span> <span class="n">OD_DEFAULTS</span><span class="p">[</span><span class="s2">"fit"</span><span class="p">][</span>
-        <span class="s2">"jacobian"</span>
-    <span class="p">],</span>
+    <span class="n">jacobian</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span>
+        <span class="s2">"auto"</span><span class="p">,</span> <span class="s2">"analytic"</span><span class="p">,</span> <span class="s2">"propagator"</span><span class="p">,</span> <span class="s2">"central"</span><span class="p">,</span> <span class="s2">"2-point"</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="n">OD_DEFAULTS</span><span class="p">[</span><span class="s2">"fit"</span><span class="p">][</span><span class="s2">"jacobian"</span><span class="p">],</span>
     <span class="n">validate_covariance</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">OD_DEFAULTS</span><span class="p">[</span><span class="s2">"fit"</span><span class="p">][</span><span class="s2">"validate_covariance"</span><span class="p">],</span>
     <span class="n">loss</span><span class="p">:</span> <span class="n">LossType</span> <span class="o">=</span> <span class="n">OD_DEFAULTS</span><span class="p">[</span><span class="s2">"fit"</span><span class="p">][</span><span class="s2">"loss"</span><span class="p">],</span>
     <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">HUBER_F_SCALE_DEFAULT</span><span class="p">,</span>
@@ -1178,11 +1179,20 @@
 <span class="sd">        (e.g. inflating per-station sigmas from an observatory bias table). Default</span>
 <span class="sd">        None leaves the observations unchanged. The model is applied once at this</span>
 <span class="sd">        entry point and is not forwarded to nested calls.</span>
-<span class="sd">    jacobian : {"analytic", "central", "2-point"}, optional</span>
+<span class="sd">    jacobian : {"auto", "analytic", "propagator", "central", "2-point"}, optional</span>
 <span class="sd">        How the residual Jacobian is obtained for both the solver and the</span>
 <span class="sd">        solution covariance.</span>
 
-<span class="sd">        - ``"analytic"`` (default): the observation partials (topocentric</span>
+<span class="sd">        - ``"auto"`` (default): derivatives that follow the selected</span>
+<span class="sd">          dynamics: ``"analytic"`` when the propagator declares two-body</span>
+<span class="sd">          dynamics (``Propagator.two_body_dynamics``), ``"propagator"`` when</span>
+<span class="sd">          its native backend supplies state-transition matrices (ASSIST's</span>
+<span class="sd">          variational equations), ``"central"`` otherwise.</span>
+<span class="sd">        - ``"propagator"``: the propagation backend's own state-transition</span>
+<span class="sd">          matrices chained through the exact light-time and projection</span>
+<span class="sd">          derivatives: exact for that backend's dynamics, at about the cost</span>
+<span class="sd">          of one propagation per iteration.</span>
+<span class="sd">        - ``"analytic"``: the observation partials (topocentric</span>
 <span class="sd">          spherical projection including light time) chained with the 2-body</span>
 <span class="sd">          state transition matrix, computed by forward-mode automatic</span>
 <span class="sd">          differentiation in the Rust backend and passed to</span>
@@ -1300,10 +1310,10 @@
 <span class="sd">    """</span>
     <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">orbit</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">"Only one orbit can be differentially corrected"</span>
     <span class="n">_validate_loss</span><span class="p">(</span><span class="n">loss</span><span class="p">,</span> <span class="n">f_scale</span><span class="p">)</span>
-    <span class="k">if</span> <span class="n">jacobian</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"analytic"</span><span class="p">,</span> <span class="s2">"central"</span><span class="p">,</span> <span class="s2">"2-point"</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">jacobian</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"auto"</span><span class="p">,</span> <span class="s2">"analytic"</span><span class="p">,</span> <span class="s2">"propagator"</span><span class="p">,</span> <span class="s2">"central"</span><span class="p">,</span> <span class="s2">"2-point"</span><span class="p">):</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
-            <span class="sa">f</span><span class="s2">"jacobian must be one of 'analytic', 'central', '2-point'; "</span>
-            <span class="sa">f</span><span class="s2">"got </span><span class="si">{</span><span class="n">jacobian</span><span class="si">!r}</span><span class="s2">"</span>
+            <span class="sa">f</span><span class="s2">"jacobian must be one of 'auto', 'analytic', 'propagator', 'central', "</span>
+            <span class="sa">f</span><span class="s2">"'2-point'; got </span><span class="si">{</span><span class="n">jacobian</span><span class="si">!r}</span><span class="s2">"</span>
         <span class="p">)</span>
 
     <span class="k">if</span> <span class="n">observatory_bias_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -1376,7 +1386,7 @@
         <span class="p">[</span><span class="kc">False</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span> <span class="k">if</span> <span class="n">mask</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">pc</span><span class="o">.</span><span class="n">invert</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
     <span class="p">)</span>
     <span class="n">output</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">fit_orbit_whitened_ipc</span><span class="p">(</span>
-        <span class="n">propagator</span><span class="p">,</span>
+        <span class="n">native_propagator</span><span class="p">(</span><span class="n">propagator</span><span class="p">),</span>
         <span class="o">*</span><span class="n">_native_problem</span><span class="p">(</span><span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">),</span>
         <span class="n">ignore_mask</span><span class="p">,</span>
         <span class="n">fit_settings</span><span class="o">=</span><span class="n">_fit_settings</span><span class="p">(</span>
@@ -1482,7 +1492,7 @@
     <span class="n">fit_settings</span> <span class="o">=</span> <span class="n">_fit_settings</span><span class="p">(</span>
         <span class="n">loss</span><span class="p">,</span>
         <span class="n">f_scale</span><span class="p">,</span>
-        <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"jacobian"</span><span class="p">,</span> <span class="s2">"analytic"</span><span class="p">),</span>
+        <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"jacobian"</span><span class="p">,</span> <span class="n">OD_DEFAULTS</span><span class="p">[</span><span class="s2">"fit"</span><span class="p">][</span><span class="s2">"jacobian"</span><span class="p">]),</span>
         <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"validate_covariance"</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
         <span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span>
@@ -1504,7 +1514,7 @@
         <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
 
         <span class="n">output</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">iterative_fit_ipc</span><span class="p">(</span>
-            <span class="n">propagator</span><span class="p">,</span>
+            <span class="n">native_propagator</span><span class="p">(</span><span class="n">propagator</span><span class="p">),</span>
             <span class="o">*</span><span class="n">_native_problem</span><span class="p">(</span><span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">),</span>
             <span class="n">fit_settings</span><span class="o">=</span><span class="n">fit_settings</span><span class="p">,</span>
             <span class="o">**</span><span class="n">loop_settings</span><span class="p">,</span>

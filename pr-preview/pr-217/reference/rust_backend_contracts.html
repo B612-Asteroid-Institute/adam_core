@@ -624,6 +624,18 @@ loop), <code class="docutils literal notranslate"><span class="pre">full_od_bary
 loop followed by the refinement loop) and <code class="docutils literal notranslate"><span class="pre">run_od_barycentric</span></code> /
 <code class="docutils literal notranslate"><span class="pre">run_od_2body_ipc</span></code> (observation models in order, full OD on the used
 observations, original / used astrometry snapshots for the members).</p></li>
+<li><p>External native propagators: a backend compiled in another extension
+(adam-assist) exposes its propagation as a C-ABI table
+(<code class="docutils literal notranslate"><span class="pre">ExternalPropagatorV1</span></code>: ABI version, identity, integration time
+scale, two-body flag, and a thread-safe <code class="docutils literal notranslate"><span class="pre">propagate</span></code> over flat arrays
+of states, epochs, frame, origin and target times, cross-product or
+pairwise) in a capsule named <code class="docutils literal notranslate"><span class="pre">adam_core.propagator.v1</span></code>, declared with
+the <code class="docutils literal notranslate"><span class="pre">propagator_capsule</span></code> work unit of its <code class="docutils literal notranslate"><span class="pre">NativeBackend</span></code>. The OD
+entry points then hand the capsule to Rust, which runs every stage
+(<code class="docutils literal notranslate"><span class="pre">run_iod</span></code>, the refinement loops, the fits) natively with that
+backend’s dynamics, with the GIL released and no Python call per
+prediction. <code class="docutils literal notranslate"><span class="pre">_rust_native.two_body_propagator_capsule()</span></code> is the
+reference implementation.</p></li>
 <li><p>Dispatch: <code class="docutils literal notranslate"><span class="pre">iterative_fit</span></code>, <code class="docutils literal notranslate"><span class="pre">cmc2003_fit_detailed</span></code> and <code class="docutils literal notranslate"><span class="pre">run_iod</span></code>
 (and <code class="docutils literal notranslate"><span class="pre">iod</span></code>, which wraps it) route to a propagator’s <code class="docutils literal notranslate"><span class="pre">iterative_fit</span></code> /
 <code class="docutils literal notranslate"><span class="pre">cmc2003_fit</span></code> / <code class="docutils literal notranslate"><span class="pre">run_iod</span></code> work units when its <code class="docutils literal notranslate"><span class="pre">native_backend</span></code>

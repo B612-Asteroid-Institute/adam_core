@@ -454,10 +454,11 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.residuals</span><span class="w"> </span><span class="kn">import</span> <span class="n">Residuals</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.variants</span><span class="w"> </span><span class="kn">import</span> <span class="n">VariantOrbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.iter</span><span class="w"> </span><span class="kn">import</span> <span class="n">_iterate_chunks</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="n">deprecated</span><span class="p">,</span> <span class="n">native_work_unit</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="n">deprecated</span><span class="p">,</span> <span class="n">native_propagator</span><span class="p">,</span> <span class="n">native_work_unit</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">drop_duplicate_orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.gauss</span><span class="w"> </span><span class="kn">import</span> <span class="n">MU</span><span class="p">,</span> <span class="n">C</span>
@@ -819,8 +820,81 @@
     <span class="c1">#: chi2 clipped at CMC2003's rejection threshold, over the whole arc's</span>
     <span class="c1">#: degrees of freedom (None when not converged).</span>
     <span class="n">whole_arc_score</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
-    <span class="n">correction_note</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span></div>
+    <span class="n">correction_note</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="c1">#: ``"gauss"`` (a Gauss root of ``triplet``) or ``"ranging"`` (a</span>
+    <span class="c1">#: systematic-ranging orbit; ``triplet`` repeats the attributable's</span>
+    <span class="c1">#: reference row and ``root_index`` is its rank by chi2).</span>
+    <span class="n">source</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"gauss"</span></div>
 
+
+
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">RangingSample</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    The systematic-ranging sample of an arc Gauss could not handle: the</span>
+<span class="sd">    attributable (position and rates at the reference observation), and per</span>
+<span class="sd">    orbit in the admissible region its heliocentric ecliptic state at the</span>
+<span class="sd">    attributable's epoch, range, range rate, chi2 and weight</span>
+<span class="sd">    ``exp(-delta_chi2 / 2)`` (normalized).</span>
+<span class="sd">    """</span>
+
+    <span class="n">attributable</span><span class="p">:</span> <span class="nb">dict</span>
+    <span class="n">states</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">rho_au</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">rho_dot_au_per_day</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">chi2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">weight</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span>
+    <span class="n">best</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="n">grid_points</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">admissible_points</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">num_obs</span><span class="p">:</span> <span class="nb">int</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">to_variant_orbits</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">object_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">VariantOrbits</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""The sample as weighted `VariantOrbits` of one orbit</span>
+<span class="sd">        (``orbit_id`` ``"ranging"``), for propagating or screening it."""</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">)</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">attributable</span>
+        <span class="n">time</span> <span class="o">=</span> <span class="n">Timestamp</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">days</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">a</span><span class="p">[</span><span class="s2">"epoch_days"</span><span class="p">])]</span> <span class="o">*</span> <span class="n">n</span><span class="p">,</span>
+            <span class="n">nanos</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">a</span><span class="p">[</span><span class="s2">"epoch_nanos"</span><span class="p">])]</span> <span class="o">*</span> <span class="n">n</span><span class="p">,</span>
+            <span class="n">scale</span><span class="o">=</span><span class="n">a</span><span class="p">[</span><span class="s2">"epoch_scale"</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="n">states</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">states</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="mi">6</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">VariantOrbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+            <span class="n">orbit_id</span><span class="o">=</span><span class="p">[</span><span class="s2">"ranging"</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">,</span>
+            <span class="n">object_id</span><span class="o">=</span><span class="p">[</span><span class="n">object_id</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">,</span>
+            <span class="n">variant_id</span><span class="o">=</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">)],</span>
+            <span class="n">weights</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span>
+            <span class="n">weights_cov</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">weight</span><span class="p">,</span>
+            <span class="n">coordinates</span><span class="o">=</span><span class="n">CartesianCoordinates</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+                <span class="n">x</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span>
+                <span class="n">y</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span>
+                <span class="n">z</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">],</span>
+                <span class="n">vx</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">3</span><span class="p">],</span>
+                <span class="n">vy</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">4</span><span class="p">],</span>
+                <span class="n">vz</span><span class="o">=</span><span class="n">states</span><span class="p">[:,</span> <span class="mi">5</span><span class="p">],</span>
+                <span class="n">time</span><span class="o">=</span><span class="n">time</span><span class="p">,</span>
+                <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">"SUN"</span><span class="p">]</span> <span class="o">*</span> <span class="n">n</span><span class="p">),</span>
+                <span class="n">frame</span><span class="o">=</span><span class="s2">"ecliptic"</span><span class="p">,</span>
+            <span class="p">),</span>
+        <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_ranging_from_output</span><span class="p">(</span><span class="n">ranging</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RangingSample</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="n">ranging</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="k">return</span> <span class="n">RangingSample</span><span class="p">(</span>
+        <span class="n">attributable</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">ranging</span><span class="p">[</span><span class="s2">"attributable"</span><span class="p">]),</span>
+        <span class="n">states</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">ranging</span><span class="p">[</span><span class="s2">"states"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span>
+        <span class="n">rho_au</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">ranging</span><span class="p">[</span><span class="s2">"rho_au"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="n">rho_dot_au_per_day</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">ranging</span><span class="p">[</span><span class="s2">"rho_dot_au_per_day"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="n">chi2</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">ranging</span><span class="p">[</span><span class="s2">"chi2"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="n">weight</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">ranging</span><span class="p">[</span><span class="s2">"weight"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">),</span>
+        <span class="n">best</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">ranging</span><span class="p">[</span><span class="s2">"best"</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">ranging</span><span class="p">[</span><span class="s2">"best"</span><span class="p">]),</span>
+        <span class="n">grid_points</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">ranging</span><span class="p">[</span><span class="s2">"grid_points"</span><span class="p">]),</span>
+        <span class="n">admissible_points</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">ranging</span><span class="p">[</span><span class="s2">"admissible_points"</span><span class="p">]),</span>
+        <span class="n">num_obs</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">ranging</span><span class="p">[</span><span class="s2">"num_obs"</span><span class="p">]),</span>
+    <span class="p">)</span>
 
 
 <div class="viewcode-block" id="IodReport">
@@ -846,6 +920,9 @@
     <span class="c1">#: the accepted orbit's 3-sigma region) fitting about as well (chi2</span>
     <span class="c1">#: within the same margin); non-empty means the IOD is ambiguous.</span>
     <span class="n">ambiguous_with</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+    <span class="c1">#: The systematic-ranging sample (`RangingSample`) when ranging ran: the</span>
+    <span class="c1">#: arc was too short for an orbit, or no Gauss candidate converged.</span>
+    <span class="n">ranging</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">RangingSample</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
 
     <span class="nd">@property</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">found</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
@@ -884,6 +961,7 @@
             <span class="n">arc_length</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"arc_length"</span><span class="p">]),</span>
             <span class="n">postfit_reduced_chi2</span><span class="o">=</span><span class="n">candidate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"postfit_reduced_chi2"</span><span class="p">),</span>
             <span class="n">whole_arc_score</span><span class="o">=</span><span class="n">candidate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"whole_arc_score"</span><span class="p">),</span>
+            <span class="n">source</span><span class="o">=</span><span class="n">candidate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"source"</span><span class="p">,</span> <span class="s2">"gauss"</span><span class="p">),</span>
             <span class="n">converged</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"converged"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)),</span>
             <span class="n">accepted</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"accepted"</span><span class="p">]),</span>
             <span class="n">corrected_state</span><span class="o">=</span><span class="p">(</span>
@@ -906,6 +984,7 @@
         <span class="n">corrections_run</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"corrections_run"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
         <span class="n">not_found_reason</span><span class="o">=</span><span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"not_found_reason"</span><span class="p">),</span>
         <span class="n">ambiguous_with</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ambiguous_with"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">()),</span>
+        <span class="n">ranging</span><span class="o">=</span><span class="n">_ranging_from_output</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ranging"</span><span class="p">)),</span>
     <span class="p">)</span>
 
 
@@ -934,6 +1013,7 @@
     <span class="n">span_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">acceptance</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"corrected"</span><span class="p">,</span> <span class="s2">"prefit"</span><span class="p">]</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"acceptance"</span><span class="p">],</span>
     <span class="n">correction_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">ranging_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">fit_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">observatory_bias_model</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ObservationUncertaintyModel</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">IodReport</span><span class="p">]:</span>
@@ -994,6 +1074,17 @@
 <span class="sd">        where each raw Gauss orbit is scored to order the corrections:</span>
 <span class="sd">        ``"local"`` (default), the observations of its first stage, or</span>
 <span class="sd">        ``"whole_arc"``, every observation (the legacy order).</span>
+<span class="sd">    ranging_settings : dict, optional</span>
+<span class="sd">        Overrides of systematic ranging (keys ``ranging_enabled``,</span>
+<span class="sd">        ``ranging_rho_min_au``, ``ranging_rho_max_au``, ``ranging_n_rho``,</span>
+<span class="sd">        ``ranging_n_rho_dot``, ``ranging_max_corrections``,</span>
+<span class="sd">        ``ranging_chunk_size``, ``ranging_max_arc_days``; Rust</span>
+<span class="sd">        ``RangingConfig`` defaults otherwise). Ranging runs on arcs of at</span>
+<span class="sd">        most ``ranging_max_arc_days`` (5).</span>
+<span class="sd">        Under corrected acceptance an arc shorter than ``min_arc_length``</span>
+<span class="sd">        returns no orbit but the ranging sample (``IodReport.ranging``), and</span>
+<span class="sd">        when no Gauss candidate converges the best ranging orbits are</span>
+<span class="sd">        corrected like candidates (``IodCandidate.source == "ranging"``).</span>
 <span class="sd">    fit_settings : dict, optional</span>
 <span class="sd">        Solver settings of the correction stages (as `fit_least_squares`'s;</span>
 <span class="sd">        the whole-arc stage uses the linear loss, the earlier ones</span>
@@ -1034,6 +1125,7 @@
         <span class="s2">"acceptance"</span><span class="p">:</span> <span class="n">acceptance</span><span class="p">,</span>
         <span class="o">**</span><span class="p">(</span><span class="n">span_settings</span> <span class="ow">or</span> <span class="p">{}),</span>
         <span class="o">**</span><span class="p">(</span><span class="n">correction_settings</span> <span class="ow">or</span> <span class="p">{}),</span>
+        <span class="o">**</span><span class="p">(</span><span class="n">ranging_settings</span> <span class="ow">or</span> <span class="p">{}),</span>
     <span class="p">}</span>
     <span class="n">orbit_id</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span>
     <span class="n">fused</span> <span class="o">=</span> <span class="n">native_work_unit</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"run_iod"</span><span class="p">)</span>
@@ -1050,7 +1142,7 @@
             <span class="n">_placeholder_orbit</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span> <span class="n">observations</span>
         <span class="p">)</span>
         <span class="n">output</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">run_iod_ipc</span><span class="p">(</span>
-            <span class="n">propagator</span><span class="p">,</span>
+            <span class="n">native_propagator</span><span class="p">(</span><span class="n">propagator</span><span class="p">),</span>
             <span class="n">observed_ipc</span><span class="p">,</span>
             <span class="n">observers_ipc</span><span class="p">,</span>
             <span class="n">iod_settings</span><span class="o">=</span><span class="n">iod_settings</span><span class="p">,</span>

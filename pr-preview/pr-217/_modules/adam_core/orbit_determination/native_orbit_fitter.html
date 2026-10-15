@@ -737,7 +737,7 @@
         <span class="n">fit_settings</span> <span class="o">=</span> <span class="n">_fit_settings</span><span class="p">(</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">loss</span><span class="p">,</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">f_scale</span><span class="p">,</span>
-            <span class="n">fit_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"jacobian"</span><span class="p">,</span> <span class="s2">"analytic"</span><span class="p">),</span>
+            <span class="n">fit_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"jacobian"</span><span class="p">,</span> <span class="n">OD_DEFAULTS</span><span class="p">[</span><span class="s2">"fit"</span><span class="p">][</span><span class="s2">"jacobian"</span><span class="p">]),</span>
             <span class="n">fit_kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"validate_covariance"</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
             <span class="n">fit_kwargs</span><span class="p">,</span>
         <span class="p">)</span>

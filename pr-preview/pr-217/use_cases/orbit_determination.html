@@ -642,9 +642,11 @@ when optimizer steps use the analytic 2-body Jacobian.</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter()</span></code> (<code class="docutils literal notranslate"><span class="pre">outlier_rejection=&quot;cmc2003&quot;</span></code>) / <code class="docutils literal notranslate"><span class="pre">refine()</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p>Differential correction</p></td>
-<td><p>whitened residuals, exact 2-body Jacobian, weak-direction covariance
-probe, linear loss</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">refine()</span></code> <code class="docutils literal notranslate"><span class="pre">fit_settings</span></code> (<code class="docutils literal notranslate"><span class="pre">jacobian=&quot;analytic&quot;</span></code>,
+<td><p>whitened residuals, derivatives that follow the dynamics,
+weak-direction covariance probe, linear loss</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">refine()</span></code> <code class="docutils literal notranslate"><span class="pre">fit_settings</span></code> (<code class="docutils literal notranslate"><span class="pre">jacobian=&quot;auto&quot;</span></code>: analytic for
+two-body propagators, the backend’s state-transition matrices for
+native backends such as ASSIST, central differences otherwise;
 <code class="docutils literal notranslate"><span class="pre">validate_covariance=True</span></code>, <code class="docutils literal notranslate"><span class="pre">loss=&quot;linear&quot;</span></code>)</p></td>
 </tr>
 <tr class="row-odd"><td><p>IOD</p></td>
@@ -733,6 +735,18 @@ rejected observation still counts. The lowest score wins (ties within
 1e-6 go to the earliest candidate). <code class="docutils literal notranslate"><span class="pre">IodReport.ambiguous_with</span></code> lists
 converged solutions outside the accepted orbit’s 3-sigma region whose
 score is within the same margin (Gronchi 2009).</p></li>
+<li><p><strong>Short arcs and Gauss failures: ranging.</strong> An arc too short for an
+orbit (<code class="docutils literal notranslate"><span class="pre">min_arc_length</span></code>) returns no orbit but the systematic-ranging
+sample (<code class="docutils literal notranslate"><span class="pre">IodReport.ranging</span></code>): the attributable (position and rates) is
+completed at every range and range rate of the admissible region (bound
+to the Sun, not to the Earth; Milani et al. 2004), each orbit scored on
+the observations and weighted by <code class="docutils literal notranslate"><span class="pre">exp(-delta_chi2/2)</span></code> (Farnocchia,
+Chesley &amp; Micheli 2015). <code class="docutils literal notranslate"><span class="pre">RangingSample.to_variant_orbits</span></code> gives the
+sample as weighted <code class="docutils literal notranslate"><span class="pre">VariantOrbits</span></code>. When no Gauss candidate converges,
+the best 3 ranging orbits are corrected exactly like Gauss candidates
+(<code class="docutils literal notranslate"><span class="pre">IodCandidate.source</span> <span class="pre">==</span> <span class="pre">&quot;ranging&quot;</span></code>). Ranging runs on arcs of at most
+5 days (a few nights; <code class="docutils literal notranslate"><span class="pre">ranging_max_arc_days</span></code>); <code class="docutils literal notranslate"><span class="pre">ranging_settings</span></code>
+tunes or disables it.</p></li>
 <li><p><strong>Failure.</strong> A candidate whose prediction fails is skipped and counted;
 when nothing is accepted, <code class="docutils literal notranslate"><span class="pre">IodReport.not_found_reason</span></code> says why.</p></li>
 <li><p><strong>Evidence.</strong> On the first solutions of 126 walk-forward objects
