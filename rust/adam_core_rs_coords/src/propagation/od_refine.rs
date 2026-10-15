@@ -1990,9 +1990,10 @@ fn stage_fit<T: OriginTranslationProvider>(
 
 /// The next stage's observation mask: every observation within the
 /// current span grown `growth` times about its centre; when that adds
-/// nothing (an apparition gap) the night (integer MJD) of the observation
-/// nearest the current span, earliest on ties, joins instead.
-fn grow_stage(times: &[f64], mask: &[bool], growth: f64) -> Vec<bool> {
+/// nothing (an apparition gap) the observing night (`nights`, see
+/// `observation_nights`) of the observation nearest the current span,
+/// earliest on ties, joins instead, with everything observed during it.
+fn grow_stage(times: &[f64], nights: &[usize], mask: &[bool], growth: f64) -> Vec<bool> {
     let included = times
         .iter()
         .zip(mask)
@@ -2018,11 +2019,15 @@ fn grow_stage(times: &[f64], mask: &[bool], growth: f64) -> Vec<bool> {
     });
     match nearest {
         Some(row) => {
-            let night = times[row].floor();
+            let (start, end) = (0..times.len())
+                .filter(|&other| nights[other] == nights[row])
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), other| {
+                    (lo.min(times[other]), hi.max(times[other]))
+                });
             times
                 .iter()
                 .zip(mask)
-                .map(|(&t, &keep)| keep || t.floor() == night)
+                .map(|(&t, &keep)| keep || (t >= start && t <= end))
                 .collect()
         }
         None => mask.to_vec(),
@@ -2153,6 +2158,7 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
     }
     let n = observed.len();
     let times = super::od::observed_times_mjd(observed)?;
+    let nights = super::od::observation_nights(&times, Some(&observers.code));
     let stage_config = WhitenedFitConfig {
         loss: LossType::Linear,
         validate_covariance: false,
@@ -2218,7 +2224,7 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
         let mut mask: Vec<bool> = times.iter().map(|&t| t >= t_lo && t <= t_hi).collect();
         let count = |m: &[bool]| m.iter().filter(|&&keep| keep).count();
         while count(&mask) < correction.min_stage_obs.min(n) {
-            let grown = grow_stage(&times, &mask, correction.growth);
+            let grown = grow_stage(&times, &nights, &mask, correction.growth);
             if count(&grown) == count(&mask) {
                 break;
             }
@@ -2265,7 +2271,7 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
             };
             seed = orbit_with_state(&seed, output.state)?;
             if !whole_arc {
-                mask = grow_stage(&times, &mask, correction.growth);
+                mask = grow_stage(&times, &nights, &mask, correction.growth);
                 continue;
             }
             let output = if output.evaluation.reduced_chi2 <= config.rchi2_threshold {
@@ -2304,7 +2310,13 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
                 }
             };
             let rchi2 = output.evaluation.reduced_chi2;
-            if rchi2.is_finite() && rchi2 <= config.rchi2_threshold {
+            if output.evaluation.arc_length < config.min_arc_length {
+                note = Some(format!(
+                    "stalled at stage {stages}: whole arc after rejection spans {:.4} days, \
+                     shorter than min_arc_length = {}",
+                    output.evaluation.arc_length, config.min_arc_length
+                ));
+            } else if rchi2.is_finite() && rchi2 <= config.rchi2_threshold {
                 last_fit = Some(output);
             } else {
                 note = Some(format!(
@@ -4065,27 +4077,28 @@ mod tests {
     #[test]
     fn grow_stage_grows_geometrically_and_jumps_gaps() {
         let times = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 40.0, 40.2, 41.0];
+        let nights = super::super::od::observation_nights(&times, None);
         let mask =
             |rows: &[usize]| -> Vec<bool> { (0..times.len()).map(|r| rows.contains(&r)).collect() };
         // Span 2 days about 2..4 grown 4x: 1 .. 7 days -> rows 0..=6.
         assert_eq!(
-            grow_stage(&times, &mask(&[2, 3, 4]), 4.0),
+            grow_stage(&times, &nights, &mask(&[2, 3, 4]), 4.0),
             mask(&[0, 1, 2, 3, 4, 5, 6])
         );
         // Nothing within 4x of the first week: the night of the nearest
         // observation beyond it (MJD 40) joins, both of its observations.
         assert_eq!(
-            grow_stage(&times, &mask(&[0, 1, 2, 3, 4, 5, 6]), 4.0)
+            grow_stage(&times, &nights, &mask(&[0, 1, 2, 3, 4, 5, 6]), 4.0)
                 .iter()
                 .filter(|&&k| k)
                 .count(),
             10 - 1
         );
-        let jumped = grow_stage(&times, &mask(&[0, 1, 2, 3, 4, 5, 6]), 1.5);
+        let jumped = grow_stage(&times, &nights, &mask(&[0, 1, 2, 3, 4, 5, 6]), 1.5);
         assert_eq!(jumped, mask(&[0, 1, 2, 3, 4, 5, 6, 7, 8]));
         // Everything included: unchanged.
         let all = vec![true; times.len()];
-        assert_eq!(grow_stage(&times, &all, 4.0), all);
+        assert_eq!(grow_stage(&times, &nights, &all, 4.0), all);
     }
 
     #[test]
@@ -4353,6 +4366,57 @@ mod tests {
         assert!(right < wrong);
         // Over the margin: the wrong root is not an equal alternative.
         assert!((wrong - right) * 82.0 > AMBIGUITY_DELTA_CHI2);
+    }
+
+    #[test]
+    fn corrected_acceptance_needs_min_arc_length_before_and_after_rejection() {
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let run = |observed: &CoordinateBatch, min_arc_length: f64| {
+            run_iod_with(
+                &predictor,
+                observed,
+                &observers(),
+                &super::super::od::IodConfig {
+                    min_arc_length,
+                    contamination_percentage: 20.0,
+                    ..corrected_iod_config(3.0)
+                },
+                &WhitenedFitConfig::default(),
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap()
+        };
+        // The 44-day arc is shorter than 50 days: refused up front.
+        let short = run(&synthetic_observations(None), 50.0);
+        assert!(!short.found());
+        let reason = short.not_found_reason.unwrap();
+        assert!(reason.contains("min_arc_length"), "{reason}");
+        // The outlier is the last observation: rejecting it leaves 40 days,
+        // shorter than 43.5, so no candidate converges.
+        let rejected = run(&synthetic_observations(Some(NUM_OBS - 1)), 43.5);
+        assert!(!rejected.found());
+        assert!(
+            rejected
+                .candidates
+                .iter()
+                .filter_map(|c| c.correction_note.as_deref())
+                .any(|note| note.contains("shorter than min_arc_length")),
+            "{:?}",
+            rejected.not_found_reason
+        );
+        // With 40 days enough, the same arc is accepted without the outlier.
+        let accepted = run(&synthetic_observations(Some(NUM_OBS - 1)), 40.0);
+        assert_eq!(
+            accepted.accepted_candidate().unwrap().removed,
+            vec![NUM_OBS - 1]
+        );
     }
 
     #[test]

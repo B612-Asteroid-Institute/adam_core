@@ -209,6 +209,47 @@ fn polish_real_root(coeffs: &[f64], x0: f64, max_iter: usize, tol: f64) -> f64 {
     x
 }
 
+/// Relative imaginary part below which a computed root counts as real.
+/// A double real root (the boundary between one and three Gauss solutions,
+/// where both solutions matter) comes out of the root finder as a pair
+/// `x ± i·d` with `d` of order `sqrt(eps)·|x|`, about 1e-8 relative, so an
+/// absolute 1e-8 test dropped it; 1e-6 keeps it while genuine complex
+/// pairs of this polynomial have relative imaginary parts of order one.
+const REAL_ROOT_RTOL: f64 = 1e-6;
+
+/// Polished roots closer than this (relative) are the same root (both
+/// halves of a near-double pair converge to it).
+const DUPLICATE_ROOT_RTOL: f64 = 1e-9;
+
+/// The positive real roots of the Gauss polynomial `coeffs` among the
+/// computed `roots`, polished on the real axis, de-duplicated and in
+/// descending order (the legacy `numpy.roots` order; candidate order is
+/// observable through the prefit acceptance).
+fn positive_real_roots(coeffs: &[f64], roots: &[C64]) -> Vec<f64> {
+    let mut r2_mags: Vec<f64> = Vec::with_capacity(3);
+    for root in roots {
+        if root.re < 0.0 || root.im.abs() > REAL_ROOT_RTOL * root.re.abs() {
+            continue;
+        }
+        let polished = polish_real_root(coeffs, root.re, 6, 1e-14);
+        // Newton on a near-double root can run off (p' ~ 0): keep the
+        // root finder's value then.
+        let value = if polished.is_finite()
+            && (polished - root.re).abs() <= REAL_ROOT_RTOL * root.re.abs().max(1e-300)
+        {
+            polished
+        } else {
+            root.re
+        };
+        if value.is_finite() && value >= 0.0 {
+            r2_mags.push(value);
+        }
+    }
+    r2_mags.sort_by(|left, right| right.total_cmp(left));
+    r2_mags.dedup_by(|a, b| (*a - *b).abs() <= DUPLICATE_ROOT_RTOL * b.abs());
+    r2_mags
+}
+
 #[inline]
 fn cross(a: [f64; 3], b: [f64; 3]) -> [f64; 3] {
     [
@@ -379,31 +420,11 @@ pub fn gauss_iod_candidates(
     // roots at vastly different magnitudes — e.g. 0.86 and 37.6 AU).
     let roots = find_roots_laguerre_deg8(&coeffs);
 
-    // Step 5: filter positive near-real roots, polishing each back to
-    // the real axis so numerical residuals in im don't shift behaviour.
-    //
-    // Threshold: treat a root as real if |im| < 1e-8. This is tight
-    // enough to reject genuinely complex roots (whose im comes from the
-    // polynomial structure and is O(1) on well-posed inputs) yet loose
-    // enough to admit all real roots even when Durand-Kerner only
-    // reached 1e-12 convergence.
-    let mut r2_mags: Vec<f64> = Vec::with_capacity(3);
-    for root in roots.iter() {
-        if root.im.abs() < 1e-8 && root.re >= 0.0 {
-            let polished = polish_real_root(&coeffs, root.re, 6, 1e-14);
-            if polished.is_finite() && polished >= 0.0 {
-                r2_mags.push(polished);
-            }
-        }
-    }
-
+    // Step 5: positive real roots, descending.
+    let r2_mags = positive_real_roots(&coeffs, &roots);
     if r2_mags.is_empty() {
         return Vec::new();
     }
-    // Legacy numpy.roots emits the positive real roots in descending
-    // magnitude for this sparse degree-8 polynomial. Candidate order is
-    // observable because public IOD accepts the first qualifying orbit.
-    r2_mags.sort_by(|left, right| right.total_cmp(left));
 
     // Step 6: per-root orbit construction — reuse the already-Rust
     // implementation in gauss_iod_orbits_from_roots.
@@ -429,6 +450,54 @@ pub fn gauss_iod_candidates(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Coefficients (descending) of the product of the given polynomials.
+    fn product(factors: &[&[f64]]) -> Vec<f64> {
+        factors.iter().fold(vec![1.0], |acc, factor| {
+            let mut out = vec![0.0; acc.len() + factor.len() - 1];
+            for (i, a) in acc.iter().enumerate() {
+                for (j, b) in factor.iter().enumerate() {
+                    out[i + j] += a * b;
+                }
+            }
+            out
+        })
+    }
+
+    #[test]
+    fn a_double_real_root_is_kept_once_and_a_complex_pair_is_not() {
+        // (x - 1.2)^2 (x - 0.7) (x + 2) (x^2 + 1)(x^2 + 2x + 5): a double
+        // root at 1.2 (the boundary between one and three Gauss solutions),
+        // a simple root at 0.7, and only negative or complex roots besides.
+        let coeffs = product(&[
+            &[1.0, -1.2],
+            &[1.0, -1.2],
+            &[1.0, -0.7],
+            &[1.0, 2.0],
+            &[1.0, 0.0, 1.0],
+            &[1.0, 2.0, 5.0],
+        ]);
+        assert_eq!(coeffs.len(), 9);
+        let roots = find_roots_laguerre_deg8(&coeffs);
+        let real = positive_real_roots(&coeffs, &roots);
+        assert_eq!(real.len(), 2, "{real:?} from {roots:?}");
+        assert!((real[0] - 1.2).abs() < 1e-6, "{real:?}");
+        assert!((real[1] - 0.7).abs() < 1e-12, "{real:?}");
+
+        // A genuine complex pair near 1.2 (imaginary part 1 % of the real
+        // part) is not a solution.
+        let coeffs = product(&[
+            &[1.0, -2.4, 1.2 * 1.2 + 0.012 * 0.012],
+            &[1.0, -0.7],
+            &[1.0, 2.0],
+            &[1.0, 0.0, 1.0],
+            &[1.0, 2.0, 5.0],
+        ]);
+        let roots = find_roots_laguerre_deg8(&coeffs);
+        let real = positive_real_roots(&coeffs, &roots);
+        assert_eq!(real.len(), 1, "{real:?}");
+        assert!((real[0] - 0.7).abs() < 1e-12);
+    }
 
     #[test]
     fn complex_arithmetic_roundtrips() {

@@ -13,6 +13,22 @@ pub const VELOCITY_METHOD_AUTO: i32 = 3;
 /// 5 degrees of separation and the Taylor-series Herrick-Gibbs below it.
 pub const AUTO_HERRICK_GIBBS_MAX_SEPARATION_DEG: f64 = 5.0;
 
+/// Smallest topocentric range (au) a Gauss root may give any of its three
+/// observations: 1e-4 au, about 15,000 km. Gauss's polynomial carries a
+/// spurious solution at zero range (the observer's own orbit, r = |q|;
+/// Milani & Gronchi 2010, ch. 7; Gronchi 2009), which observer
+/// topocentricity moves to a small, non-zero range of either sign; and an
+/// object this close moves under Earth's gravity, where the heliocentric
+/// two-body Gauss solution does not hold. Negative ranges are unphysical.
+pub const GAUSS_MIN_TOPOCENTRIC_RANGE_AU: f64 = 1e-4;
+
+/// Whether a Gauss root's three topocentric ranges are physical (each at
+/// least [`GAUSS_MIN_TOPOCENTRIC_RANGE_AU`], so positive).
+pub fn physical_ranges(rho: [f64; 3]) -> bool {
+    rho.iter()
+        .all(|&range| range.is_finite() && range >= GAUSS_MIN_TOPOCENTRIC_RANGE_AU)
+}
+
 /// One Gauss preliminary orbit: epoch (decimal days, light-time corrected
 /// when requested), heliocentric ecliptic state, and the velocity method
 /// actually used (0 Gauss, 1 Gibbs, 2 Herrick-Gibbs).
@@ -247,7 +263,7 @@ pub fn gauss_iod_candidates_from_roots(
         let rho2 = scale(rho2_hat, rho2_mag);
         let rho3 = scale(rho3_hat, rho3_mag);
 
-        if dot(rho2, rho2_hat) < 0.0 {
+        if !physical_ranges([rho1_mag, rho2_mag, rho3_mag]) {
             continue;
         }
 
@@ -305,6 +321,17 @@ pub fn gauss_iod_candidates_from_roots(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gauss_roots_need_three_physical_ranges() {
+        assert!(physical_ranges([0.3, 0.31, 0.32]));
+        // Near zero (the spurious observer root) or negative: refused.
+        assert!(!physical_ranges([0.3, 5e-5, 0.32]));
+        assert!(!physical_ranges([-0.01, 0.31, 0.32]));
+        assert!(!physical_ranges([0.3, 0.31, f64::NAN]));
+        // An Earth close approach beyond 15,000 km stays.
+        assert!(physical_ranges([2e-3, 2e-3, 2e-3]));
+    }
 
     #[test]
     fn gibbs_velocity_scales_with_supplied_mu() {

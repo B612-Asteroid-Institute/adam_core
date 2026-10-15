@@ -42,8 +42,17 @@
 //!   then station code, then input row), whatever order the caller supplies;
 //!   every output array keeps the caller's order. Identical inputs give
 //!   identical results.
+//! * **Inputs.** Gauss takes equatorial directions and heliocentric
+//!   ecliptic observer positions; ecliptic observations and equatorial
+//!   observers are rotated, observers not centred on the Sun are refused.
+//!   An arc shorter than `min_arc_length` (1 day) is not searched, and a
+//!   whole-arc fit whose rejection leaves less is not accepted.
 //! * **Duplicate epochs.** A triplet never holds two observations at the
 //!   same epoch (Gauss needs three distinct times).
+//! * **Nights.** A station's observations form one observing night until a
+//!   gap of more than 8 hours or 16 hours of continuous coverage
+//!   ([`observation_nights`]); the UTC calendar day would split nights that
+//!   straddle 0h UTC.
 //! * **Triplets** ([`SpanSearchConfig`]). Gauss truncates the f and g
 //!   series, so a preliminary orbit degrades with the fraction of the orbit
 //!   its triplet spans (Milani & Gronchi 2010, sec. 9.1; full-arc reduced
@@ -57,7 +66,10 @@
 //!   (Vallado 2013, sec. 7.5.2).
 //! * **Multiple roots.** Every physical root of a triplet's degree-8
 //!   polynomial is a candidate (up to three genuine solutions: Charlier;
-//!   Gronchi 2009). When one converges, its sibling roots are corrected too.
+//!   Gronchi 2009): real to a relative 1e-6 (so a near-double root is kept),
+//!   de-duplicated, with all three topocentric ranges at least 1e-4 au (the
+//!   spurious zero-range root and negative ranges are dropped). When one
+//!   converges, its sibling roots are corrected too.
 //! * **Acceptance** ([`IodAcceptance::Corrected`], [`CorrectionConfig`]).
 //!   Candidates are corrected in increasing prefit reduced chi2, at most 8,
 //!   until 2 reach the whole arc. Each is corrected in stages from its
@@ -1838,6 +1850,21 @@ pub(super) fn iod_candidate_pool(
             format!("{n} observations, fewer than min_obs = {}", config.min_obs),
         ));
     }
+    // A short arc does not determine an orbit (a night cannot fix six
+    // parameters); the prefit gate checks this per candidate, the corrected
+    // acceptance here and again after rejection.
+    let times = observed_times_mjd(observed)?;
+    let arc = times.iter().copied().fold(f64::NEG_INFINITY, f64::max)
+        - times.iter().copied().fold(f64::INFINITY, f64::min);
+    if arc < config.min_arc_length {
+        return Ok(IodResult::not_found(
+            epoch_scale,
+            format!(
+                "arc of {arc:.4} days, shorter than min_arc_length = {}",
+                config.min_arc_length
+            ),
+        ));
+    }
     let order = iod_observation_order(observed, observers)?;
     let sorted_observed = take_coordinate_batch(observed, &order)?;
     let sorted_observers = take_observer_batch(observers, &order)?;
@@ -1954,6 +1981,92 @@ fn restore_input_order(mut result: IodResult, order: &[usize]) -> IodResult {
     result
 }
 
+/// J2000 obliquity of the ecliptic (IAU 1976, 84381.448 arcsec), the
+/// rotation the Gauss kernel applies to its equatorial directions.
+const GAUSS_OBLIQUITY_RAD: f64 = 84_381.448 / 3600.0 * std::f64::consts::PI / 180.0;
+
+/// The geometry the Gauss kernel assumes: equatorial (RA, Dec) directions in
+/// degrees and heliocentric ecliptic observer positions (au). Ecliptic
+/// observations and equatorial observers are rotated; other frames, and
+/// observers not centred on the Sun, are refused (the kernel would silently
+/// use them as heliocentric: a barycentric observer is about 0.005 au off).
+/// Equatorial (RA, Dec) directions (degrees) and heliocentric ecliptic
+/// observer positions (au), row for row.
+type GaussGeometry = (Vec<[f64; 2]>, Vec<[f64; 3]>);
+
+fn gauss_geometry(
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+) -> PropagationResultValue<GaussGeometry> {
+    let (sin_e, cos_e) = GAUSS_OBLIQUITY_RAD.sin_cos();
+    let values = observed.values.spherical().ok_or_else(|| {
+        PropagationError::InvalidRequest("IOD requires spherical observed coordinates".to_string())
+    })?;
+    let directions: Vec<[f64; 2]> = match observed.frame {
+        Frame::Equatorial => values.iter().map(|row| [row[1], row[2]]).collect(),
+        Frame::Ecliptic => values
+            .iter()
+            .map(|row| {
+                let (lon, lat) = (row[1].to_radians(), row[2].to_radians());
+                let ec = [lat.cos() * lon.cos(), lat.cos() * lon.sin(), lat.sin()];
+                let eq = [
+                    ec[0],
+                    cos_e * ec[1] - sin_e * ec[2],
+                    sin_e * ec[1] + cos_e * ec[2],
+                ];
+                [
+                    eq[1].atan2(eq[0]).to_degrees().rem_euclid(360.0),
+                    eq[2].clamp(-1.0, 1.0).asin().to_degrees(),
+                ]
+            })
+            .collect(),
+        other => {
+            return Err(PropagationError::InvalidRequest(format!(
+                "IOD requires equatorial or ecliptic observed coordinates; got {}",
+                other.as_str()
+            )))
+        }
+    };
+    let coordinates = &observers.coordinates;
+    if let Some(origin) = coordinates
+        .origins
+        .origins
+        .iter()
+        .find(|origin| !super::ephemeris::is_sun_origin(origin))
+    {
+        return Err(PropagationError::InvalidRequest(format!(
+            "IOD requires heliocentric observer positions (origin SUN); got {}",
+            origin.code()
+        )));
+    }
+    let positions = coordinates.values.cartesian().ok_or_else(|| {
+        PropagationError::InvalidRequest("IOD requires Cartesian observer coordinates".to_string())
+    })?;
+    let observer_positions: Vec<[f64; 3]> = match coordinates.frame {
+        Frame::Ecliptic => positions
+            .iter()
+            .map(|row| [row[0], row[1], row[2]])
+            .collect(),
+        Frame::Equatorial => positions
+            .iter()
+            .map(|row| {
+                [
+                    row[0],
+                    cos_e * row[1] + sin_e * row[2],
+                    -sin_e * row[1] + cos_e * row[2],
+                ]
+            })
+            .collect(),
+        other => {
+            return Err(PropagationError::InvalidRequest(format!(
+                "IOD requires ecliptic or equatorial observer coordinates; got {}",
+                other.as_str()
+            )))
+        }
+    };
+    Ok((directions, observer_positions))
+}
+
 /// [`run_iod`] on observations already in the canonical search order.
 fn run_iod_sorted(
     predictor: &dyn SphericalPredictor,
@@ -1963,14 +2076,9 @@ fn run_iod_sorted(
     collect_all: bool,
 ) -> PropagationResultValue<IodResult> {
     let n = observed.len();
-    let observed_values = observed.values.spherical().ok_or_else(|| {
-        PropagationError::InvalidRequest("IOD requires spherical observed coordinates".to_string())
-    })?;
+    let (gauss_directions, gauss_observers) = gauss_geometry(observed, observers)?;
     let times = observed_times_mjd(observed)?;
     let epoch_scale = observation_time_scale(observed)?;
-    let observer_positions = observers.coordinates.values.cartesian().ok_or_else(|| {
-        PropagationError::InvalidRequest("IOD requires Cartesian observer coordinates".to_string())
-    })?;
 
     let max_outliers =
         (((n as f64) * (config.contamination_percentage / 100.0)) as usize).min(n - config.min_obs);
@@ -1992,7 +2100,12 @@ fn run_iod_sorted(
     };
     let triplets: Vec<([usize; 3], (usize, usize))> =
         if config.observation_selection_method == ObservationSelectionMethod::Spans {
-            span_triplets(&times, &config.spans, budget)
+            span_triplets(
+                &times,
+                &observation_nights(&times, Some(&observers.code)),
+                &config.spans,
+                budget,
+            )
         } else {
             select_observation_triplets_bounded(&times, config.observation_selection_method, budget)
                 .into_iter()
@@ -2013,13 +2126,10 @@ fn run_iod_sorted(
     let mut candidates: Vec<IodCandidate> = Vec::new();
     for (triplet, window) in triplets {
         counters.triplets_tried += 1;
-        let ra = std::array::from_fn(|slot| observed_values[triplet[slot]][1]);
-        let dec = std::array::from_fn(|slot| observed_values[triplet[slot]][2]);
+        let ra = std::array::from_fn(|slot| gauss_directions[triplet[slot]][0]);
+        let dec = std::array::from_fn(|slot| gauss_directions[triplet[slot]][1]);
         let triplet_times = std::array::from_fn(|slot| times[triplet[slot]]);
-        let triplet_observers = std::array::from_fn(|slot| {
-            let row = observer_positions[triplet[slot]];
-            [row[0], row[1], row[2]]
-        });
+        let triplet_observers = std::array::from_fn(|slot| gauss_observers[triplet[slot]]);
         let gauss = gauss_iod_candidates(
             ra,
             dec,
@@ -2295,12 +2405,15 @@ fn select_observation_triplets_bounded(
                 .collect()
         }
         ObservationSelectionMethod::Combinations => combination_triplets(times, budget),
-        ObservationSelectionMethod::Spans => {
-            span_triplets(times, &SpanSearchConfig::default(), budget)
-                .into_iter()
-                .map(|(triplet, _)| triplet)
-                .collect()
-        }
+        ObservationSelectionMethod::Spans => span_triplets(
+            times,
+            &observation_nights(times, None),
+            &SpanSearchConfig::default(),
+            budget,
+        )
+        .into_iter()
+        .map(|(triplet, _)| triplet)
+        .collect(),
     };
     triplets.retain(|row| {
         times[row[0]] != times[row[1]]
@@ -2431,8 +2544,62 @@ fn combination_triplets(times: &[f64], budget: usize) -> Vec<[usize; 3]> {
 /// of the same two nights give near-identical Gauss geometry, so a dense
 /// night would otherwise spend the whole budget on one configuration. The
 /// walk stops at `budget`.
+/// Gap that separates two observing nights of one station (days): 8 hours.
+/// A ground station's daytime gap is at least 10 hours (a night lasts at
+/// most about 14), and gaps inside a night rarely exceed 8, so a station's
+/// observations separated by more than this belong to different nights.
+/// Unlike the UTC calendar day (`floor(MJD)`), this does not split the
+/// nights of stations east of the Americas, which straddle 0h UTC.
+pub const OBSERVING_NIGHT_GAP_DAYS: f64 = 8.0 / 24.0;
+
+/// Longest observing night (days): 16 hours, above the longest dark period
+/// at survey latitudes (about 14). A station observing continuously (a
+/// space telescope, or round-the-clock cadence) starts a new night after it,
+/// so its arc is not chained into one "night".
+pub const OBSERVING_NIGHT_MAX_DAYS: f64 = 16.0 / 24.0;
+
+/// Observing-night id of every observation: each station's observations, in
+/// time order, start a new night after a gap above
+/// [`OBSERVING_NIGHT_GAP_DAYS`] or once the night has lasted
+/// [`OBSERVING_NIGHT_MAX_DAYS`]; ids are numbered by first observation time
+/// (then row). Without `stations` every row is one station.
+pub(super) fn observation_nights(
+    times: &[f64],
+    stations: Option<&[crate::ObservatoryCode]>,
+) -> Vec<usize> {
+    let n = times.len();
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&a, &b| times[a].total_cmp(&times[b]).then(a.cmp(&b)));
+    let station = |row: usize| stations.map(|codes| codes[row].0.as_str());
+    // Per station: (start of its current night, last time, night id).
+    let mut last_seen: std::collections::HashMap<Option<&str>, (f64, f64, usize)> =
+        std::collections::HashMap::new();
+    let mut nights = vec![0_usize; n];
+    let mut next_id = 0_usize;
+    for &row in &order {
+        let key = station(row);
+        let t = times[row];
+        let (start, id) = match last_seen.get(&key) {
+            Some(&(start, last, id))
+                if t - last <= OBSERVING_NIGHT_GAP_DAYS
+                    && t - start <= OBSERVING_NIGHT_MAX_DAYS =>
+            {
+                (start, id)
+            }
+            _ => {
+                next_id += 1;
+                (t, next_id - 1)
+            }
+        };
+        nights[row] = id;
+        last_seen.insert(key, (start, t, id));
+    }
+    nights
+}
+
 fn span_triplets(
     times: &[f64],
+    nights: &[usize],
     config: &SpanSearchConfig,
     budget: usize,
 ) -> Vec<([usize; 3], (usize, usize))> {
@@ -2506,7 +2673,7 @@ fn span_triplets(
     };
     let deviation = |first: usize, last: usize| ((t[last] - t[first]) - target).abs();
 
-    let mut seen: HashSet<(i64, i64)> = HashSet::new();
+    let mut seen: HashSet<(usize, usize)> = HashSet::new();
     for (lo, hi) in windows {
         if hi < lo + 2 {
             continue;
@@ -2579,7 +2746,7 @@ fn span_triplets(
                 });
             let Some(middle) = middle else { continue };
             let triplet = [order[first], order[middle], order[last]];
-            if seen.insert((t[first].floor() as i64, t[last].floor() as i64)) {
+            if seen.insert((nights[order[first]], nights[order[last]])) {
                 out.push((triplet, (order[lo], order[hi])));
                 if out.len() == budget {
                     return out;
@@ -3779,6 +3946,7 @@ mod tests {
         times: &[f64],
         config: &SpanSearchConfig,
     ) -> Vec<([usize; 3], (usize, usize))> {
+        let nights = observation_nights(times, None);
         let n = times.len();
         let mut order: Vec<usize> = (0..n).collect();
         order.sort_by(|&a, &b| times[a].total_cmp(&times[b]).then(a.cmp(&b)));
@@ -3839,7 +4007,7 @@ mod tests {
                     });
                 if let Some(middle) = middle {
                     let triplet = [order[first], order[middle], order[last]];
-                    if seen.insert((t[first].floor() as i64, t[last].floor() as i64)) {
+                    if seen.insert((nights[order[first]], nights[order[last]])) {
                         out.push((triplet, (order[lo], order[hi])));
                     }
                 }
@@ -3884,7 +4052,7 @@ mod tests {
             let expected = materialized_span_triplets(&times, &config);
             for budget in [0, 1, 2, 5, 17, expected.len(), expected.len() + 3] {
                 assert_eq!(
-                    span_triplets(&times, &config, budget),
+                    span_triplets(&times, &observation_nights(&times, None), &config, budget),
                     expected[..budget.min(expected.len())].to_vec(),
                     "{times:?} budget {budget}"
                 );
@@ -3898,6 +4066,132 @@ mod tests {
     }
 
     #[test]
+    fn observing_nights_follow_stations_not_utc_days() {
+        // Station A observes across 0h UTC (a European night), then the next
+        // night; station B observes during A's first night; a space
+        // telescope observes every 6 hours for two days.
+        let codes: Vec<crate::ObservatoryCode> = [
+            "A", "A", "A", "A", "B", "S", "S", "S", "S", "S", "S", "S", "S",
+        ]
+        .iter()
+        .map(|c| crate::ObservatoryCode(c.to_string()))
+        .collect();
+        let times = [
+            100.80, 100.95, 101.10, 101.80, 100.90, 100.0, 100.25, 100.5, 100.75, 101.0, 101.25,
+            101.5, 101.75,
+        ];
+        let nights = observation_nights(&times, Some(&codes));
+        assert_eq!(nights[0], nights[1]);
+        assert_eq!(
+            nights[1], nights[2],
+            "a night straddling 0h UTC is one night"
+        );
+        assert_ne!(nights[2], nights[3], "the next night is another");
+        assert_ne!(nights[4], nights[0], "another station's night is its own");
+        // Continuous coverage is cut into nights of at most 16 hours.
+        let space: Vec<usize> = nights[5..].to_vec();
+        assert_eq!(space[0], space[2]);
+        assert_ne!(space[0], space[3]);
+        assert!(space.windows(2).all(|w| w[0] <= w[1]));
+        // Without stations, every row is one station.
+        let single = observation_nights(&times[..4], None);
+        assert_eq!(single, vec![single[0], single[0], single[0], single[3]]);
+        assert_ne!(single[0], single[3]);
+    }
+
+    #[test]
+    fn gauss_geometry_rotates_frames_and_refuses_other_origins() {
+        let observed = synthetic_observations();
+        let observers = observers();
+        assert_eq!(observed.frame, Frame::Equatorial);
+        let (directions, positions) = gauss_geometry(&observed, &observers).unwrap();
+        let (sin_e, cos_e) = GAUSS_OBLIQUITY_RAD.sin_cos();
+
+        // The same observations in the ecliptic frame, the observers in the
+        // equatorial frame: the Gauss geometry is unchanged.
+        let values = observed.values.spherical().unwrap();
+        let ecliptic_values: Vec<[f64; 6]> = values
+            .iter()
+            .map(|row| {
+                let (ra, dec) = (row[1].to_radians(), row[2].to_radians());
+                let eq = [dec.cos() * ra.cos(), dec.cos() * ra.sin(), dec.sin()];
+                let ec = [
+                    eq[0],
+                    cos_e * eq[1] + sin_e * eq[2],
+                    -sin_e * eq[1] + cos_e * eq[2],
+                ];
+                [
+                    row[0],
+                    ec[1].atan2(ec[0]).to_degrees().rem_euclid(360.0),
+                    ec[2].asin().to_degrees(),
+                    row[3],
+                    row[4],
+                    row[5],
+                ]
+            })
+            .collect();
+        let ecliptic = CoordinateBatch::new(
+            CoordinateValues::Spherical(ecliptic_values),
+            Frame::Ecliptic,
+            observed.origins.clone(),
+            observed.times.clone(),
+            None,
+        )
+        .unwrap();
+        let cartesian = observers.coordinates.values.cartesian().unwrap();
+        let equatorial_observers = ObserverBatch::new(
+            observers.code.clone(),
+            CoordinateBatch::cartesian(
+                cartesian
+                    .iter()
+                    .map(|row| {
+                        [
+                            row[0],
+                            cos_e * row[1] - sin_e * row[2],
+                            sin_e * row[1] + cos_e * row[2],
+                            row[3],
+                            row[4],
+                            row[5],
+                        ]
+                    })
+                    .collect(),
+                Frame::Equatorial,
+                observers.coordinates.origins.clone(),
+                observers.coordinates.times.clone(),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let (rotated_directions, rotated_positions) =
+            gauss_geometry(&ecliptic, &equatorial_observers).unwrap();
+        for row in 0..NUM_OBS {
+            for axis in 0..2 {
+                assert!((rotated_directions[row][axis] - directions[row][axis]).abs() < 1e-10);
+            }
+            for axis in 0..3 {
+                assert!((rotated_positions[row][axis] - positions[row][axis]).abs() < 1e-14);
+            }
+        }
+
+        // Observers not centred on the Sun are refused, not used as if.
+        let geocentric = ObserverBatch::new(
+            observers.code.clone(),
+            CoordinateBatch::cartesian(
+                cartesian.to_vec(),
+                Frame::Ecliptic,
+                OriginArray::repeat(OriginId::Named("EARTH".to_string()), NUM_OBS),
+                observers.coordinates.times.clone(),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let err = gauss_geometry(&observed, &geocentric).unwrap_err();
+        assert!(err.to_string().contains("heliocentric"), "{err}");
+    }
+
+    #[test]
     fn span_triplets_prefer_the_target_span_in_the_densest_window() {
         // 3000 observations every six hours: the first triplet spans the
         // target exactly, its middle at the pair's midpoint, inside the
@@ -3905,7 +4199,8 @@ mod tests {
         let n = 3000;
         let times: Vec<f64> = (0..n).map(|k| 60_000.0 + 0.25 * k as f64).collect();
         let config = SpanSearchConfig::default();
-        let triplets = span_triplets(&times, &config, config.max_triplets);
+        let nights = observation_nights(&times, None);
+        let triplets = span_triplets(&times, &nights, &config, config.max_triplets);
         assert_eq!(triplets.len(), config.max_triplets);
         let (first, window) = triplets[0];
         assert_eq!(times[first[2]] - times[first[0]], config.target_span_days);
@@ -3917,11 +4212,8 @@ mod tests {
         let mut night_pairs = std::collections::HashSet::new();
         for (triplet, (lo, hi)) in &triplets {
             assert!(*lo <= triplet[0] && triplet[2] <= *hi);
-            // One triplet per pair of nights.
-            assert!(night_pairs.insert((
-                times[triplet[0]].floor() as i64,
-                times[triplet[2]].floor() as i64
-            )));
+            // One triplet per pair of observing nights.
+            assert!(night_pairs.insert((nights[triplet[0]], nights[triplet[2]])));
         }
     }
 

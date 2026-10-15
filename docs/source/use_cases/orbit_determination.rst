@@ -230,6 +230,13 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
 * **Ordering and determinism.** Observations are searched in a canonical
   order (epoch, station, input row); the same input gives the same orbit
   whatever its row order. A triplet never repeats an epoch.
+* **Inputs.** Ecliptic observations and equatorial observers are rotated to
+  the frames Gauss uses; observers not centred on the Sun are refused. An
+  arc shorter than ``min_arc_length`` (1 day) is not searched, and a fit
+  whose rejected observations leave a shorter arc is not accepted.
+* **Nights.** A station's observations form one night until a gap of more
+  than 8 hours (or 16 hours of continuous coverage), so nights that straddle
+  0h UTC are not split.
 * **Triplets.** Gauss truncates the f and g series, so a preliminary orbit
   degrades with the arc its triplet spans (on 2012 TF79 the full-arc reduced
   chi2 grows from about 1e4 at a 3-day span to 1e9 at 67 days). The search
@@ -251,8 +258,10 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
   arc. The search stops after 2 candidates reach the whole arc
   (``correction_settings``).
 * **Multiple roots.** Every physical root of a triplet's Gauss polynomial is
-  a candidate (Charlier: up to three); the other roots of a converged
-  candidate's triplet are corrected too.
+  a candidate (Charlier: up to three): real to a relative 1e-6, so a
+  near-double root is kept, and with every topocentric range at least
+  1e-4 au, so the spurious zero-range root is dropped. The other roots of a
+  converged candidate's triplet are corrected too.
 * **Ranking and ambiguity.** Candidates are compared on the whole arc:
   every observation's chi2 clipped at the CMC2003 rejection threshold, so a
   rejected observation still counts. The lowest score wins (ties within

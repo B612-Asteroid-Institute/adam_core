@@ -176,6 +176,17 @@ This file contains notable changes in adam-core
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
 
+- IOD audit fixes. Corrected IOD refuses an arc shorter than
+  `min_arc_length` and a whole-arc fit whose rejection leaves one. Gauss
+  takes its geometry in the frames it assumes: ecliptic observations and
+  equatorial observers are rotated, and observers not centred on the Sun
+  raise instead of being used as heliocentric. Gauss roots are real to a
+  relative 1e-6 (an absolute 1e-8 dropped near-double roots), are
+  de-duplicated, and need all three topocentric ranges to be at least
+  1e-4 au (`GAUSS_MIN_TOPOCENTRIC_RANGE_AU`; only the middle range was
+  checked, and only for sign). Observing nights are per station, split by
+  gaps over 8 hours or 16 hours of coverage (`observation_nights`), not by
+  UTC calendar day, for the span search and the corrected stages' gap jumps.
 - Corrected IOD no longer accepts a wrong Gauss root that fits by rejecting
   much of the arc (2002 RV112: 22 of 44 observations rejected, reduced chi2
   1.92 on the rest, beating the right root's 2.15 on all 44). The whole-arc
