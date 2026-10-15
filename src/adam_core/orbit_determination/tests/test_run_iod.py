@@ -289,8 +289,9 @@ def test_corrected_acceptance_is_invariant_to_observation_order(
         two_body_arc.take(permutation), TwoBodyPropagator(), min_obs=6
     )
     assert report.accepted == shuffled_report.accepted
+    # Summation order differs across platforms (1.7e-12 au on Linux CI).
     npt.assert_allclose(
-        shuffled.coordinates.values, orbit.coordinates.values, rtol=0, atol=1e-12
+        shuffled.coordinates.values, orbit.coordinates.values, rtol=0, atol=1e-10
     )
 
 

@@ -120,7 +120,14 @@ Current Migrated APIs
   - Backend default: legacy path, with Rust path held in ``dual`` mode pending +20% p50/p95 perf gate.
   - Error behavior: velocity-method validation raises ``ValueError`` for unsupported solver names.
 
-- ``orbit_determination.fit_least_squares`` (whitened residuals, analytic Jacobian, robust loss)
+- ``orbit_determination.fit_least_squares`` (whitened residuals, Jacobian that follows the dynamics, robust loss)
+  - Derivatives: ``jacobian="auto"`` (default) resolves to ``"analytic"`` for
+    declared two-body dynamics, ``"propagator"`` when the backend supplies
+    state-transition matrices (``Propagator::propagate_stm``), and
+    ``"central"`` otherwise. The propagator route takes optimizer steps with
+    the two-body Jacobian, then converges and evaluates the covariance with
+    the backend's STMs, so the reported solution and covariance carry the
+    selected dynamics' exact derivatives.
   - Boundary: nested Arrow IPC of the orbit, observed coordinates and
     observers plus a ``fit_settings`` dict in; a dict of scalars, lists and
     NumPy arrays out. The complete work unit (solver, Jacobian, loss,

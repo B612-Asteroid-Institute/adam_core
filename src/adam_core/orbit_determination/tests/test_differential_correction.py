@@ -656,10 +656,15 @@ def _assist_propagator():
     pytest.importorskip("adam_assist")
     from adam_assist import ASSISTPropagator
 
+    from .._native_dispatch import native_work_unit
+
     propagator = ASSISTPropagator()
-    if not hasattr(propagator, "fit_least_squares_evaluated"):
+    # Dispatch follows the declared backend (NativeBackend), not method
+    # presence: only an adam-assist that declares this work unit routes here.
+    if native_work_unit(propagator, "fit_least_squares_evaluated") is None:
         pytest.skip(
-            "installed adam_assist lacks the fused fit_least_squares_evaluated work unit"
+            "installed adam_assist does not declare the fused "
+            "fit_least_squares_evaluated work unit"
         )
     return propagator
 

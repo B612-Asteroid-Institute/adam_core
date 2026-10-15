@@ -197,8 +197,13 @@ This file contains notable changes in adam-core
   dynamics by default (explicit `"analytic"` still warns). `TwoBodyPropagator`
   supplies STMs by automatic differentiation (equal to the analytic
   Jacobian), and the external C ABI carries an optional `propagate_stm`, so
-  native backends (ASSIST's variational equations) give exact derivatives at
-  about one propagation per iteration instead of twelve.
+  native backends (ASSIST's variational equations) give exact derivatives.
+  Because a variational propagation costs far more than a plain one, the
+  propagator route steps with the two-body Jacobian and then converges and
+  forms the covariance with the backend's STMs (2025 N1, 4225 observations
+  through ASSIST: 32 s, against 885 s for STMs at every step and 18 s for
+  the two-body Jacobian alone; fits agree to metres on multi-opposition
+  arcs).
 - External native propagators (C ABI v1, `propagation::external`): a
   backend compiled in another extension (adam-assist's ASSIST) exposes its
   propagation as an `ExternalPropagatorV1` table in a capsule named
