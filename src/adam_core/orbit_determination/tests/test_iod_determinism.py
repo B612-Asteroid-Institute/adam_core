@@ -197,7 +197,8 @@ def test_run_iod_reports_every_scored_candidate(two_body_arc) -> None:  # noqa: 
         assert len(set(candidate.triplet)) == 3
         assert len({times[row] for row in candidate.triplet}) == 3
         assert 0 <= candidate.root_index < candidate.root_count
-        assert candidate.velocity_method == "gibbs"
+        # The default "auto" records the method each root used.
+        assert candidate.velocity_method in ("gibbs", "herrick+gibbs")
         assert candidate.postfit_reduced_chi2 is None and not candidate.converged
         if not candidate.accepted:
             assert candidate.removed == ()

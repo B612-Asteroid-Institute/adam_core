@@ -61,9 +61,9 @@
 //!   30 d, whole arc) and in each walks (first, last) pairs by distance of
 //!   their span from 6 days, one triplet per pair and per pair of nights,
 //!   lazily, up to 32 triplets.
-//! * **Velocity** ([`VelocityMethod`]). Gibbs by default; `Auto` uses
+//! * **Velocity** ([`VelocityMethod`]). `Auto` by default:
 //!   Herrick-Gibbs when consecutive position vectors are within 5 degrees
-//!   (Vallado 2013, sec. 7.5.2).
+//!   (Vallado 2013, sec. 7.5.2), Gibbs otherwise.
 //! * **Multiple roots.** Every physical root of a triplet's degree-8
 //!   polynomial is a candidate (up to three genuine solutions: Charlier;
 //!   Gronchi 2009): real to a relative 1e-6 (so a near-double root is kept),
@@ -1452,7 +1452,10 @@ impl Default for IodConfig {
             mu: IOD_DEFAULT_MU,
             speed_of_light: IOD_DEFAULT_SPEED_OF_LIGHT,
             max_triplets: None,
-            velocity_method: VelocityMethod::Gibbs,
+            // Herrick-Gibbs where the positions are within 5 degrees
+            // (Vallado 2013, sec. 7.5.2), Gibbs otherwise; Herrick-Gibbs beat
+            // Gibbs at every span of the 2026-07-28 sweep, often 100x in chi2.
+            velocity_method: VelocityMethod::Auto,
             spans: SpanSearchConfig::default(),
             acceptance: IodAcceptance::Corrected,
             correction: CorrectionConfig::default(),

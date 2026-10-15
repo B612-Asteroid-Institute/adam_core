@@ -224,18 +224,33 @@ def iod_worker(
     observations: OrbitDeterminationObservations,
     linkage_members: FittedOrbitMembers,
     propagator: Type[Propagator],
-    min_obs: int = 6,
-    min_arc_length: float = 1.0,
-    contamination_percentage: float = 0.0,
-    rchi2_threshold: float = 200,
+    min_obs: int = IOD_DEFAULTS["min_obs"],
+    min_arc_length: float = IOD_DEFAULTS["min_arc_length"],
+    contamination_percentage: float = IOD_DEFAULTS["contamination_percentage"],
+    rchi2_threshold: float = IOD_DEFAULTS["rchi2_threshold"],
     observation_selection_method: Literal[
         "combinations", "first+middle+last", "thirds", "spans"
-    ] = "combinations",
+    ] = IOD_DEFAULTS["observation_selection_method"],
     linkage_id_col: str = "cluster_id",
     iterate: bool = False,
-    light_time: bool = True,
+    light_time: bool = IOD_DEFAULTS["light_time"],
     propagator_kwargs: dict = {},
+    velocity_method: Literal["gauss", "gibbs", "herrick+gibbs", "auto"] = IOD_DEFAULTS[
+        "velocity_method"
+    ],
+    acceptance: Literal["corrected", "prefit"] = IOD_DEFAULTS["acceptance"],
+    span_settings: Optional[dict] = None,
+    correction_settings: Optional[dict] = None,
+    fit_settings: Optional[dict] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
+    """`run_iod` on each linkage in ``linkage_ids`` (one propagator
+    instance for the chunk); each accepted orbit takes its linkage id as
+    ``orbit_id``. ``iterate`` is accepted for compatibility and ignored."""
+    del iterate
+    propagator_instance = propagator(**propagator_kwargs)
+    # Arrow arrays and chunks yield scalars; the lookups below key on the
+    # plain values.
+    linkage_ids = [lid.as_py() if hasattr(lid, "as_py") else lid for lid in linkage_ids]
 
     # Pre-compute linkage_id -> linkage_member rows and obs_id -> observation row
     # so each per-linkage lookup is O(1) rather than O(N_members)/O(N_observations).
@@ -272,23 +287,30 @@ def iod_worker(
             ]
         )
 
-        iod_orbit, iod_orbit_orbit_members = iod(
+        iod_orbit, iod_orbit_orbit_members, _report = run_iod(
             observations_linkage,
+            propagator_instance,
             min_obs=min_obs,
             min_arc_length=min_arc_length,
             rchi2_threshold=rchi2_threshold,
             contamination_percentage=contamination_percentage,
             observation_selection_method=observation_selection_method,
-            iterate=iterate,
             light_time=light_time,
-            propagator=propagator,
-            propagator_kwargs=propagator_kwargs,
+            velocity_method=velocity_method,
+            acceptance=acceptance,
+            span_settings=span_settings,
+            correction_settings=correction_settings,
+            fit_settings=fit_settings,
         )
         if len(iod_orbit) > 0:
-            iod_orbit = iod_orbit.set_column("orbit_id", pa.array([linkage_id]))
+            iod_orbit = iod_orbit.set_column(
+                "orbit_id", pa.array([linkage_id], type=pa.large_string())
+            )
             iod_orbit_orbit_members = iod_orbit_orbit_members.set_column(
                 "orbit_id",
-                pa.array([linkage_id for i in range(len(iod_orbit_orbit_members))]),
+                pa.array(
+                    [linkage_id] * len(iod_orbit_orbit_members), type=pa.large_string()
+                ),
             )
 
         time_end = time.time()
@@ -784,23 +806,39 @@ def initial_orbit_determination(
     observations: OrbitDeterminationObservations,
     linkage_members: FittedOrbitMembers,
     propagator: Type[Propagator],
-    min_obs: int = 6,
-    min_arc_length: float = 1.0,
-    contamination_percentage: float = 20.0,
-    rchi2_threshold: float = 10**3,
+    min_obs: int = IOD_DEFAULTS["min_obs"],
+    min_arc_length: float = IOD_DEFAULTS["min_arc_length"],
+    contamination_percentage: float = IOD_DEFAULTS["contamination_percentage"],
+    rchi2_threshold: float = IOD_DEFAULTS["rchi2_threshold"],
     observation_selection_method: Literal[
         "combinations", "first+middle+last", "thirds", "spans"
-    ] = "combinations",
+    ] = IOD_DEFAULTS["observation_selection_method"],
     iterate: bool = False,
-    light_time: bool = True,
+    light_time: bool = IOD_DEFAULTS["light_time"],
     linkage_id_col: str = "cluster_id",
     propagator_kwargs: dict = {},
     chunk_size: int = 1,
     max_processes: Optional[int] = 1,
     observatory_bias_model: Optional[ObservationUncertaintyModel] = None,
+    velocity_method: Literal["gauss", "gibbs", "herrick+gibbs", "auto"] = IOD_DEFAULTS[
+        "velocity_method"
+    ],
+    acceptance: Literal["corrected", "prefit"] = IOD_DEFAULTS["acceptance"],
+    span_settings: Optional[dict] = None,
+    correction_settings: Optional[dict] = None,
+    fit_settings: Optional[dict] = None,
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
     Run initial orbit determination on linkages found in observations.
+
+    Each linkage runs the `run_iod` stage with the same policy and defaults
+    (``IOD_DEFAULTS``: span-bounded triplets, corrected acceptance); see
+    `run_iod` for the settings. The legacy linkage behavior (first raw Gauss
+    orbit under the threshold) is ``acceptance="prefit",
+    observation_selection_method="combinations", rchi2_threshold=1000``; with
+    ``acceptance="prefit"`` a propagator's compiled
+    ``initial_orbit_determination`` work unit runs every linkage in one
+    crossing.
 
     If `observatory_bias_model` is provided it is applied to the observations
     once at this entry point (e.g. inflating per-station sigmas from an
@@ -817,7 +855,8 @@ def initial_orbit_determination(
     # one crossing; chunk_size is consumed by Rust and max_processes is kept
     # only for signature compatibility (native execution replaces Ray).
     native_prop = propagator(**propagator_kwargs)
-    if hasattr(native_prop, "initial_orbit_determination"):
+    # The compiled batch work unit implements the legacy prefit policy only.
+    if acceptance == "prefit" and hasattr(native_prop, "initial_orbit_determination"):
         if len(observations) == 0 or len(linkage_members) == 0:
             return FittedOrbits.empty(), FittedOrbitMembers.empty()
         linkage_ids = linkage_members.column(linkage_id_col).unique().to_pylist()
@@ -861,6 +900,11 @@ def initial_orbit_determination(
                 linkage_id_col=linkage_id_col,
                 propagator=propagator,
                 propagator_kwargs=propagator_kwargs,
+                velocity_method=velocity_method,
+                acceptance=acceptance,
+                span_settings=span_settings,
+                correction_settings=correction_settings,
+                fit_settings=fit_settings,
             )
             iod_orbits_chunks.append(iod_orbits_chunk)
             iod_orbit_members_chunks.append(iod_orbit_members_chunk)

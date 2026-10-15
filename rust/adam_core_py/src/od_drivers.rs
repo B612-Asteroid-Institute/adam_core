@@ -201,6 +201,7 @@ fn legacy_iod_defaults() -> IodConfig {
     IodConfig {
         observation_selection_method: ObservationSelectionMethod::Combinations,
         acceptance: IodAcceptance::Prefit,
+        velocity_method: VelocityMethod::Gibbs,
         ..IodConfig::default()
     }
 }

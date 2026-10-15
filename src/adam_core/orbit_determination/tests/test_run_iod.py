@@ -38,6 +38,8 @@ def test_iod_is_the_accepted_orbit_of_run_iod(two_body_arc) -> None:  # noqa: F8
         rchi2_threshold=1e4,
         observation_selection_method="combinations",
         acceptance="prefit",
+        # `iod` keeps the legacy Gibbs velocity; `run_iod` defaults to "auto".
+        velocity_method="gibbs",
     )
     assert isinstance(report, IodReport) and report.found
     npt.assert_array_equal(legacy_orbit.coordinates.values, orbit.coordinates.values)
@@ -344,3 +346,50 @@ def test_signature_defaults_are_the_rust_defaults(two_body_arc) -> None:  # noqa
         correction_settings=correction_settings,
     )
     assert explicit == implicit
+
+
+def test_initial_orbit_determination_runs_run_iod_per_linkage(
+    two_body_arc,  # noqa: F811
+) -> None:
+    """The linkage batch is `run_iod` per linkage with the same defaults,
+    each orbit labelled with its linkage id; the legacy arguments give the
+    legacy `iod()` orbit."""
+    import quivr as qv
+
+    from ..iod import initial_orbit_determination
+
+    class Linkages(qv.Table):
+        cluster_id = qv.LargeStringColumn()
+        obs_id = qv.LargeStringColumn()
+
+    obs_ids = two_body_arc.id.to_pylist()
+    members = Linkages.from_kwargs(cluster_id=["L1"] * len(obs_ids), obs_id=obs_ids)
+
+    orbits, orbit_members = initial_orbit_determination(
+        two_body_arc, members, propagator=TwoBodyPropagator
+    )
+    expected, _, report = run_iod(two_body_arc, TwoBodyPropagator())
+    assert report.found and report.accepted_candidate.converged
+    assert orbits.orbit_id.to_pylist() == ["L1"]
+    assert set(orbit_members.orbit_id.to_pylist()) == {"L1"}
+    npt.assert_allclose(
+        orbits.coordinates.values, expected.coordinates.values, rtol=0, atol=1e-12
+    )
+
+    legacy_args = dict(
+        contamination_percentage=0.0,
+        rchi2_threshold=1e4,
+        observation_selection_method="combinations",
+    )
+    legacy, _ = initial_orbit_determination(
+        two_body_arc,
+        members,
+        propagator=TwoBodyPropagator,
+        acceptance="prefit",
+        velocity_method="gibbs",
+        **legacy_args,
+    )
+    reference, _ = iod(two_body_arc, TwoBodyPropagator, **legacy_args)
+    npt.assert_allclose(
+        legacy.coordinates.values, reference.coordinates.values, rtol=0, atol=1e-12
+    )

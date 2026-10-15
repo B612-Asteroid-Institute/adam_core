@@ -4580,8 +4580,10 @@ mod tests {
             );
         }
         let rchi2 = accepted.postfit_reduced_chi2.unwrap();
+        // Ranked on the whole-arc score (ties within a relative 1e-6).
+        let score = accepted.whole_arc_score.unwrap();
         for candidate in result.candidates.iter().filter(|c| c.converged) {
-            assert!(candidate.postfit_reduced_chi2.unwrap() >= rchi2);
+            assert!(candidate.whole_arc_score.unwrap() >= score * (1.0 - 1e-6));
         }
         // The accepted orbit is the true one (within the scatter of six
         // observations), not the root-order first.

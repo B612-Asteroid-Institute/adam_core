@@ -176,12 +176,14 @@ Current Migrated APIs
     loop followed by the refinement loop) and ``run_od_barycentric`` /
     ``run_od_2body_ipc`` (observation models in order, full OD on the used
     observations, original / used astrometry snapshots for the members).
-  - Dispatch: ``iterative_fit``, ``cmc2003_fit_detailed`` and ``iod`` route
-    to a propagator's ``iterative_fit`` / ``cmc2003_fit`` /
-    ``initial_orbit_determination`` work units when it has them and otherwise
+  - Dispatch: ``iterative_fit``, ``cmc2003_fit_detailed`` and ``run_iod``
+    (and ``iod``, which wraps it) route to a propagator's ``iterative_fit`` /
+    ``cmc2003_fit`` / ``run_iod`` work units when it has them and otherwise
     run the same Rust loop through the callback route
-    (``iterative_fit_ipc`` / ``cmc2003_fit_ipc`` / ``iod_fit_ipc`` with the
-    propagator object); ``NativeOrbitFitter.full_od`` routes to ``full_od``
+    (``iterative_fit_ipc`` / ``cmc2003_fit_ipc`` / ``run_iod_ipc`` with the
+    propagator object); ``initial_orbit_determination`` runs ``run_iod`` per
+    linkage, and a propagator's batch ``initial_orbit_determination`` work
+    unit only with ``acceptance="prefit"`` (the legacy policy it implements); ``NativeOrbitFitter.full_od`` routes to ``full_od``
     when its ``rejection_kwargs`` are all fit or loop settings and otherwise
     chains ``initial_fit`` and ``refine_fit`` (two native crossings);
     ``run_od`` routes to ``run_od`` for a ``NativeOrbitFitter`` when every

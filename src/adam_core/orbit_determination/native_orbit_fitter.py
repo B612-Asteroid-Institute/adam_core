@@ -114,7 +114,7 @@ class NativeOrbitFitter(OrbitFitter):
     velocity_method : {"gauss", "gibbs", "herrick+gibbs", "auto"}, optional
         Velocity of the Gauss IOD candidates; ``"auto"`` chooses
         Herrick-Gibbs or Gibbs per root by the separation of its position
-        vectors. Default ``"gibbs"``.
+        vectors. Default ``"auto"``.
     iod_acceptance : {"corrected", "prefit"}, optional
         ``"corrected"`` (default): each Gauss orbit seeds staged differential
         corrections from its triplet's span to the whole arc, and the

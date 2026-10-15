@@ -176,6 +176,21 @@ This file contains notable changes in adam-core
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
 
+- `initial_orbit_determination` (the linkage batch) runs `run_iod` on each
+  linkage with the same policy and `IOD_DEFAULTS` as `run_iod` and
+  `NativeOrbitFitter` (span search, corrected acceptance, `rchi2_threshold`
+  200), so the IOD fixes reach linkage pipelines; it gains
+  `velocity_method`, `acceptance`, `span_settings`, `correction_settings` and
+  `fit_settings`. The legacy behavior is `acceptance="prefit",
+  observation_selection_method="combinations", rchi2_threshold=1000`, and a
+  propagator's compiled batch `initial_orbit_determination` work unit now
+  runs only for `acceptance="prefit"`. `iod_worker` takes the same settings
+  and no longer drops every linkage when given Arrow linkage ids.
+- The default Gauss velocity method is `"auto"` (Herrick-Gibbs when the
+  three positions are within 5 degrees, Vallado 2013; Gibbs otherwise)
+  instead of `"gibbs"`, for `run_iod`, `NativeOrbitFitter`, `run_od` and
+  `initial_orbit_determination`; the legacy `iod()` and `iod_fit_ipc` keep
+  Gibbs.
 - Corrected IOD orders its corrections by each raw Gauss orbit's reduced
   chi2 on the observations of its first stage (`CorrectionConfig.prefit_scope
   = PrefitScope::Local`; Python `correction_settings={"prefit_scope": ...}`)

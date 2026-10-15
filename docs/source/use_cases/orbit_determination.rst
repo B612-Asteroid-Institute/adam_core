@@ -244,7 +244,7 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
   days and the whole arc, and in each prefers triplets spanning about 6
   days, at most one per pair of nights, 32 triplets in all
   (``span_settings``).
-* **Velocity.** Gibbs by default; ``velocity_method="auto"`` switches to
+* **Velocity.** ``velocity_method="auto"`` by default, which switches to
   Herrick-Gibbs when consecutive positions are within 5 degrees (Vallado
   2013, sec. 7.5.2).
 * **Correction.** Each raw Gauss orbit is scored on the observations near
