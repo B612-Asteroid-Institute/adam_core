@@ -6,6 +6,7 @@ import numpy.typing as npt
 import pyarrow as pa
 import pyarrow.compute as pc
 
+from .. import _rust_native
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.covariances import CoordinateCovariances
 from ..coordinates.origin import Origin, OriginCodes
@@ -32,8 +33,9 @@ LossType = Literal["linear", "huber"]
 # Huber transition point in units of whitened (1-sigma) residual components:
 # residuals within +/- f_scale are treated quadratically, larger residuals
 # linearly. 1.345 is the classical constant giving 95% asymptotic efficiency
-# for Gaussian errors (Huber 1981; Huber & Ronchetti 2009, sec. 4.5).
-HUBER_F_SCALE_DEFAULT = 1.345
+# for Gaussian errors (Huber 1981; Huber & Ronchetti 2009, sec. 4.5); the
+# value is Rust's ``HUBER_F_SCALE_DEFAULT``.
+HUBER_F_SCALE_DEFAULT = _rust_native.iod_defaults()["huber_f_scale"]
 
 # Fused native fitter kwargs (bead personal-cmy.7 / personal-dqk): the Rust
 # Gauss-Newton work units accept only these tuning parameters.

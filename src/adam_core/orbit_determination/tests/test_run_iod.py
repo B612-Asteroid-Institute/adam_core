@@ -287,3 +287,59 @@ def test_corrected_acceptance_is_invariant_to_observation_order(
     npt.assert_allclose(
         shuffled.coordinates.values, orbit.coordinates.values, rtol=0, atol=1e-12
     )
+
+
+def test_signature_defaults_are_the_rust_defaults(two_body_arc) -> None:  # noqa: F811
+    """`IOD_DEFAULTS` is Rust's ``IodConfig::default()``: the signature
+    defaults of `run_iod` and `NativeOrbitFitter` are its values, and passing
+    every span / correction key explicitly reproduces the default search."""
+    import inspect
+
+    from adam_core.orbit_determination import IOD_DEFAULTS, NativeOrbitFitter
+
+    run_iod_params = inspect.signature(run_iod).parameters
+    for key in (
+        "min_obs",
+        "min_arc_length",
+        "contamination_percentage",
+        "rchi2_threshold",
+        "observation_selection_method",
+        "light_time",
+        "max_triplets",
+        "velocity_method",
+        "acceptance",
+    ):
+        assert run_iod_params[key].default == IOD_DEFAULTS[key], key
+    fitter_params = inspect.signature(NativeOrbitFitter).parameters
+    for fitter_key, key in (
+        ("min_obs", "min_obs"),
+        ("min_arc_length", "min_arc_length"),
+        ("contamination_percentage", "contamination_percentage"),
+        ("iod_rchi2_threshold", "rchi2_threshold"),
+        ("observation_selection_method", "observation_selection_method"),
+        ("velocity_method", "velocity_method"),
+        ("iod_acceptance", "acceptance"),
+        ("f_scale", "huber_f_scale"),
+    ):
+        assert fitter_params[fitter_key].default == IOD_DEFAULTS[key], fitter_key
+
+    span_settings = {k: v for k, v in IOD_DEFAULTS.items() if k.startswith("span_")}
+    correction_settings = {
+        k: IOD_DEFAULTS[k]
+        for k in (
+            "max_corrections",
+            "max_converged",
+            "correction_growth",
+            "min_stage_obs",
+            "max_stages",
+            "stage_loss",
+        )
+    }
+    _, _, implicit = run_iod(two_body_arc, TwoBodyPropagator())
+    _, _, explicit = run_iod(
+        two_body_arc,
+        TwoBodyPropagator(),
+        span_settings=span_settings,
+        correction_settings=correction_settings,
+    )
+    assert explicit == implicit

@@ -28,6 +28,62 @@
 //! scipy/numpy paths to solver round-off, not bit-for-bit. Outlier ties in
 //! `od_fit_barycentric` are broken by observation index (stable sort);
 //! numpy's introsort tie order is unspecified.
+//!
+//! # IOD policy
+//!
+//! The default IOD stage ([`IodConfig::default`], `run_iod` and
+//! `NativeOrbitFitter` in Python) follows the practice of OrbFit, Find_Orb
+//! and JPL: a Gauss preliminary orbit is a seed for differential
+//! correction, not the answer (Milani & Gronchi 2010, ch. 7–9). Every
+//! number below is a `Default` on its config type, which documents its
+//! source; the Python signature defaults are read from these (`IOD_DEFAULTS`).
+//!
+//! * **Ordering.** Observations are searched in a canonical order (epoch,
+//!   then station code, then input row), whatever order the caller supplies;
+//!   every output array keeps the caller's order. Identical inputs give
+//!   identical results.
+//! * **Duplicate epochs.** A triplet never holds two observations at the
+//!   same epoch (Gauss needs three distinct times).
+//! * **Triplets** ([`SpanSearchConfig`]). Gauss truncates the f and g
+//!   series, so a preliminary orbit degrades with the fraction of the orbit
+//!   its triplet spans (Milani & Gronchi 2010, sec. 9.1; full-arc reduced
+//!   chi2 ~1e4 at a 3-day span against ~1e9 at 67 days on 2012 TF79). The
+//!   search visits windows (densest 10 d, densest 30 d, last 30 d, first
+//!   30 d, whole arc) and in each walks (first, last) pairs by distance of
+//!   their span from 6 days, one triplet per pair and per pair of nights,
+//!   lazily, up to 32 triplets.
+//! * **Velocity** ([`VelocityMethod`]). Gibbs by default; `Auto` uses
+//!   Herrick-Gibbs when consecutive position vectors are within 5 degrees
+//!   (Vallado 2013, sec. 7.5.2).
+//! * **Multiple roots.** Every physical root of a triplet's degree-8
+//!   polynomial is a candidate (up to three genuine solutions: Charlier;
+//!   Gronchi 2009). When one converges, its sibling roots are corrected too.
+//! * **Acceptance** ([`IodAcceptance::Corrected`], [`CorrectionConfig`]).
+//!   Candidates are corrected in increasing prefit reduced chi2, at most 8,
+//!   until 2 reach the whole arc. Each is corrected in stages from its
+//!   triplet's span (at least 6 observations), growing the span fourfold or
+//!   jumping an apparition gap to the nearest night, each stage within
+//!   `rchi2_threshold` (200, the legacy IOD gate and the ladder's first).
+//!   Stages before the whole arc reject nothing
+//!   and down-weight with Huber's loss (gated on the robust cost); the
+//!   whole-arc stage is linear, with CMC2003 rejection (Carpino, Milani &
+//!   Chesley 2003) when above the threshold.
+//! * **Ranking.** Lowest whole-arc reduced chi2 (weighted RMS); values
+//!   within a relative 1e-6 tie and go to the lowest candidate index. A
+//!   converged solution outside the accepted one's 3-sigma region yet within
+//!   the same chi2 margin (6-dof 99.73 % quantile, 20.06) is reported in
+//!   `IodResult::ambiguous_with`.
+//! * **Continuation and failure.** A candidate whose prediction fails is
+//!   counted and skipped; caller errors propagate. When nothing is accepted
+//!   the result says why (`not_found_reason`), naming the last stall.
+//! * **Evidence.** On the first solutions of 126 walk-forward objects
+//!   (ASSIST, MPC observations, 2026-10-14) this policy seeded 116 of 122
+//!   against 16 for the legacy `combinations` + prefit gate and 114 for the
+//!   study's seeding ladder, with the ladder's final reduced chi2 (median
+//!   ratio 1.000), median 1.9 s per object; single-object reruns since
+//!   recover 433 Eros (Huber stages) and 3200 Phaethon (central-difference
+//!   continuation, 1,160 s). The legacy policy stays selectable
+//!   (`observation_selection_method="combinations"`, `acceptance="prefit"`).
 
 use super::ephemeris::{generate_ephemeris_barycentric, EphemerisOptions};
 use super::{PropagationError, PropagationResultValue, Propagator};
@@ -1134,6 +1190,15 @@ impl ObservationSelectionMethod {
             )),
         }
     }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Combinations => "combinations",
+            Self::FirstMiddleLast => "first+middle+last",
+            Self::Thirds => "thirds",
+            Self::Spans => "spans",
+        }
+    }
 }
 
 /// Heliocentric gravitational parameter (au³/day²) of [`IodConfig::default`]:
@@ -1158,8 +1223,8 @@ pub const IOD_DEFAULT_SPEED_OF_LIGHT: f64 = 173.144_632_674_240_34;
 /// seeding windows of the 2026-10-12 walk-forward), and within each window
 /// walks (first, last) pairs by distance of their span from
 /// `target_span_days`, one triplet per pair with the middle observation
-/// nearest the pair's midpoint. The values are provisional until bead
-/// a6w.9 fixes them on the validation set.
+/// nearest the pair's midpoint. Validated on the walk-forward first
+/// solutions (see the module's IOD policy).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct SpanSearchConfig {
     /// Preferred triplet span (days): the middle of the 3 / 6 / 12-day
@@ -1237,21 +1302,31 @@ impl IodAcceptance {
 /// predict well; rejection belongs to the refinement of the accepted
 /// orbit. The partial stages down-weight instead (`stage_loss`), as
 /// OrbFit, JPL and Find_Orb weight or reject inside every correction.
-/// Values are provisional until bead a6w.9.
+/// Validated on the walk-forward first solutions (see the module's IOD
+/// policy).
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CorrectionConfig {
-    /// Candidates corrected at most, in increasing prefit reduced chi2.
+    /// Candidates corrected at most, in increasing prefit reduced chi2. 8
+    /// (an engineering bound, validated on the walk-forward first
+    /// solutions): the order of the study ladder's seed attempts (four
+    /// windows x two selections) and a quarter of the 32-triplet budget,
+    /// which bounds the cost of an arc that cannot be seeded.
     pub max_corrections: usize,
     /// The search stops once this many candidates converged on the whole
-    /// arc (more than one guards against a wrong-basin first success).
+    /// arc (2: more than one guards against a wrong-basin first success,
+    /// whose sibling roots are corrected too; the ladder stopped at one).
     pub max_converged: usize,
-    /// Each stage spans `growth` times the previous span (the walk-forward
-    /// expansion factor).
+    /// Each stage spans `growth` times the previous span (4: the
+    /// walk-forward `_arc_expand` factor that seeded 98 of the 100 first
+    /// solutions the legacy gate missed).
     pub growth: f64,
     /// The first stage holds at least this many observations (grown from
-    /// the triplet's span until it does).
+    /// the triplet's span until it does): 6, the IOD `min_obs` and the
+    /// ladder's window minimum (12 coordinates for 6 parameters).
     pub min_stage_obs: usize,
-    /// Stages per candidate at most before it is abandoned.
+    /// Stages per candidate at most before it is abandoned (40: the
+    /// walk-forward `_arc_expand` bound; fourfold growth covers a 60-year
+    /// arc from one night in about 8 stages, each gap jump adds one).
     pub max_stages: usize,
     /// Loss of the stages before the whole arc. `Huber` (the fit's
     /// `f_scale`) bounds the pull of observations a partial orbit predicts

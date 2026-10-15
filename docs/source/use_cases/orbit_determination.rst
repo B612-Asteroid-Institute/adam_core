@@ -194,9 +194,11 @@ model list built with your own tables needs no package.
      - ``fit_least_squares()`` (``jacobian="analytic"``,
        ``validate_covariance=True``, ``loss="linear"``)
    * - IOD
-     - Gauss on every observation triplet, accepted below reduced chi2 200;
-       at least 6 observations over 1 day
-     - ``NativeOrbitFitter()`` (``observation_selection_method="combinations"``,
+     - Gauss on span-bounded triplets (about 6 days), each orbit a seed for
+       staged differential corrections to the whole arc; at least 6
+       observations over 1 day. See *The IOD policy* below.
+     - ``NativeOrbitFitter()`` / ``run_iod()``
+       (``observation_selection_method="spans"``, ``iod_acceptance="corrected"``,
        ``iod_rchi2_threshold=200``, ``min_obs=6``, ``min_arc_length=1``)
    * - Provenance
      - ``FittedOrbitMembers`` record original vs used astrometry, ``astcat``
@@ -214,6 +216,55 @@ pre-2026-09 loop). The lower-level entry points (``initial_orbit_determination``
 ``observatory_bias_model`` that defaults to None: they are building blocks,
 not the shipped pipeline, and work without the data packages. The same notes
 are in the ``run_od`` docstring.
+
+The IOD policy
+~~~~~~~~~~~~~~
+
+A Gauss preliminary orbit is a seed for differential correction, not the
+answer (Milani & Gronchi 2010), as in OrbFit, Find_Orb and JPL's pipeline.
+Every number is a Rust ``Default`` that documents its source; Python reads
+them from ``IOD_DEFAULTS`` (``from adam_core.orbit_determination import
+IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
+``NativeOrbitFitter`` cannot drift from Rust.
+
+* **Ordering and determinism.** Observations are searched in a canonical
+  order (epoch, station, input row); the same input gives the same orbit
+  whatever its row order. A triplet never repeats an epoch.
+* **Triplets.** Gauss truncates the f and g series, so a preliminary orbit
+  degrades with the arc its triplet spans (on 2012 TF79 the full-arc reduced
+  chi2 grows from about 1e4 at a 3-day span to 1e9 at 67 days). The search
+  visits the densest 10 days, the densest 30 days, the last and first 30
+  days and the whole arc, and in each prefers triplets spanning about 6
+  days, at most one per pair of nights, 32 triplets in all
+  (``span_settings``).
+* **Velocity.** Gibbs by default; ``velocity_method="auto"`` switches to
+  Herrick-Gibbs when consecutive positions are within 5 degrees (Vallado
+  2013, sec. 7.5.2).
+* **Correction.** In increasing prefit reduced chi2, up to 8 candidates are
+  corrected in stages: the triplet's span (at least 6 observations), then
+  spans grown fourfold (an apparition gap jumps to the nearest night), each
+  stage within ``rchi2_threshold``. Stages before the whole arc reject
+  nothing and down-weight with Huber's loss (``correction_settings=
+  {"stage_loss": "linear"}`` turns that off); the whole-arc stage is a plain
+  fit with Carpino, Milani & Chesley (2003) rejection when above the
+  threshold. The search stops after 2 candidates reach the whole arc
+  (``correction_settings``).
+* **Multiple roots.** Every physical root of a triplet's Gauss polynomial is
+  a candidate (Charlier: up to three); the other roots of a converged
+  candidate's triplet are corrected too.
+* **Ranking and ambiguity.** The lowest whole-arc reduced chi2 wins (ties
+  within 1e-6 go to the earliest candidate). ``IodReport.ambiguous_with``
+  lists converged solutions outside the accepted orbit's 3-sigma region
+  whose chi2 is within the same margin (Gronchi 2009).
+* **Failure.** A candidate whose prediction fails is skipped and counted;
+  when nothing is accepted, ``IodReport.not_found_reason`` says why.
+* **Evidence.** On the first solutions of 126 walk-forward objects
+  (ASSIST, MPC observations) the policy seeded 116 of 122, against 16 for
+  the legacy ``"combinations"`` search with the prefit gate and 114 for the
+  study's seeding ladder, at the ladder's final reduced chi2; single-object
+  reruns since recover 433 Eros and 3200 Phaethon. The legacy
+  policy stays selectable (``observation_selection_method="combinations"``,
+  ``acceptance="prefit"``); ``iod()`` keeps it.
 
 The pieces, one by one
 ~~~~~~~~~~~~~~~~~~~~~~

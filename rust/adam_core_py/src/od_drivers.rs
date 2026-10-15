@@ -40,7 +40,7 @@ use adam_core_rs_coords::{
     ObserverBatch as DataObserverBatch, OrbitBatch as DataOrbitBatch, TimeScale,
     TryFromNestedRecordBatch, TwoBodyModelConfig, CMC2003_APPARITION_GAP_DAYS, CMC2003_CHI2_FRAC,
     CMC2003_CHI2_RECOVER, CMC2003_CHI2_REJECT, CMC2003_MAX_ITERATIONS,
-    CMC2003_MAX_REJECTED_FRACTION, CMC2003_PSD_FLOOR_FRAC,
+    CMC2003_MAX_REJECTED_FRACTION, CMC2003_PSD_FLOOR_FRAC, HUBER_F_SCALE_DEFAULT,
 };
 use numpy::{IntoPyArray, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::exceptions::PyValueError;
@@ -202,6 +202,45 @@ fn legacy_iod_defaults() -> IodConfig {
         acceptance: IodAcceptance::Prefit,
         ..IodConfig::default()
     }
+}
+
+/// `IodConfig::default()` (with `HUBER_F_SCALE_DEFAULT` as
+/// ``huber_f_scale``) under the keys of the ``iod_settings``,
+/// ``span_settings`` and ``correction_settings`` dicts: the one source of the
+/// Python signature defaults of `run_iod` and `NativeOrbitFitter`.
+#[pyfunction]
+pub fn iod_defaults(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
+    let config = IodConfig::default();
+    let out = PyDict::new(py);
+    out.set_item("min_obs", config.min_obs)?;
+    out.set_item("min_arc_length", config.min_arc_length)?;
+    out.set_item("contamination_percentage", config.contamination_percentage)?;
+    out.set_item("rchi2_threshold", config.rchi2_threshold)?;
+    out.set_item(
+        "observation_selection_method",
+        config.observation_selection_method.as_str(),
+    )?;
+    out.set_item("light_time", config.light_time)?;
+    out.set_item("max_triplets", config.max_triplets)?;
+    out.set_item("velocity_method", config.velocity_method.as_str())?;
+    out.set_item("acceptance", config.acceptance.as_str())?;
+    out.set_item("span_target_days", config.spans.target_span_days)?;
+    out.set_item("span_min_days", config.spans.min_span_days)?;
+    out.set_item("span_max_days", config.spans.max_span_days)?;
+    out.set_item(
+        "span_dense_window_days",
+        config.spans.dense_window_days.to_vec(),
+    )?;
+    out.set_item("span_edge_window_days", config.spans.edge_window_days)?;
+    out.set_item("span_max_triplets", config.spans.max_triplets)?;
+    out.set_item("max_corrections", config.correction.max_corrections)?;
+    out.set_item("max_converged", config.correction.max_converged)?;
+    out.set_item("correction_growth", config.correction.growth)?;
+    out.set_item("min_stage_obs", config.correction.min_stage_obs)?;
+    out.set_item("max_stages", config.correction.max_stages)?;
+    out.set_item("stage_loss", config.correction.stage_loss.as_str())?;
+    out.set_item("huber_f_scale", HUBER_F_SCALE_DEFAULT)?;
+    Ok(out)
 }
 
 /// `IodConfig` from the ``iod_settings`` dict over `defaults`.
@@ -1296,6 +1335,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cmc2003_fit_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(iod_fit_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_iod_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(iod_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(run_iod_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(full_od_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(full_od_2body_ipc, m)?)?;

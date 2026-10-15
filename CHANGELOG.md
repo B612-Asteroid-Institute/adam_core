@@ -171,6 +171,15 @@ This file contains notable changes in adam-core
   whitened fit (`fit_least_squares`, the CMC2003 and worst-residual loops,
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
+- IOD policy written down (bead a6w.9): the module doc of `od.rs` and the
+  "The IOD policy" section of the orbit-determination use-case page give
+  ordering, triplet search, velocity, correction, multiple roots, ranking,
+  ambiguity, failure reporting and the validation evidence; every constant's
+  source is on its Rust `Default`. `IOD_DEFAULTS` (Rust `iod_defaults()`)
+  exports `IodConfig::default()`, and the signature defaults of `run_iod`
+  and `NativeOrbitFitter` (and `HUBER_F_SCALE_DEFAULT`) are read from it.
+  `run_iod`'s `contamination_percentage` default is therefore 20, as in
+  `IodConfig::default()` and `NativeOrbitFitter` (it was 0).
 - `iod()` and `NativeOrbitFitter.initial_fit` are thin wrappers over
   `run_iod`; the per-object shortcut to a propagator's compiled
   `initial_orbit_determination` work unit is gone from `iod()` (the linkage

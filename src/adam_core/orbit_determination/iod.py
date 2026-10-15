@@ -2,6 +2,7 @@ import logging
 import time
 import uuid
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Literal, Optional, Tuple, Type
 
 import numpy as np
@@ -9,6 +10,7 @@ import numpy.typing as npt
 import pyarrow as pa
 import quivr as qv
 
+from .. import _rust_native
 from ..coordinates import CartesianCoordinates
 from ..coordinates.origin import Origin
 from ..coordinates.residuals import Residuals
@@ -20,6 +22,14 @@ from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, drop_duplicate_orbits
 from .gauss import MU, C
 from .observation_uncertainty import ObservationUncertaintyModel
+
+#: The IOD defaults, read once from Rust's ``IodConfig::default()`` (with its
+#: span search and correction settings, under the keys of ``run_iod``'s
+#: ``span_settings`` / ``correction_settings``, and ``huber_f_scale``). The
+#: signature defaults of `run_iod` and `NativeOrbitFitter` are these values;
+#: the policy and the source of each number are documented on the Rust types
+#: and in the orbit-determination use-case page.
+IOD_DEFAULTS = MappingProxyType(_rust_native.iod_defaults())
 
 logger = logging.getLogger(__name__)
 
@@ -433,18 +443,20 @@ def run_iod(
     observations: OrbitDeterminationObservations,
     propagator: Propagator,
     *,
-    min_obs: int = 6,
-    min_arc_length: float = 1.0,
-    contamination_percentage: float = 0.0,
-    rchi2_threshold: float = 200,
+    min_obs: int = IOD_DEFAULTS["min_obs"],
+    min_arc_length: float = IOD_DEFAULTS["min_arc_length"],
+    contamination_percentage: float = IOD_DEFAULTS["contamination_percentage"],
+    rchi2_threshold: float = IOD_DEFAULTS["rchi2_threshold"],
     observation_selection_method: Literal[
         "combinations", "first+middle+last", "thirds", "spans"
-    ] = "spans",
-    light_time: bool = True,
-    max_triplets: Optional[int] = None,
-    velocity_method: Literal["gauss", "gibbs", "herrick+gibbs", "auto"] = "gibbs",
+    ] = IOD_DEFAULTS["observation_selection_method"],
+    light_time: bool = IOD_DEFAULTS["light_time"],
+    max_triplets: Optional[int] = IOD_DEFAULTS["max_triplets"],
+    velocity_method: Literal["gauss", "gibbs", "herrick+gibbs", "auto"] = IOD_DEFAULTS[
+        "velocity_method"
+    ],
     span_settings: Optional[dict] = None,
-    acceptance: Literal["corrected", "prefit"] = "corrected",
+    acceptance: Literal["corrected", "prefit"] = IOD_DEFAULTS["acceptance"],
     correction_settings: Optional[dict] = None,
     fit_settings: Optional[dict] = None,
     observatory_bias_model: Optional[ObservationUncertaintyModel] = None,

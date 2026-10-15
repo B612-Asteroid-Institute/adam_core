@@ -26,7 +26,7 @@ from .differential_correction import (
 )
 from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
-from .iod import run_iod
+from .iod import IOD_DEFAULTS, run_iod
 from .orbit_fitter import OrbitFitter
 from .rejection import cmc2003_fit
 
@@ -159,16 +159,18 @@ class NativeOrbitFitter(OrbitFitter):
         self,
         propagator_class: Type[Propagator],
         propagator_kwargs: Optional[dict[str, Any]] = None,
-        min_obs: int = 6,
-        min_arc_length: float = 1.0,
-        contamination_percentage: float = 20.0,
+        min_obs: int = IOD_DEFAULTS["min_obs"],
+        min_arc_length: float = IOD_DEFAULTS["min_arc_length"],
+        contamination_percentage: float = IOD_DEFAULTS["contamination_percentage"],
         rchi2_threshold: float = 10.0,
-        iod_rchi2_threshold: float = 200.0,
+        iod_rchi2_threshold: float = IOD_DEFAULTS["rchi2_threshold"],
         observation_selection_method: Literal[
             "combinations", "first+middle+last", "thirds", "spans"
-        ] = "spans",
-        velocity_method: Literal["gauss", "gibbs", "herrick+gibbs", "auto"] = "gibbs",
-        iod_acceptance: Literal["corrected", "prefit"] = "corrected",
+        ] = IOD_DEFAULTS["observation_selection_method"],
+        velocity_method: Literal[
+            "gauss", "gibbs", "herrick+gibbs", "auto"
+        ] = IOD_DEFAULTS["velocity_method"],
+        iod_acceptance: Literal["corrected", "prefit"] = IOD_DEFAULTS["acceptance"],
         loss: LossType = "linear",
         f_scale: float = HUBER_F_SCALE_DEFAULT,
         outlier_rejection: Literal["worst_residual", "cmc2003"] = "cmc2003",
