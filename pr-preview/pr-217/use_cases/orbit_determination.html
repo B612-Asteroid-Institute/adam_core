@@ -685,6 +685,13 @@ them from <code class="docutils literal notranslate"><span class="pre">IOD_DEFAU
 <li><p><strong>Ordering and determinism.</strong> Observations are searched in a canonical
 order (epoch, station, input row); the same input gives the same orbit
 whatever its row order. A triplet never repeats an epoch.</p></li>
+<li><p><strong>Inputs.</strong> Ecliptic observations and equatorial observers are rotated to
+the frames Gauss uses; observers not centred on the Sun are refused. An
+arc shorter than <code class="docutils literal notranslate"><span class="pre">min_arc_length</span></code> (1 day) is not searched, and a fit
+whose rejected observations leave a shorter arc is not accepted.</p></li>
+<li><p><strong>Nights.</strong> A station’s observations form one night until a gap of more
+than 8 hours (or 16 hours of continuous coverage), so nights that straddle
+0h UTC are not split.</p></li>
 <li><p><strong>Triplets.</strong> Gauss truncates the f and g series, so a preliminary orbit
 degrades with the arc its triplet spans (on 2012 TF79 the full-arc reduced
 chi2 grows from about 1e4 at a 3-day span to 1e9 at 67 days). The search
@@ -706,8 +713,10 @@ threshold, rejecting at most <code class="docutils literal notranslate"><span cl
 arc. The search stops after 2 candidates reach the whole arc
 (<code class="docutils literal notranslate"><span class="pre">correction_settings</span></code>).</p></li>
 <li><p><strong>Multiple roots.</strong> Every physical root of a triplet’s Gauss polynomial is
-a candidate (Charlier: up to three); the other roots of a converged
-candidate’s triplet are corrected too.</p></li>
+a candidate (Charlier: up to three): real to a relative 1e-6, so a
+near-double root is kept, and with every topocentric range at least
+1e-4 au, so the spurious zero-range root is dropped. The other roots of a
+converged candidate’s triplet are corrected too.</p></li>
 <li><p><strong>Ranking and ambiguity.</strong> Candidates are compared on the whole arc:
 every observation’s chi2 clipped at the CMC2003 rejection threshold, so a
 rejected observation still counts. The lowest score wins (ties within
