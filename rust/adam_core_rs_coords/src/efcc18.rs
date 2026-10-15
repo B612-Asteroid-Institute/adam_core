@@ -8,7 +8,7 @@
 //! tiles) in **RING** ordering: the k-th data row of `bias.dat` is HEALPix
 //! ring pixel k, as listed in the archive's `tiles.dat`. Each (tile, catalog)
 //! cell stores four numbers: the position correction in RA*cos(Dec) at J2000
-//! [arcsec], the position correction in Dec at J2000 [arcsec], and the proper
+//! \[arcsec\], the position correction in Dec at J2000 \[arcsec\], and the proper
 //! motion corrections in RA*cos(Dec) and Dec [mas/yr], all with respect to
 //! Gaia-DR2.
 //!
