@@ -176,6 +176,14 @@ This file contains notable changes in adam-core
   the corrected-IOD stages, which no longer retry on their own). Status -2
   now means non-finite under both Jacobians or non-finite residuals.
 
+- Corrected IOD no longer accepts a wrong Gauss root that fits by rejecting
+  much of the arc (2002 RV112: 22 of 44 observations rejected, reduced chi2
+  1.92 on the rest, beating the right root's 2.15 on all 44). The whole-arc
+  CMC2003 stage rejects at most `contamination_percentage` of the arc, and
+  candidates rank, and are tested for ambiguity, on a whole-arc score
+  (`IodCandidate.whole_arc_score`: every observation's chi2 clipped at the
+  CMC2003 rejection threshold, over the whole arc's degrees of freedom)
+  instead of the reduced chi2 of the observations each one kept.
 - IOD policy written down (bead a6w.9): the module doc of `od.rs` and the
   "The IOD policy" section of the orbit-determination use-case page give
   ordering, triplet search, velocity, correction, multiple roots, ranking,

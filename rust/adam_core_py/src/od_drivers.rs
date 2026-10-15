@@ -623,6 +623,7 @@ fn candidate_dict<'py>(py: Python<'py>, candidate: &IodCandidate) -> PyResult<Bo
     out.set_item("num_obs", candidate.num_obs)?;
     out.set_item("arc_length", candidate.arc_length)?;
     out.set_item("postfit_reduced_chi2", candidate.postfit_reduced_chi2)?;
+    out.set_item("whole_arc_score", candidate.whole_arc_score)?;
     out.set_item("converged", candidate.converged)?;
     out.set_item(
         "corrected_state",

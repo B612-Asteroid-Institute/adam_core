@@ -2038,26 +2038,59 @@ const RCHI2_TIE_RTOL: f64 = 1e-6;
 /// joint confidence region of an orbit (Milani & Gronchi 2010, sec. 5.6).
 const AMBIGUITY_DELTA_CHI2: f64 = 20.062;
 
+/// Degrees of freedom of the whole arc: every observation's, minus the six
+/// orbit parameters.
+fn whole_arc_dof(evaluation: &super::od::FitEvaluation) -> usize {
+    (evaluation
+        .dof
+        .iter()
+        .map(|&d| d.max(0) as usize)
+        .sum::<usize>())
+    .saturating_sub(6)
+}
+
+/// [`super::od::IodCandidate::whole_arc_score`]: the whole arc's chi2 with
+/// every observation clipped at `CMC2003_CHI2_REJECT` (the least a rejected
+/// observation can contribute), over the whole arc's degrees of freedom.
+fn whole_arc_score(evaluation: &super::od::FitEvaluation) -> f64 {
+    let clipped: f64 = evaluation
+        .chi2
+        .iter()
+        .map(|&chi2| {
+            if chi2.is_finite() {
+                chi2.min(crate::cmc2003::CMC2003_CHI2_REJECT)
+            } else {
+                crate::cmc2003::CMC2003_CHI2_REJECT
+            }
+        })
+        .sum();
+    match whole_arc_dof(evaluation) {
+        0 => f64::INFINITY,
+        dof => clipped / dof as f64,
+    }
+}
+
 /// Whether `other` is a second solution as acceptable as `best`: outside
 /// `best`'s 3-sigma confidence region (Mahalanobis distance squared under
 /// `best`'s covariance, `other` moved to `best`'s epoch by two-body
 /// propagation, above `AMBIGUITY_DELTA_CHI2`) yet within the same
-/// chi2 margin of it (`(rchi2_other - rchi2_best) * dof_best`). This is
+/// chi2 margin of it (whole-arc scores times the whole arc's degrees of
+/// freedom). This is
 /// the multiple-solution case of Gronchi (2009) / Charlier: separate local
 /// minima the observations cannot choose between. Without a finite,
 /// invertible covariance the solutions are not compared.
 fn is_ambiguous_with(best: &super::od::IodCandidate, other: &super::od::IodCandidate) -> bool {
-    let (Some(state), Some(other_state), Some(covariance), Some(best_rchi2), Some(other_rchi2)) = (
+    let (Some(state), Some(other_state), Some(covariance), Some(best_score), Some(other_score)) = (
         best.corrected_state,
         other.corrected_state,
         best.corrected_covariance,
-        best.postfit_reduced_chi2,
-        other.postfit_reduced_chi2,
+        best.whole_arc_score,
+        other.whole_arc_score,
     ) else {
         return false;
     };
-    let dof = (2 * best.evaluation.as_ref().map_or(best.num_obs, |e| e.num_obs)).saturating_sub(6);
-    if dof == 0 || (other_rchi2 - best_rchi2) * dof as f64 >= AMBIGUITY_DELTA_CHI2 {
+    let dof = best.evaluation.as_ref().map_or(0, whole_arc_dof);
+    if dof == 0 || (other_score - best_score) * dof as f64 >= AMBIGUITY_DELTA_CHI2 {
         return false;
     }
     let Ok(mu) = crate::types::origin_mu_au3_day2(&OriginId::from_code("SUN")) else {
@@ -2091,14 +2124,16 @@ fn is_ambiguous_with(best: &super::od::IodCandidate, other: &super::od::IodCandi
 /// stages use `correction.stage_loss` (Huber by default: down-weighted,
 /// gated on the robust cost); the whole-arc stage is linear. On the
 /// whole arc, a fit above the threshold gets the CMC2003 rejection loop
-/// (Carpino, Milani & Chesley 2003, OrbFit's constants) and passes if that
-/// brings it within the threshold. The search stops once `max_converged`
+/// (Carpino, Milani & Chesley 2003, OrbFit's constants, but rejecting at
+/// most `contamination_percentage` of the arc) and passes if that brings it
+/// within the threshold. The search stops once `max_converged`
 /// candidates reached the whole arc; every other Gauss root of a converged
 /// candidate's triplet (Charlier: up to three per triplet) is corrected too
 /// before the search moves on or stops, outside the `max_corrections`
-/// budget. The accepted candidate is the converged one with the lowest final
-/// reduced chi2 (the weighted RMS), the lowest index among those within a
-/// relative `RCHI2_TIE_RTOL` of it, never the root order. Its orbit is that whole-arc fit at the Gauss epoch, rejected rows
+/// budget. The accepted candidate is the converged one with the lowest
+/// whole-arc score (chi2 over every observation, each clipped at the CMC2003
+/// rejection threshold), the lowest index among those within a relative
+/// `RCHI2_TIE_RTOL` of it, never the root order. Its orbit is that whole-arc fit at the Gauss epoch, rejected rows
 /// reported as outliers. Converged candidates that are distinct solutions
 /// fitting about as well (`is_ambiguous_with`) are listed in
 /// `ambiguous_with`.
@@ -2243,6 +2278,12 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
                     observers,
                     &Cmc2003FitConfig {
                         fit: stage_config,
+                        // The IOD's own outlier allowance, not OrbFit's 50 %
+                        // refinement bound: a wrong orbit must not fit by
+                        // discarding the half of the arc it cannot explain
+                        // (2002 RV112: 22 of 44 rejected).
+                        max_rejected_fraction: (config.contamination_percentage / 100.0)
+                            .clamp(0.0, 1.0),
                         ..Cmc2003FitConfig::default()
                     },
                     provider,
@@ -2280,6 +2321,7 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
             (Some(output), None) => {
                 record.converged = true;
                 record.postfit_reduced_chi2 = Some(output.evaluation.reduced_chi2);
+                record.whole_arc_score = Some(whole_arc_score(&output.evaluation));
                 record.corrected_state = Some(output.state);
                 record.corrected_covariance = Some(output.covariance);
                 record.removed = (0..n)
@@ -2309,15 +2351,17 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
             }
         }
     }
-    // Roots of one triplet often converge to the same minimum, their final
-    // reduced chi2 equal to solver precision: values within
+    // Roots of one triplet often converge to the same minimum, their
+    // scores equal to solver precision: values within
     // `RCHI2_TIE_RTOL` of the lowest tie, and the lowest candidate index
     // (canonical observation order) wins, so the choice does not depend on
     // rounding. A distinct solution that close is reported in
     // `ambiguous_with`.
-    let postfit = |candidate: &super::od::IodCandidate| {
-        candidate.postfit_reduced_chi2.unwrap_or(f64::INFINITY)
-    };
+    // Ranked on the whole arc (`whole_arc_score`), never on the
+    // observations each candidate kept: 1.92 on 22 of 44 observations must
+    // not beat 2.15 on all 44.
+    let postfit =
+        |candidate: &super::od::IodCandidate| candidate.whole_arc_score.unwrap_or(f64::INFINITY);
     let lowest = result
         .candidates
         .iter()
@@ -4163,6 +4207,8 @@ mod tests {
                 max_corrections: 47,
                 ..super::super::od::CorrectionConfig::default()
             },
+            // Whole-arc rejection is bounded by the IOD's allowance.
+            contamination_percentage: 20.0,
             ..corrected_iod_config(3.0)
         };
         let result = run_iod_with(
@@ -4207,6 +4253,7 @@ mod tests {
                     stage_loss,
                     ..super::super::od::CorrectionConfig::default()
                 },
+                contamination_percentage: 20.0,
                 ..corrected_iod_config(3.0)
             };
             run_iod_with(
@@ -4232,6 +4279,80 @@ mod tests {
             .correction_note
             .as_deref()
             .is_some_and(|n| n.contains("stalled"))));
+    }
+
+    #[test]
+    fn whole_arc_rejection_is_bounded_by_the_iod_contamination() {
+        // The gross outlier needs one rejection to bring the whole arc
+        // within 3: allowed at 20 % contamination (2 of 12), refused at 0 %.
+        let observed = synthetic_observations(Some(3));
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let run = |contamination_percentage: f64| {
+            run_iod_with(
+                &predictor,
+                &observed,
+                &observers(),
+                &super::super::od::IodConfig {
+                    contamination_percentage,
+                    ..corrected_iod_config(3.0)
+                },
+                &WhitenedFitConfig::default(),
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap()
+        };
+        let allowed = run(20.0);
+        assert_eq!(allowed.accepted_candidate().unwrap().removed, vec![3]);
+        let refused = run(0.0);
+        assert!(!refused.found());
+        assert!(refused
+            .candidates
+            .iter()
+            .all(|c| c.removed.is_empty() || !c.converged));
+    }
+
+    #[test]
+    fn candidates_rank_on_the_whole_arc_not_on_the_observations_they_kept() {
+        // 2002 RV112: a wrong root rejected 22 of 44 observations and fit the
+        // rest at reduced chi2 1.92; the right roots kept all 44 at 2.15.
+        // Clipping every chi2 at CMC2003's rejection threshold, the wrong
+        // root scores (1.92 x 38 + 22 x 8) / 82 = 3.04 and loses.
+        let evaluation = |kept_rchi2: f64, rejected: usize| super::super::od::FitEvaluation {
+            residuals: vec![0.0; 44 * 6],
+            chi2: (0..44)
+                .map(|row| {
+                    if row < rejected {
+                        1e4
+                    } else {
+                        kept_rchi2 * (2.0 * (44 - rejected) as f64 - 6.0) / (44 - rejected) as f64
+                    }
+                })
+                .collect(),
+            dof: vec![2; 44],
+            probability: vec![0.5; 44],
+            orbit_chi2: 0.0,
+            reduced_chi2: kept_rchi2,
+            arc_length: 30.0,
+            num_obs: 44 - rejected,
+            outlier: (0..44).map(|row| row < rejected).collect(),
+        };
+        let wrong = whole_arc_score(&evaluation(1.92, 22));
+        let right = whole_arc_score(&evaluation(2.15, 0));
+        assert!(
+            (wrong - (1.92 * 38.0 + 22.0 * 8.0) / 82.0).abs() < 1e-9,
+            "{wrong}"
+        );
+        assert!((right - 2.15).abs() < 1e-9, "{right}");
+        assert!(right < wrong);
+        // Over the margin: the wrong root is not an equal alternative.
+        assert!((wrong - right) * 82.0 > AMBIGUITY_DELTA_CHI2);
     }
 
     #[test]
@@ -4385,15 +4506,15 @@ mod tests {
         let covariance = best.corrected_covariance.unwrap();
         let sigma_x = covariance[0].sqrt();
         assert!(sigma_x.is_finite() && sigma_x > 0.0);
-        let shifted = |k: f64, rchi2: f64| {
+        let shifted = |k: f64, score: f64| {
             let mut other = best.clone();
             let mut state = other.corrected_state.unwrap();
             state[0] += k * sigma_x;
             other.corrected_state = Some(state);
-            other.postfit_reduced_chi2 = Some(rchi2);
+            other.whole_arc_score = Some(score);
             other
         };
-        let rchi2 = best.postfit_reduced_chi2.unwrap();
+        let rchi2 = best.whole_arc_score.unwrap();
         // The same orbit is not a second solution.
         assert!(!is_ambiguous_with(&best, &best));
         // Far outside the 3-sigma region, an equally good fit: ambiguous.

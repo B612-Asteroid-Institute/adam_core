@@ -67,12 +67,17 @@
 //!   Stages before the whole arc reject nothing
 //!   and down-weight with Huber's loss (gated on the robust cost); the
 //!   whole-arc stage is linear, with CMC2003 rejection (Carpino, Milani &
-//!   Chesley 2003) when above the threshold.
-//! * **Ranking.** Lowest whole-arc reduced chi2 (weighted RMS); values
-//!   within a relative 1e-6 tie and go to the lowest candidate index. A
-//!   converged solution outside the accepted one's 3-sigma region yet within
-//!   the same chi2 margin (6-dof 99.73 % quantile, 20.06) is reported in
-//!   `IodResult::ambiguous_with`.
+//!   Chesley 2003) when above the threshold, rejecting at most
+//!   `contamination_percentage` of the arc (20 %; OrbFit's 50 % bound is for
+//!   refining a known orbit, and let a wrong root fit by discarding half of
+//!   2002 RV112's arc).
+//! * **Ranking.** Lowest whole-arc score: every observation's chi2 clipped
+//!   at CMC2003's rejection threshold (8), over the whole arc's degrees of
+//!   freedom, so candidates that kept different observations are compared on
+//!   the same data. Values within a relative 1e-6 tie and go to the lowest
+//!   candidate index. A converged solution outside the accepted one's
+//!   3-sigma region yet within the same score margin (6-dof 99.73 %
+//!   quantile, 20.06) is reported in `IodResult::ambiguous_with`.
 //! * **Continuation and failure.** A candidate whose prediction fails is
 //!   counted and skipped; caller errors propagate. When nothing is accepted
 //!   the result says why (`not_found_reason`), naming the last stall.
@@ -1552,10 +1557,16 @@ pub struct IodCandidate {
     pub reduced_chi2: f64,
     pub num_obs: usize,
     pub arc_length: f64,
-    /// Reduced chi2 of the corrected orbit on the whole arc (corrected
-    /// acceptance); `None` when the candidate was not corrected or did not
-    /// reach the whole arc.
+    /// Reduced chi2 of the corrected orbit on the observations it kept
+    /// (corrected acceptance); `None` when the candidate was not corrected or
+    /// did not reach the whole arc.
     pub postfit_reduced_chi2: Option<f64>,
+    /// The corrected orbit's whole-arc score, which ranks candidates: every
+    /// observation's chi2 clipped at CMC2003's rejection threshold (so a
+    /// rejected observation counts as at least that), summed over the whole
+    /// arc and divided by its degrees of freedom. Candidates that kept
+    /// different observations are compared on the same data.
+    pub whole_arc_score: Option<f64>,
     /// Whether the staged correction reached the whole arc within the
     /// threshold at every stage.
     pub converged: bool,
@@ -2079,6 +2090,7 @@ fn run_iod_sorted(
                 num_obs: evaluation.num_obs,
                 arc_length: evaluation.arc_length,
                 postfit_reduced_chi2: None,
+                whole_arc_score: None,
                 converged: false,
                 corrected_state: None,
                 corrected_covariance: None,

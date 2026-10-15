@@ -341,8 +341,8 @@ class IodCandidate:
     reduced_chi2: float
     num_obs: int
     arc_length: float
-    #: Corrected acceptance: reduced chi2 of the corrected orbit on the whole
-    #: arc (None when not corrected or stalled), whether the staged
+    #: Corrected acceptance: reduced chi2 of the corrected orbit on the
+    #: observations it kept (None when not corrected or stalled), whether the staged
     #: correction reached the whole arc, the corrected state, the stages
     #: run and why it stopped short, if it did.
     postfit_reduced_chi2: Optional[float]
@@ -350,6 +350,10 @@ class IodCandidate:
     accepted: bool
     corrected_state: Optional[tuple[float, float, float, float, float, float]] = None
     stages: int = 0
+    #: Whole-arc score that ranks converged candidates: every observation's
+    #: chi2 clipped at CMC2003's rejection threshold, over the whole arc's
+    #: degrees of freedom (None when not converged).
+    whole_arc_score: Optional[float] = None
     correction_note: Optional[str] = None
 
 
@@ -410,6 +414,7 @@ def report_from_iod_output(output: dict) -> IodReport:
             num_obs=int(candidate["num_obs"]),
             arc_length=float(candidate["arc_length"]),
             postfit_reduced_chi2=candidate.get("postfit_reduced_chi2"),
+            whole_arc_score=candidate.get("whole_arc_score"),
             converged=bool(candidate.get("converged", False)),
             accepted=bool(candidate["accepted"]),
             corrected_state=(
