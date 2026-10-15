@@ -306,6 +306,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.od_orchestration.html">adam_core.orbit_determination.od_orchestration module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.orbit_fitter.html">adam_core.orbit_determination.orbit_fitter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.provenance.html">adam_core.orbit_determination.provenance module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.rejection.html">adam_core.orbit_determination.rejection module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.veres2017.html">adam_core.orbit_determination.veres2017 module</a></li>
 </ul>
@@ -452,6 +453,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_has_compatible_native_spec</span><span class="p">,</span>
     <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">,</span>
+    <span class="n">native_work_unit</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_FUSED_LOOP_KWARGS</span><span class="p">,</span>
@@ -466,6 +468,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.iod</span><span class="w"> </span><span class="kn">import</span> <span class="n">IOD_DEFAULTS</span><span class="p">,</span> <span class="n">run_iod</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.orbit_fitter</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitFitter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.provenance</span><span class="w"> </span><span class="kn">import</span> <span class="n">with_iod_provenance</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.rejection</span><span class="w"> </span><span class="kn">import</span> <span class="n">cmc2003_fit</span>
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
@@ -512,9 +515,10 @@
     <span class="p">)</span>
     <span class="n">fit</span> <span class="o">=</span> <span class="n">output</span><span class="p">[</span><span class="s2">"fit"</span><span class="p">]</span>
     <span class="n">_emit_native_warnings</span><span class="p">(</span><span class="n">fit</span><span class="p">)</span>
-    <span class="k">return</span> <span class="n">_fitted_tables_from_native_output</span><span class="p">(</span>
+    <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">members</span> <span class="o">=</span> <span class="n">_fitted_tables_from_native_output</span><span class="p">(</span>
         <span class="n">seed</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">fit</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">fit</span><span class="p">[</span><span class="s2">"weights"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
-    <span class="p">)</span></div>
+    <span class="p">)</span>
+    <span class="k">return</span> <span class="n">with_iod_provenance</span><span class="p">(</span><span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">iod</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ambiguous_with"</span><span class="p">)),</span> <span class="n">members</span></div>
 
 
 
@@ -557,7 +561,7 @@
 <span class="sd">    velocity_method : {"gauss", "gibbs", "herrick+gibbs", "auto"}, optional</span>
 <span class="sd">        Velocity of the Gauss IOD candidates; ``"auto"`` chooses</span>
 <span class="sd">        Herrick-Gibbs or Gibbs per root by the separation of its position</span>
-<span class="sd">        vectors. Default ``"gibbs"``.</span>
+<span class="sd">        vectors. Default ``"auto"``.</span>
 <span class="sd">    iod_acceptance : {"corrected", "prefit"}, optional</span>
 <span class="sd">        ``"corrected"`` (default): each Gauss orbit seeds staged differential</span>
 <span class="sd">        corrections from its triplet's span to the whole arc, and the</span>
@@ -778,7 +782,7 @@
 <span class="sd">        itself. Otherwise `initial_fit` and `refine_fit` are chained,</span>
 <span class="sd">        honoring subclass overrides.</span>
 <span class="sd">        """</span>
-        <span class="n">fused</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"full_od"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+        <span class="n">fused</span> <span class="o">=</span> <span class="n">native_work_unit</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"full_od"</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">supports_native_full_od</span><span class="p">():</span>
             <span class="n">iod_settings</span><span class="p">,</span> <span class="n">refinement</span><span class="p">,</span> <span class="n">fit_settings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">native_settings</span><span class="p">()</span>
             <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="n">fit_settings</span><span class="p">[</span><span class="s2">"jacobian"</span><span class="p">])</span>

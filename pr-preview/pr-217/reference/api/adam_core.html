@@ -307,6 +307,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.od_orchestration.html">adam_core.orbit_determination.od_orchestration module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.orbit_fitter.html">adam_core.orbit_determination.orbit_fitter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.provenance.html">adam_core.orbit_determination.provenance module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.rejection.html">adam_core.orbit_determination.rejection module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.orbit_determination.veres2017.html">adam_core.orbit_determination.veres2017 module</a></li>
 </ul>
@@ -887,6 +888,7 @@
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html">adam_core.orbit_determination.fitted_orbits module</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.assign_duplicate_observations"><code class="docutils literal notranslate"><span class="pre">assign_duplicate_observations()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.drop_duplicate_orbits"><code class="docutils literal notranslate"><span class="pre">drop_duplicate_orbits()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.OdProvenance"><code class="docutils literal notranslate"><span class="pre">OdProvenance</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits"><code class="docutils literal notranslate"><span class="pre">FittedOrbits</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.ObservationAstrometry"><code class="docutils literal notranslate"><span class="pre">ObservationAstrometry</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbitMembers"><code class="docutils literal notranslate"><span class="pre">FittedOrbitMembers</span></code></a></li>
@@ -956,6 +958,14 @@
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.outliers.html#adam_core.orbit_determination.outliers.calculate_max_outliers"><code class="docutils literal notranslate"><span class="pre">calculate_max_outliers()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.outliers.html#adam_core.orbit_determination.outliers.remove_lowest_probability_observation"><code class="docutils literal notranslate"><span class="pre">remove_lowest_probability_observation()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.provenance.html">adam_core.orbit_determination.provenance module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.provenance.html#adam_core.orbit_determination.provenance.backend_identity"><code class="docutils literal notranslate"><span class="pre">backend_identity()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.provenance.html#adam_core.orbit_determination.provenance.model_descriptor"><code class="docutils literal notranslate"><span class="pre">model_descriptor()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.provenance.html#adam_core.orbit_determination.provenance.with_iod_provenance"><code class="docutils literal notranslate"><span class="pre">with_iod_provenance()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.provenance.html#adam_core.orbit_determination.provenance.carry_iod_provenance"><code class="docutils literal notranslate"><span class="pre">carry_iod_provenance()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.provenance.html#adam_core.orbit_determination.provenance.complete_provenance"><code class="docutils literal notranslate"><span class="pre">complete_provenance()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.rejection.html">adam_core.orbit_determination.rejection module</a><ul>
@@ -1312,8 +1322,15 @@
 </li>
 <li class="toctree-l1"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.Propagator"><code class="docutils literal notranslate"><span class="pre">Propagator</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.Propagator.native_backend"><code class="docutils literal notranslate"><span class="pre">Propagator.native_backend</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.Propagator.propagate_orbits"><code class="docutils literal notranslate"><span class="pre">Propagator.propagate_orbits()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.Propagator.two_body_dynamics"><code class="docutils literal notranslate"><span class="pre">Propagator.two_body_dynamics</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.NativeBackend"><code class="docutils literal notranslate"><span class="pre">NativeBackend</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.NativeBackend.name"><code class="docutils literal notranslate"><span class="pre">NativeBackend.name</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.NativeBackend.version"><code class="docutils literal notranslate"><span class="pre">NativeBackend.version</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.NativeBackend.work_units"><code class="docutils literal notranslate"><span class="pre">NativeBackend.work_units</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.EphemerisMixin"><code class="docutils literal notranslate"><span class="pre">EphemerisMixin</span></code></a><ul>

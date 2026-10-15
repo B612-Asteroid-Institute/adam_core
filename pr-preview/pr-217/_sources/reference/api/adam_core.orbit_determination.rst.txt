@@ -26,5 +26,6 @@ Submodules
    adam_core.orbit_determination.od_orchestration
    adam_core.orbit_determination.orbit_fitter
    adam_core.orbit_determination.outliers
+   adam_core.orbit_determination.provenance
    adam_core.orbit_determination.rejection
    adam_core.orbit_determination.veres2017

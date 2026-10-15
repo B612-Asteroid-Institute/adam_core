@@ -306,6 +306,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.od_orchestration.html">adam_core.orbit_determination.od_orchestration module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.orbit_fitter.html">adam_core.orbit_determination.orbit_fitter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.provenance.html">adam_core.orbit_determination.provenance module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.rejection.html">adam_core.orbit_determination.rejection module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.veres2017.html">adam_core.orbit_determination.veres2017 module</a></li>
 </ul>
@@ -480,7 +481,10 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="n">_warn_if_analytic_jacobian_mismatches</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">,</span>
+    <span class="n">native_work_unit</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">ObservationAstrometry</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.observation_uncertainty</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
@@ -492,6 +496,7 @@
     <span class="n">native_model_specs</span><span class="p">,</span>
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.orbit_fitter</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitFitter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.provenance</span><span class="w"> </span><span class="kn">import</span> <span class="n">complete_provenance</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.veres2017</span><span class="w"> </span><span class="kn">import</span> <span class="n">SigmaFillModel</span>
 
 <span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span>
@@ -685,6 +690,14 @@
     <span class="k">return</span> <span class="n">models</span>
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_model_list</span><span class="p">(</span><span class="n">models</span><span class="p">:</span> <span class="n">ObservationModels</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">ObservationUncertaintyModel</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="n">models</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">[]</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">models</span><span class="p">,</span> <span class="n">ObservationUncertaintyModel</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">models</span><span class="p">]</span>
+    <span class="k">return</span> <span class="nb">list</span><span class="p">(</span><span class="n">models</span><span class="p">)</span>
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">_fused_run_od</span><span class="p">(</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
     <span class="n">fitter</span><span class="p">:</span> <span class="n">OrbitFitter</span><span class="p">,</span>
@@ -700,17 +713,12 @@
 <span class="sd">    """</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">.native_orbit_fitter</span><span class="w"> </span><span class="kn">import</span> <span class="n">NativeOrbitFitter</span><span class="p">,</span> <span class="n">tables_from_native_full_od</span>
 
-    <span class="n">fused</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"run_od"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">fused</span> <span class="o">=</span> <span class="n">native_work_unit</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"run_od"</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fitter</span><span class="p">,</span> <span class="n">NativeOrbitFitter</span><span class="p">):</span>
         <span class="k">return</span> <span class="kc">None</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">fitter</span><span class="o">.</span><span class="n">supports_native_full_od</span><span class="p">():</span>
         <span class="k">return</span> <span class="kc">None</span>
-    <span class="k">if</span> <span class="n">models</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="n">model_list</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="n">ObservationUncertaintyModel</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">models</span><span class="p">,</span> <span class="n">ObservationUncertaintyModel</span><span class="p">):</span>
-        <span class="n">model_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">models</span><span class="p">]</span>
-    <span class="k">else</span><span class="p">:</span>
-        <span class="n">model_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">models</span><span class="p">)</span>
+    <span class="n">model_list</span> <span class="o">=</span> <span class="n">_model_list</span><span class="p">(</span><span class="n">models</span><span class="p">)</span>
     <span class="n">specs</span> <span class="o">=</span> <span class="n">native_model_specs</span><span class="p">(</span><span class="n">model_list</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">specs</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
@@ -810,6 +818,11 @@
 <span class="sd">    -------</span>
 <span class="sd">    fitted_orbits : `FittedOrbits` (1 or 0)</span>
 <span class="sd">        Orbit(s) found by the backend (empty if the fit failed).</span>
+<span class="sd">        Its ``provenance`` (`OdProvenance`) records the adam-core version,</span>
+<span class="sd">        the route (fused or composed), the fitter, the IOD and refinement</span>
+<span class="sd">        backends, the settings, the observation models (with a SHA-256 of</span>
+<span class="sd">        each table), whether the IOD was ambiguous, and the number and</span>
+<span class="sd">        fraction of observations the final fit rejected.</span>
 <span class="sd">    fitted_orbit_members : `FittedOrbitMembers` (M)</span>
 <span class="sd">        Members with residuals and flags from the fitter and with</span>
 <span class="sd">        ``original_astrometry``, ``used_astrometry`` and ``astcat``</span>
@@ -902,7 +915,18 @@
     <span class="c1"># veneer keeps id validation, object ids and table assembly.</span>
     <span class="n">fused</span> <span class="o">=</span> <span class="n">_fused_run_od</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">fitter</span><span class="p">,</span> <span class="n">models</span><span class="p">,</span> <span class="n">propagator</span><span class="p">,</span> <span class="n">object_id</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">fused</span>
+        <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">fused</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">complete_provenance</span><span class="p">(</span>
+                <span class="n">fitted_orbits</span><span class="p">,</span>
+                <span class="n">fitted_orbit_members</span><span class="p">,</span>
+                <span class="n">fitter</span><span class="o">=</span><span class="n">fitter</span><span class="p">,</span>
+                <span class="n">propagator</span><span class="o">=</span><span class="n">propagator</span><span class="p">,</span>
+                <span class="n">models</span><span class="o">=</span><span class="n">_model_list</span><span class="p">(</span><span class="n">models</span><span class="p">),</span>
+                <span class="n">route</span><span class="o">=</span><span class="s2">"fused"</span><span class="p">,</span>
+            <span class="p">),</span>
+            <span class="n">fitted_orbit_members</span><span class="p">,</span>
+        <span class="p">)</span>
 
     <span class="n">used</span> <span class="o">=</span> <span class="n">apply_observation_models</span><span class="p">(</span><span class="n">observations</span><span class="p">,</span> <span class="n">models</span><span class="p">)</span>
 
@@ -915,6 +939,14 @@
 
     <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">attach_observation_provenance</span><span class="p">(</span>
         <span class="n">fitted_orbit_members</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">used</span>
+    <span class="p">)</span>
+    <span class="n">fitted_orbits</span> <span class="o">=</span> <span class="n">complete_provenance</span><span class="p">(</span>
+        <span class="n">fitted_orbits</span><span class="p">,</span>
+        <span class="n">fitted_orbit_members</span><span class="p">,</span>
+        <span class="n">fitter</span><span class="o">=</span><span class="n">fitter</span><span class="p">,</span>
+        <span class="n">propagator</span><span class="o">=</span><span class="n">propagator</span><span class="p">,</span>
+        <span class="n">models</span><span class="o">=</span><span class="n">_model_list</span><span class="p">(</span><span class="n">models</span><span class="p">),</span>
+        <span class="n">route</span><span class="o">=</span><span class="s2">"composed"</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="k">return</span> <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">fitted_orbit_members</span></div>
 

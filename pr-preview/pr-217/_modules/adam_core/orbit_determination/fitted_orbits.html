@@ -306,6 +306,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.od_orchestration.html">adam_core.orbit_determination.od_orchestration module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.orbit_fitter.html">adam_core.orbit_determination.orbit_fitter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.provenance.html">adam_core.orbit_determination.provenance module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.rejection.html">adam_core.orbit_determination.rejection module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.veres2017.html">adam_core.orbit_determination.veres2017 module</a></li>
 </ul>
@@ -551,6 +552,45 @@
 
 
 
+<div class="viewcode-block" id="OdProvenance">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.OdProvenance">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">OdProvenance</span><span class="p">(</span><span class="n">qv</span><span class="o">.</span><span class="n">Table</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    Compact provenance of one fitted orbit: what produced it and how.</span>
+
+<span class="sd">    Written by `~adam_core.orbit_determination.run_od` (every field) and by</span>
+<span class="sd">    the IOD stage (``iod_*``); null for orbits produced by other entry points.</span>
+<span class="sd">    Configurations and model descriptors are compact JSON; model tables are</span>
+<span class="sd">    identified by content hash, not copied.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: adam-core version that produced the orbit.</span>
+    <span class="n">adam_core_version</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1">#: ``"fused"`` (one native ``run_od`` crossing) or ``"composed"``.</span>
+    <span class="n">route</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1">#: The `OrbitFitter` class (``module.qualname``).</span>
+    <span class="n">fitter</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1">#: Backend of the IOD stage and of the refinement (``name version``; a</span>
+    <span class="c1">#: propagator without a `NativeBackend` is ``python:module.qualname``).</span>
+    <span class="n">iod_backend</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">refinement_backend</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1">#: IOD, refinement and solver settings (JSON), when the fitter exposes</span>
+    <span class="c1">#: them (`NativeOrbitFitter.native_settings`).</span>
+    <span class="n">settings</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1">#: Observation models applied at fit time (JSON list of descriptors:</span>
+    <span class="c1">#: type, scalar parameters, SHA-256 of each table).</span>
+    <span class="n">models</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">LargeStringColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1">#: Whether the IOD found another converged solution, distinct from the</span>
+    <span class="c1">#: accepted one yet fitting about as well, and how many.</span>
+    <span class="n">iod_ambiguous</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">BooleanColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">iod_alternatives</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Int64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1">#: Observations rejected as outliers by the final fit, and their</span>
+    <span class="c1">#: fraction of the observations it was given.</span>
+    <span class="n">num_rejected</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Int64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">rejected_fraction</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Float64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+
 <div class="viewcode-block" id="FittedOrbits">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">FittedOrbits</span><span class="p">(</span><span class="n">qv</span><span class="o">.</span><span class="n">Table</span><span class="p">):</span>
@@ -565,6 +605,8 @@
     <span class="n">iterations</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Int64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">success</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">BooleanColumn</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="n">status_code</span> <span class="o">=</span> <span class="n">qv</span><span class="o">.</span><span class="n">Int64Column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="c1">#: Compact provenance (`OdProvenance`); null outside `run_od` and IOD.</span>
+    <span class="n">provenance</span> <span class="o">=</span> <span class="n">OdProvenance</span><span class="o">.</span><span class="n">as_column</span><span class="p">(</span><span class="n">nullable</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 
 <div class="viewcode-block" id="FittedOrbits.to_orbits">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits.to_orbits">[docs]</a>

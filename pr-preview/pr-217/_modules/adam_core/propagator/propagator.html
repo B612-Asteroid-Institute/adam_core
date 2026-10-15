@@ -306,6 +306,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.od_orchestration.html">adam_core.orbit_determination.od_orchestration module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.orbit_fitter.html">adam_core.orbit_determination.orbit_fitter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.provenance.html">adam_core.orbit_determination.provenance module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.rejection.html">adam_core.orbit_determination.rejection module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.veres2017.html">adam_core.orbit_determination.veres2017 module</a></li>
 </ul>
@@ -458,6 +459,7 @@
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span><span class="p">,</span> <span class="n">field</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">ClassVar</span><span class="p">,</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Union</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..constants</span><span class="w"> </span><span class="kn">import</span> <span class="n">Constants</span> <span class="k">as</span> <span class="n">_Constants</span>
@@ -551,6 +553,29 @@
 
 
 
+<div class="viewcode-block" id="NativeBackend">
+<a class="viewcode-back" href="../../../reference/api/adam_core.propagator.html#adam_core.propagator.NativeBackend">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">NativeBackend</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    A propagator class's declaration that it provides compiled orbit</span>
+<span class="sd">    determination work units running its own dynamics.</span>
+
+<span class="sd">    ``name`` and ``version`` identify the backend (recorded in OD</span>
+<span class="sd">    provenance); ``work_units`` names the methods that run natively</span>
+<span class="sd">    (``run_iod``, ``full_od``, ``run_od``, ``iterative_fit``,</span>
+<span class="sd">    ``cmc2003_fit``, ``fit_least_squares_whitened``,</span>
+<span class="sd">    ``fit_least_squares_evaluated``, ``fit_least_squares``,</span>
+<span class="sd">    ``initial_orbit_determination``). OD dispatches to a work unit only when</span>
+<span class="sd">    it is declared here: having a method of that name is not enough.</span>
+<span class="sd">    """</span>
+
+    <span class="n">name</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">version</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">work_units</span><span class="p">:</span> <span class="nb">frozenset</span> <span class="o">=</span> <span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="nb">frozenset</span><span class="p">)</span></div>
+
+
+
 <div class="viewcode-block" id="Propagator">
 <a class="viewcode-back" href="../../../reference/api/adam_core.propagator.propagator.html#adam_core.propagator.Propagator">[docs]</a>
 <span class="k">class</span><span class="w"> </span><span class="nc">Propagator</span><span class="p">(</span><span class="n">EphemerisMixin</span><span class="p">):</span>
@@ -570,6 +595,12 @@
     <span class="c1">#: analytic Jacobian is requested, and ``jacobian="central"`` differences</span>
     <span class="c1">#: the propagator itself instead.</span>
     <span class="n">two_body_dynamics</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="nb">bool</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="c1">#: The compiled OD work units this class provides (`NativeBackend`), or</span>
+    <span class="c1">#: None. The declaration covers the class's own propagation and</span>
+    <span class="c1">#: work-unit methods: a subclass that overrides any of them is not</span>
+    <span class="c1">#: covered (it runs the composed path) unless it declares again.</span>
+    <span class="n">native_backend</span><span class="p">:</span> <span class="n">ClassVar</span><span class="p">[</span><span class="n">Optional</span><span class="p">[</span><span class="n">NativeBackend</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
 
 <div class="viewcode-block" id="Propagator.propagate_orbits">
 <a class="viewcode-back" href="../../../reference/api/adam_core.propagator.propagator.html#adam_core.propagator.Propagator.propagate_orbits">[docs]</a>

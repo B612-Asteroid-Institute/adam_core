@@ -306,6 +306,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.od_orchestration.html">adam_core.orbit_determination.od_orchestration module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.orbit_fitter.html">adam_core.orbit_determination.orbit_fitter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.provenance.html">adam_core.orbit_determination.provenance module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.rejection.html">adam_core.orbit_determination.rejection module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.orbit_determination.veres2017.html">adam_core.orbit_determination.veres2017 module</a></li>
 </ul>
@@ -454,7 +455,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.spice</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_perturber_state</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="n">_warn_if_analytic_jacobian_mismatches</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">,</span> <span class="n">native_work_unit</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span> <span class="n">evaluate_orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.observation_uncertainty</span><span class="w"> </span><span class="kn">import</span> <span class="n">ObservationUncertaintyModel</span>
@@ -1016,7 +1017,7 @@
 <span class="sd">    `RuntimeWarning`s. Returns None when the propagator exposes no such work</span>
 <span class="sd">    unit.</span>
 <span class="sd">    """</span>
-    <span class="n">fused</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"fit_least_squares_whitened"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">fused</span> <span class="o">=</span> <span class="n">native_work_unit</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"fit_least_squares_whitened"</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="kc">None</span>
     <span class="n">ignore_mask</span> <span class="o">=</span> <span class="p">(</span>
@@ -1053,7 +1054,7 @@
 <span class="sd">    neither. Only reachable for the legacy forward-difference Jacobian with</span>
 <span class="sd">    the linear loss; see `fit_least_squares`.</span>
 <span class="sd">    """</span>
-    <span class="n">fused_fit</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"fit_least_squares_evaluated"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">fused_fit</span> <span class="o">=</span> <span class="n">native_work_unit</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"fit_least_squares_evaluated"</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">fused_fit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">ignore_mask</span> <span class="o">=</span> <span class="p">(</span>
             <span class="n">pc</span><span class="o">.</span><span class="n">is_in</span><span class="p">(</span><span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="p">,</span> <span class="n">pa</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">ignore</span><span class="p">))</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">()</span>
@@ -1066,7 +1067,7 @@
             <span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="p">(</span><span class="o">~</span><span class="n">outlier</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
         <span class="p">)</span>
 
-    <span class="n">native_fit</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"fit_least_squares"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">native_fit</span> <span class="o">=</span> <span class="n">native_work_unit</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"fit_least_squares"</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">native_fit</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">fitted</span><span class="p">,</span> <span class="n">_chi2</span><span class="p">,</span> <span class="n">iterations</span><span class="p">,</span> <span class="n">converged</span> <span class="o">=</span> <span class="n">native_fit</span><span class="p">(</span>
             <span class="n">orbit</span><span class="p">,</span> <span class="n">observations_to_include</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span>
@@ -1479,7 +1480,7 @@
     <span class="c1"># Rust-backed propagators run the whole rejection loop in one crossing</span>
     <span class="c1"># (``iterative_fit`` work unit); every other propagator runs the same Rust</span>
     <span class="c1"># loop through the callback route. The facade only wraps the selected pass.</span>
-    <span class="n">fused</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"iterative_fit"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="n">fused</span> <span class="o">=</span> <span class="n">native_work_unit</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"iterative_fit"</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">output</span> <span class="o">=</span> <span class="n">fused</span><span class="p">(</span><span class="n">orbit</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">fit_settings</span><span class="o">=</span><span class="n">fit_settings</span><span class="p">,</span> <span class="o">**</span><span class="n">loop_settings</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>

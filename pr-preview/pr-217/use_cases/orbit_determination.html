@@ -308,6 +308,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.od_orchestration.html">adam_core.orbit_determination.od_orchestration module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.orbit_fitter.html">adam_core.orbit_determination.orbit_fitter module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.outliers.html">adam_core.orbit_determination.outliers module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.provenance.html">adam_core.orbit_determination.provenance module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.rejection.html">adam_core.orbit_determination.rejection module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.orbit_determination.veres2017.html">adam_core.orbit_determination.veres2017 module</a></li>
 </ul>
@@ -656,7 +657,12 @@ observations over 1 day. See <em>The IOD policy</em> below.</p></td>
 <tr class="row-even"><td><p>Provenance</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">FittedOrbitMembers</span></code> record original vs used astrometry, <code class="docutils literal notranslate"><span class="pre">astcat</span></code>
 and <code class="docutils literal notranslate"><span class="pre">weight</span></code>; the models act on the fit only. Judge a held-out
-observation against its nominal position and original sigma.</p></td>
+observation against its nominal position and original sigma.
+<code class="docutils literal notranslate"><span class="pre">FittedOrbits.provenance</span></code> (<code class="docutils literal notranslate"><span class="pre">OdProvenance</span></code>) records the
+adam-core version, route, fitter, IOD and refinement backends,
+settings, model descriptors with table hashes, IOD ambiguity, and the
+number and fraction of observations rejected (CMC2003 may reject up
+to half the arc; the fraction shows how much it did).</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">run_od</span></code></p></td>
 </tr>
 </tbody>
@@ -699,7 +705,7 @@ visits the densest 10 days, the densest 30 days, the last and first 30
 days and the whole arc, and in each prefers triplets spanning about 6
 days, at most one per pair of nights, 32 triplets in all
 (<code class="docutils literal notranslate"><span class="pre">span_settings</span></code>).</p></li>
-<li><p><strong>Velocity.</strong> Gibbs by default; <code class="docutils literal notranslate"><span class="pre">velocity_method=&quot;auto&quot;</span></code> switches to
+<li><p><strong>Velocity.</strong> <code class="docutils literal notranslate"><span class="pre">velocity_method=&quot;auto&quot;</span></code> by default, which switches to
 Herrick-Gibbs when consecutive positions are within 5 degrees (Vallado
 2013, sec. 7.5.2).</p></li>
 <li><p><strong>Correction.</strong> Each raw Gauss orbit is scored on the observations near
