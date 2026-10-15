@@ -243,6 +243,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -510,6 +511,24 @@ table into <code class="docutils literal notranslate"><span class="pre">Orbits</
 </pre></div>
 </div>
 </section>
+<section id="oem-3-0-with-local-frame-covariances">
+<h2>OEM 3.0 with Local Frame Covariances<a class="headerlink" href="#oem-3-0-with-local-frame-covariances" title="Link to this heading">¶</a></h2>
+<p><code class="docutils literal notranslate"><span class="pre">version=&quot;3.0&quot;</span></code> writes <code class="docutils literal notranslate"><span class="pre">REF_FRAME</span> <span class="pre">=</span> <span class="pre">ICRF</span></code>, 16 significant digits and millisecond
+epochs. <code class="docutils literal notranslate"><span class="pre">covariance_frame</span></code> writes the covariance blocks in RSW, RTN or TNW, or in
+3.0 in any SANA registry frame such as <code class="docutils literal notranslate"><span class="pre">VNC_ROTATING</span></code>, which a COMMENT notes.</p>
+<div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">LocalFrameCovariances</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits.oem_io</span><span class="w"> </span><span class="kn">import</span> <span class="n">orbit_to_oem</span>
+
+<span class="c1"># One object_id with multiple epochs, as above.</span>
+<span class="n">orbits</span> <span class="o">=</span> <span class="n">propagated_orbits</span>
+<span class="n">orbit_to_oem</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="s2">"vnc.oem"</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">"3.0"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"VNC_ROTATING"</span><span class="p">)</span>
+<span class="n">orbit_to_oem</span><span class="p">(</span>
+    <span class="n">orbits</span><span class="p">,</span> <span class="s2">"tnw.oem"</span><span class="p">,</span> <span class="n">version</span><span class="o">=</span><span class="s2">"3.0"</span><span class="p">,</span> <span class="n">covariance_frame</span><span class="o">=</span><span class="s2">"TNW"</span><span class="p">,</span> <span class="n">table_frames_only</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span>
+<span class="n">LocalFrameCovariances</span><span class="o">.</span><span class="n">from_orbits</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="s2">"VNC_ROTATING"</span><span class="p">)</span><span class="o">.</span><span class="n">to_parquet</span><span class="p">(</span><span class="s2">"vnc.parquet"</span><span class="p">)</span>
+</pre></div>
+</div>
+</section>
 <section id="read-oem-back-into-orbits">
 <h2>Read OEM Back into <code class="docutils literal notranslate"><span class="pre">Orbits</span></code><a class="headerlink" href="#read-oem-back-into-orbits" title="Link to this heading">¶</a></h2>
 <div class="highlight-python notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">adam_core.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
@@ -652,7 +671,7 @@ propagator backend and force model choices.</p></li>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             
@@ -678,6 +697,7 @@ propagator backend and force model choices.</p></li>
 <li><a class="reference internal" href="#input-model-orbit-seed-vs-ephemeris-state-history">Input Model: Orbit Seed vs Ephemeris State History</a></li>
 <li><a class="reference internal" href="#generate-oem-from-a-pre-propagated-state-history">Generate OEM from a Pre-Propagated State History</a></li>
 <li><a class="reference internal" href="#generate-oem-from-a-seed-orbit-propagation-included">Generate OEM from a Seed Orbit (Propagation Included)</a></li>
+<li><a class="reference internal" href="#oem-3-0-with-local-frame-covariances">OEM 3.0 with Local Frame Covariances</a></li>
 <li><a class="reference internal" href="#read-oem-back-into-orbits">Read OEM Back into <code class="docutils literal notranslate"><span class="pre">Orbits</span></code></a></li>
 <li><a class="reference internal" href="#generate-spk-from-orbits">Generate SPK from <code class="docutils literal notranslate"><span class="pre">Orbits</span></code></a></li>
 <li><a class="reference internal" href="#from-ephemeris-like-state-tables-to-oem-spk">From Ephemeris-Like State Tables to OEM/SPK</a></li>

@@ -242,6 +242,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -438,7 +439,8 @@
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">datetime</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Type</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Sequence</span><span class="p">,</span> <span class="n">Type</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
@@ -460,7 +462,7 @@
 
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
-<span class="c1"># CCSDS OEM version written by this module. Matches the Python `oem`</span>
+<span class="c1"># Default CCSDS OEM version of orbit_to_oem. Matches the Python `oem`</span>
 <span class="c1"># package's CURRENT_VERSION ('2.0'), which this module's Rust KVN engine</span>
 <span class="c1"># replaced (bead personal-cmy.28).</span>
 <span class="n">OEM_VERSION</span> <span class="o">=</span> <span class="s2">"2.0"</span>
@@ -626,6 +628,9 @@
 <span class="sd">    """</span>
     <span class="n">frame_map</span> <span class="o">=</span> <span class="p">{</span>
         <span class="s2">"EME2000"</span><span class="p">:</span> <span class="s2">"equatorial"</span><span class="p">,</span>  <span class="c1"># Earth Mean Equator and Equinox of J2000</span>
+        <span class="s2">"ICRF"</span><span class="p">:</span> <span class="s2">"equatorial"</span><span class="p">,</span>  <span class="c1"># International Celestial Reference Frame</span>
+        <span class="s2">"J2000"</span><span class="p">:</span> <span class="s2">"equatorial"</span><span class="p">,</span>
+        <span class="s2">"GCRF"</span><span class="p">:</span> <span class="s2">"equatorial"</span><span class="p">,</span>  <span class="c1"># Geocentric Celestial Reference Frame</span>
         <span class="s2">"ITRF-93"</span><span class="p">:</span> <span class="s2">"itrf93"</span><span class="p">,</span>  <span class="c1"># International Terrestrial Reference Frame</span>
     <span class="p">}</span>
 
@@ -740,6 +745,15 @@
     <span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
     <span class="n">output_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
     <span class="n">originator</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"ADAM CORE USER"</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">version</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">OEM_VERSION</span><span class="p">,</span>
+    <span class="n">object_name</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">object_id</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">creation_date</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">comments</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="p">(),</span>
+    <span class="n">include_covariance</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="n">covariance_frame</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">table_frames_only</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Convert Orbit object to an OEM file.</span>
@@ -752,6 +766,16 @@
 <span class="sd">        The Orbit object to convert, must be pre-propagated to the desired times.</span>
 <span class="sd">    output_file : str</span>
 <span class="sd">        Path to the output OEM file</span>
+<span class="sd">    version : str</span>
+<span class="sd">        "2.0" (REF_FRAME EME2000) or "3.0" (REF_FRAME ICRF, 16 significant</span>
+<span class="sd">        digits, epochs rounded to the millisecond with a warning).</span>
+<span class="sd">    object_name, object_id, creation_date, comments : optional</span>
+<span class="sd">        OBJECT_NAME and OBJECT_ID (default the object_id), CREATION_DATE</span>
+<span class="sd">        (default now, UTC for 3.0) and COMMENT lines after META_START.</span>
+<span class="sd">    include_covariance, covariance_frame, table_frames_only : optional</span>
+<span class="sd">        Write covariance blocks in REF_FRAME (None) or a local orbital frame:</span>
+<span class="sd">        RSW, RTN, TNW, or in 3.0 any name ``LocalFrameCovariances`` accepts,</span>
+<span class="sd">        unless table_frames_only.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -773,13 +797,32 @@
             <span class="s2">"WARNING: Orbit has only one time, you probably wanted to use orbit_to_oem_propagated instead."</span>
         <span class="p">)</span>
 
-    <span class="n">_write_oem_fused</span><span class="p">(</span><span class="n">orbits</span><span class="p">,</span> <span class="n">output_file</span><span class="p">,</span> <span class="n">originator</span><span class="p">)</span>
+    <span class="n">_write_oem_fused</span><span class="p">(</span>
+        <span class="n">orbits</span><span class="p">,</span>
+        <span class="n">output_file</span><span class="p">,</span>
+        <span class="n">originator</span><span class="p">,</span>
+        <span class="n">version</span><span class="p">,</span>
+        <span class="n">creation_date</span><span class="p">,</span>
+        <span class="n">object_name</span><span class="o">=</span><span class="n">object_name</span><span class="p">,</span>
+        <span class="n">object_id</span><span class="o">=</span><span class="n">object_id</span><span class="p">,</span>
+        <span class="n">comments</span><span class="o">=</span><span class="n">comments</span><span class="p">,</span>
+        <span class="n">include_covariance</span><span class="o">=</span><span class="n">include_covariance</span><span class="p">,</span>
+        <span class="n">covariance_frame</span><span class="o">=</span><span class="n">covariance_frame</span><span class="p">,</span>
+        <span class="n">table_frames_only</span><span class="o">=</span><span class="n">table_frames_only</span><span class="p">,</span>
+    <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">output_file</span></div>
 
 
 
-<span class="k">def</span><span class="w"> </span><span class="nf">_write_oem_fused</span><span class="p">(</span><span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span> <span class="n">output_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">originator</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">_write_oem_fused</span><span class="p">(</span>
+    <span class="n">orbits</span><span class="p">:</span> <span class="n">Orbits</span><span class="p">,</span>
+    <span class="n">output_file</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">originator</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">version</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">OEM_VERSION</span><span class="p">,</span>
+    <span class="n">creation_date</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="o">**</span><span class="n">options</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""One fused Rust crossing owns the equatorial rotation (ecliptic input),</span>
 <span class="sd">    stable time sort, metadata assembly, AU-&gt;km conversion, covariance</span>
 <span class="sd">    extraction, KVN rendering, and file write (bead personal-cmy.37.4.4).</span>
@@ -800,12 +843,22 @@
             <span class="n">transform_coordinates</span><span class="p">(</span><span class="n">orbits</span><span class="o">.</span><span class="n">coordinates</span><span class="p">,</span> <span class="n">frame_out</span><span class="o">=</span><span class="s2">"equatorial"</span><span class="p">),</span>
         <span class="p">)</span>
 
-    <span class="n">_rn</span><span class="o">.</span><span class="n">oem_write_orbits_kvn</span><span class="p">(</span>
+    <span class="k">if</span> <span class="n">creation_date</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">now</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span>
+        <span class="n">utc</span> <span class="o">=</span> <span class="n">now</span><span class="p">(</span><span class="n">datetime</span><span class="o">.</span><span class="n">timezone</span><span class="o">.</span><span class="n">utc</span><span class="p">)</span><span class="o">.</span><span class="n">strftime</span><span class="p">(</span><span class="s2">"%Y-%m-</span><span class="si">%d</span><span class="s2">T%H:%M:%S"</span><span class="p">)</span>
+        <span class="n">creation_date</span> <span class="o">=</span> <span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">()</span> <span class="k">if</span> <span class="n">version</span> <span class="o">==</span> <span class="s2">"2.0"</span> <span class="k">else</span> <span class="n">utc</span>
+    <span class="n">rounded</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">oem_write_orbits_kvn</span><span class="p">(</span>
         <span class="nb">str</span><span class="p">(</span><span class="n">output_file</span><span class="p">),</span>
         <span class="n">orbits_to_ipc</span><span class="p">(</span><span class="n">orbits</span><span class="p">),</span>
         <span class="n">originator</span><span class="p">,</span>
-        <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span>
+        <span class="n">creation_date</span><span class="p">,</span>
+        <span class="n">version</span><span class="o">=</span><span class="n">version</span><span class="p">,</span>
+        <span class="o">**</span><span class="n">options</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="k">if</span> <span class="n">rounded</span><span class="p">:</span>
+        <span class="n">warnings</span><span class="o">.</span><span class="n">warn</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">rounded</span><span class="si">}</span><span class="s2"> of </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">orbits</span><span class="p">)</span><span class="si">}</span><span class="s2"> epochs rounded to the millisecond grid."</span>
+        <span class="p">)</span>
 
 
 <div class="viewcode-block" id="orbit_to_oem_propagated">
@@ -996,7 +1049,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             

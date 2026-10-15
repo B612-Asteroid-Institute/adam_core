@@ -242,6 +242,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -437,6 +438,7 @@
           <h1>Source code for adam_core.utils.mpc</h1><div class="highlight"><pre>
 <span></span><span class="kn">from</span><span class="w"> </span><span class="nn">__future__</span><span class="w"> </span><span class="kn">import</span> <span class="n">annotations</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">TYPE_CHECKING</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy.typing</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">npt</span>
@@ -446,6 +448,18 @@
 
 <span class="n">BASE62</span> <span class="o">=</span> <span class="s2">"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"</span>
 <span class="n">BASE62_MAP</span> <span class="o">=</span> <span class="p">{</span><span class="n">BASE62</span><span class="p">[</span><span class="n">i</span><span class="p">]:</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">BASE62</span><span class="p">))}</span>
+
+
+<div class="viewcode-block" id="ADESDesignationParts">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.ADESDesignationParts">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">ADESDesignationParts</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Validated ADES identity fields derived from one submitted MPC label."""</span>
+
+    <span class="n">perm_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">prov_id</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">trk_sub</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span></div>
+
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_astropy_time_class</span><span class="p">():</span>
@@ -501,307 +515,193 @@
 
 
 
+<span class="k">def</span><span class="w"> </span><span class="nf">_rust_designation_call</span><span class="p">(</span><span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Call one strict scalar Rust designation codec."""</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
+
+    <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">_rn</span><span class="p">,</span> <span class="n">name</span><span class="p">)(</span><span class="n">designation</span><span class="p">)</span>
+
+
 <div class="viewcode-block" id="pack_numbered_designation">
 <a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_numbered_designation">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">pack_numbered_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    Pack a numbered MPC designation.</span>
-
-<span class="sd">    Runs in the Rust backend (legacy-exact port, W11 helper migration).</span>
-
-<span class="sd">    Examples of numbered designations:</span>
-<span class="sd">        Numbered      Packed</span>
-<span class="sd">        3202          03202</span>
-<span class="sd">        50000         50000</span>
-<span class="sd">        100345        A0345</span>
-<span class="sd">        360017        a0017</span>
-<span class="sd">        203289        K3289</span>
-<span class="sd">        620000        ~0000</span>
-<span class="sd">        620061        ~000z</span>
-<span class="sd">        3140113       ~AZaz</span>
-<span class="sd">        15396335      ~zzzz</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    designation : str</span>
-<span class="sd">        MPC numbered designation.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    designation_pf : str</span>
-<span class="sd">        MPC packed numbered designation.</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError : If the numbered designation cannot be packed.</span>
-<span class="sd">        If the numbered designation is larger than 15396335.</span>
-<span class="sd">    """</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
-
-    <span class="k">return</span> <span class="n">_rn</span><span class="o">.</span><span class="n">pack_numbered_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">)</span></div>
-
-
-
-<div class="viewcode-block" id="pack_provisional_designation">
-<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_provisional_designation">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">pack_provisional_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    Pack a provisional MPC designation.</span>
-
-<span class="sd">    Runs in the Rust backend (legacy-exact port, W11 helper migration).</span>
-
-<span class="sd">    Examples of provisional designations:</span>
-<span class="sd">        Provisional   Packed</span>
-<span class="sd">        1995 XA       J95X00A</span>
-<span class="sd">        1995 XL1      J95X01L</span>
-<span class="sd">        1995 FB13     J95F13B</span>
-<span class="sd">        1998 SQ108    J98SA8Q</span>
-<span class="sd">        1998 SV127    J98SC7V</span>
-<span class="sd">        1998 SS162    J98SG2S</span>
-<span class="sd">        2099 AZ193    K99AJ3Z</span>
-<span class="sd">        2008 AA360    K08Aa0A</span>
-<span class="sd">        2007 TA418    K07Tf8A</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    designation : str</span>
-<span class="sd">        MPC provisional designation.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    designation_pf : str</span>
-<span class="sd">        MPC packed provisional designation.</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError : If the provisional designation cannot be packed.</span>
-<span class="sd">        The provisional designations is not at least 6 characters long.</span>
-<span class="sd">        The first 4 characters of the provisional designation are not a year.</span>
-<span class="sd">        The 5th character of the provisional designation is not a space.</span>
-<span class="sd">        The provisional designation contains a hyphen.</span>
-<span class="sd">        The half-month letter is I or Z.</span>
-<span class="sd">    """</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
-
-    <span class="k">return</span> <span class="n">_rn</span><span class="o">.</span><span class="n">pack_provisional_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">)</span></div>
-
-
-
-<div class="viewcode-block" id="pack_survey_designation">
-<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_survey_designation">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">pack_survey_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    Pack a survey MPC designation.</span>
-
-<span class="sd">    Runs in the Rust backend (legacy-exact port, W11 helper migration).</span>
-
-<span class="sd">    Examples of survey designations:</span>
-<span class="sd">        Survey       Packed</span>
-<span class="sd">        2040 P-L     PLS2040</span>
-<span class="sd">        3138 T-1     T1S3138</span>
-<span class="sd">        1010 T-2     T2S1010</span>
-<span class="sd">        4101 T-3     T3S4101</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    designation : str</span>
-<span class="sd">        MPC survey designation.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    designation_pf : str</span>
-<span class="sd">        MPC packed survey designation.</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError : If the survey designation cannot be packed.</span>
-<span class="sd">        The survey designation does not start with P-L, T-1, T-2, or T-3.</span>
-<span class="sd">    """</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
-
-    <span class="k">return</span> <span class="n">_rn</span><span class="o">.</span><span class="n">pack_survey_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">)</span></div>
-
-
-
-<div class="viewcode-block" id="pack_mpc_designation">
-<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_mpc_designation">[docs]</a>
-<span class="k">def</span><span class="w"> </span><span class="nf">pack_mpc_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    Pack a unpacked MPC designation. For example, provisional</span>
-<span class="sd">    designation 1998 SS162 will be packed to J98SG2S. Permanent</span>
-<span class="sd">    designation 323 will be packed to 00323.</span>
-
-<span class="sd">    Runs in the Rust backend (legacy-exact port, W11 helper migration).</span>
-
-<span class="sd">    TODO: add support for comet and natural satellite designations</span>
-
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    designation : str</span>
-<span class="sd">        MPC unpacked designation.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    designation_pf : str</span>
-<span class="sd">        MPC packed form designation.</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError : If designation cannot be packed.</span>
-<span class="sd">    """</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
-
-    <span class="k">return</span> <span class="n">_rn</span><span class="o">.</span><span class="n">pack_mpc_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">)</span></div>
+<span class="w">    </span><span class="sd">"""Pack one canonical decimal minor-planet number."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"pack_numbered_designation"</span><span class="p">,</span> <span class="n">designation</span><span class="p">)</span></div>
 
 
 
 <div class="viewcode-block" id="unpack_numbered_designation">
 <a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_numbered_designation">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">unpack_numbered_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    Unpack a numbered MPC designation.</span>
+<span class="w">    </span><span class="sd">"""Unpack one canonical five-character numbered minor-planet identity."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"unpack_numbered_designation"</span><span class="p">,</span> <span class="n">designation_pf</span><span class="p">)</span></div>
 
-<span class="sd">    Runs in the Rust backend (legacy-exact port, W11 helper migration).</span>
 
-<span class="sd">    Examples of numbered designations:</span>
-<span class="sd">        Numbered      Unpacked</span>
-<span class="sd">        03202         3202</span>
-<span class="sd">        50000         50000</span>
-<span class="sd">        A0345         100345</span>
-<span class="sd">        a0017         360017</span>
-<span class="sd">        K3289         203289</span>
-<span class="sd">        ~0000         620000</span>
-<span class="sd">        ~000z         620061</span>
-<span class="sd">        ~AZaz         3140113</span>
-<span class="sd">        ~zzzz         15396335</span>
 
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    designation_pf : str</span>
-<span class="sd">        MPC packed numbered designation.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    designation : str</span>
-<span class="sd">        MPC unpacked numbered designation.</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError : If the numbered designation cannot be unpacked.</span>
-<span class="sd">    """</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
-
-    <span class="k">return</span> <span class="n">_rn</span><span class="o">.</span><span class="n">unpack_numbered_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">)</span></div>
+<div class="viewcode-block" id="pack_provisional_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_provisional_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pack_provisional_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Pack a canonical ordinary, extended, or A-prefix minor-planet provisional."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"pack_provisional_designation"</span><span class="p">,</span> <span class="n">designation</span><span class="p">)</span></div>
 
 
 
 <div class="viewcode-block" id="unpack_provisional_designation">
 <a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_provisional_designation">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">unpack_provisional_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    Unpack a provisional MPC designation.</span>
+<span class="w">    </span><span class="sd">"""Unpack a canonical ordinary or underscore-extended minor-planet provisional."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"unpack_provisional_designation"</span><span class="p">,</span> <span class="n">designation_pf</span><span class="p">)</span></div>
 
-<span class="sd">    Runs in the Rust backend (legacy-exact port, W11 helper migration).</span>
 
-<span class="sd">    Examples of provisional designations:</span>
-<span class="sd">        Provisional   Unpacked</span>
-<span class="sd">        J95X00A       1995 XA</span>
-<span class="sd">        J95X01L       1995 XL1</span>
-<span class="sd">        J95F13B       1995 FB13</span>
-<span class="sd">        J98SA8Q       1998 SQ108</span>
-<span class="sd">        J98SC7V       1998 SV127</span>
-<span class="sd">        J98SG2S       1998 SS162</span>
-<span class="sd">        K99AJ3Z       2099 AZ193</span>
-<span class="sd">        K08Aa0A       2008 AA360</span>
-<span class="sd">        K07Tf8A       2007 TA418</span>
 
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    designation_pf : str</span>
-<span class="sd">        MPC packed provisional designation.</span>
-
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    designation : str</span>
-<span class="sd">        MPC unpacked provisional designation.</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError : If the provisional designation cannot be unpacked.</span>
-<span class="sd">        The packed provisional designation is not 7 characters long.</span>
-<span class="sd">        The packed provisional designation does not have a year.</span>
-<span class="sd">    """</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
-
-    <span class="k">return</span> <span class="n">_rn</span><span class="o">.</span><span class="n">unpack_provisional_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">)</span></div>
+<div class="viewcode-block" id="pack_survey_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_survey_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pack_survey_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Pack a canonical P-L or T-1/T-2/T-3 survey designation."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"pack_survey_designation"</span><span class="p">,</span> <span class="n">designation</span><span class="p">)</span></div>
 
 
 
 <div class="viewcode-block" id="unpack_survey_designation">
 <a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_survey_designation">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">unpack_survey_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    Unpack a survey MPC designation.</span>
+<span class="w">    </span><span class="sd">"""Unpack a canonical PLS/T1S/T2S/T3S survey designation."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"unpack_survey_designation"</span><span class="p">,</span> <span class="n">designation_pf</span><span class="p">)</span></div>
 
-<span class="sd">    Runs in the Rust backend (legacy-exact port, W11 helper migration).</span>
 
-<span class="sd">    Examples of survey designations:</span>
-<span class="sd">        Survey       Packed</span>
-<span class="sd">        PLS2040      2040 P-L</span>
-<span class="sd">        T1S3138      3138 T-1</span>
-<span class="sd">        T2S1010      1010 T-2</span>
-<span class="sd">        T3S4101      4101 T-3</span>
 
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    designation_pf : str</span>
-<span class="sd">        MPC packed survey designation.</span>
+<div class="viewcode-block" id="pack_numbered_comet_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_numbered_comet_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pack_numbered_comet_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Pack a canonical numbered comet/interstellar identity and optional fragment."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"pack_numbered_comet_designation"</span><span class="p">,</span> <span class="n">designation</span><span class="p">)</span></div>
 
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    designation : str</span>
-<span class="sd">        MPC unpacked survey designation.</span>
 
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError : If the survey designation cannot be unpacked.</span>
-<span class="sd">        The packed survey designation does not start with PLS, T1S, T2S, or T3S.</span>
-<span class="sd">    """</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
-    <span class="k">return</span> <span class="n">_rn</span><span class="o">.</span><span class="n">unpack_survey_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">)</span></div>
+<div class="viewcode-block" id="unpack_numbered_comet_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_numbered_comet_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">unpack_numbered_comet_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Unpack a canonical numbered comet/interstellar identity."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"unpack_numbered_comet_designation"</span><span class="p">,</span> <span class="n">designation_pf</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="pack_provisional_comet_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_provisional_comet_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pack_provisional_comet_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Pack a modern, ancient, BCE, or 12-character combined comet identity."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"pack_provisional_comet_designation"</span><span class="p">,</span> <span class="n">designation</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="unpack_provisional_comet_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_provisional_comet_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">unpack_provisional_comet_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Unpack a modern, ancient, BCE, or 12-character combined comet identity."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span>
+        <span class="s2">"unpack_provisional_comet_designation"</span><span class="p">,</span> <span class="n">designation_pf</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="pack_comet_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_comet_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pack_comet_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Pack any supported canonical comet or interstellar designation."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"pack_comet_designation"</span><span class="p">,</span> <span class="n">designation</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="unpack_comet_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_comet_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">unpack_comet_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Unpack any supported canonical comet or interstellar designation."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"unpack_comet_designation"</span><span class="p">,</span> <span class="n">designation_pf</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="pack_permanent_satellite_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_permanent_satellite_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pack_permanent_satellite_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Pack a permanent natural-satellite identity written with a Roman numeral."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"pack_permanent_satellite_designation"</span><span class="p">,</span> <span class="n">designation</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="unpack_permanent_satellite_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_permanent_satellite_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">unpack_permanent_satellite_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Unpack a permanent natural-satellite identity to its official Roman numeral."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span>
+        <span class="s2">"unpack_permanent_satellite_designation"</span><span class="p">,</span> <span class="n">designation_pf</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="pack_provisional_satellite_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_provisional_satellite_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pack_provisional_satellite_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Pack a canonical provisional natural-satellite designation."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"pack_provisional_satellite_designation"</span><span class="p">,</span> <span class="n">designation</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="unpack_provisional_satellite_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_provisional_satellite_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">unpack_provisional_satellite_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Unpack a canonical provisional natural-satellite designation."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span>
+        <span class="s2">"unpack_provisional_satellite_designation"</span><span class="p">,</span> <span class="n">designation_pf</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="pack_satellite_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_satellite_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pack_satellite_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Pack a permanent or provisional natural-satellite designation."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"pack_satellite_designation"</span><span class="p">,</span> <span class="n">designation</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="unpack_satellite_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_satellite_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">unpack_satellite_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Unpack a permanent or provisional natural-satellite designation."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"unpack_satellite_designation"</span><span class="p">,</span> <span class="n">designation_pf</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="pack_mpc_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.pack_mpc_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">pack_mpc_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Strictly dispatch and pack any supported canonical MPC designation."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"pack_mpc_designation"</span><span class="p">,</span> <span class="n">designation</span><span class="p">)</span></div>
 
 
 
 <div class="viewcode-block" id="unpack_mpc_designation">
 <a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_mpc_designation">[docs]</a>
 <span class="k">def</span><span class="w"> </span><span class="nf">unpack_mpc_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
-<span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    Unpack a packed MPC designation. For example, provisional</span>
-<span class="sd">    designation J98SG2S will be unpacked to 1998 SS162. Permanent</span>
-<span class="sd">    designation 00323 will be unpacked to 323.</span>
+<span class="w">    </span><span class="sd">"""Strictly dispatch and unpack any supported canonical MPC designation."""</span>
+    <span class="k">return</span> <span class="n">_rust_designation_call</span><span class="p">(</span><span class="s2">"unpack_mpc_designation"</span><span class="p">,</span> <span class="n">designation_pf</span><span class="p">)</span></div>
 
-<span class="sd">    Runs in the Rust backend (legacy-exact port, W11 helper migration).</span>
 
-<span class="sd">    TODO: add support for comet and natural satellite designations</span>
 
-<span class="sd">    Parameters</span>
-<span class="sd">    ----------</span>
-<span class="sd">    designation_pf : str</span>
-<span class="sd">        MPC packed form designation.</span>
+<div class="viewcode-block" id="parse_ades_designation">
+<a class="viewcode-back" href="../../../reference/api/adam_core.utils.mpc.html#adam_core.utils.mpc.parse_ades_designation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">parse_ades_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ADESDesignationParts</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""Classify a canonical unpacked identity into ADES identity fields.</span>
 
-<span class="sd">    Returns</span>
-<span class="sd">    -------</span>
-<span class="sd">    designation : str</span>
-<span class="sd">        MPC unpacked designation.</span>
-
-<span class="sd">    Raises</span>
-<span class="sd">    ------</span>
-<span class="sd">    ValueError : If designation_pf cannot be unpacked.</span>
+<span class="sd">    Official packed identities, malformed/noncanonical designations, and</span>
+<span class="sd">    ambiguous values are rejected before the bounded tracking-ID fallback.</span>
+<span class="sd">    Submitted unpacked identity is retained; a combined numbered/provisional</span>
+<span class="sd">    comet is represented by its two canonical ADES fields.</span>
 <span class="sd">    """</span>
     <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span> <span class="k">as</span> <span class="n">_rn</span>
 
-    <span class="k">return</span> <span class="n">_rn</span><span class="o">.</span><span class="n">unpack_mpc_designation</span><span class="p">(</span><span class="n">designation_pf</span><span class="p">)</span></div>
+    <span class="n">perm_id</span><span class="p">,</span> <span class="n">prov_id</span><span class="p">,</span> <span class="n">trk_sub</span> <span class="o">=</span> <span class="n">_rn</span><span class="o">.</span><span class="n">parse_ades_designation</span><span class="p">(</span><span class="n">designation</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ADESDesignationParts</span><span class="p">(</span><span class="n">perm_id</span><span class="o">=</span><span class="n">perm_id</span><span class="p">,</span> <span class="n">prov_id</span><span class="o">=</span><span class="n">prov_id</span><span class="p">,</span> <span class="n">trk_sub</span><span class="o">=</span><span class="n">trk_sub</span><span class="p">)</span></div>
 
 </pre></div>
         </article>
@@ -821,7 +721,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             

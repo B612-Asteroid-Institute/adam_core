@@ -3,7 +3,7 @@
   <head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta name="color-scheme" content="light dark"><meta name="viewport" content="width=device-width, initial-scale=1" />
-<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="adam_core.coordinates.residuals module" href="adam_core.coordinates.residuals.html"><link rel="prev" title="adam_core.coordinates.keplerian module" href="adam_core.coordinates.keplerian.html">
+<link rel="index" title="Index" href="../../genindex.html"><link rel="search" title="Search" href="../../search.html"><link rel="next" title="adam_core.coordinates.residuals module" href="adam_core.coordinates.residuals.html"><link rel="prev" title="adam_core.coordinates.local_orbital_frames module" href="adam_core.coordinates.local_orbital_frames.html">
         <link rel="canonical" href="https://adam-core.readthedocs.io/en/latest/reference/api/adam_core.coordinates.origin.html">
 
     <!-- Generated with Sphinx 8.2.3 and Furo 2025.12.19 -->
@@ -243,6 +243,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5 current current-page"><a class="current reference internal" href="#">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -450,7 +451,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="adam_core.coordinates.origin.OriginCodes">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.coordinates.origin.</span></span><span class="sig-name descname"><span class="pre">OriginCodes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/coordinates/origin.html#OriginCodes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.coordinates.origin.OriginCodes" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/enum.html#enum.Enum" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></a></p>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/enum.html#enum.Enum" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.coordinates.origin.OriginCodes.SOLAR_SYSTEM_BARYCENTER">
 <span class="sig-name descname"><span class="pre">SOLAR_SYSTEM_BARYCENTER</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">0</span></em><a class="headerlink" href="#adam_core.coordinates.origin.OriginCodes.SOLAR_SYSTEM_BARYCENTER" title="Link to this definition">¶</a></dt>
@@ -551,7 +552,7 @@
 <dl class="py class">
 <dt class="sig sig-object py" id="adam_core.coordinates.origin.OriginGravitationalParameters">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.coordinates.origin.</span></span><span class="sig-name descname"><span class="pre">OriginGravitationalParameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/coordinates/origin.html#OriginGravitationalParameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.coordinates.origin.OriginGravitationalParameters" title="Link to this definition">¶</a></dt>
-<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/enum.html#enum.Enum" title="(in Python v3.14)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></a></p>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/enum.html#enum.Enum" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.coordinates.origin.OriginGravitationalParameters.MERCURY_BARYCENTER">
 <span class="sig-name descname"><span class="pre">MERCURY_BARYCENTER</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">4.912547450564196e-11</span></em><a class="headerlink" href="#adam_core.coordinates.origin.OriginGravitationalParameters.MERCURY_BARYCENTER" title="Link to this definition">¶</a></dt>
@@ -619,7 +620,7 @@
 
 <dl class="py method">
 <dt class="sig sig-object py" id="adam_core.coordinates.origin.OriginGravitationalParameters.SOLAR_SYSTEM_BARYCENTER">
-<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">SOLAR_SYSTEM_BARYCENTER</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/coordinates/origin.html#OriginGravitationalParameters.SOLAR_SYSTEM_BARYCENTER"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.coordinates.origin.OriginGravitationalParameters.SOLAR_SYSTEM_BARYCENTER" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">SOLAR_SYSTEM_BARYCENTER</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/coordinates/origin.html#OriginGravitationalParameters.SOLAR_SYSTEM_BARYCENTER"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.coordinates.origin.OriginGravitationalParameters.SOLAR_SYSTEM_BARYCENTER" title="Link to this definition">¶</a></dt>
 <dd><p>Return the effective gravitational parameter of the Solar System barycenter as approximated
 by adding the gravitational parameters of the Sun, Mercury, Venus, Earth, Moon,
 Mars, Jupiter, Uranus, and Neptune.</p>
@@ -632,7 +633,7 @@ of small bodies not included in the calculation here.</p>
 <dd class="field-odd"><p><strong>mu</strong> – The gravitational parameter of the Solar System barycenter in au^3 / day^2.</p>
 </dd>
 <dt class="field-even">Return type<span class="colon">:</span></dt>
-<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)">float</a></p>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)">float</a></p>
 </dd>
 </dl>
 </dd></dl>
@@ -641,7 +642,7 @@ of small bodies not included in the calculation here.</p>
 
 <dl class="py class">
 <dt class="sig sig-object py" id="adam_core.coordinates.origin.Origin">
-<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.coordinates.origin.</span></span><span class="sig-name descname"><span class="pre">Origin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v25.0.1)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.14)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/coordinates/origin.html#Origin"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.coordinates.origin.Origin" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.coordinates.origin.</span></span><span class="sig-name descname"><span class="pre">Origin</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">table</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://arrow.apache.org/docs/python/generated/pyarrow.Table.html#pyarrow.Table" title="(in Apache Arrow v26.0.0)"><span class="pre">Table</span></a></span></em>, <em class="sig-param"><span class="o"><span class="pre">**</span></span><span class="n"><span class="pre">kwargs</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/coordinates/origin.html#Origin"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.coordinates.origin.Origin" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://quivr.readthedocs.io/en/latest/api/tables.html#quivr.Table" title="(in quivr v0.7.6.dev5+g5e130d9)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Table</span></code></a></p>
 <dl class="py attribute">
 <dt class="sig sig-object py" id="adam_core.coordinates.origin.Origin.code">
@@ -652,7 +653,7 @@ variable-length chunks.</p>
 
 <dl class="py method">
 <dt class="sig sig-object py" id="adam_core.coordinates.origin.Origin.from_OriginCodes">
-<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_OriginCodes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#adam_core.coordinates.origin.OriginCodes" title="adam_core.coordinates.origin.OriginCodes"><span class="pre">OriginCodes</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.14)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#adam_core.coordinates.origin.Origin" title="adam_core.coordinates.origin.Origin"><span class="pre">Origin</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/coordinates/origin.html#Origin.from_OriginCodes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.coordinates.origin.Origin.from_OriginCodes" title="Link to this definition">¶</a></dt>
+<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_OriginCodes</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">code</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="#adam_core.coordinates.origin.OriginCodes" title="adam_core.coordinates.origin.OriginCodes"><span class="pre">OriginCodes</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">size</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#int" title="(in Python v3.15)"><span class="pre">int</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#adam_core.coordinates.origin.Origin" title="adam_core.coordinates.origin.Origin"><span class="pre">Origin</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/coordinates/origin.html#Origin.from_OriginCodes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.coordinates.origin.Origin.from_OriginCodes" title="Link to this definition">¶</a></dt>
 <dd></dd></dl>
 
 <dl class="py method">
@@ -681,7 +682,7 @@ variable-length chunks.</p>
 <dd class="field-even"><p><cite>~numpy.ndarray</cite> (N)</p>
 </dd>
 <dt class="field-odd">Raises<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.14)"><strong>ValueError</strong></a> – If the origin code is not recognized.</p>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/exceptions.html#ValueError" title="(in Python v3.15)"><strong>ValueError</strong></a> – If the origin code is not recognized.</p>
 </dd>
 </dl>
 </dd></dl>
@@ -709,14 +710,14 @@ variable-length chunks.</p>
               </div>
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
             </a>
-          <a class="prev-page" href="adam_core.coordinates.keplerian.html">
+          <a class="prev-page" href="adam_core.coordinates.local_orbital_frames.html">
               <svg class="furo-related-icon"><use href="#svg-arrow-right"></use></svg>
               <div class="page-info">
                 <div class="context">
                   <span>Previous</span>
                 </div>
                 
-                <div class="title">adam_core.coordinates.keplerian module</div>
+                <div class="title">adam_core.coordinates.local_orbital_frames module</div>
                 
               </div>
             </a>
@@ -730,7 +731,7 @@ variable-length chunks.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             

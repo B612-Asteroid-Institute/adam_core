@@ -243,6 +243,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -447,6 +448,28 @@
         <article role="main" id="furo-main-content">
           <section id="module-adam_core.utils.mpc">
 <span id="adam-core-utils-mpc-module"></span><h1>adam_core.utils.mpc module<a class="headerlink" href="#module-adam_core.utils.mpc" title="Link to this heading">¶</a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.ADESDesignationParts">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">ADESDesignationParts</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">perm_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">prov_id</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">trk_sub</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#ADESDesignationParts"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.ADESDesignationParts" title="Link to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/builtins/functions.html#object" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Validated ADES identity fields derived from one submitted MPC label.</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.ADESDesignationParts.perm_id">
+<span class="sig-name descname"><span class="pre">perm_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#adam_core.utils.mpc.ADESDesignationParts.perm_id" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.ADESDesignationParts.prov_id">
+<span class="sig-name descname"><span class="pre">prov_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#adam_core.utils.mpc.ADESDesignationParts.prov_id" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.ADESDesignationParts.trk_sub">
+<span class="sig-name descname"><span class="pre">trk_sub</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#adam_core.utils.mpc.ADESDesignationParts.trk_sub" title="Link to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.utils.mpc.convert_mpc_packed_dates">
 <span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">convert_mpc_packed_dates</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pf_tt</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><span class="pre">npt.ArrayLike</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><span class="pre">Time</span></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#convert_mpc_packed_dates"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.convert_mpc_packed_dates" title="Link to this definition">¶</a></dt>
@@ -468,233 +491,132 @@ for details on the packed date format.</p>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.utils.mpc.pack_numbered_designation">
-<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_numbered_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_numbered_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_numbered_designation" title="Link to this definition">¶</a></dt>
-<dd><p>Pack a numbered MPC designation.</p>
-<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
-<dl class="simple">
-<dt>Examples of numbered designations:</dt><dd><p>Numbered      Packed
-3202          03202
-50000         50000
-100345        A0345
-360017        a0017
-203289        K3289
-620000        ~0000
-620061        ~000z
-3140113       ~AZaz
-15396335      ~zzzz</p>
-</dd>
-</dl>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>designation</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – MPC numbered designation.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>designation_pf</strong> – MPC packed numbered designation.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
-</dd>
-</dl>
-<p>:raises ValueError : If the numbered designation cannot be packed.: If the numbered designation is larger than 15396335.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="adam_core.utils.mpc.pack_provisional_designation">
-<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_provisional_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_provisional_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_provisional_designation" title="Link to this definition">¶</a></dt>
-<dd><p>Pack a provisional MPC designation.</p>
-<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
-<dl class="simple">
-<dt>Examples of provisional designations:</dt><dd><p>Provisional   Packed
-1995 XA       J95X00A
-1995 XL1      J95X01L
-1995 FB13     J95F13B
-1998 SQ108    J98SA8Q
-1998 SV127    J98SC7V
-1998 SS162    J98SG2S
-2099 AZ193    K99AJ3Z
-2008 AA360    K08Aa0A
-2007 TA418    K07Tf8A</p>
-</dd>
-</dl>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>designation</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – MPC provisional designation.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>designation_pf</strong> – MPC packed provisional designation.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
-</dd>
-</dl>
-<p>:raises ValueError : If the provisional designation cannot be packed.: The provisional designations is not at least 6 characters long.
-    The first 4 characters of the provisional designation are not a year.
-    The 5th character of the provisional designation is not a space.
-    The provisional designation contains a hyphen.
-    The half-month letter is I or Z.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="adam_core.utils.mpc.pack_survey_designation">
-<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_survey_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_survey_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_survey_designation" title="Link to this definition">¶</a></dt>
-<dd><p>Pack a survey MPC designation.</p>
-<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
-<dl class="simple">
-<dt>Examples of survey designations:</dt><dd><p>Survey       Packed
-2040 P-L     PLS2040
-3138 T-1     T1S3138
-1010 T-2     T2S1010
-4101 T-3     T3S4101</p>
-</dd>
-</dl>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>designation</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – MPC survey designation.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>designation_pf</strong> – MPC packed survey designation.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
-</dd>
-</dl>
-<p>:raises ValueError : If the survey designation cannot be packed.: The survey designation does not start with P-L, T-1, T-2, or T-3.</p>
-</dd></dl>
-
-<dl class="py function">
-<dt class="sig sig-object py" id="adam_core.utils.mpc.pack_mpc_designation">
-<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_mpc_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_mpc_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_mpc_designation" title="Link to this definition">¶</a></dt>
-<dd><p>Pack a unpacked MPC designation. For example, provisional
-designation 1998 SS162 will be packed to J98SG2S. Permanent
-designation 323 will be packed to 00323.</p>
-<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
-<p>TODO: add support for comet and natural satellite designations</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>designation</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – MPC unpacked designation.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>designation_pf</strong> – MPC packed form designation.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
-</dd>
-</dl>
-<p>:raises ValueError : If designation cannot be packed.:</p>
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_numbered_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_numbered_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_numbered_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Pack one canonical decimal minor-planet number.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.utils.mpc.unpack_numbered_designation">
-<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_numbered_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_numbered_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_numbered_designation" title="Link to this definition">¶</a></dt>
-<dd><p>Unpack a numbered MPC designation.</p>
-<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
-<dl class="simple">
-<dt>Examples of numbered designations:</dt><dd><p>Numbered      Unpacked
-03202         3202
-50000         50000
-A0345         100345
-a0017         360017
-K3289         203289
-~0000         620000
-~000z         620061
-~AZaz         3140113
-~zzzz         15396335</p>
-</dd>
-</dl>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>designation_pf</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – MPC packed numbered designation.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>designation</strong> – MPC unpacked numbered designation.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
-</dd>
-</dl>
-<p>:raises ValueError : If the numbered designation cannot be unpacked.:</p>
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_numbered_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_numbered_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_numbered_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Unpack one canonical five-character numbered minor-planet identity.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.pack_provisional_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_provisional_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_provisional_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_provisional_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Pack a canonical ordinary, extended, or A-prefix minor-planet provisional.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.utils.mpc.unpack_provisional_designation">
-<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_provisional_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_provisional_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_provisional_designation" title="Link to this definition">¶</a></dt>
-<dd><p>Unpack a provisional MPC designation.</p>
-<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
-<dl class="simple">
-<dt>Examples of provisional designations:</dt><dd><p>Provisional   Unpacked
-J95X00A       1995 XA
-J95X01L       1995 XL1
-J95F13B       1995 FB13
-J98SA8Q       1998 SQ108
-J98SC7V       1998 SV127
-J98SG2S       1998 SS162
-K99AJ3Z       2099 AZ193
-K08Aa0A       2008 AA360
-K07Tf8A       2007 TA418</p>
-</dd>
-</dl>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>designation_pf</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – MPC packed provisional designation.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>designation</strong> – MPC unpacked provisional designation.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
-</dd>
-</dl>
-<p>:raises ValueError : If the provisional designation cannot be unpacked.: The packed provisional designation is not 7 characters long.
-    The packed provisional designation does not have a year.</p>
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_provisional_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_provisional_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_provisional_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Unpack a canonical ordinary or underscore-extended minor-planet provisional.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.pack_survey_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_survey_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_survey_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_survey_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Pack a canonical P-L or T-1/T-2/T-3 survey designation.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.utils.mpc.unpack_survey_designation">
-<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_survey_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_survey_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_survey_designation" title="Link to this definition">¶</a></dt>
-<dd><p>Unpack a survey MPC designation.</p>
-<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
-<dl class="simple">
-<dt>Examples of survey designations:</dt><dd><p>Survey       Packed
-PLS2040      2040 P-L
-T1S3138      3138 T-1
-T2S1010      1010 T-2
-T3S4101      4101 T-3</p>
-</dd>
-</dl>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>designation_pf</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – MPC packed survey designation.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>designation</strong> – MPC unpacked survey designation.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
-</dd>
-</dl>
-<p>:raises ValueError : If the survey designation cannot be unpacked.: The packed survey designation does not start with PLS, T1S, T2S, or T3S.</p>
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_survey_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_survey_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_survey_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Unpack a canonical PLS/T1S/T2S/T3S survey designation.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.pack_numbered_comet_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_numbered_comet_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_numbered_comet_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_numbered_comet_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Pack a canonical numbered comet/interstellar identity and optional fragment.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.unpack_numbered_comet_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_numbered_comet_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_numbered_comet_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_numbered_comet_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Unpack a canonical numbered comet/interstellar identity.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.pack_provisional_comet_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_provisional_comet_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_provisional_comet_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_provisional_comet_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Pack a modern, ancient, BCE, or 12-character combined comet identity.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.unpack_provisional_comet_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_provisional_comet_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_provisional_comet_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_provisional_comet_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Unpack a modern, ancient, BCE, or 12-character combined comet identity.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.pack_comet_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_comet_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_comet_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_comet_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Pack any supported canonical comet or interstellar designation.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.unpack_comet_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_comet_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_comet_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_comet_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Unpack any supported canonical comet or interstellar designation.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.pack_permanent_satellite_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_permanent_satellite_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_permanent_satellite_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_permanent_satellite_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Pack a permanent natural-satellite identity written with a Roman numeral.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.unpack_permanent_satellite_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_permanent_satellite_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_permanent_satellite_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_permanent_satellite_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Unpack a permanent natural-satellite identity to its official Roman numeral.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.pack_provisional_satellite_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_provisional_satellite_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_provisional_satellite_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_provisional_satellite_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Pack a canonical provisional natural-satellite designation.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.unpack_provisional_satellite_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_provisional_satellite_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_provisional_satellite_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_provisional_satellite_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Unpack a canonical provisional natural-satellite designation.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.pack_satellite_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_satellite_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_satellite_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_satellite_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Pack a permanent or provisional natural-satellite designation.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.unpack_satellite_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_satellite_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_satellite_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_satellite_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Unpack a permanent or provisional natural-satellite designation.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.pack_mpc_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">pack_mpc_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#pack_mpc_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.pack_mpc_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Strictly dispatch and pack any supported canonical MPC designation.</p>
 </dd></dl>
 
 <dl class="py function">
 <dt class="sig sig-object py" id="adam_core.utils.mpc.unpack_mpc_designation">
-<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_mpc_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_mpc_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_mpc_designation" title="Link to this definition">¶</a></dt>
-<dd><p>Unpack a packed MPC designation. For example, provisional
-designation J98SG2S will be unpacked to 1998 SS162. Permanent
-designation 00323 will be unpacked to 323.</p>
-<p>Runs in the Rust backend (legacy-exact port, W11 helper migration).</p>
-<p>TODO: add support for comet and natural satellite designations</p>
-<dl class="field-list simple">
-<dt class="field-odd">Parameters<span class="colon">:</span></dt>
-<dd class="field-odd"><p><strong>designation_pf</strong> (<a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)"><em>str</em></a>) – MPC packed form designation.</p>
-</dd>
-<dt class="field-even">Returns<span class="colon">:</span></dt>
-<dd class="field-even"><p><strong>designation</strong> – MPC unpacked designation.</p>
-</dd>
-<dt class="field-odd">Return type<span class="colon">:</span></dt>
-<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.14)">str</a></p>
-</dd>
-</dl>
-<p>:raises ValueError : If designation_pf cannot be unpacked.:</p>
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">unpack_mpc_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation_pf</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#unpack_mpc_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.unpack_mpc_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Strictly dispatch and unpack any supported canonical MPC designation.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="adam_core.utils.mpc.parse_ades_designation">
+<span class="sig-prename descclassname"><span class="pre">adam_core.utils.mpc.</span></span><span class="sig-name descname"><span class="pre">parse_ades_designation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">designation</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="#adam_core.utils.mpc.ADESDesignationParts" title="adam_core.utils.mpc.ADESDesignationParts"><span class="pre">ADESDesignationParts</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/utils/mpc.html#parse_ades_designation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.utils.mpc.parse_ades_designation" title="Link to this definition">¶</a></dt>
+<dd><p>Classify a canonical unpacked identity into ADES identity fields.</p>
+<p>Official packed identities, malformed/noncanonical designations, and
+ambiguous values are rejected before the bounded tracking-ID fallback.
+Submitted unpacked identity is retained; a combined numbered/provisional
+comet is represented by its two canonical ADES fields.</p>
 </dd></dl>
 
 </section>
@@ -734,7 +656,7 @@ designation 00323 will be unpacked to 323.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             
@@ -756,15 +678,34 @@ designation 00323 will be unpacked to 323.</p>
           <div class="toc-tree">
             <ul>
 <li><a class="reference internal" href="#">adam_core.utils.mpc module</a><ul>
+<li><a class="reference internal" href="#adam_core.utils.mpc.ADESDesignationParts"><code class="docutils literal notranslate"><span class="pre">ADESDesignationParts</span></code></a><ul>
+<li><a class="reference internal" href="#adam_core.utils.mpc.ADESDesignationParts.perm_id"><code class="docutils literal notranslate"><span class="pre">ADESDesignationParts.perm_id</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.ADESDesignationParts.prov_id"><code class="docutils literal notranslate"><span class="pre">ADESDesignationParts.prov_id</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.ADESDesignationParts.trk_sub"><code class="docutils literal notranslate"><span class="pre">ADESDesignationParts.trk_sub</span></code></a></li>
+</ul>
+</li>
 <li><a class="reference internal" href="#adam_core.utils.mpc.convert_mpc_packed_dates"><code class="docutils literal notranslate"><span class="pre">convert_mpc_packed_dates()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.utils.mpc.pack_numbered_designation"><code class="docutils literal notranslate"><span class="pre">pack_numbered_designation()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.utils.mpc.pack_provisional_designation"><code class="docutils literal notranslate"><span class="pre">pack_provisional_designation()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.utils.mpc.pack_survey_designation"><code class="docutils literal notranslate"><span class="pre">pack_survey_designation()</span></code></a></li>
-<li><a class="reference internal" href="#adam_core.utils.mpc.pack_mpc_designation"><code class="docutils literal notranslate"><span class="pre">pack_mpc_designation()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.utils.mpc.unpack_numbered_designation"><code class="docutils literal notranslate"><span class="pre">unpack_numbered_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.pack_provisional_designation"><code class="docutils literal notranslate"><span class="pre">pack_provisional_designation()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.utils.mpc.unpack_provisional_designation"><code class="docutils literal notranslate"><span class="pre">unpack_provisional_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.pack_survey_designation"><code class="docutils literal notranslate"><span class="pre">pack_survey_designation()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.utils.mpc.unpack_survey_designation"><code class="docutils literal notranslate"><span class="pre">unpack_survey_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.pack_numbered_comet_designation"><code class="docutils literal notranslate"><span class="pre">pack_numbered_comet_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.unpack_numbered_comet_designation"><code class="docutils literal notranslate"><span class="pre">unpack_numbered_comet_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.pack_provisional_comet_designation"><code class="docutils literal notranslate"><span class="pre">pack_provisional_comet_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.unpack_provisional_comet_designation"><code class="docutils literal notranslate"><span class="pre">unpack_provisional_comet_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.pack_comet_designation"><code class="docutils literal notranslate"><span class="pre">pack_comet_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.unpack_comet_designation"><code class="docutils literal notranslate"><span class="pre">unpack_comet_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.pack_permanent_satellite_designation"><code class="docutils literal notranslate"><span class="pre">pack_permanent_satellite_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.unpack_permanent_satellite_designation"><code class="docutils literal notranslate"><span class="pre">unpack_permanent_satellite_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.pack_provisional_satellite_designation"><code class="docutils literal notranslate"><span class="pre">pack_provisional_satellite_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.unpack_provisional_satellite_designation"><code class="docutils literal notranslate"><span class="pre">unpack_provisional_satellite_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.pack_satellite_designation"><code class="docutils literal notranslate"><span class="pre">pack_satellite_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.unpack_satellite_designation"><code class="docutils literal notranslate"><span class="pre">unpack_satellite_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.pack_mpc_designation"><code class="docutils literal notranslate"><span class="pre">pack_mpc_designation()</span></code></a></li>
 <li><a class="reference internal" href="#adam_core.utils.mpc.unpack_mpc_designation"><code class="docutils literal notranslate"><span class="pre">unpack_mpc_designation()</span></code></a></li>
+<li><a class="reference internal" href="#adam_core.utils.mpc.parse_ades_designation"><code class="docutils literal notranslate"><span class="pre">parse_ades_designation()</span></code></a></li>
 </ul>
 </li>
 </ul>

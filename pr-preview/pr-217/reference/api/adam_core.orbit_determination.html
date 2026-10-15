@@ -243,6 +243,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -535,7 +536,47 @@
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="adam_core.orbit_determination.iod.html">adam_core.orbit_determination.iod module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate"><code class="docutils literal notranslate"><span class="pre">IodCandidate</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.state"><code class="docutils literal notranslate"><span class="pre">IodCandidate.state</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.epoch_days"><code class="docutils literal notranslate"><span class="pre">IodCandidate.epoch_days</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.epoch_nanos"><code class="docutils literal notranslate"><span class="pre">IodCandidate.epoch_nanos</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.epoch_scale"><code class="docutils literal notranslate"><span class="pre">IodCandidate.epoch_scale</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.window"><code class="docutils literal notranslate"><span class="pre">IodCandidate.window</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.triplet"><code class="docutils literal notranslate"><span class="pre">IodCandidate.triplet</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.root_index"><code class="docutils literal notranslate"><span class="pre">IodCandidate.root_index</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.root_count"><code class="docutils literal notranslate"><span class="pre">IodCandidate.root_count</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.velocity_method"><code class="docutils literal notranslate"><span class="pre">IodCandidate.velocity_method</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.prefit_chi2"><code class="docutils literal notranslate"><span class="pre">IodCandidate.prefit_chi2</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.prefit_reduced_chi2"><code class="docutils literal notranslate"><span class="pre">IodCandidate.prefit_reduced_chi2</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.removed"><code class="docutils literal notranslate"><span class="pre">IodCandidate.removed</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.chi2"><code class="docutils literal notranslate"><span class="pre">IodCandidate.chi2</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.reduced_chi2"><code class="docutils literal notranslate"><span class="pre">IodCandidate.reduced_chi2</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.num_obs"><code class="docutils literal notranslate"><span class="pre">IodCandidate.num_obs</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.arc_length"><code class="docutils literal notranslate"><span class="pre">IodCandidate.arc_length</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.postfit_reduced_chi2"><code class="docutils literal notranslate"><span class="pre">IodCandidate.postfit_reduced_chi2</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.converged"><code class="docutils literal notranslate"><span class="pre">IodCandidate.converged</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.accepted"><code class="docutils literal notranslate"><span class="pre">IodCandidate.accepted</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.corrected_state"><code class="docutils literal notranslate"><span class="pre">IodCandidate.corrected_state</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.stages"><code class="docutils literal notranslate"><span class="pre">IodCandidate.stages</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate.correction_note"><code class="docutils literal notranslate"><span class="pre">IodCandidate.correction_note</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport"><code class="docutils literal notranslate"><span class="pre">IodReport</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport.candidates"><code class="docutils literal notranslate"><span class="pre">IodReport.candidates</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport.accepted"><code class="docutils literal notranslate"><span class="pre">IodReport.accepted</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport.triplets_tried"><code class="docutils literal notranslate"><span class="pre">IodReport.triplets_tried</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport.candidates_evaluated"><code class="docutils literal notranslate"><span class="pre">IodReport.candidates_evaluated</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport.candidates_failed"><code class="docutils literal notranslate"><span class="pre">IodReport.candidates_failed</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport.corrections_run"><code class="docutils literal notranslate"><span class="pre">IodReport.corrections_run</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport.not_found_reason"><code class="docutils literal notranslate"><span class="pre">IodReport.not_found_reason</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport.ambiguous_with"><code class="docutils literal notranslate"><span class="pre">IodReport.ambiguous_with</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport.found"><code class="docutils literal notranslate"><span class="pre">IodReport.found</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport.ambiguous"><code class="docutils literal notranslate"><span class="pre">IodReport.ambiguous</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport.accepted_candidate"><code class="docutils literal notranslate"><span class="pre">IodReport.accepted_candidate</span></code></a></li>
+</ul>
+</li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.initial_orbit_determination"><code class="docutils literal notranslate"><span class="pre">initial_orbit_determination()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.run_iod"><code class="docutils literal notranslate"><span class="pre">run_iod()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l1"><a class="reference internal" href="adam_core.orbit_determination.least_squares.html">adam_core.orbit_determination.least_squares module</a><ul>
@@ -550,6 +591,8 @@
 <li class="toctree-l2"><a class="reference internal" href="adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter"><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.native_settings"><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter.native_settings()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.supports_native_full_od"><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter.supports_native_full_od()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.fused_propagator_matches"><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter.fused_propagator_matches()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.iod_propagator_for"><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter.iod_propagator_for()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.full_od"><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter.full_od()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.initial_fit"><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter.initial_fit()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.refine_fit"><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter.refine_fit()</span></code></a></li>
@@ -689,7 +732,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             

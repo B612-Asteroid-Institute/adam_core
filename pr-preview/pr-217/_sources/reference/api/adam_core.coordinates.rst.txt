@@ -17,6 +17,7 @@ Submodules
    adam_core.coordinates.covariances
    adam_core.coordinates.geodetics
    adam_core.coordinates.keplerian
+   adam_core.coordinates.local_orbital_frames
    adam_core.coordinates.origin
    adam_core.coordinates.residuals
    adam_core.coordinates.spherical

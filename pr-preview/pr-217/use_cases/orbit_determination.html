@@ -244,6 +244,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../reference/api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -633,7 +634,9 @@ positions before anything reads them)</p></td>
 <tr class="row-odd"><td><p>Outlier rejection</p></td>
 <td><p>Carpino-Milani-Chesley (2003) with OrbFit’s <code class="docutils literal notranslate"><span class="pre">reject.def</span></code> constants
 (reject 8, recover 7, frac 0.25, 15 passes, 50% max rejected, 180-day
-apparitions, 5% eigenvalue floor)</p></td>
+apparitions, 5% eigenvalue floor). Each refit shares a full-predictor
+central-difference Jacobian between covariance and rejection, even
+when optimizer steps use the analytic 2-body Jacobian.</p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter()</span></code> (<code class="docutils literal notranslate"><span class="pre">outlier_rejection=&quot;cmc2003&quot;</span></code>) / <code class="docutils literal notranslate"><span class="pre">cmc2003_fit()</span></code></p></td>
 </tr>
 <tr class="row-even"><td><p>Differential correction</p></td>
@@ -643,9 +646,11 @@ probe, linear loss</p></td>
 <code class="docutils literal notranslate"><span class="pre">validate_covariance=True</span></code>, <code class="docutils literal notranslate"><span class="pre">loss=&quot;linear&quot;</span></code>)</p></td>
 </tr>
 <tr class="row-odd"><td><p>IOD</p></td>
-<td><p>Gauss on every observation triplet, accepted below reduced chi2 200;
-at least 6 observations over 1 day</p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter()</span></code> (<code class="docutils literal notranslate"><span class="pre">observation_selection_method=&quot;combinations&quot;</span></code>,
+<td><p>Gauss on span-bounded triplets (about 6 days), each orbit a seed for
+staged differential corrections to the whole arc; at least 6
+observations over 1 day. See <em>The IOD policy</em> below.</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter()</span></code> / <code class="docutils literal notranslate"><span class="pre">run_iod()</span></code>
+(<code class="docutils literal notranslate"><span class="pre">observation_selection_method=&quot;spans&quot;</span></code>, <code class="docutils literal notranslate"><span class="pre">iod_acceptance=&quot;corrected&quot;</span></code>,
 <code class="docutils literal notranslate"><span class="pre">iod_rchi2_threshold=200</span></code>, <code class="docutils literal notranslate"><span class="pre">min_obs=6</span></code>, <code class="docutils literal notranslate"><span class="pre">min_arc_length=1</span></code>)</p></td>
 </tr>
 <tr class="row-even"><td><p>Provenance</p></td>
@@ -667,6 +672,55 @@ pre-2026-09 loop). The lower-level entry points (<code class="docutils literal n
 <code class="docutils literal notranslate"><span class="pre">observatory_bias_model</span></code> that defaults to None: they are building blocks,
 not the shipped pipeline, and work without the data packages. The same notes
 are in the <code class="docutils literal notranslate"><span class="pre">run_od</span></code> docstring.</p>
+</section>
+<section id="the-iod-policy">
+<h3>The IOD policy<a class="headerlink" href="#the-iod-policy" title="Link to this heading">¶</a></h3>
+<p>A Gauss preliminary orbit is a seed for differential correction, not the
+answer (Milani &amp; Gronchi 2010), as in OrbFit, Find_Orb and JPL’s pipeline.
+Every number is a Rust <code class="docutils literal notranslate"><span class="pre">Default</span></code> that documents its source; Python reads
+them from <code class="docutils literal notranslate"><span class="pre">IOD_DEFAULTS</span></code> (<code class="docutils literal notranslate"><span class="pre">from</span> <span class="pre">adam_core.orbit_determination</span> <span class="pre">import</span>
+<span class="pre">IOD_DEFAULTS</span></code>), so the signature defaults of <code class="docutils literal notranslate"><span class="pre">run_iod</span></code> and
+<code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter</span></code> cannot drift from Rust.</p>
+<ul class="simple">
+<li><p><strong>Ordering and determinism.</strong> Observations are searched in a canonical
+order (epoch, station, input row); the same input gives the same orbit
+whatever its row order. A triplet never repeats an epoch.</p></li>
+<li><p><strong>Triplets.</strong> Gauss truncates the f and g series, so a preliminary orbit
+degrades with the arc its triplet spans (on 2012 TF79 the full-arc reduced
+chi2 grows from about 1e4 at a 3-day span to 1e9 at 67 days). The search
+visits the densest 10 days, the densest 30 days, the last and first 30
+days and the whole arc, and in each prefers triplets spanning about 6
+days, at most one per pair of nights, 32 triplets in all
+(<code class="docutils literal notranslate"><span class="pre">span_settings</span></code>).</p></li>
+<li><p><strong>Velocity.</strong> Gibbs by default; <code class="docutils literal notranslate"><span class="pre">velocity_method=&quot;auto&quot;</span></code> switches to
+Herrick-Gibbs when consecutive positions are within 5 degrees (Vallado
+2013, sec. 7.5.2).</p></li>
+<li><p><strong>Correction.</strong> In increasing prefit reduced chi2, up to 8 candidates are
+corrected in stages: the triplet’s span (at least 6 observations), then
+spans grown fourfold (an apparition gap jumps to the nearest night), each
+stage within <code class="docutils literal notranslate"><span class="pre">rchi2_threshold</span></code>. Stages before the whole arc reject
+nothing and down-weight with Huber’s loss (<code class="docutils literal notranslate"><span class="pre">correction_settings=</span>
+<span class="pre">{&quot;stage_loss&quot;:</span> <span class="pre">&quot;linear&quot;}</span></code> turns that off); the whole-arc stage is a plain
+fit with Carpino, Milani &amp; Chesley (2003) rejection when above the
+threshold. The search stops after 2 candidates reach the whole arc
+(<code class="docutils literal notranslate"><span class="pre">correction_settings</span></code>).</p></li>
+<li><p><strong>Multiple roots.</strong> Every physical root of a triplet’s Gauss polynomial is
+a candidate (Charlier: up to three); the other roots of a converged
+candidate’s triplet are corrected too.</p></li>
+<li><p><strong>Ranking and ambiguity.</strong> The lowest whole-arc reduced chi2 wins (ties
+within 1e-6 go to the earliest candidate). <code class="docutils literal notranslate"><span class="pre">IodReport.ambiguous_with</span></code>
+lists converged solutions outside the accepted orbit’s 3-sigma region
+whose chi2 is within the same margin (Gronchi 2009).</p></li>
+<li><p><strong>Failure.</strong> A candidate whose prediction fails is skipped and counted;
+when nothing is accepted, <code class="docutils literal notranslate"><span class="pre">IodReport.not_found_reason</span></code> says why.</p></li>
+<li><p><strong>Evidence.</strong> On the first solutions of 126 walk-forward objects
+(ASSIST, MPC observations) the policy seeded 116 of 122, against 16 for
+the legacy <code class="docutils literal notranslate"><span class="pre">&quot;combinations&quot;</span></code> search with the prefit gate and 114 for the
+study’s seeding ladder, at the ladder’s final reduced chi2; single-object
+reruns since recover 433 Eros and 3200 Phaethon. The legacy
+policy stays selectable (<code class="docutils literal notranslate"><span class="pre">observation_selection_method=&quot;combinations&quot;</span></code>,
+<code class="docutils literal notranslate"><span class="pre">acceptance=&quot;prefit&quot;</span></code>); <code class="docutils literal notranslate"><span class="pre">iod()</span></code> keeps it.</p></li>
+</ul>
 </section>
 <section id="the-pieces-one-by-one">
 <h3>The pieces, one by one<a class="headerlink" href="#the-pieces-one-by-one" title="Link to this heading">¶</a></h3>
@@ -701,12 +755,51 @@ are in the <code class="docutils literal notranslate"><span class="pre">run_od</
 <span class="c1"># members.weight holds per-observation weights, members.astcat the star catalog.</span>
 </pre></div>
 </div>
+</section>
+<section id="custom-models-and-fitters">
+<h3>Custom models and fitters<a class="headerlink" href="#custom-models-and-fitters" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">run_od</span></code> can combine model application and fitting into one Rust call when
+their native specifications describe the Python implementations. Subclass
+overrides are honored through the ordinary composition by default:</p>
+<ul class="simple">
+<li><p>A model overriding <code class="docutils literal notranslate"><span class="pre">apply</span></code> must also define <code class="docutils literal notranslate"><span class="pre">_native_specs</span></code> to opt into
+the combined call. The specification must reproduce the complete custom
+transformation. This check also applies inside nested <code class="docutils literal notranslate"><span class="pre">CompositeModel</span></code>
+instances.</p></li>
+<li><p>A <code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter</span></code> overriding <code class="docutils literal notranslate"><span class="pre">full_od</span></code>, <code class="docutils literal notranslate"><span class="pre">initial_fit</span></code> or
+<code class="docutils literal notranslate"><span class="pre">refine_fit</span></code> must also define <code class="docutils literal notranslate"><span class="pre">native_settings</span></code> to opt into the combined
+call. Those settings must fully describe the custom behavior in the Rust
+drivers. Custom logic that cannot be expressed by those drivers should
+leave <code class="docutils literal notranslate"><span class="pre">native_settings</span></code> inherited.</p></li>
+</ul>
+<p>Subclasses that inherit the fitting/model methods unchanged remain eligible
+for fusion. Further subclasses that change those methods must renew the
+explicit opt-in. The ordinary composition still uses Rust numerical drivers
+inside the built-in fitting stages.</p>
 <p><code class="docutils literal notranslate"><span class="pre">fit_least_squares</span></code> itself minimizes the whitened (lon, lat) residuals with
 an exact two-body Jacobian (Rust autodiff) and validates the covariance along
 its weakest direction, so line-of-sight uncertainties are no longer fabricated
 by finite differences. Pass <code class="docutils literal notranslate"><span class="pre">jacobian=&quot;2-point&quot;</span></code> to reach a propagator’s
 fused Rust Gauss-Newton work unit with the legacy forward-difference
 covariance.</p>
+</section>
+<section id="solver-budgets">
+<h3>Solver budgets<a class="headerlink" href="#solver-budgets" title="Link to this heading">¶</a></h3>
+<p><code class="docutils literal notranslate"><span class="pre">fit_least_squares</span></code> accepts two independent limits: <code class="docutils literal notranslate"><span class="pre">max_iterations</span></code>
+(default 100) caps optimizer iterations, while <code class="docutils literal notranslate"><span class="pre">max_nfev</span></code> (default None)
+caps solver residual-vector evaluations. Supplying both enforces both.
+The evaluation budget includes the initial state, rejected trial steps, and
+every finite-difference candidate: a forward-difference Jacobian costs six
+evaluations and a central-difference Jacobian costs twelve, even when batched
+into one backend call. A batch is only started if it fits in the remaining
+budget. Final covariance calculation, covariance validation, and fit reporting
+are outside this solver budget.</p>
+<p>Budget exhaustion returns the current solution with <code class="docutils literal notranslate"><span class="pre">success=False</span></code> and
+<code class="docutils literal notranslate"><span class="pre">status_code=0</span></code> unless convergence was established on the final permitted
+evaluation. The legacy <code class="docutils literal notranslate"><span class="pre">FittedOrbits.iterations</span></code> column records solver
+residual-vector evaluations, including numerical Jacobians. Each fit within
+a rejection loop gets a fresh evaluation budget; CMC2003’s <code class="docutils literal notranslate"><span class="pre">max_iterations</span></code>
+continues to control its rejection loop.</p>
 </section>
 </section>
 <section id="when-to-use-this-pattern">
@@ -759,7 +852,7 @@ cleanup of observation-to-orbit assignments.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             
@@ -787,7 +880,10 @@ cleanup of observation-to-orbit assignments.</p>
 <li><a class="reference internal" href="#runnable-example">Runnable Example</a></li>
 <li><a class="reference internal" href="#fit-time-observation-models-and-provenance">Fit-Time Observation Models and Provenance</a><ul>
 <li><a class="reference internal" href="#the-shipped-defaults">The shipped defaults</a></li>
+<li><a class="reference internal" href="#the-iod-policy">The IOD policy</a></li>
 <li><a class="reference internal" href="#the-pieces-one-by-one">The pieces, one by one</a></li>
+<li><a class="reference internal" href="#custom-models-and-fitters">Custom models and fitters</a></li>
+<li><a class="reference internal" href="#solver-budgets">Solver budgets</a></li>
 </ul>
 </li>
 <li><a class="reference internal" href="#when-to-use-this-pattern">When to Use This Pattern</a></li>

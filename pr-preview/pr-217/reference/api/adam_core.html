@@ -243,6 +243,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -480,6 +481,11 @@
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a><ul>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.coordinates.keplerian.html#adam_core.coordinates.keplerian.KeplerianCoordinates"><code class="docutils literal notranslate"><span class="pre">KeplerianCoordinates</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.local_frame_jacobians"><code class="docutils literal notranslate"><span class="pre">local_frame_jacobians()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a><ul>
@@ -726,6 +732,7 @@
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.a"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.a</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.a_sigma"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.a_sigma</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.associations"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.associations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.astcat"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.astcat</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.b"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.b</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.b_sigma"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.b_sigma</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.catalog_id"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.catalog_id</span></code></a></li>
@@ -740,6 +747,7 @@
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.exposure_start_time"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.exposure_start_time</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.exposures"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.exposures()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.filter"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.filter</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.from_pyarrow"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.from_pyarrow()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.fwhm"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.fwhm</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.healpixels"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.healpixels()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.id"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.id</span></code></a></li>
@@ -750,6 +758,7 @@
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.observers"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.observers()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.pa"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.pa</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.pa_sigma"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.pa_sigma</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.photcat"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.photcat</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.photometry"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.photometry()</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.ra"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.ra</span></code></a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.observations.html#adam_core.observations.SourceCatalog.ra_sigma"><code class="docutils literal notranslate"><span class="pre">SourceCatalog.ra_sigma</span></code></a></li>
@@ -897,7 +906,10 @@
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.iod.html">adam_core.orbit_determination.iod module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate"><code class="docutils literal notranslate"><span class="pre">IodCandidate</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport"><code class="docutils literal notranslate"><span class="pre">IodReport</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.initial_orbit_determination"><code class="docutils literal notranslate"><span class="pre">initial_orbit_determination()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.run_iod"><code class="docutils literal notranslate"><span class="pre">run_iod()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.orbit_determination.least_squares.html">adam_core.orbit_determination.least_squares module</a><ul>
@@ -1301,6 +1313,7 @@
 <li class="toctree-l1"><a class="reference internal" href="adam_core.propagator.html">adam_core.propagator package</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.Propagator"><code class="docutils literal notranslate"><span class="pre">Propagator</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.Propagator.propagate_orbits"><code class="docutils literal notranslate"><span class="pre">Propagator.propagate_orbits()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.Propagator.two_body_dynamics"><code class="docutils literal notranslate"><span class="pre">Propagator.two_body_dynamics</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.propagator.html#adam_core.propagator.EphemerisMixin"><code class="docutils literal notranslate"><span class="pre">EphemerisMixin</span></code></a><ul>
@@ -1405,15 +1418,29 @@
 <li class="toctree-l3"><a class="reference internal" href="adam_core.utils.http.html">adam_core.utils.http module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.utils.iter.html">adam_core.utils.iter module</a></li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.utils.mpc.html">adam_core.utils.mpc module</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.ADESDesignationParts"><code class="docutils literal notranslate"><span class="pre">ADESDesignationParts</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.convert_mpc_packed_dates"><code class="docutils literal notranslate"><span class="pre">convert_mpc_packed_dates()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.pack_numbered_designation"><code class="docutils literal notranslate"><span class="pre">pack_numbered_designation()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.pack_provisional_designation"><code class="docutils literal notranslate"><span class="pre">pack_provisional_designation()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.pack_survey_designation"><code class="docutils literal notranslate"><span class="pre">pack_survey_designation()</span></code></a></li>
-<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.pack_mpc_designation"><code class="docutils literal notranslate"><span class="pre">pack_mpc_designation()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_numbered_designation"><code class="docutils literal notranslate"><span class="pre">unpack_numbered_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.pack_provisional_designation"><code class="docutils literal notranslate"><span class="pre">pack_provisional_designation()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_provisional_designation"><code class="docutils literal notranslate"><span class="pre">unpack_provisional_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.pack_survey_designation"><code class="docutils literal notranslate"><span class="pre">pack_survey_designation()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_survey_designation"><code class="docutils literal notranslate"><span class="pre">unpack_survey_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.pack_numbered_comet_designation"><code class="docutils literal notranslate"><span class="pre">pack_numbered_comet_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_numbered_comet_designation"><code class="docutils literal notranslate"><span class="pre">unpack_numbered_comet_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.pack_provisional_comet_designation"><code class="docutils literal notranslate"><span class="pre">pack_provisional_comet_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_provisional_comet_designation"><code class="docutils literal notranslate"><span class="pre">unpack_provisional_comet_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.pack_comet_designation"><code class="docutils literal notranslate"><span class="pre">pack_comet_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_comet_designation"><code class="docutils literal notranslate"><span class="pre">unpack_comet_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.pack_permanent_satellite_designation"><code class="docutils literal notranslate"><span class="pre">pack_permanent_satellite_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_permanent_satellite_designation"><code class="docutils literal notranslate"><span class="pre">unpack_permanent_satellite_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.pack_provisional_satellite_designation"><code class="docutils literal notranslate"><span class="pre">pack_provisional_satellite_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_provisional_satellite_designation"><code class="docutils literal notranslate"><span class="pre">unpack_provisional_satellite_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.pack_satellite_designation"><code class="docutils literal notranslate"><span class="pre">pack_satellite_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_satellite_designation"><code class="docutils literal notranslate"><span class="pre">unpack_satellite_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.pack_mpc_designation"><code class="docutils literal notranslate"><span class="pre">pack_mpc_designation()</span></code></a></li>
 <li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.unpack_mpc_designation"><code class="docutils literal notranslate"><span class="pre">unpack_mpc_designation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="adam_core.utils.mpc.html#adam_core.utils.mpc.parse_ades_designation"><code class="docutils literal notranslate"><span class="pre">parse_ades_designation()</span></code></a></li>
 </ul>
 </li>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.utils.spice.html">adam_core.utils.spice module</a><ul>
@@ -1485,7 +1512,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             

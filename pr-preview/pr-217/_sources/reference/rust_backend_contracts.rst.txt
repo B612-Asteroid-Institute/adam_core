@@ -193,6 +193,13 @@ Current Migrated APIs
   - Error behavior: driver errors raise ``ValueError`` for invalid inputs and
     ``RuntimeError`` for backend failures; an exception raised by a Python
     propagator inside the callback is re-raised unchanged.
+  - CMC2003 finalization uses one central-difference Jacobian through the
+    full predictor for all observations. Selected rows form the covariance;
+    all rows supply rejection/recovery projections. The solver Jacobian
+    setting affects optimizer steps only. The twelve finalization candidate
+    predictions are outside ``max_nfev``; ``validate_covariance`` controls
+    the additional weak-direction probe. Huber plus CMC2003 remains a
+    heuristic combination without calibrated rejection statistics.
 
 - ``orbit_determination.cmc2003_fit`` / ``cmc2003_fit_detailed``
   - Boundary: the whole loop is the ``cmc2003_fit`` work unit above (fused

@@ -242,6 +242,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -459,7 +460,20 @@
 <span class="sd">   observation INSIDE the fit (the fit absorbs part of its error) and</span>
 <span class="sd">   ``I + P_i`` for one OUTSIDE it; ``chi2_i = r_i^T (I -/+ P_i)^-1 r_i``.</span>
 <span class="sd">   The projection is OrbFit's linear ``A Gamma A^T`` in whitened units,</span>
-<span class="sd">   evaluated with the analytic 2-body Jacobian of `fit_least_squares`.</span>
+<span class="sd">   evaluated with central differences through the full propagator at the</span>
+<span class="sd">   fitted state. The selected rows of this same whitened Jacobian determine</span>
+<span class="sd">   ``C``; all rows are retained for rejection and recovery. ``jacobian``</span>
+<span class="sd">   controls optimizer steps only in this rejection loop. A row whose</span>
+<span class="sd">   statistic cannot be established never looks acceptable: a non-finite</span>
+<span class="sd">   statistic (NaN residual from a failed prediction, NaN Jacobian rows) is</span>
+<span class="sd">   ``+inf`` with the ``"non_finite_chi2"`` flag, and a singular expected</span>
+<span class="sd">   covariance is ``+inf`` with ``"singular_residual_covariance"`` unless</span>
+<span class="sd">   both residual components are exactly zero (then ``0``). ``+inf`` exceeds</span>
+<span class="sd">   every rejection threshold and no recovery threshold, so such a row is</span>
+<span class="sd">   rejected when selected (subject to the guards of step 4) and never</span>
+<span class="sd">   re-included; when the worst selected row is infinite the batch</span>
+<span class="sd">   threshold is infinite too, so that pass rejects exactly the infinite</span>
+<span class="sd">   rows.</span>
 <span class="sd">3. Re-include an excluded observation when ``chi2_i &lt;= chi2_recover +</span>
 <span class="sd">   0.75 * fudge``; reject a selected one when ``chi2_i &gt;= threshold`` and</span>
 <span class="sd">   ``chi2_i &gt; chi2_reject + fudge``, where ``threshold`` is ``chi2_frac`` times</span>
@@ -480,7 +494,7 @@
 
 <span class="sd">The per-pass decision kernels (apparitions, expected residual covariance</span>
 <span class="sd">chi2, reject / re-include selection) run in the Rust backend</span>
-<span class="sd">(``adam_core_rs_coords::cmc2003``); this module drives the refits.</span>
+<span class="sd">(``adam_core_rs_coords::cmc2003``); the refit loop also runs in Rust.</span>
 
 <span class="sd">Constants are OrbFit's ``reject.def`` defaults: chi2_reject 8, chi2_recover 7,</span>
 <span class="sd">chi2_frac 0.25, at most 15 passes, at most 50% rejected, 180-day apparition</span>
@@ -499,6 +513,7 @@
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="n">_warn_if_analytic_jacobian_mismatches</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_FUSED_LOOP_KWARGS</span><span class="p">,</span>
     <span class="n">_NATIVE_FIT_KWARGS</span><span class="p">,</span>
@@ -621,7 +636,11 @@
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
 <span class="sd">    chi2 : (N,)</span>
-<span class="sd">        Expected-covariance chi2 per observation (non-negative).</span>
+<span class="sd">        Expected-covariance chi2 per observation (non-negative). ``+inf``</span>
+<span class="sd">        where the statistic is non-finite (``"non_finite_chi2"``) or the</span>
+<span class="sd">        expected covariance is singular with a nonzero residual</span>
+<span class="sd">        (``"singular_residual_covariance"``); such rows are rejected when</span>
+<span class="sd">        selected and never recovered.</span>
 <span class="sd">    flags : set of str</span>
 <span class="sd">        Diagnostic flags raised while computing.</span>
 <span class="sd">    """</span>
@@ -740,14 +759,22 @@
 <span class="sd">        Eigenvalue floor on the expected residual covariance in whitened</span>
 <span class="sd">        units (0.05).</span>
 <span class="sd">    loss, f_scale : see `fit_least_squares`</span>
-<span class="sd">        Loss used by every fit pass; ``"huber"`` composes robust fitting with</span>
-<span class="sd">        rejection.</span>
+<span class="sd">        Loss used by every fit pass. The default ``"linear"`` gives the</span>
+<span class="sd">        weighted least-squares covariance assumed by CMC2003. ``"huber"``</span>
+<span class="sd">        remains available as a heuristic combination: its robust-cost</span>
+<span class="sd">        covariance does not establish calibrated CMC rejection statistics.</span>
 <span class="sd">    validate_covariance : bool</span>
-<span class="sd">        Forwarded to `fit_least_squares` for every pass.</span>
+<span class="sd">        Check the full-predictor covariance against a 1-sigma weak-direction</span>
+<span class="sd">        displacement on every pass; warn if it disagrees. Disabling this</span>
+<span class="sd">        diagnostic does not change the central-difference finalization.</span>
 <span class="sd">    **kwargs</span>
-<span class="sd">        Further keyword arguments for `fit_least_squares` (e.g. ``jacobian``,</span>
-<span class="sd">        ``max_nfev``). ``ignore`` is managed by this function and must not be</span>
-<span class="sd">        passed.</span>
+<span class="sd">        Solver settings for `fit_least_squares` (e.g. ``jacobian``,</span>
+<span class="sd">        ``max_nfev``). ``jacobian`` controls optimizer steps; covariance and</span>
+<span class="sd">        rejection always share a central-difference Jacobian through the</span>
+<span class="sd">        full predictor, including light-time handling. This finalization</span>
+<span class="sd">        costs twelve candidate predictions per pass, batched where supported,</span>
+<span class="sd">        outside the solver evaluation budget. ``ignore`` is managed by this</span>
+<span class="sd">        function and must not be passed.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -769,7 +796,7 @@
     <span class="k">if</span> <span class="n">unsupported</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">"cmc2003_fit runs the Rust rejection loop and accepts only the fit "</span>
-            <span class="s2">"settings jacobian, xtol, ftol, gtol, max_nfev (max_iterations); got "</span>
+            <span class="s2">"settings jacobian, xtol, ftol, gtol, max_nfev; got "</span>
             <span class="o">+</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">kwargs</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="si">!r}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">unsupported</span><span class="p">))</span>
         <span class="p">)</span>
     <span class="n">fit_settings</span> <span class="o">=</span> <span class="n">_fit_settings</span><span class="p">(</span>
@@ -779,6 +806,7 @@
         <span class="n">validate_covariance</span><span class="p">,</span>
         <span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="n">fit_settings</span><span class="p">[</span><span class="s2">"jacobian"</span><span class="p">])</span>
     <span class="n">loop_settings</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
         <span class="n">chi2_reject</span><span class="o">=</span><span class="n">chi2_reject</span><span class="p">,</span>
         <span class="n">chi2_recover</span><span class="o">=</span><span class="n">chi2_recover</span><span class="p">,</span>
@@ -861,7 +889,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             

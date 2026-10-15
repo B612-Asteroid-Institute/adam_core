@@ -242,6 +242,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -438,6 +439,8 @@
 <span></span><span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">uuid</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">types</span><span class="w"> </span><span class="kn">import</span> <span class="n">MappingProxyType</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Literal</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Type</span>
 
 <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
@@ -445,6 +448,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">quivr</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qv</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.residuals</span><span class="w"> </span><span class="kn">import</span> <span class="n">Residuals</span>
@@ -457,9 +461,17 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">.gauss</span><span class="w"> </span><span class="kn">import</span> <span class="n">MU</span><span class="p">,</span> <span class="n">C</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.observation_uncertainty</span><span class="w"> </span><span class="kn">import</span> <span class="n">ObservationUncertaintyModel</span>
 
+<span class="c1">#: The IOD defaults, read once from Rust's ``IodConfig::default()`` (with its</span>
+<span class="c1">#: span search and correction settings, under the keys of ``run_iod``'s</span>
+<span class="c1">#: ``span_settings`` / ``correction_settings``, and ``huber_f_scale``). The</span>
+<span class="c1">#: signature defaults of `run_iod` and `NativeOrbitFitter` are these values;</span>
+<span class="c1">#: the policy and the source of each number are documented on the Rust types</span>
+<span class="c1">#: and in the orbit-determination use-case page.</span>
+<span class="n">IOD_DEFAULTS</span> <span class="o">=</span> <span class="n">MappingProxyType</span><span class="p">(</span><span class="n">_rust_native</span><span class="o">.</span><span class="n">iod_defaults</span><span class="p">())</span>
+
 <span class="n">logger</span> <span class="o">=</span> <span class="n">logging</span><span class="o">.</span><span class="n">getLogger</span><span class="p">(</span><span class="vm">__name__</span><span class="p">)</span>
 
-<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"initial_orbit_determination"</span><span class="p">]</span>
+<span class="n">__all__</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"IodCandidate"</span><span class="p">,</span> <span class="s2">"IodReport"</span><span class="p">,</span> <span class="s2">"initial_orbit_determination"</span><span class="p">,</span> <span class="s2">"run_iod"</span><span class="p">]</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">sort_by_id_and_time</span><span class="p">(</span>
@@ -655,7 +667,7 @@
     <span class="n">contamination_percentage</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
     <span class="n">rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span>
     <span class="n">observation_selection_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span>
-        <span class="s2">"combinations"</span><span class="p">,</span> <span class="s2">"first+middle+last"</span><span class="p">,</span> <span class="s2">"thirds"</span>
+        <span class="s2">"combinations"</span><span class="p">,</span> <span class="s2">"first+middle+last"</span><span class="p">,</span> <span class="s2">"thirds"</span><span class="p">,</span> <span class="s2">"spans"</span>
     <span class="p">]</span> <span class="o">=</span> <span class="s2">"combinations"</span><span class="p">,</span>
     <span class="n">linkage_id_col</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"cluster_id"</span><span class="p">,</span>
     <span class="n">iterate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
@@ -735,6 +747,287 @@
     <span class="k">return</span> <span class="n">iod_orbits</span><span class="p">,</span> <span class="n">iod_orbit_members</span>
 
 
+<div class="viewcode-block" id="IodCandidate">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodCandidate">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">IodCandidate</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    One Gauss candidate scored by `run_iod`. Row indices refer to the</span>
+<span class="sd">    observations as passed to `run_iod`.</span>
+<span class="sd">    """</span>
+
+    <span class="c1">#: Heliocentric ecliptic Cartesian state (au, au/day) at the epoch.</span>
+    <span class="n">state</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]</span>
+    <span class="c1">#: Gauss epoch, exact (integer days and nanoseconds in ``epoch_scale``).</span>
+    <span class="n">epoch_days</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">epoch_nanos</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">epoch_scale</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1">#: Rows of the earliest and latest observation of the search window.</span>
+    <span class="n">window</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+    <span class="c1">#: Rows of the three observations the candidate was built from.</span>
+    <span class="n">triplet</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+    <span class="c1">#: Which of the triplet's ``root_count`` physical Gauss roots this is.</span>
+    <span class="n">root_index</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">root_count</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">velocity_method</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="c1">#: Two-body score of the preliminary orbit against every observation.</span>
+    <span class="n">prefit_chi2</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">prefit_reduced_chi2</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="c1">#: Rows the outlier trial removed to reach acceptance (empty otherwise).</span>
+    <span class="n">removed</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="c1">#: Statistics after the outlier trial (the prefit ones unless rows were</span>
+    <span class="c1">#: removed).</span>
+    <span class="n">chi2</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">reduced_chi2</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="n">num_obs</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">arc_length</span><span class="p">:</span> <span class="nb">float</span>
+    <span class="c1">#: Corrected acceptance: reduced chi2 of the corrected orbit on the whole</span>
+    <span class="c1">#: arc (None when not corrected or stalled), whether the staged</span>
+    <span class="c1">#: correction reached the whole arc, the corrected state, the stages</span>
+    <span class="c1">#: run and why it stopped short, if it did.</span>
+    <span class="n">postfit_reduced_chi2</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">float</span><span class="p">]</span>
+    <span class="n">converged</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">accepted</span><span class="p">:</span> <span class="nb">bool</span>
+    <span class="n">corrected_state</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">stages</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">correction_note</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="IodReport">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.IodReport">[docs]</a>
+<span class="nd">@dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">IodReport</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    What `run_iod` searched: every scored candidate (`IodCandidate`), which</span>
+<span class="sd">    one was accepted, the search counters and the reason when none was.</span>
+<span class="sd">    A dataclass rather than a table: candidates are few and their rows</span>
+<span class="sd">    reference the observations by index.</span>
+<span class="sd">    """</span>
+
+    <span class="n">candidates</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="n">IodCandidate</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span>
+    <span class="c1">#: Index into ``candidates`` of the accepted orbit; None when none was.</span>
+    <span class="n">accepted</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span>
+    <span class="n">triplets_tried</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">candidates_evaluated</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">candidates_failed</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">corrections_run</span><span class="p">:</span> <span class="nb">int</span>
+    <span class="n">not_found_reason</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">str</span><span class="p">]</span>
+    <span class="c1">#: Indices of converged candidates that are distinct solutions (outside</span>
+    <span class="c1">#: the accepted orbit's 3-sigma region) fitting about as well (chi2</span>
+    <span class="c1">#: within the same margin); non-empty means the IOD is ambiguous.</span>
+    <span class="n">ambiguous_with</span><span class="p">:</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="o">...</span><span class="p">]</span> <span class="o">=</span> <span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">found</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">accepted</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">ambiguous</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">bool</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ambiguous_with</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">accepted_candidate</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">IodCandidate</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="kc">None</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">accepted</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="bp">self</span><span class="o">.</span><span class="n">candidates</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">accepted</span><span class="p">]</span></div>
+
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">report_from_iod_output</span><span class="p">(</span><span class="n">output</span><span class="p">:</span> <span class="nb">dict</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">IodReport</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""The `IodReport` of a Rust IOD dict (`run_iod_ipc` or the ``iod`` entry</span>
+<span class="sd">    of a fused ``full_od`` / ``run_od`` output)."""</span>
+    <span class="n">candidates</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span>
+        <span class="n">IodCandidate</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">candidate</span><span class="p">[</span><span class="s2">"state"</span><span class="p">]),</span>
+            <span class="n">epoch_days</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"epoch_days"</span><span class="p">]),</span>
+            <span class="n">epoch_nanos</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"epoch_nanos"</span><span class="p">]),</span>
+            <span class="n">epoch_scale</span><span class="o">=</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"epoch_scale"</span><span class="p">],</span>
+            <span class="n">window</span><span class="o">=</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"window"</span><span class="p">][</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">int</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"window"</span><span class="p">][</span><span class="mi">1</span><span class="p">])),</span>
+            <span class="n">triplet</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">candidate</span><span class="p">[</span><span class="s2">"triplet"</span><span class="p">]),</span>
+            <span class="n">root_index</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"root_index"</span><span class="p">]),</span>
+            <span class="n">root_count</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"root_count"</span><span class="p">]),</span>
+            <span class="n">velocity_method</span><span class="o">=</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"velocity_method"</span><span class="p">],</span>
+            <span class="n">prefit_chi2</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"prefit_chi2"</span><span class="p">]),</span>
+            <span class="n">prefit_reduced_chi2</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"prefit_reduced_chi2"</span><span class="p">]),</span>
+            <span class="n">removed</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">row</span><span class="p">)</span> <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">candidate</span><span class="p">[</span><span class="s2">"removed"</span><span class="p">]),</span>
+            <span class="n">chi2</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"chi2"</span><span class="p">]),</span>
+            <span class="n">reduced_chi2</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"reduced_chi2"</span><span class="p">]),</span>
+            <span class="n">num_obs</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"num_obs"</span><span class="p">]),</span>
+            <span class="n">arc_length</span><span class="o">=</span><span class="nb">float</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"arc_length"</span><span class="p">]),</span>
+            <span class="n">postfit_reduced_chi2</span><span class="o">=</span><span class="n">candidate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"postfit_reduced_chi2"</span><span class="p">),</span>
+            <span class="n">converged</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"converged"</span><span class="p">,</span> <span class="kc">False</span><span class="p">)),</span>
+            <span class="n">accepted</span><span class="o">=</span><span class="nb">bool</span><span class="p">(</span><span class="n">candidate</span><span class="p">[</span><span class="s2">"accepted"</span><span class="p">]),</span>
+            <span class="n">corrected_state</span><span class="o">=</span><span class="p">(</span>
+                <span class="kc">None</span>
+                <span class="k">if</span> <span class="n">candidate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"corrected_state"</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span>
+                <span class="k">else</span> <span class="nb">tuple</span><span class="p">(</span><span class="nb">float</span><span class="p">(</span><span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">candidate</span><span class="p">[</span><span class="s2">"corrected_state"</span><span class="p">])</span>
+            <span class="p">),</span>
+            <span class="n">stages</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">candidate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"stages"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+            <span class="n">correction_note</span><span class="o">=</span><span class="n">candidate</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"correction_note"</span><span class="p">),</span>
+        <span class="p">)</span>
+        <span class="k">for</span> <span class="n">candidate</span> <span class="ow">in</span> <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"candidates"</span><span class="p">,</span> <span class="p">())</span>
+    <span class="p">)</span>
+    <span class="n">accepted</span> <span class="o">=</span> <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"accepted"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">IodReport</span><span class="p">(</span>
+        <span class="n">candidates</span><span class="o">=</span><span class="n">candidates</span><span class="p">,</span>
+        <span class="n">accepted</span><span class="o">=</span><span class="kc">None</span> <span class="k">if</span> <span class="n">accepted</span> <span class="ow">is</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">int</span><span class="p">(</span><span class="n">accepted</span><span class="p">),</span>
+        <span class="n">triplets_tried</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"triplets_tried"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+        <span class="n">candidates_evaluated</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"candidates_evaluated"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+        <span class="n">candidates_failed</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"candidates_failed"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+        <span class="n">corrections_run</span><span class="o">=</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"corrections_run"</span><span class="p">,</span> <span class="mi">0</span><span class="p">)),</span>
+        <span class="n">not_found_reason</span><span class="o">=</span><span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"not_found_reason"</span><span class="p">),</span>
+        <span class="n">ambiguous_with</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ambiguous_with"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">()),</span>
+    <span class="p">)</span>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">_empty_report</span><span class="p">(</span><span class="n">reason</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">IodReport</span><span class="p">:</span>
+    <span class="k">return</span> <span class="n">IodReport</span><span class="p">((),</span> <span class="kc">None</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">reason</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="run_iod">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.iod.html#adam_core.orbit_determination.iod.run_iod">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">run_iod</span><span class="p">(</span>
+    <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
+    <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">,</span>
+    <span class="o">*</span><span class="p">,</span>
+    <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"min_obs"</span><span class="p">],</span>
+    <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"min_arc_length"</span><span class="p">],</span>
+    <span class="n">contamination_percentage</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"contamination_percentage"</span><span class="p">],</span>
+    <span class="n">rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"rchi2_threshold"</span><span class="p">],</span>
+    <span class="n">observation_selection_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span>
+        <span class="s2">"combinations"</span><span class="p">,</span> <span class="s2">"first+middle+last"</span><span class="p">,</span> <span class="s2">"thirds"</span><span class="p">,</span> <span class="s2">"spans"</span>
+    <span class="p">]</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"observation_selection_method"</span><span class="p">],</span>
+    <span class="n">light_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"light_time"</span><span class="p">],</span>
+    <span class="n">max_triplets</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"max_triplets"</span><span class="p">],</span>
+    <span class="n">velocity_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"gauss"</span><span class="p">,</span> <span class="s2">"gibbs"</span><span class="p">,</span> <span class="s2">"herrick+gibbs"</span><span class="p">,</span> <span class="s2">"auto"</span><span class="p">]</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span>
+        <span class="s2">"velocity_method"</span>
+    <span class="p">],</span>
+    <span class="n">span_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">acceptance</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"corrected"</span><span class="p">,</span> <span class="s2">"prefit"</span><span class="p">]</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"acceptance"</span><span class="p">],</span>
+    <span class="n">correction_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">fit_settings</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">observatory_bias_model</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ObservationUncertaintyModel</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">IodReport</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">"""</span>
+<span class="sd">    The IOD stage: Gauss preliminary orbits on observation triplets, scored</span>
+<span class="sd">    on ``propagator`` and accepted in one of two ways. ``acceptance=</span>
+<span class="sd">    "corrected"`` (default) treats each Gauss orbit as a seed for</span>
+<span class="sd">    differential corrections: in increasing prefit reduced chi2, up to</span>
+<span class="sd">    ``max_corrections`` candidates are corrected on the observations their</span>
+<span class="sd">    triplet spans, then on spans grown fourfold (jumping apparition gaps)</span>
+<span class="sd">    up to the whole arc, every stage within ``rchi2_threshold``; the</span>
+<span class="sd">    converged candidate with the lowest whole-arc reduced chi2 is accepted</span>
+<span class="sd">    and its orbit is that corrected, unrejected fit. ``"prefit"`` is the</span>
+<span class="sd">    legacy gate: the first raw Gauss orbit within ``rchi2_threshold`` on</span>
+<span class="sd">    every observation (after the outlier trial).</span>
+
+<span class="sd">    This is the native stage behind `iod`, `NativeOrbitFitter.initial_fit`</span>
+<span class="sd">    and the IOD half of `run_od`. ``propagator`` is explicit: it is the</span>
+<span class="sd">    backend that scores candidates and may differ from the one that later</span>
+<span class="sd">    refines the orbit. A Rust-backed propagator exposing the fused</span>
+<span class="sd">    ``run_iod`` work unit runs the whole search in one crossing; any other</span>
+<span class="sd">    propagator runs the same Rust search through its own</span>
+<span class="sd">    ``generate_ephemeris``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    observations : `OrbitDeterminationObservations`</span>
+<span class="sd">        Observations believed to belong to one object (any row order; the</span>
+<span class="sd">        search sorts by epoch, station and row and reports in input order).</span>
+<span class="sd">    propagator : `~adam_core.propagator.Propagator`</span>
+<span class="sd">        The propagator instance that scores candidates.</span>
+<span class="sd">    min_obs, min_arc_length, contamination_percentage, rchi2_threshold,</span>
+<span class="sd">    observation_selection_method, light_time</span>
+<span class="sd">        As for `iod`.</span>
+<span class="sd">    max_triplets : int, optional</span>
+<span class="sd">        Bound on the triplets searched; None keeps the legacy budget of three</span>
+<span class="sd">        triplets per allowed outlier (``"spans"``: its own default budget).</span>
+<span class="sd">    velocity_method : {"gauss", "gibbs", "herrick+gibbs", "auto"}</span>
+<span class="sd">        Velocity of the Gauss candidates. ``"auto"`` uses Herrick-Gibbs when</span>
+<span class="sd">        consecutive position vectors are within 5 degrees (Vallado 2013) and</span>
+<span class="sd">        Gibbs otherwise; candidates record the method used.</span>
+<span class="sd">    span_settings : dict, optional</span>
+<span class="sd">        Overrides of the ``observation_selection_method="spans"`` search</span>
+<span class="sd">        (keys ``span_target_days``, ``span_min_days``, ``span_max_days``,</span>
+<span class="sd">        ``span_dense_window_days``, ``span_edge_window_days``,</span>
+<span class="sd">        ``span_max_triplets``); missing keys keep the Rust defaults of</span>
+<span class="sd">        ``SpanSearchConfig``.</span>
+<span class="sd">    acceptance : {"corrected", "prefit"}</span>
+<span class="sd">        See above.</span>
+<span class="sd">    correction_settings : dict, optional</span>
+<span class="sd">        Overrides of the corrected acceptance (keys ``max_corrections``,</span>
+<span class="sd">        ``max_converged``, ``correction_growth``, ``min_stage_obs``,</span>
+<span class="sd">        ``max_stages``, ``stage_loss``); missing keys keep the Rust</span>
+<span class="sd">        ``CorrectionConfig`` defaults. ``stage_loss`` is the loss of the</span>
+<span class="sd">        stages before the whole arc: ``"huber"`` (default) down-weights</span>
+<span class="sd">        observations a partial orbit predicts badly and gates each stage on</span>
+<span class="sd">        its robust cost; ``"linear"`` turns that off.</span>
+<span class="sd">    fit_settings : dict, optional</span>
+<span class="sd">        Solver settings of the correction stages (as `fit_least_squares`'s;</span>
+<span class="sd">        the whole-arc stage uses the linear loss, the earlier ones</span>
+<span class="sd">        ``stage_loss``; all skip covariance validation).</span>
+<span class="sd">    observatory_bias_model : `ObservationUncertaintyModel`, optional</span>
+<span class="sd">        Applied to the observations before the search.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    orbit : `FittedOrbits` (0 or 1)</span>
+<span class="sd">        The accepted preliminary orbit at its exact Gauss epoch.</span>
+<span class="sd">    members : `FittedOrbitMembers` (0 or N)</span>
+<span class="sd">        Residuals and solution / outlier flags of every observation against</span>
+<span class="sd">        the accepted orbit, in input order.</span>
+<span class="sd">    report : `IodReport`</span>
+<span class="sd">        Every scored candidate, the accepted index, the search counters and</span>
+<span class="sd">        the reason when no orbit was accepted.</span>
+<span class="sd">    """</span>
+    <span class="k">if</span> <span class="n">observatory_bias_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">observations</span> <span class="o">=</span> <span class="n">observatory_bias_model</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">(),</span>
+            <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">empty</span><span class="p">(),</span>
+            <span class="n">_empty_report</span><span class="p">(</span><span class="s2">"no observations"</span><span class="p">),</span>
+        <span class="p">)</span>
+    <span class="n">iod_settings</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s2">"min_obs"</span><span class="p">:</span> <span class="n">min_obs</span><span class="p">,</span>
+        <span class="s2">"min_arc_length"</span><span class="p">:</span> <span class="n">min_arc_length</span><span class="p">,</span>
+        <span class="s2">"contamination_percentage"</span><span class="p">:</span> <span class="n">contamination_percentage</span><span class="p">,</span>
+        <span class="s2">"rchi2_threshold"</span><span class="p">:</span> <span class="n">rchi2_threshold</span><span class="p">,</span>
+        <span class="s2">"observation_selection_method"</span><span class="p">:</span> <span class="n">observation_selection_method</span><span class="p">,</span>
+        <span class="s2">"light_time"</span><span class="p">:</span> <span class="n">light_time</span><span class="p">,</span>
+        <span class="s2">"mu"</span><span class="p">:</span> <span class="n">MU</span><span class="p">,</span>
+        <span class="s2">"speed_of_light"</span><span class="p">:</span> <span class="n">C</span><span class="p">,</span>
+        <span class="s2">"max_triplets"</span><span class="p">:</span> <span class="n">max_triplets</span><span class="p">,</span>
+        <span class="s2">"velocity_method"</span><span class="p">:</span> <span class="n">velocity_method</span><span class="p">,</span>
+        <span class="s2">"acceptance"</span><span class="p">:</span> <span class="n">acceptance</span><span class="p">,</span>
+        <span class="o">**</span><span class="p">(</span><span class="n">span_settings</span> <span class="ow">or</span> <span class="p">{}),</span>
+        <span class="o">**</span><span class="p">(</span><span class="n">correction_settings</span> <span class="ow">or</span> <span class="p">{}),</span>
+    <span class="p">}</span>
+    <span class="n">orbit_id</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span>
+    <span class="n">fused</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"run_iod"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="n">fused</span><span class="p">(</span>
+            <span class="n">observations</span><span class="p">,</span> <span class="n">iod_settings</span><span class="o">=</span><span class="n">iod_settings</span><span class="p">,</span> <span class="n">fit_settings</span><span class="o">=</span><span class="n">fit_settings</span>
+        <span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
+
+        <span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="n">_native_problem</span>
+
+        <span class="n">_</span><span class="p">,</span> <span class="n">observed_ipc</span><span class="p">,</span> <span class="n">observers_ipc</span> <span class="o">=</span> <span class="n">_native_problem</span><span class="p">(</span>
+            <span class="n">_placeholder_orbit</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span> <span class="n">observations</span>
+        <span class="p">)</span>
+        <span class="n">output</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">run_iod_ipc</span><span class="p">(</span>
+            <span class="n">propagator</span><span class="p">,</span>
+            <span class="n">observed_ipc</span><span class="p">,</span>
+            <span class="n">observers_ipc</span><span class="p">,</span>
+            <span class="n">iod_settings</span><span class="o">=</span><span class="n">iod_settings</span><span class="p">,</span>
+            <span class="n">fit_settings</span><span class="o">=</span><span class="n">fit_settings</span><span class="p">,</span>
+        <span class="p">)</span>
+    <span class="n">orbit</span><span class="p">,</span> <span class="n">members</span> <span class="o">=</span> <span class="n">tables_from_iod_output</span><span class="p">(</span><span class="n">orbit_id</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">orbit</span><span class="p">,</span> <span class="n">members</span><span class="p">,</span> <span class="n">report_from_iod_output</span><span class="p">(</span><span class="n">output</span><span class="p">)</span></div>
+
+
+
 <span class="k">def</span><span class="w"> </span><span class="nf">iod</span><span class="p">(</span>
     <span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span>
     <span class="n">propagator</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Propagator</span><span class="p">],</span>
@@ -743,12 +1036,13 @@
     <span class="n">contamination_percentage</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.0</span><span class="p">,</span>
     <span class="n">rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">200</span><span class="p">,</span>
     <span class="n">observation_selection_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span>
-        <span class="s2">"combinations"</span><span class="p">,</span> <span class="s2">"first+middle+last"</span><span class="p">,</span> <span class="s2">"thirds"</span>
+        <span class="s2">"combinations"</span><span class="p">,</span> <span class="s2">"first+middle+last"</span><span class="p">,</span> <span class="s2">"thirds"</span><span class="p">,</span> <span class="s2">"spans"</span>
     <span class="p">]</span> <span class="o">=</span> <span class="s2">"combinations"</span><span class="p">,</span>
     <span class="n">iterate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">light_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
     <span class="n">propagator_kwargs</span><span class="p">:</span> <span class="nb">dict</span> <span class="o">=</span> <span class="p">{},</span>
     <span class="n">observatory_bias_model</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">ObservationUncertaintyModel</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">velocity_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"gauss"</span><span class="p">,</span> <span class="s2">"gibbs"</span><span class="p">,</span> <span class="s2">"herrick+gibbs"</span><span class="p">,</span> <span class="s2">"auto"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"gibbs"</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">FittedOrbits</span><span class="p">,</span> <span class="n">FittedOrbitMembers</span><span class="p">]:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Run initial orbit determination on a set of observations believed to belong to a single</span>
@@ -820,62 +1114,26 @@
 <span class="sd">            "outlier" : Flag to indicate which observations are potential outliers (their chi2 is higher than</span>
 <span class="sd">                the chi2 threshold) [float]</span>
 <span class="sd">    """</span>
-    <span class="c1"># Apply the observatory bias model (if any) before fitting: inflates the</span>
-    <span class="c1"># observation uncertainties once at this entry point.</span>
+    <span class="c1"># Apply the observatory bias model (if any) before anything else, as</span>
+    <span class="c1"># every entry point does; then the accepted orbit of the `run_iod` stage</span>
+    <span class="c1"># on a fresh propagator instance (the candidate report is available from</span>
+    <span class="c1"># `run_iod` itself).</span>
     <span class="k">if</span> <span class="n">observatory_bias_model</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
         <span class="n">observations</span> <span class="o">=</span> <span class="n">observatory_bias_model</span><span class="o">.</span><span class="n">apply</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span>
-
-    <span class="c1"># Initialize the propagator</span>
-    <span class="n">prop</span> <span class="o">=</span> <span class="n">propagator</span><span class="p">(</span><span class="o">**</span><span class="n">propagator_kwargs</span><span class="p">)</span>
-
-    <span class="c1"># One native crossing owns the complete preliminary-IOD decision loop on</span>
-    <span class="c1"># providers exposing the fused work unit. UUID creation remains Python-</span>
-    <span class="c1"># owned; the native batch uses it as the synthetic linkage/final orbit id.</span>
-    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">prop</span><span class="p">,</span> <span class="s2">"initial_orbit_determination"</span><span class="p">):</span>
-        <span class="n">orbit_id</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span>
-        <span class="k">return</span> <span class="n">_native_initial_orbit_determination</span><span class="p">(</span>
-            <span class="n">prop</span><span class="p">,</span>
-            <span class="n">observations</span><span class="p">,</span>
-            <span class="p">[</span><span class="n">orbit_id</span><span class="p">],</span>
-            <span class="p">[</span><span class="n">orbit_id</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span>
-            <span class="n">observations</span><span class="o">.</span><span class="n">id</span><span class="o">.</span><span class="n">to_pylist</span><span class="p">(),</span>
-            <span class="n">min_obs</span><span class="o">=</span><span class="n">min_obs</span><span class="p">,</span>
-            <span class="n">min_arc_length</span><span class="o">=</span><span class="n">min_arc_length</span><span class="p">,</span>
-            <span class="n">contamination_percentage</span><span class="o">=</span><span class="n">contamination_percentage</span><span class="p">,</span>
-            <span class="n">rchi2_threshold</span><span class="o">=</span><span class="n">rchi2_threshold</span><span class="p">,</span>
-            <span class="n">observation_selection_method</span><span class="o">=</span><span class="n">observation_selection_method</span><span class="p">,</span>
-            <span class="n">light_time</span><span class="o">=</span><span class="n">light_time</span><span class="p">,</span>
-            <span class="n">chunk_size</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="c1"># Every other propagator runs the same Rust decision loop through the</span>
-    <span class="c1"># callback route, driving its own ``generate_ephemeris``.</span>
-    <span class="kn">from</span><span class="w"> </span><span class="nn">adam_core</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
-
-    <span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="n">_native_problem</span>
-
-    <span class="n">orbit_id</span> <span class="o">=</span> <span class="n">uuid</span><span class="o">.</span><span class="n">uuid4</span><span class="p">()</span><span class="o">.</span><span class="n">hex</span>
-    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">(),</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
-    <span class="n">_</span><span class="p">,</span> <span class="n">observed_ipc</span><span class="p">,</span> <span class="n">observers_ipc</span> <span class="o">=</span> <span class="n">_native_problem</span><span class="p">(</span>
-        <span class="n">_placeholder_orbit</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span> <span class="n">observations</span>
+    <span class="n">orbit</span><span class="p">,</span> <span class="n">members</span><span class="p">,</span> <span class="n">_report</span> <span class="o">=</span> <span class="n">run_iod</span><span class="p">(</span>
+        <span class="n">observations</span><span class="p">,</span>
+        <span class="n">propagator</span><span class="p">(</span><span class="o">**</span><span class="n">propagator_kwargs</span><span class="p">),</span>
+        <span class="n">min_obs</span><span class="o">=</span><span class="n">min_obs</span><span class="p">,</span>
+        <span class="n">min_arc_length</span><span class="o">=</span><span class="n">min_arc_length</span><span class="p">,</span>
+        <span class="n">contamination_percentage</span><span class="o">=</span><span class="n">contamination_percentage</span><span class="p">,</span>
+        <span class="n">rchi2_threshold</span><span class="o">=</span><span class="n">rchi2_threshold</span><span class="p">,</span>
+        <span class="n">observation_selection_method</span><span class="o">=</span><span class="n">observation_selection_method</span><span class="p">,</span>
+        <span class="n">light_time</span><span class="o">=</span><span class="n">light_time</span><span class="p">,</span>
+        <span class="n">velocity_method</span><span class="o">=</span><span class="n">velocity_method</span><span class="p">,</span>
+        <span class="c1"># `iod` keeps the legacy acceptance; `run_iod` defaults to corrected.</span>
+        <span class="n">acceptance</span><span class="o">=</span><span class="s2">"prefit"</span><span class="p">,</span>
     <span class="p">)</span>
-    <span class="n">output</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">iod_fit_ipc</span><span class="p">(</span>
-        <span class="n">prop</span><span class="p">,</span>
-        <span class="n">observed_ipc</span><span class="p">,</span>
-        <span class="n">observers_ipc</span><span class="p">,</span>
-        <span class="n">iod_settings</span><span class="o">=</span><span class="p">{</span>
-            <span class="s2">"min_obs"</span><span class="p">:</span> <span class="n">min_obs</span><span class="p">,</span>
-            <span class="s2">"min_arc_length"</span><span class="p">:</span> <span class="n">min_arc_length</span><span class="p">,</span>
-            <span class="s2">"contamination_percentage"</span><span class="p">:</span> <span class="n">contamination_percentage</span><span class="p">,</span>
-            <span class="s2">"rchi2_threshold"</span><span class="p">:</span> <span class="n">rchi2_threshold</span><span class="p">,</span>
-            <span class="s2">"observation_selection_method"</span><span class="p">:</span> <span class="n">observation_selection_method</span><span class="p">,</span>
-            <span class="s2">"light_time"</span><span class="p">:</span> <span class="n">light_time</span><span class="p">,</span>
-            <span class="s2">"mu"</span><span class="p">:</span> <span class="n">MU</span><span class="p">,</span>
-            <span class="s2">"speed_of_light"</span><span class="p">:</span> <span class="n">C</span><span class="p">,</span>
-        <span class="p">},</span>
-    <span class="p">)</span>
-    <span class="k">return</span> <span class="n">tables_from_iod_output</span><span class="p">(</span><span class="n">orbit_id</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">orbit</span><span class="p">,</span> <span class="n">members</span>
 
 
 <span class="k">def</span><span class="w"> </span><span class="nf">_placeholder_orbit</span><span class="p">(</span><span class="n">observations</span><span class="p">:</span> <span class="n">OrbitDeterminationObservations</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Orbits</span><span class="p">:</span>
@@ -904,9 +1162,21 @@
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    Wrap the dict of a Rust IOD decision (`iod_fit_ipc`, or the ``iod`` entry</span>
 <span class="sd">    of a fused ``full_od`` output) into `FittedOrbits` / `FittedOrbitMembers`</span>
-<span class="sd">    in the observations' order; empty tables when no orbit was accepted.</span>
+<span class="sd">    in the observations' order; empty tables when no orbit was accepted, in</span>
+<span class="sd">    which case the search counters and the reason are logged at debug level.</span>
 <span class="sd">    """</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">output</span><span class="p">[</span><span class="s2">"found"</span><span class="p">]:</span>
+        <span class="n">reason</span> <span class="o">=</span> <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"not_found_reason"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">reason</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span>
+                <span class="s2">"IOD accepted no orbit for </span><span class="si">%d</span><span class="s2"> observations: </span><span class="si">%s</span><span class="s2"> "</span>
+                <span class="s2">"(triplets tried: </span><span class="si">%s</span><span class="s2">, candidates evaluated: </span><span class="si">%s</span><span class="s2">, failed: </span><span class="si">%s</span><span class="s2">)"</span><span class="p">,</span>
+                <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">),</span>
+                <span class="n">reason</span><span class="p">,</span>
+                <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"triplets_tried"</span><span class="p">),</span>
+                <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"candidates_evaluated"</span><span class="p">),</span>
+                <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"candidates_failed"</span><span class="p">),</span>
+            <span class="p">)</span>
         <span class="k">return</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">(),</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
     <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"state"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
     <span class="n">orbit</span> <span class="o">=</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
@@ -919,8 +1189,11 @@
             <span class="n">vx</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">4</span><span class="p">],</span>
             <span class="n">vy</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">4</span><span class="p">:</span><span class="mi">5</span><span class="p">],</span>
             <span class="n">vz</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">5</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span>
-            <span class="n">time</span><span class="o">=</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span>
-                <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"epoch_mjd"</span><span class="p">])],</span> <span class="n">scale</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"epoch_scale"</span><span class="p">]</span>
+            <span class="c1"># The IOD epoch crosses exactly (integer days and nanoseconds).</span>
+            <span class="n">time</span><span class="o">=</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+                <span class="n">days</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"epoch_days"</span><span class="p">])],</span>
+                <span class="n">nanos</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">output</span><span class="p">[</span><span class="s2">"epoch_nanos"</span><span class="p">])],</span>
+                <span class="n">scale</span><span class="o">=</span><span class="n">output</span><span class="p">[</span><span class="s2">"epoch_scale"</span><span class="p">],</span>
             <span class="p">),</span>
             <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">"SUN"</span><span class="p">]),</span>
             <span class="n">frame</span><span class="o">=</span><span class="s2">"ecliptic"</span><span class="p">,</span>
@@ -957,7 +1230,7 @@
     <span class="n">contamination_percentage</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">20.0</span><span class="p">,</span>
     <span class="n">rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mi">10</span><span class="o">**</span><span class="mi">3</span><span class="p">,</span>
     <span class="n">observation_selection_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span>
-        <span class="s2">"combinations"</span><span class="p">,</span> <span class="s2">"first+middle+last"</span><span class="p">,</span> <span class="s2">"thirds"</span>
+        <span class="s2">"combinations"</span><span class="p">,</span> <span class="s2">"first+middle+last"</span><span class="p">,</span> <span class="s2">"thirds"</span><span class="p">,</span> <span class="s2">"spans"</span>
     <span class="p">]</span> <span class="o">=</span> <span class="s2">"combinations"</span><span class="p">,</span>
     <span class="n">iterate</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
     <span class="n">light_time</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
@@ -1104,7 +1377,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             

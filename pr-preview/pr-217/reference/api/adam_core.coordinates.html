@@ -243,6 +243,7 @@
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -624,6 +625,22 @@
 </li>
 </ul>
 </li>
+<li class="toctree-l1"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.local_frame_jacobians"><code class="docutils literal notranslate"><span class="pre">local_frame_jacobians()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.orbit_id"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.orbit_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.object_id"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.object_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.time"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.time</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.covariance"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.covariance</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.origin"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.origin</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.frame"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.frame</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.inertial_frame"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.inertial_frame</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.from_orbits"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.from_orbits()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.local_orbital_frames.html#adam_core.coordinates.local_orbital_frames.LocalFrameCovariances.schema"><code class="docutils literal notranslate"><span class="pre">LocalFrameCovariances.schema</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a><ul>
 <li class="toctree-l2"><a class="reference internal" href="adam_core.coordinates.origin.html#adam_core.coordinates.origin.OriginCodes"><code class="docutils literal notranslate"><span class="pre">OriginCodes</span></code></a><ul>
 <li class="toctree-l3"><a class="reference internal" href="adam_core.coordinates.origin.html#adam_core.coordinates.origin.OriginCodes.SOLAR_SYSTEM_BARYCENTER"><code class="docutils literal notranslate"><span class="pre">OriginCodes.SOLAR_SYSTEM_BARYCENTER</span></code></a></li>
@@ -803,7 +820,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             

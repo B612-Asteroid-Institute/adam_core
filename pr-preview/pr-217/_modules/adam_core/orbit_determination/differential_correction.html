@@ -242,6 +242,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -443,6 +444,7 @@
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pa</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">pyarrow.compute</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pc</span>
 
+<span class="kn">from</span><span class="w"> </span><span class="nn">..</span><span class="w"> </span><span class="kn">import</span> <span class="n">_rust_native</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.cartesian</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartesianCoordinates</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.covariances</span><span class="w"> </span><span class="kn">import</span> <span class="n">CoordinateCovariances</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..coordinates.origin</span><span class="w"> </span><span class="kn">import</span> <span class="n">Origin</span><span class="p">,</span> <span class="n">OriginCodes</span>
@@ -452,6 +454,7 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time.time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..utils.spice</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_perturber_state</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="n">_warn_if_analytic_jacobian_mismatches</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span> <span class="n">evaluate_orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.observation_uncertainty</span><span class="w"> </span><span class="kn">import</span> <span class="n">ObservationUncertaintyModel</span>
@@ -468,17 +471,17 @@
 <span class="c1"># Huber transition point in units of whitened (1-sigma) residual components:</span>
 <span class="c1"># residuals within +/- f_scale are treated quadratically, larger residuals</span>
 <span class="c1"># linearly. 1.345 is the classical constant giving 95% asymptotic efficiency</span>
-<span class="c1"># for Gaussian errors (Huber 1981; Huber &amp; Ronchetti 2009, sec. 4.5).</span>
-<span class="n">HUBER_F_SCALE_DEFAULT</span> <span class="o">=</span> <span class="mf">1.345</span>
+<span class="c1"># for Gaussian errors (Huber 1981; Huber &amp; Ronchetti 2009, sec. 4.5); the</span>
+<span class="c1"># value is Rust's ``HUBER_F_SCALE_DEFAULT``.</span>
+<span class="n">HUBER_F_SCALE_DEFAULT</span> <span class="o">=</span> <span class="n">_rust_native</span><span class="o">.</span><span class="n">iod_defaults</span><span class="p">()[</span><span class="s2">"huber_f_scale"</span><span class="p">]</span>
 
 <span class="c1"># Fused native fitter kwargs (bead personal-cmy.7 / personal-dqk): the Rust</span>
 <span class="c1"># Gauss-Newton work units accept only these tuning parameters.</span>
 <span class="n">_NATIVE_FIT_KWARGS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"xtol"</span><span class="p">,</span> <span class="s2">"ftol"</span><span class="p">,</span> <span class="s2">"max_iterations"</span><span class="p">}</span>
 
-<span class="c1"># scipy keyword arguments a propagator's fused whitened work unit</span>
-<span class="c1"># (``fit_least_squares_whitened``) understands; any other kwarg keeps the</span>
-<span class="c1"># scipy path.</span>
-<span class="n">_FUSED_WHITENED_KWARGS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"xtol"</span><span class="p">,</span> <span class="s2">"ftol"</span><span class="p">,</span> <span class="s2">"gtol"</span><span class="p">,</span> <span class="s2">"max_nfev"</span><span class="p">}</span>
+<span class="c1"># Solver settings understood by a propagator's fused whitened work unit</span>
+<span class="c1"># (``fit_least_squares_whitened``).</span>
+<span class="n">_FUSED_WHITENED_KWARGS</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"xtol"</span><span class="p">,</span> <span class="s2">"ftol"</span><span class="p">,</span> <span class="s2">"gtol"</span><span class="p">,</span> <span class="s2">"max_nfev"</span><span class="p">,</span> <span class="s2">"max_iterations"</span><span class="p">}</span>
 <span class="c1"># Keyword arguments the rejection loops forward to `fit_least_squares` that</span>
 <span class="c1"># their fused work units (``iterative_fit`` / ``cmc2003_fit``) understand.</span>
 <span class="n">_FUSED_LOOP_KWARGS</span> <span class="o">=</span> <span class="n">_FUSED_WHITENED_KWARGS</span> <span class="o">|</span> <span class="p">{</span><span class="s2">"jacobian"</span><span class="p">,</span> <span class="s2">"validate_covariance"</span><span class="p">}</span>
@@ -493,8 +496,8 @@
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">dict</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    The ``fit_settings`` dict of a propagator's fused whitened work units:</span>
-<span class="sd">    the `fit_least_squares` options plus the scipy tolerances (``max_nfev``</span>
-<span class="sd">    bounds the solver's residual evaluations).</span>
+<span class="sd">    the `fit_least_squares` options, tolerances, and independent iteration and</span>
+<span class="sd">    residual-evaluation budgets. None leaves the evaluation count uncapped.</span>
 <span class="sd">    """</span>
     <span class="k">return</span> <span class="p">{</span>
         <span class="s2">"loss"</span><span class="p">:</span> <span class="n">loss</span><span class="p">,</span>
@@ -504,7 +507,8 @@
         <span class="s2">"xtol"</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"xtol"</span><span class="p">,</span> <span class="mf">1e-12</span><span class="p">),</span>
         <span class="s2">"ftol"</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"ftol"</span><span class="p">,</span> <span class="mf">1e-12</span><span class="p">),</span>
         <span class="s2">"gtol"</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"gtol"</span><span class="p">,</span> <span class="mf">1e-12</span><span class="p">),</span>
-        <span class="s2">"max_iterations"</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"max_nfev"</span><span class="p">,</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"max_iterations"</span><span class="p">,</span> <span class="mi">100</span><span class="p">)),</span>
+        <span class="s2">"max_iterations"</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"max_iterations"</span><span class="p">,</span> <span class="mi">100</span><span class="p">),</span>
+        <span class="s2">"max_nfev"</span><span class="p">:</span> <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"max_nfev"</span><span class="p">),</span>
     <span class="p">}</span>
 
 
@@ -1217,11 +1221,17 @@
 <span class="sd">        Ignored for ``loss="linear"``.</span>
 <span class="sd">    **kwargs</span>
 <span class="sd">        Solver settings forwarded to the Rust driver: ``xtol``, ``ftol``,</span>
-<span class="sd">        ``gtol`` (default 1e-12 each, scipy's stopping rules) and ``max_nfev``</span>
-<span class="sd">        (or ``max_iterations``, default 100). Any other keyword raises a</span>
-<span class="sd">        `ValueError`: the fit runs natively (Levenberg-Marquardt with</span>
-<span class="sd">        Marquardt scaling) and no longer forwards arguments to</span>
-<span class="sd">        `scipy.optimize.least_squares`.</span>
+<span class="sd">        ``gtol`` (default 1e-12 each, scipy's stopping rules), ``max_iterations``</span>
+<span class="sd">        (positive integer, default 100: optimizer iterations, one Jacobian</span>
+<span class="sd">        each), and ``max_nfev`` (positive integer or None, default None:</span>
+<span class="sd">        scipy's ``nfev``, the initial residual vector plus every trial step,</span>
+<span class="sd">        accepted or rejected). Residual evaluations spent on finite-difference</span>
+<span class="sd">        Jacobians (six forward or twelve central per iteration) are not</span>
+<span class="sd">        budget, as in ``scipy.optimize.least_squares(method="trf")``; they</span>
+<span class="sd">        are still reported in the ``iterations`` column. Final covariance</span>
+<span class="sd">        calculation/validation and fit reporting are outside both limits.</span>
+<span class="sd">        Any other keyword raises a `ValueError`: the fit runs natively and no</span>
+<span class="sd">        longer forwards arguments to `scipy.optimize.least_squares`.</span>
 
 <span class="sd">    Returns</span>
 <span class="sd">    -------</span>
@@ -1235,6 +1245,31 @@
 
 <span class="sd">    Notes</span>
 <span class="sd">    -----</span>
+<span class="sd">    **Solver contract.** The optimizer is the trust-region Gauss-Newton</span>
+<span class="sd">    method of ``scipy.optimize.least_squares(method="trf", x_scale="jac")``</span>
+<span class="sd">    without bounds, run natively: parameters are scaled by their Jacobian</span>
+<span class="sd">    column norms, each iteration takes the exact trust-region step of the</span>
+<span class="sd">    scaled Gauss-Newton model, a step is accepted when the cost decreases,</span>
+<span class="sd">    and the region shrinks fourfold on a poor actual-to-predicted reduction</span>
+<span class="sd">    ratio (or a failed / non-finite prediction) and doubles on a good one at</span>
+<span class="sd">    the boundary. ``status_code`` reports why the solver stopped and</span>
+<span class="sd">    ``success`` is ``status_code &gt; 0``: ``1`` the scaled gradient</span>
+<span class="sd">    (``max |g_k| / scale_k``) fell below ``gtol``; ``2`` an accepted step</span>
+<span class="sd">    reduced the cost by less than ``ftol * cost`` with ratio above 0.25;</span>
+<span class="sd">    ``3`` an accepted step, or a rejected step after the region shrank, was</span>
+<span class="sd">    below ``xtol * (xtol + |x|)``; ``4`` both; ``0`` ``max_iterations`` or</span>
+<span class="sd">    ``max_nfev`` was reached first; ``-1`` no step decreased the cost while</span>
+<span class="sd">    the region was above the ``xtol`` resolution (stalled); ``-2`` the</span>
+<span class="sd">    Jacobian or gradient was non-finite at the current iterate. A non-finite</span>
+<span class="sd">    quantity never produces ``success=True``. With ``jacobian="analytic"``</span>
+<span class="sd">    on a propagator that is not two-body the Jacobian is inexact and the</span>
+<span class="sd">    solver converges to that Jacobian's fixed point rather than the cost</span>
+<span class="sd">    minimum (see `Propagator.two_body_dynamics`); ``jacobian="central"`` is</span>
+<span class="sd">    exact for any propagator. The legacy ``iterations`` output column records</span>
+<span class="sd">    every solver residual-vector evaluation, including numerical Jacobians,</span>
+<span class="sd">    rather than optimizer iterations. Rejection loops receive a fresh budget</span>
+<span class="sd">    for each fit.</span>
+
 <span class="sd">    With ``loss="huber"`` the reported ``chi2`` / ``reduced_chi2`` remain the</span>
 <span class="sd">    plain (unweighted) chi2 of the included observations, so they stay</span>
 <span class="sd">    comparable across losses; the minimized robust cost is not stored. The</span>
@@ -1268,9 +1303,11 @@
     <span class="k">if</span> <span class="n">unsupported</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">"fit_least_squares runs the Rust solver and accepts only the solver "</span>
-            <span class="s2">"settings xtol, ftol, gtol, max_nfev (max_iterations); got "</span>
+            <span class="s2">"settings xtol, ftol, gtol, max_nfev, max_iterations; got "</span>
             <span class="o">+</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">kwargs</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="si">!r}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">unsupported</span><span class="p">))</span>
         <span class="p">)</span>
+
+    <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="n">jacobian</span><span class="p">)</span>
 
     <span class="c1"># Rust-backed propagators expose the complete whitened fit as one native</span>
     <span class="c1"># crossing (``fit_least_squares_whitened``): every Jacobian option, both</span>
@@ -1420,8 +1457,8 @@
     <span class="k">if</span> <span class="n">unsupported</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">"iterative_fit runs the Rust rejection loop and accepts only the fit "</span>
-            <span class="s2">"settings jacobian, validate_covariance, xtol, ftol, gtol, max_nfev "</span>
-            <span class="s2">"(max_iterations); got "</span>
+            <span class="s2">"settings jacobian, validate_covariance, xtol, ftol, gtol, max_nfev, "</span>
+            <span class="s2">"max_iterations; got "</span>
             <span class="o">+</span> <span class="s2">", "</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">key</span><span class="si">}</span><span class="s2">=</span><span class="si">{</span><span class="n">kwargs</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="si">!r}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">unsupported</span><span class="p">))</span>
         <span class="p">)</span>
     <span class="n">fit_settings</span> <span class="o">=</span> <span class="n">_fit_settings</span><span class="p">(</span>
@@ -1431,6 +1468,7 @@
         <span class="n">kwargs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"validate_covariance"</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>
         <span class="n">kwargs</span><span class="p">,</span>
     <span class="p">)</span>
+    <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="n">fit_settings</span><span class="p">[</span><span class="s2">"jacobian"</span><span class="p">])</span>
     <span class="n">loop_settings</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span>
         <span class="n">rchi2_threshold</span><span class="o">=</span><span class="n">rchi2_threshold</span><span class="p">,</span>
         <span class="n">min_obs</span><span class="o">=</span><span class="n">min_obs</span><span class="p">,</span>
@@ -1476,7 +1514,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             

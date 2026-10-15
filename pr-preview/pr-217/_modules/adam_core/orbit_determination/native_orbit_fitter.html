@@ -242,6 +242,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -448,6 +449,10 @@
 <span class="kn">from</span><span class="w"> </span><span class="nn">..orbits.orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">Orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..propagator.propagator</span><span class="w"> </span><span class="kn">import</span> <span class="n">Propagator</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">..time</span><span class="w"> </span><span class="kn">import</span> <span class="n">Timestamp</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">_has_compatible_native_spec</span><span class="p">,</span>
+    <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">,</span>
+<span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.differential_correction</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
     <span class="n">_FUSED_LOOP_KWARGS</span><span class="p">,</span>
     <span class="n">HUBER_F_SCALE_DEFAULT</span><span class="p">,</span>
@@ -459,7 +464,7 @@
 <span class="p">)</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.evaluate</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitDeterminationObservations</span><span class="p">,</span> <span class="n">evaluate_orbits</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.fitted_orbits</span><span class="w"> </span><span class="kn">import</span> <span class="n">FittedOrbitMembers</span><span class="p">,</span> <span class="n">FittedOrbits</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">.iod</span><span class="w"> </span><span class="kn">import</span> <span class="n">iod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">.iod</span><span class="w"> </span><span class="kn">import</span> <span class="n">IOD_DEFAULTS</span><span class="p">,</span> <span class="n">run_iod</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.orbit_fitter</span><span class="w"> </span><span class="kn">import</span> <span class="n">OrbitFitter</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">.rejection</span><span class="w"> </span><span class="kn">import</span> <span class="n">cmc2003_fit</span>
 
@@ -479,6 +484,9 @@
 <span class="sd">    refined fit with Python-owned orbit ids and the given object id.</span>
 <span class="sd">    """</span>
     <span class="k">if</span> <span class="ow">not</span> <span class="n">output</span><span class="p">[</span><span class="s2">"found"</span><span class="p">]</span> <span class="ow">or</span> <span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"fit"</span><span class="p">)</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="n">reason</span> <span class="o">=</span> <span class="p">(</span><span class="n">output</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"iod"</span><span class="p">)</span> <span class="ow">or</span> <span class="p">{})</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"not_found_reason"</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">reason</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">"IOD found no orbit for </span><span class="si">%s</span><span class="s2">: </span><span class="si">%s</span><span class="s2">"</span><span class="p">,</span> <span class="n">object_id</span><span class="p">,</span> <span class="n">reason</span><span class="p">)</span>
         <span class="k">return</span> <span class="n">FittedOrbits</span><span class="o">.</span><span class="n">empty</span><span class="p">(),</span> <span class="n">FittedOrbitMembers</span><span class="o">.</span><span class="n">empty</span><span class="p">()</span>
     <span class="n">iod</span> <span class="o">=</span> <span class="n">output</span><span class="p">[</span><span class="s2">"iod"</span><span class="p">]</span>
     <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">iod</span><span class="p">[</span><span class="s2">"state"</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
@@ -492,8 +500,11 @@
             <span class="n">vx</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">3</span><span class="p">:</span><span class="mi">4</span><span class="p">],</span>
             <span class="n">vy</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">4</span><span class="p">:</span><span class="mi">5</span><span class="p">],</span>
             <span class="n">vz</span><span class="o">=</span><span class="n">state</span><span class="p">[</span><span class="mi">5</span><span class="p">:</span><span class="mi">6</span><span class="p">],</span>
-            <span class="n">time</span><span class="o">=</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">from_mjd</span><span class="p">(</span>
-                <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">iod</span><span class="p">[</span><span class="s2">"epoch_mjd"</span><span class="p">])],</span> <span class="n">scale</span><span class="o">=</span><span class="n">iod</span><span class="p">[</span><span class="s2">"epoch_scale"</span><span class="p">]</span>
+            <span class="c1"># The IOD epoch crosses exactly (integer days and nanoseconds).</span>
+            <span class="n">time</span><span class="o">=</span><span class="n">Timestamp</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span>
+                <span class="n">days</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">iod</span><span class="p">[</span><span class="s2">"epoch_days"</span><span class="p">])],</span>
+                <span class="n">nanos</span><span class="o">=</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">iod</span><span class="p">[</span><span class="s2">"epoch_nanos"</span><span class="p">])],</span>
+                <span class="n">scale</span><span class="o">=</span><span class="n">iod</span><span class="p">[</span><span class="s2">"epoch_scale"</span><span class="p">],</span>
             <span class="p">),</span>
             <span class="n">origin</span><span class="o">=</span><span class="n">Origin</span><span class="o">.</span><span class="n">from_kwargs</span><span class="p">(</span><span class="n">code</span><span class="o">=</span><span class="p">[</span><span class="s2">"SUN"</span><span class="p">]),</span>
             <span class="n">frame</span><span class="o">=</span><span class="s2">"ecliptic"</span><span class="p">,</span>
@@ -540,8 +551,19 @@
 <span class="sd">        Default 200.0.</span>
 <span class="sd">    observation_selection_method : str, optional</span>
 <span class="sd">        Strategy for selecting observation triplets in IOD.  One of</span>
-<span class="sd">        ``"combinations"``, ``"first+middle+last"``, ``"thirds"``.</span>
-<span class="sd">        Default ``"combinations"``.</span>
+<span class="sd">        ``"combinations"``, ``"first+middle+last"``, ``"thirds"``,</span>
+<span class="sd">        ``"spans"`` (span-bounded triplets swept across search windows).</span>
+<span class="sd">        Default ``"spans"``.</span>
+<span class="sd">    velocity_method : {"gauss", "gibbs", "herrick+gibbs", "auto"}, optional</span>
+<span class="sd">        Velocity of the Gauss IOD candidates; ``"auto"`` chooses</span>
+<span class="sd">        Herrick-Gibbs or Gibbs per root by the separation of its position</span>
+<span class="sd">        vectors. Default ``"gibbs"``.</span>
+<span class="sd">    iod_acceptance : {"corrected", "prefit"}, optional</span>
+<span class="sd">        ``"corrected"`` (default): each Gauss orbit seeds staged differential</span>
+<span class="sd">        corrections from its triplet's span to the whole arc, and the</span>
+<span class="sd">        converged candidate with the lowest reduced chi2 is accepted</span>
+<span class="sd">        (``iod_rchi2_threshold`` bounds every stage). ``"prefit"``: the</span>
+<span class="sd">        legacy gate on the raw Gauss orbit. See `run_iod`.</span>
 <span class="sd">    loss : {"linear", "huber"}, optional</span>
 <span class="sd">        Loss used during differential correction (`iterative_fit`).</span>
 <span class="sd">        ``"huber"`` downweights large residuals instead of letting them pull</span>
@@ -557,7 +579,9 @@
 <span class="sd">        - ``"cmc2003"`` (default): `cmc2003_fit`, Carpino-Milani-Chesley</span>
 <span class="sd">          (2003) rejection with re-inclusion against the expected post-fit</span>
 <span class="sd">          residual covariance, with OrbFit's ``reject.def`` constants.</span>
-<span class="sd">          ``rchi2_threshold``, ``min_obs``, ``min_arc_length`` and</span>
+<span class="sd">          Covariance and rejection share central differences through the full</span>
+<span class="sd">          predictor; ``jacobian`` in ``rejection_kwargs`` controls optimizer</span>
+<span class="sd">          steps only. ``rchi2_threshold``, ``min_obs``, ``min_arc_length`` and</span>
 <span class="sd">          ``contamination_percentage`` then apply to IOD only; tune the</span>
 <span class="sd">          scheme through ``rejection_kwargs``.</span>
 <span class="sd">        - ``"worst_residual"``: `iterative_fit`, which removes the</span>
@@ -565,8 +589,9 @@
 <span class="sd">          exceeds ``rchi2_threshold``, bounded by ``contamination_percentage``,</span>
 <span class="sd">          ``min_obs`` and ``min_arc_length`` (the pre-2026-09 behaviour).</span>
 
-<span class="sd">        Both compose with ``loss="huber"``. See the Notes of `run_od` for</span>
-<span class="sd">        the full default configuration.</span>
+<span class="sd">        Both accept ``loss="huber"``; its combination with CMC2003 is</span>
+<span class="sd">        heuristic, without calibrated rejection statistics. See the Notes</span>
+<span class="sd">        of `run_od` for the full default configuration.</span>
 <span class="sd">    rejection_kwargs : dict, optional</span>
 <span class="sd">        Extra keyword arguments for the rejection function (e.g.</span>
 <span class="sd">        ``chi2_reject``, ``chi2_recover`` for ``"cmc2003"``; ``jacobian``,</span>
@@ -577,14 +602,18 @@
         <span class="bp">self</span><span class="p">,</span>
         <span class="n">propagator_class</span><span class="p">:</span> <span class="n">Type</span><span class="p">[</span><span class="n">Propagator</span><span class="p">],</span>
         <span class="n">propagator_kwargs</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">dict</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="n">Any</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
-        <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">6</span><span class="p">,</span>
-        <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
-        <span class="n">contamination_percentage</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">20.0</span><span class="p">,</span>
+        <span class="n">min_obs</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"min_obs"</span><span class="p">],</span>
+        <span class="n">min_arc_length</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"min_arc_length"</span><span class="p">],</span>
+        <span class="n">contamination_percentage</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"contamination_percentage"</span><span class="p">],</span>
         <span class="n">rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
-        <span class="n">iod_rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">200.0</span><span class="p">,</span>
+        <span class="n">iod_rchi2_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"rchi2_threshold"</span><span class="p">],</span>
         <span class="n">observation_selection_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span>
-            <span class="s2">"combinations"</span><span class="p">,</span> <span class="s2">"first+middle+last"</span><span class="p">,</span> <span class="s2">"thirds"</span>
-        <span class="p">]</span> <span class="o">=</span> <span class="s2">"combinations"</span><span class="p">,</span>
+            <span class="s2">"combinations"</span><span class="p">,</span> <span class="s2">"first+middle+last"</span><span class="p">,</span> <span class="s2">"thirds"</span><span class="p">,</span> <span class="s2">"spans"</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"observation_selection_method"</span><span class="p">],</span>
+        <span class="n">velocity_method</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span>
+            <span class="s2">"gauss"</span><span class="p">,</span> <span class="s2">"gibbs"</span><span class="p">,</span> <span class="s2">"herrick+gibbs"</span><span class="p">,</span> <span class="s2">"auto"</span>
+        <span class="p">]</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"velocity_method"</span><span class="p">],</span>
+        <span class="n">iod_acceptance</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"corrected"</span><span class="p">,</span> <span class="s2">"prefit"</span><span class="p">]</span> <span class="o">=</span> <span class="n">IOD_DEFAULTS</span><span class="p">[</span><span class="s2">"acceptance"</span><span class="p">],</span>
         <span class="n">loss</span><span class="p">:</span> <span class="n">LossType</span> <span class="o">=</span> <span class="s2">"linear"</span><span class="p">,</span>
         <span class="n">f_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="n">HUBER_F_SCALE_DEFAULT</span><span class="p">,</span>
         <span class="n">outlier_rejection</span><span class="p">:</span> <span class="n">Literal</span><span class="p">[</span><span class="s2">"worst_residual"</span><span class="p">,</span> <span class="s2">"cmc2003"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"cmc2003"</span><span class="p">,</span>
@@ -603,6 +632,8 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">rchi2_threshold</span> <span class="o">=</span> <span class="n">rchi2_threshold</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">iod_rchi2_threshold</span> <span class="o">=</span> <span class="n">iod_rchi2_threshold</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">observation_selection_method</span> <span class="o">=</span> <span class="n">observation_selection_method</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">velocity_method</span> <span class="o">=</span> <span class="n">velocity_method</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">iod_acceptance</span> <span class="o">=</span> <span class="n">iod_acceptance</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">loss</span> <span class="o">=</span> <span class="n">loss</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">f_scale</span> <span class="o">=</span> <span class="n">f_scale</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">outlier_rejection</span> <span class="o">=</span> <span class="n">outlier_rejection</span>
@@ -618,6 +649,11 @@
 <span class="sd">        the outlier-rejection loop and its constants, and the whitened-fit</span>
 <span class="sd">        options (`fit_least_squares` defaults unless overridden through</span>
 <span class="sd">        ``rejection_kwargs``).</span>
+
+<span class="sd">        A subclass overriding ``full_od``, ``initial_fit`` or ``refine_fit``</span>
+<span class="sd">        uses the Python composition by default. Defining ``native_settings``</span>
+<span class="sd">        on that subclass explicitly opts into fusion and promises these dicts</span>
+<span class="sd">        describe its complete fitting behavior, including the overridden hooks.</span>
 <span class="sd">        """</span>
         <span class="kn">from</span><span class="w"> </span><span class="nn">.gauss</span><span class="w"> </span><span class="kn">import</span> <span class="n">MU</span><span class="p">,</span> <span class="n">C</span>
 
@@ -627,6 +663,8 @@
             <span class="s2">"contamination_percentage"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">contamination_percentage</span><span class="p">,</span>
             <span class="s2">"rchi2_threshold"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">iod_rchi2_threshold</span><span class="p">,</span>
             <span class="s2">"observation_selection_method"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">observation_selection_method</span><span class="p">,</span>
+            <span class="s2">"velocity_method"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">velocity_method</span><span class="p">,</span>
+            <span class="s2">"acceptance"</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">iod_acceptance</span><span class="p">,</span>
             <span class="s2">"light_time"</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span>
             <span class="s2">"mu"</span><span class="p">:</span> <span class="n">MU</span><span class="p">,</span>
             <span class="s2">"speed_of_light"</span><span class="p">:</span> <span class="n">C</span><span class="p">,</span>
@@ -670,7 +708,15 @@
 <div class="viewcode-block" id="NativeOrbitFitter.supports_native_full_od">
 <a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.supports_native_full_od">[docs]</a>
     <span class="k">def</span><span class="w"> </span><span class="nf">supports_native_full_od</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
-<span class="w">        </span><span class="sd">"""Whether ``rejection_kwargs`` are all understood by the fused work units."""</span>
+<span class="w">        </span><span class="sd">"""Whether the fitting hooks and settings can use the fused work units.</span>
+
+<span class="sd">        Inherited settings cannot represent overridden fitting hooks. Check</span>
+<span class="sd">        that compatibility before parsing settings for the built-in drivers.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">_has_compatible_native_spec</span><span class="p">(</span>
+            <span class="bp">self</span><span class="p">,</span> <span class="s2">"native_settings"</span><span class="p">,</span> <span class="p">(</span><span class="s2">"full_od"</span><span class="p">,</span> <span class="s2">"initial_fit"</span><span class="p">,</span> <span class="s2">"refine_fit"</span><span class="p">)</span>
+        <span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
         <span class="n">_</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">native_settings</span><span class="p">()</span>
         <span class="n">loop_keys</span> <span class="o">=</span> <span class="p">{</span>
             <span class="s2">"chi2_reject"</span><span class="p">,</span>
@@ -682,6 +728,36 @@
             <span class="s2">"psd_floor_frac"</span><span class="p">,</span>
         <span class="p">}</span>
         <span class="k">return</span> <span class="nb">set</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rejection_kwargs</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">loop_keys</span> <span class="o">|</span> <span class="n">_FUSED_LOOP_KWARGS</span></div>
+
+
+<div class="viewcode-block" id="NativeOrbitFitter.fused_propagator_matches">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.fused_propagator_matches">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fused_propagator_matches</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        Whether ``propagator`` is the IOD propagator this fitter is</span>
+<span class="sd">        configured for: an instance of ``propagator_class`` built without</span>
+<span class="sd">        extra keyword arguments. When it is, a fused work unit scores the</span>
+<span class="sd">        IOD candidates on ``propagator`` itself; otherwise</span>
+<span class="sd">        `iod_propagator_for` hands the fused work unit a fresh configured</span>
+<span class="sd">        instance, as the composition uses.</span>
+<span class="sd">        """</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="nb">isinstance</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">propagator_class</span><span class="p">)</span> <span class="ow">and</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="NativeOrbitFitter.iod_propagator_for">
+<a class="viewcode-back" href="../../../reference/api/adam_core.orbit_determination.native_orbit_fitter.html#adam_core.orbit_determination.native_orbit_fitter.NativeOrbitFitter.iod_propagator_for">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">iod_propagator_for</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">propagator</span><span class="p">:</span> <span class="n">Propagator</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Propagator</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">"""</span>
+<span class="sd">        The explicit IOD propagator for a fused work unit refining on</span>
+<span class="sd">        ``propagator``: None when ``propagator`` already is the configured</span>
+<span class="sd">        IOD propagator (`fused_propagator_matches`), else a fresh</span>
+<span class="sd">        ``propagator_class(**propagator_kwargs)``.</span>
+<span class="sd">        """</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">fused_propagator_matches</span><span class="p">(</span><span class="n">propagator</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">None</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">propagator_class</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span><span class="p">)</span></div>
 
 
 <div class="viewcode-block" id="NativeOrbitFitter.full_od">
@@ -696,16 +772,22 @@
 <span class="sd">        IOD followed by refinement. On a Rust-backed propagator exposing the</span>
 <span class="sd">        fused ``full_od`` work unit the whole pipeline (Gauss IOD decision</span>
 <span class="sd">        loop, differential correction, outlier rejection) runs natively in</span>
-<span class="sd">        one crossing; otherwise `initial_fit` and `refine_fit` are chained.</span>
+<span class="sd">        one crossing when ``supports_native_full_od`` confirms compatibility;</span>
+<span class="sd">        the IOD stage runs on the configured IOD propagator (`iod_propagator_for`),</span>
+<span class="sd">        which the work unit receives explicitly when it is not ``propagator``</span>
+<span class="sd">        itself. Otherwise `initial_fit` and `refine_fit` are chained,</span>
+<span class="sd">        honoring subclass overrides.</span>
 <span class="sd">        """</span>
         <span class="n">fused</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="s2">"full_od"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">fused</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">supports_native_full_od</span><span class="p">():</span>
             <span class="n">iod_settings</span><span class="p">,</span> <span class="n">refinement</span><span class="p">,</span> <span class="n">fit_settings</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">native_settings</span><span class="p">()</span>
+            <span class="n">_warn_if_analytic_jacobian_mismatches</span><span class="p">(</span><span class="n">propagator</span><span class="p">,</span> <span class="n">fit_settings</span><span class="p">[</span><span class="s2">"jacobian"</span><span class="p">])</span>
             <span class="n">output</span> <span class="o">=</span> <span class="n">fused</span><span class="p">(</span>
                 <span class="n">observations</span><span class="p">,</span>
                 <span class="n">iod_settings</span><span class="o">=</span><span class="n">iod_settings</span><span class="p">,</span>
                 <span class="n">refinement</span><span class="o">=</span><span class="n">refinement</span><span class="p">,</span>
                 <span class="n">fit_settings</span><span class="o">=</span><span class="n">fit_settings</span><span class="p">,</span>
+                <span class="n">iod_propagator</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">iod_propagator_for</span><span class="p">(</span><span class="n">propagator</span><span class="p">),</span>
             <span class="p">)</span>
             <span class="k">return</span> <span class="n">tables_from_native_full_od</span><span class="p">(</span><span class="n">object_id</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">output</span><span class="p">)</span>
         <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">full_od</span><span class="p">(</span><span class="n">object_id</span><span class="p">,</span> <span class="n">observations</span><span class="p">,</span> <span class="n">propagator</span><span class="p">)</span></div>
@@ -766,15 +848,17 @@
             <span class="p">)</span>
             <span class="k">return</span> <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">fitted_orbit_members</span>
 
-        <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">fitted_orbit_members</span> <span class="o">=</span> <span class="n">iod</span><span class="p">(</span>
+        <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">fitted_orbit_members</span><span class="p">,</span> <span class="n">_report</span> <span class="o">=</span> <span class="n">run_iod</span><span class="p">(</span>
             <span class="n">observations</span><span class="p">,</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">propagator_class</span><span class="p">,</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">propagator_class</span><span class="p">(</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span><span class="p">),</span>
             <span class="n">min_obs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">min_obs</span><span class="p">,</span>
             <span class="n">min_arc_length</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">min_arc_length</span><span class="p">,</span>
             <span class="n">contamination_percentage</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">contamination_percentage</span><span class="p">,</span>
             <span class="n">rchi2_threshold</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">iod_rchi2_threshold</span><span class="p">,</span>
             <span class="n">observation_selection_method</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_selection_method</span><span class="p">,</span>
-            <span class="n">propagator_kwargs</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">propagator_kwargs</span><span class="p">,</span>
+            <span class="n">velocity_method</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">velocity_method</span><span class="p">,</span>
+            <span class="n">acceptance</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">iod_acceptance</span><span class="p">,</span>
+            <span class="n">fit_settings</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">native_settings</span><span class="p">()[</span><span class="mi">2</span><span class="p">],</span>
         <span class="p">)</span>
         <span class="k">return</span> <span class="n">fitted_orbits</span><span class="p">,</span> <span class="n">fitted_orbit_members</span></div>
 
@@ -848,7 +932,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             

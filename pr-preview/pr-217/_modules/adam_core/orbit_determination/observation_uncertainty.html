@@ -242,6 +242,7 @@
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="../../../reference/api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -753,15 +754,21 @@
     <span class="n">models</span><span class="p">:</span> <span class="s2">"Sequence[ObservationUncertaintyModel]"</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Optional</span><span class="p">[</span><span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]]:</span>
 <span class="w">    </span><span class="sd">"""</span>
-<span class="sd">    The ``_native_spec()`` dicts of ``models`` (composites flattened, in</span>
+<span class="sd">    The ``_native_specs()`` dicts of ``models`` (composites flattened, in</span>
 <span class="sd">    application order) for a Rust-backed propagator's fused ``run_od`` work</span>
 <span class="sd">    unit, or None when any model has no native spec (a user-defined Python</span>
-<span class="sd">    model), in which case the models are applied in Python.</span>
+<span class="sd">    model), in which case the models are applied in Python. A subclass that</span>
+<span class="sd">    overrides ``apply`` must also define ``_native_specs`` to explicitly</span>
+<span class="sd">    describe its new behavior; an inherited specification is insufficient.</span>
 <span class="sd">    """</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">._native_dispatch</span><span class="w"> </span><span class="kn">import</span> <span class="n">_has_compatible_native_spec</span>
+
     <span class="n">specs</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">dict</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">for</span> <span class="n">model</span> <span class="ow">in</span> <span class="n">models</span><span class="p">:</span>
         <span class="n">spec</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">model</span><span class="p">,</span> <span class="s2">"_native_specs"</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
-        <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">spec</span> <span class="ow">is</span> <span class="kc">None</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">_has_compatible_native_spec</span><span class="p">(</span>
+            <span class="n">model</span><span class="p">,</span> <span class="s2">"_native_specs"</span><span class="p">,</span> <span class="p">(</span><span class="s2">"apply"</span><span class="p">,)</span>
+        <span class="p">):</span>
             <span class="k">return</span> <span class="kc">None</span>
         <span class="n">nested</span> <span class="o">=</span> <span class="n">spec</span><span class="p">()</span>
         <span class="k">if</span> <span class="n">nested</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
@@ -1218,7 +1225,7 @@
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             

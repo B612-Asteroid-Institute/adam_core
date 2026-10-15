@@ -243,6 +243,7 @@
 <li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.covariances.html">adam_core.coordinates.covariances module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.geodetics.html">adam_core.coordinates.geodetics module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.keplerian.html">adam_core.coordinates.keplerian module</a></li>
+<li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.local_orbital_frames.html">adam_core.coordinates.local_orbital_frames module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.origin.html">adam_core.coordinates.origin module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.residuals.html">adam_core.coordinates.residuals module</a></li>
 <li class="toctree-l5"><a class="reference internal" href="api/adam_core.coordinates.spherical.html">adam_core.coordinates.spherical module</a></li>
@@ -639,6 +640,13 @@ Settings that only the scipy solver understood raise <code class="docutils liter
 <li><p>Error behavior: driver errors raise <code class="docutils literal notranslate"><span class="pre">ValueError</span></code> for invalid inputs and
 <code class="docutils literal notranslate"><span class="pre">RuntimeError</span></code> for backend failures; an exception raised by a Python
 propagator inside the callback is re-raised unchanged.</p></li>
+<li><p>CMC2003 finalization uses one central-difference Jacobian through the
+full predictor for all observations. Selected rows form the covariance;
+all rows supply rejection/recovery projections. The solver Jacobian
+setting affects optimizer steps only. The twelve finalization candidate
+predictions are outside <code class="docutils literal notranslate"><span class="pre">max_nfev</span></code>; <code class="docutils literal notranslate"><span class="pre">validate_covariance</span></code> controls
+the additional weak-direction probe. Huber plus CMC2003 remains a
+heuristic combination without calibrated rejection statistics.</p></li>
 </ul>
 </li>
 <li><p><code class="docutils literal notranslate"><span class="pre">orbit_determination.cmc2003_fit</span></code> / <code class="docutils literal notranslate"><span class="pre">cmc2003_fit_detailed</span></code>
@@ -777,7 +785,7 @@ are explicit compatibility/provider boundaries rather than default backends.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-01</div>
+              Last updated on 2026-10-15</div>
           </div>
           <div class="right-details">
             
