@@ -204,6 +204,20 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "Build adam-assist native wheel" in release_matrix
     assert "python -m pip install --no-deps -e dependent" in tier1
     assert "jpl-small-bodies-de441-n16==2021.3.31.1" in tier1
+    assert "Run Core integration tests with the reference propagator" in tier1
+    for test_path in (
+        "src/adam_core/propagator/tests/test_propagator.py",
+        "src/adam_core/propagator/tests/test_space_ephemeris.py",
+        "src/adam_core/dynamics/tests/test_impact_viz_data.py",
+        "src/adam_core/dynamics/tests/test_lambert.py",
+        "src/adam_core/orbit_determination/tests/test_differential_correction.py",
+        "src/adam_core/orbit_determination/tests/test_iod.py",
+        "src/adam_core/orbit_determination/tests/test_least_squares.py",
+        "src/adam_core/orbit_determination/tests/test_od.py",
+        "src/adam_core/orbits/tests/test_oem.py",
+        "src/adam_core/orbits/tests/test_spice_kernel.py",
+    ):
+        assert test_path in tier1
 
     downstream_builder = (
         ROOT / "migration/scripts/develop_downstream_adam_assist.py"

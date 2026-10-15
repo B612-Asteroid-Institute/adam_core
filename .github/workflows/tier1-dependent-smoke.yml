@@ -70,6 +70,19 @@ jobs:
           PY
       - name: Run dependent import smoke
         run: python -c "import adam_assist.propagator"
+      - name: Run Core integration tests with the reference propagator
+        run: |
+          pdm run test -- \
+            src/adam_core/propagator/tests/test_propagator.py \
+            src/adam_core/propagator/tests/test_space_ephemeris.py \
+            src/adam_core/dynamics/tests/test_impact_viz_data.py \
+            src/adam_core/dynamics/tests/test_lambert.py \
+            src/adam_core/orbit_determination/tests/test_differential_correction.py \
+            src/adam_core/orbit_determination/tests/test_iod.py \
+            src/adam_core/orbit_determination/tests/test_least_squares.py \
+            src/adam_core/orbit_determination/tests/test_od.py \
+            src/adam_core/orbits/tests/test_oem.py \
+            src/adam_core/orbits/tests/test_spice_kernel.py
       - name: Run orbit determination smoke
         run: |
           python - <<'PY'
