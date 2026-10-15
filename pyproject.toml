@@ -89,8 +89,9 @@ build-backend = "maturin"
 
 [dependency-groups]
 test = [
-    # Immutable SPICE authority for regression fixtures. Keep the runtime
-    # requirements broad so wheel consumers can receive current EOP data.
+    # Freeze data authorities for regression fixtures while keeping runtime
+    # requirements broad so wheel consumers can receive current updates.
+    "mpc-obscodes==2026.4.18",
     "naif-de440==2020.12.21.1",
     "jpl-small-bodies-de441-n16==2021.3.31.1",
     "naif-leapseconds==2025.4.22",
@@ -111,7 +112,8 @@ test = [
     "mypy",
     "ruff",
     "black",
-    "adam-assist>=0.3.9",
+    # CI builds the exact compatible adam-assist source candidate after this
+    # environment is installed; do not let a published wheel replace it.
     "mpcq>=0.4.0; python_version < '3.13'",
     "google-cloud-bigquery",
     "google-cloud-bigquery-storage",

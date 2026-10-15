@@ -4,6 +4,8 @@ This file contains notable changes in adam-core
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-15
+
 ### Added
 
 - `orbit_to_oem` writes OEM 3.0 (`version="3.0"`) with labels, comments and local orbital frame covariance blocks (`covariance_frame`), and writes the state block of 9x9 covariances.
@@ -11,6 +13,13 @@ This file contains notable changes in adam-core
 - Nullable `astcat` and `photcat` provenance columns on the Python
   `SourceCatalog` schema and Rust `SourceCatalogBatch`, preserving exact source
   strings and nulls through Arrow/Parquet and observation IPC.
+
+### Changed
+
+- OEM 2.0 output remains the default and byte-compatible for existing 6x6
+  covariance inputs; when a 9x9 covariance is supplied, its Cartesian 6x6
+  state block is emitted.
+- OEM readers accept the equivalent `ICRF`, `J2000`, and `GCRF` frame labels.
 
 ### Compatibility
 
@@ -23,9 +32,16 @@ This file contains notable changes in adam-core
   dataframe readers or relax unrelated schema/type validation.
 - No compatibility claim is made for older adam-core readers consuming the new
   27-column schema. Adding fields to the public, exhaustively constructible Rust
-  `SourceCatalogBatch` is semver-breaking for Rust consumers, so any future
-  package release containing this change must be `0.6.0`, not `0.5.9`. Package
-  publication remains a separate release decision.
+  `SourceCatalogBatch` is semver-breaking for Rust consumers.
+- The Rust OEM surface is intentionally source-breaking: the old
+  `oem_write_kvn` export is removed; `oem_to_kvn` accepts comments and decimal
+  precision; and `oem_render_orbits_kvn` / `oem_write_orbits_kvn` accept
+  `OemWriteOptions` while reporting the emitted warning count.
+- The private CPython native symbol `_rust_native.oem_write_kvn` is removed;
+  supported Python callers continue through `orbit_to_oem` and `orbit_from_oem`.
+- These Rust API changes require the Python package and all six public Rust
+  crates to advance together to `0.6.0`. Package publication remains a separate
+  release decision.
 
 ## [0.5.8] - 2026-10-05
 
