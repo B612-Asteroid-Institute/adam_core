@@ -316,162 +316,204 @@ impl Propagator for ExternalPropagator {
     }
 }
 
-/// adam-core's two-body propagator behind the external ABI: the reference
-/// implementation of [`ExternalPropagatorV1`] (plugins mirror it) and the
-/// test double of the external route.
-pub mod two_body_reference {
-    use super::*;
-    use crate::propagation::{EphemerisOptions, PropagationOptions, TwoBodyPropagator};
-    use crate::{CoordinateBatch, OrbitBatch, OrbitId, OriginArray, OriginId, TimeArray};
+/// Times reach [`OwnedExternalPropagator`]'s backend already in its
+/// integration scale (the caller's [`ExternalPropagator`] rescales them), so
+/// no conversion runs; a request that needs one is refused.
+struct SameScale;
 
-    /// Times arrive in the integration scale (TDB), so no conversion runs.
-    struct SameScale;
-
-    impl crate::types::time::TimeScaleProvider for SameScale {
-        fn rescale(
-            &self,
-            _times: &TimeArray,
-            new_scale: TimeScale,
-        ) -> crate::types::SchemaResult<TimeArray> {
-            Err(crate::types::SchemaError::InvalidRecordBatch(format!(
-                "external two-body reference received non-{} times",
-                new_scale.as_str()
-            )))
-        }
+impl TimeScaleProvider for SameScale {
+    fn rescale(
+        &self,
+        _times: &crate::TimeArray,
+        new_scale: TimeScale,
+    ) -> crate::types::SchemaResult<crate::TimeArray> {
+        Err(crate::types::SchemaError::InvalidRecordBatch(format!(
+            "external propagator received times outside {}",
+            new_scale.as_str()
+        )))
     }
+}
 
-    struct Context {
-        propagator: TwoBodyPropagator,
-        scale: CString,
-        name: CString,
-        version: CString,
-    }
+/// The context behind an [`OwnedExternalPropagator`]'s table.
+pub struct ExternalContext<P> {
+    propagator: P,
+    scale: CString,
+    name: CString,
+    version: CString,
+}
 
-    fn write_error(request: &PropagateRequestV1, message: &str) {
-        if request.error.is_null() || request.error_len == 0 {
-            return;
-        }
-        let bytes = message.as_bytes();
-        let n = bytes.len().min(request.error_len - 1);
-        // SAFETY: `error` has `error_len` writable bytes.
-        unsafe {
-            std::ptr::copy_nonoverlapping(bytes.as_ptr() as *const c_char, request.error, n);
-            *request.error.add(n) = 0;
-        }
-    }
+/// Any [`Propagator`] behind the external ABI: the table (first field, so a
+/// pointer to this value is a pointer to the table) and the context it
+/// points into. A plugin builds one from its propagator and hands it to
+/// Python in a capsule named [`EXTERNAL_PROPAGATOR_CAPSULE`]; dropping it
+/// (with the capsule) frees the context.
+#[repr(C)]
+pub struct OwnedExternalPropagator<P: Propagator> {
+    table: ExternalPropagatorV1,
+    context: Box<ExternalContext<P>>,
+}
 
-    unsafe extern "C" fn propagate(
-        context: *const c_void,
-        request: *const PropagateRequestV1,
-    ) -> i32 {
-        let context = &*(context as *const Context);
-        let request = &*request;
-        match run(context, request) {
-            Ok(()) => 0,
-            Err(message) => {
-                write_error(request, &message);
-                1
-            }
-        }
-    }
+// SAFETY: the table points into `context`, owned here; `P` is Sync.
+unsafe impl<P: Propagator + Send> Send for OwnedExternalPropagator<P> {}
 
-    unsafe fn run(context: &Context, request: &PropagateRequestV1) -> Result<(), String> {
-        let n = request.n_orbits;
-        let m = request.n_times;
-        let s = std::slice::from_raw_parts(request.states, n * 6);
-        let states: Vec<[f64; 6]> = s
-            .chunks_exact(6)
-            .map(|c| std::array::from_fn(|i| c[i]))
-            .collect();
-        let scale = |p: *const c_char| -> Result<TimeScale, String> {
-            TimeScale::parse(&CStr::from_ptr(p).to_string_lossy()).map_err(|e| e.to_string())
-        };
-        let epochs = |days: *const i64, nanos: *const i64, k: usize| -> Vec<Epoch> {
-            let d = std::slice::from_raw_parts(days, k);
-            let ns = std::slice::from_raw_parts(nanos, k);
-            d.iter().zip(ns).map(|(&a, &b)| Epoch::new(a, b)).collect()
-        };
-        let frame = Frame::parse(&CStr::from_ptr(request.frame).to_string_lossy())
-            .map_err(|e| e.to_string())?;
-        let origin = OriginId::from_code(
-            CStr::from_ptr(request.origin)
-                .to_string_lossy()
-                .into_owned(),
-        );
-        let orbits = OrbitBatch::new(
-            (0..n).map(|i| OrbitId(format!("{i}"))).collect(),
-            vec![None; n],
-            CoordinateBatch::cartesian(
-                states,
-                frame,
-                OriginArray::repeat(origin, n),
-                Some(
-                    TimeArray::new(
-                        scale(request.orbit_time_scale)?,
-                        epochs(request.epoch_days, request.epoch_nanos, n),
-                    )
-                    .map_err(|e| e.to_string())?,
-                ),
-                None,
-            )
-            .map_err(|e| e.to_string())?,
-        )
-        .map_err(|e| e.to_string())?;
-        let times = TimeArray::new(
-            scale(request.time_scale)?,
-            epochs(request.time_days, request.time_nanos, m),
-        )
-        .map_err(|e| e.to_string())?;
-        let options = PropagationOptions {
-            epoch_policy: if request.pairwise != 0 {
-                EpochPolicy::Pairwise
-            } else {
-                EpochPolicy::CrossProduct
-            },
-            ..EphemerisOptions::default().propagation
-        };
-        let propagation =
-            PropagationRequest::new(&orbits, &times, options).map_err(|e| e.to_string())?;
-        let result = context
-            .propagator
-            .propagate(&propagation, &SameScale)
-            .map_err(|e| e.to_string())?;
-        let out = result
-            .orbits
-            .coordinates
-            .values
-            .cartesian()
-            .ok_or("non-Cartesian output")?;
-        let rows = if request.pairwise != 0 { n } else { n * m };
-        if out.len() != rows {
-            return Err(format!("expected {rows} rows, got {}", out.len()));
-        }
-        let out_states = std::slice::from_raw_parts_mut(request.out_states, rows * 6);
-        let out_valid = std::slice::from_raw_parts_mut(request.out_valid, rows);
-        for (row, state) in out.iter().enumerate() {
-            out_states[row * 6..row * 6 + 6].copy_from_slice(state);
-            out_valid[row] = u8::from(result.validity.is_valid(row));
-        }
-        Ok(())
-    }
-
-    /// A leaked [`ExternalPropagatorV1`] over adam-core's two-body
-    /// propagator (one per process is plenty: tests and the reference).
-    pub fn table(propagator: TwoBodyPropagator) -> &'static ExternalPropagatorV1 {
-        let context = Box::leak(Box::new(Context {
+impl<P: Propagator + Send + 'static> OwnedExternalPropagator<P> {
+    pub fn new(propagator: P, name: &str, version: &str) -> Self {
+        let identity = propagator.backend();
+        let context = Box::new(ExternalContext {
+            scale: CString::new(propagator.integration_time_scale().as_str()).expect("no NUL"),
+            name: CString::new(name).expect("no NUL in name"),
+            version: CString::new(version).expect("no NUL in version"),
             propagator,
-            scale: CString::new("tdb").unwrap(),
-            name: CString::new("adam_core.two_body.external").unwrap(),
-            version: CString::new(env!("CARGO_PKG_VERSION")).unwrap(),
-        }));
-        Box::leak(Box::new(ExternalPropagatorV1 {
+        });
+        let table = ExternalPropagatorV1 {
             abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION,
             integration_time_scale: context.scale.as_ptr(),
-            two_body_dynamics: 1,
+            two_body_dynamics: u8::from(identity.two_body_dynamics),
             name: context.name.as_ptr(),
             version: context.version.as_ptr(),
-            context: context as *const Context as *const c_void,
-            propagate,
-        }))
+            context: &*context as *const ExternalContext<P> as *const c_void,
+            propagate: propagate_with::<P>,
+        };
+        Self { table, context }
+    }
+
+    pub fn table(&self) -> *const ExternalPropagatorV1 {
+        &self.table
+    }
+}
+
+fn write_error(request: &PropagateRequestV1, message: &str) {
+    if request.error.is_null() || request.error_len == 0 {
+        return;
+    }
+    let bytes = message.as_bytes();
+    let n = bytes.len().min(request.error_len - 1);
+    // SAFETY: `error` has `error_len` writable bytes.
+    unsafe {
+        std::ptr::copy_nonoverlapping(bytes.as_ptr() as *const c_char, request.error, n);
+        *request.error.add(n) = 0;
+    }
+}
+
+unsafe extern "C" fn propagate_with<P: Propagator>(
+    context: *const c_void,
+    request: *const PropagateRequestV1,
+) -> i32 {
+    let context = &*(context as *const ExternalContext<P>);
+    let request = &*request;
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        run_request(&context.propagator, request)
+    })) {
+        Ok(Ok(())) => 0,
+        Ok(Err(message)) => {
+            write_error(request, &message);
+            1
+        }
+        Err(_) => {
+            write_error(request, "external propagator panicked");
+            2
+        }
+    }
+}
+
+unsafe fn run_request<P: Propagator>(
+    propagator: &P,
+    request: &PropagateRequestV1,
+) -> Result<(), String> {
+    use crate::propagation::PropagationOptions;
+    use crate::{CoordinateBatch, OrbitBatch, OrbitId, OriginArray, OriginId, TimeArray};
+    let n = request.n_orbits;
+    let m = request.n_times;
+    let flat = std::slice::from_raw_parts(request.states, n * 6);
+    let states: Vec<[f64; 6]> = flat
+        .chunks_exact(6)
+        .map(|c| std::array::from_fn(|i| c[i]))
+        .collect();
+    let text = |p: *const c_char| CStr::from_ptr(p).to_string_lossy().into_owned();
+    let scale = |p: *const c_char| TimeScale::parse(&text(p)).map_err(|e| e.to_string());
+    let epochs = |days: *const i64, nanos: *const i64, k: usize| -> Vec<Epoch> {
+        let d = std::slice::from_raw_parts(days, k);
+        let ns = std::slice::from_raw_parts(nanos, k);
+        d.iter().zip(ns).map(|(&a, &b)| Epoch::new(a, b)).collect()
+    };
+    let frame = Frame::parse(&text(request.frame)).map_err(|e| e.to_string())?;
+    let origin = OriginId::from_code(text(request.origin));
+    let orbit_times = TimeArray::new(
+        scale(request.orbit_time_scale)?,
+        epochs(request.epoch_days, request.epoch_nanos, n),
+    )
+    .map_err(|e| e.to_string())?;
+    let orbits = OrbitBatch::new(
+        (0..n).map(|i| OrbitId(i.to_string())).collect(),
+        vec![None; n],
+        CoordinateBatch::cartesian(
+            states,
+            frame,
+            OriginArray::repeat(origin, n),
+            Some(orbit_times),
+            None,
+        )
+        .map_err(|e| e.to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+    let times = TimeArray::new(
+        scale(request.time_scale)?,
+        epochs(request.time_days, request.time_nanos, m),
+    )
+    .map_err(|e| e.to_string())?;
+    let options = PropagationOptions {
+        chunk_size: None,
+        thread_limit: None,
+        epoch_policy: if request.pairwise != 0 {
+            EpochPolicy::Pairwise
+        } else {
+            EpochPolicy::CrossProduct
+        },
+        covariance: CovariancePropagation::None,
+    };
+    let propagation =
+        PropagationRequest::new(&orbits, &times, options).map_err(|e| e.to_string())?;
+    let result = propagator
+        .propagate(&propagation, &SameScale)
+        .map_err(|e| e.to_string())?;
+    let out = result
+        .orbits
+        .coordinates
+        .values
+        .cartesian()
+        .ok_or("non-Cartesian output")?;
+    let rows = if request.pairwise != 0 { n } else { n * m };
+    if out.len() != rows {
+        return Err(format!("expected {rows} rows, got {}", out.len()));
+    }
+    let out_states = std::slice::from_raw_parts_mut(request.out_states, rows * 6);
+    let out_valid = std::slice::from_raw_parts_mut(request.out_valid, rows);
+    for (row, state) in out.iter().enumerate() {
+        out_states[row * 6..row * 6 + 6].copy_from_slice(state);
+        out_valid[row] = u8::from(result.validity.is_valid(row));
+    }
+    Ok(())
+}
+
+/// adam-core's two-body propagator behind the external ABI: the reference
+/// implementation (and the test double of the external route).
+pub mod two_body_reference {
+    use super::OwnedExternalPropagator;
+    use crate::propagation::TwoBodyPropagator;
+
+    pub fn new(propagator: TwoBodyPropagator) -> OwnedExternalPropagator<TwoBodyPropagator> {
+        OwnedExternalPropagator::new(
+            propagator,
+            "adam_core.two_body.external",
+            env!("CARGO_PKG_VERSION"),
+        )
+    }
+
+    /// A process-lifetime table (tests).
+    pub fn table(propagator: TwoBodyPropagator) -> &'static super::ExternalPropagatorV1 {
+        let owned: &'static OwnedExternalPropagator<TwoBodyPropagator> =
+            Box::leak(Box::new(new(propagator)));
+        // SAFETY: `owned` is leaked, so its table lives for the process.
+        unsafe { &*owned.table() }
     }
 }

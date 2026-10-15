@@ -1538,33 +1538,16 @@ fn run_od_2body_ipc<'py>(
     )
 }
 
-/// `ExternalPropagatorV1` by value inside a capsule (the capsule pointer is
-/// the table's address).
-#[repr(transparent)]
-struct ExternalTable(ExternalPropagatorV1);
-
-// SAFETY: the table's pointers are to process-lifetime reference data.
-unsafe impl Send for ExternalTable {}
-
 /// adam-core's two-body propagator as an external-propagator capsule: the
 /// reference implementation of the ABI plugins expose (and a test double of
-/// the external route).
+/// the external route). The capsule owns the propagator; its pointer is the
+/// table's address.
 #[pyfunction]
 pub fn two_body_propagator_capsule(py: Python<'_>) -> PyResult<Bound<'_, PyCapsule>> {
-    let table =
-        adam_core_rs_coords::propagation::two_body_reference::table(TwoBodyPropagator::default());
     let name = std::ffi::CString::new(EXTERNAL_PROPAGATOR_CAPSULE).expect("no NUL");
     PyCapsule::new(
         py,
-        ExternalTable(ExternalPropagatorV1 {
-            abi_version: table.abi_version,
-            integration_time_scale: table.integration_time_scale,
-            two_body_dynamics: table.two_body_dynamics,
-            name: table.name,
-            version: table.version,
-            context: table.context,
-            propagate: table.propagate,
-        }),
+        adam_core_rs_coords::propagation::two_body_reference::new(TwoBodyPropagator::default()),
         Some(name),
     )
 }

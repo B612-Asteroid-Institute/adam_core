@@ -28,8 +28,9 @@ pub use ephemeris::{
     EphemerisResult, EphemerisRowDiagnostic,
 };
 pub use external::{
-    two_body_reference, ExternalPropagator, ExternalPropagatorV1, PropagateRequestV1,
-    EXTERNAL_PROPAGATOR_ABI_VERSION, EXTERNAL_PROPAGATOR_CAPSULE,
+    two_body_reference, ExternalContext, ExternalPropagator, ExternalPropagatorV1,
+    OwnedExternalPropagator, PropagateRequestV1, EXTERNAL_PROPAGATOR_ABI_VERSION,
+    EXTERNAL_PROPAGATOR_CAPSULE,
 };
 pub use od::{
     candidate_orbit_batch, evaluate_orbit, evaluate_orbit_barycentric,
