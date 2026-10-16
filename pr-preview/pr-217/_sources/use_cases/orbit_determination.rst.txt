@@ -266,7 +266,8 @@ IOD_DEFAULTS``), so the signature defaults of ``run_iod`` and
   {"stage_loss": "linear"}`` turns that off); the whole-arc stage is a plain
   fit with Carpino, Milani & Chesley (2003) rejection when above the
   threshold, rejecting at most ``contamination_percentage`` (20 %) of the
-  arc. The search stops after 2 candidates reach the whole arc
+  arc and never leaving fewer than ``min_obs`` (6); a fit that keeps fewer
+  than ``min_obs`` is not accepted. The search stops after 2 candidates reach the whole arc
   (``correction_settings``).
 * **Multiple roots.** Every physical root of a triplet's Gauss polynomial is
   a candidate (Charlier: up to three): real to a relative 1e-6, so a

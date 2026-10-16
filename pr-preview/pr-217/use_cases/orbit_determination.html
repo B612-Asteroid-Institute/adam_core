@@ -722,7 +722,8 @@ nothing and down-weight with Huber’s loss (<code class="docutils literal notra
 <span class="pre">{&quot;stage_loss&quot;:</span> <span class="pre">&quot;linear&quot;}</span></code> turns that off); the whole-arc stage is a plain
 fit with Carpino, Milani &amp; Chesley (2003) rejection when above the
 threshold, rejecting at most <code class="docutils literal notranslate"><span class="pre">contamination_percentage</span></code> (20 %) of the
-arc. The search stops after 2 candidates reach the whole arc
+arc and never leaving fewer than <code class="docutils literal notranslate"><span class="pre">min_obs</span></code> (6); a fit that keeps fewer
+than <code class="docutils literal notranslate"><span class="pre">min_obs</span></code> is not accepted. The search stops after 2 candidates reach the whole arc
 (<code class="docutils literal notranslate"><span class="pre">correction_settings</span></code>).</p></li>
 <li><p><strong>Multiple roots.</strong> Every physical root of a triplet’s Gauss polynomial is
 a candidate (Charlier: up to three): real to a relative 1e-6, so a
