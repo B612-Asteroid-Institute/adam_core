@@ -65,21 +65,12 @@ jobs:
           path: adam-assist
           fetch-depth: 0
 
-      - name: Verify exact ASSIST revision and patch unpublished Core crates
+      - name: Verify exact ASSIST revision
         shell: bash
         run: |
           set -euo pipefail
           [[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]
           test "$(git -C adam-assist rev-parse HEAD)" = "$ADAM_ASSIST_REF"
-          mkdir -p adam-assist/.cargo
-          cat > adam-assist/.cargo/config.toml <<'EOF'
-          [patch.crates-io]
-          adam_core_rs_autodiff = { path = "../rust/adam_core_rs_autodiff" }
-          adam_core_rs_coords = { path = "../rust/adam_core_rs_coords" }
-          adam_core_rs_kernel_data = { path = "../rust/adam_core_rs_kernel_data" }
-          adam_core_rs_orbit_determination = { path = "../rust/adam_core_rs_orbit_determination" }
-          adam_core_rs_spice = { path = "../rust/adam_core_rs_spice" }
-          EOF
 
       - name: Set up CPython
         uses: actions/setup-python@v5
@@ -90,6 +81,11 @@ jobs:
         uses: dtolnay/rust-toolchain@1.87.0
         with:
           components: rustfmt, clippy
+
+      - name: Prepare compatible ASSIST lock for Core candidate
+        env:
+          ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/adam-assist
+        run: python migration/scripts/develop_downstream_adam_assist.py --prepare-only
 
       - name: Verify runner architecture
         shell: bash
