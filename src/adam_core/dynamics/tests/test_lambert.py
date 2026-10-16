@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import pyarrow.compute as pc
-from adam_assist import ASSISTPropagator
+import pytest
 
 from adam_core.constants import KM_P_AU, S_P_DAY
 from adam_core.coordinates import CartesianCoordinates, transform_coordinates
@@ -119,7 +119,7 @@ def test_dinkinesh_propagation():
             frame=sbdb["frame"],
         ),
     )
-    prop = ASSISTPropagator()
+    prop = pytest.importorskip("adam_assist").ASSISTPropagator()
     dinkinesh_arrival = prop.propagate_orbits(dinkinesh_orbit, arrival_date)
     dinkinesh_arrival = dinkinesh_arrival.set_column(
         "coordinates",

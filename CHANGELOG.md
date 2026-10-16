@@ -6,14 +6,6 @@ This file contains notable changes in adam-core
 
 ### Added
 
-- `orbit_to_oem` writes OEM 3.0 (`version="3.0"`) with labels, comments and local orbital frame covariance blocks (`covariance_frame`), and writes the state block of 9x9 covariances.
-
-- `LocalFrameCovariances` and `local_frame_jacobians` rotate covariances into RSW, TNW and VNC frames; `orbit_from_oem` reads ICRF, J2000 and GCRF.
-
-- Nullable `astcat` and `photcat` provenance columns on the Python
-  `SourceCatalog` schema and Rust `SourceCatalogBatch`, preserving exact source
-  strings and nulls through Arrow/Parquet and observation IPC.
-
 - Fit-time observation handling for orbit determination, reimplemented in Rust
   from the Python `kk/obs-uncertainty-interface` branch (`d56114ac`) on top of
   the Rust OD core: `run_od` orchestration recording original vs. used
@@ -450,6 +442,23 @@ This file contains notable changes in adam-core
 
 - Gauss IOD (`iod`, `NativeOrbitFitter.initial_fit` / `full_od`, `run_od`, the linkage batch) is deterministic in the caller's row order: the Rust driver sorts observations by epoch, station code and input row before selecting triplets and maps every member array back to the input order. A zero contamination percentage only disables outlier removal (a rejected candidate is followed by the next candidate and triplet instead of ending the search), a candidate whose prediction fails is counted and skipped instead of aborting the search (`InvalidRequest` / schema errors still propagate), and the IOD dict carries `triplets_tried`, `candidates_evaluated`, `candidates_failed` and `not_found_reason`, logged at debug level when no orbit is accepted.
 
+## [0.6.0] - 2026-10-15
+
+### Added
+
+- `orbit_to_oem` writes OEM 3.0 (`version="3.0"`) with labels, comments and local orbital frame covariance blocks (`covariance_frame`), and writes the state block of 9x9 covariances.
+- `LocalFrameCovariances` and `local_frame_jacobians` rotate covariances into RSW, TNW and VNC frames; `orbit_from_oem` reads ICRF, J2000 and GCRF.
+- Nullable `astcat` and `photcat` provenance columns on the Python
+  `SourceCatalog` schema and Rust `SourceCatalogBatch`, preserving exact source
+  strings and nulls through Arrow/Parquet and observation IPC.
+
+### Changed
+
+- OEM 2.0 output remains the default and byte-compatible for existing 6x6
+  covariance inputs; when a 9x9 covariance is supplied, its Cartesian 6x6
+  state block is emitted.
+- OEM readers accept the equivalent `ICRF`, `J2000`, and `GCRF` frame labels.
+
 ### Compatibility
 
 - The Python and Rust provenance fields are additive and row-nullable. Current
@@ -459,12 +468,18 @@ This file contains notable changes in adam-core
   null `LargeString` fields. The Python shim also accepts a legacy Arrow table
   missing only one of the two fields. It does not customize generic Quivr
   dataframe readers or relax unrelated schema/type validation.
-
 - No compatibility claim is made for older adam-core readers consuming the new
   27-column schema. Adding fields to the public, exhaustively constructible Rust
-  `SourceCatalogBatch` is semver-breaking for Rust consumers, so any future
-  package release containing this change must be `0.6.0`, not `0.5.9`. Package
-  publication remains a separate release decision.
+  `SourceCatalogBatch` is semver-breaking for Rust consumers.
+- The Rust OEM surface is intentionally source-breaking: the old
+  `oem_write_kvn` export is removed; `oem_to_kvn` accepts comments and decimal
+  precision; and `oem_render_orbits_kvn` / `oem_write_orbits_kvn` accept
+  `OemWriteOptions` while reporting the number of rounded OEM epochs.
+- The private CPython native symbol `_rust_native.oem_write_kvn` is removed;
+  supported Python callers continue through `orbit_to_oem` and `orbit_from_oem`.
+- These Rust API changes require the Python package and all six public Rust
+  crates to advance together to `0.6.0`. Package publication remains a separate
+  release decision.
 
 ## [0.5.8] - 2026-10-05
 
