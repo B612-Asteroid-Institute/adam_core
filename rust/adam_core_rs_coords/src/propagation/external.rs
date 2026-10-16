@@ -562,6 +562,12 @@ unsafe extern "C" fn propagate_stm_with<P: Propagator>(
     }
 }
 
+/// How far a propagated row's epoch may be from the requested one (1 ms):
+/// well above a backend's float-time quantization, far below any spacing of
+/// distinct target times.
+const EPOCH_MATCH_TOLERANCE_NS: f64 = 1e6;
+const NANOS_PER_DAY: f64 = 86_400e9;
+
 unsafe fn run_request<P: Propagator>(
     propagator: &P,
     request: &PropagateRequestV1,
@@ -657,18 +663,27 @@ unsafe fn run_request<P: Propagator>(
             .filter(|&orbit| orbit < n)
             .ok_or_else(|| format!("propagated row {row} has unknown orbit id {id:?}"))?;
         let epoch = out_times.epochs[row];
-        let slot = if pairwise {
-            (target_epochs[orbit] == epoch).then_some(orbit)
+        // Backends may quantize their output times (ASSIST rebuilds them
+        // from f64 Julian dates, tens of microseconds), so a row matches the
+        // nearest unfilled requested epoch of its orbit within a millisecond.
+        let offset = |slot: usize| {
+            let target = target_epochs[if pairwise { slot } else { slot - orbit * m }];
+            ((epoch.days - target.days) as f64 * NANOS_PER_DAY
+                + (epoch.nanos - target.nanos) as f64)
+                .abs()
+        };
+        let candidates: Vec<usize> = if pairwise {
+            vec![orbit]
         } else {
-            // The first unfilled matching target time (targets may repeat).
-            (0..m)
-                .map(|time| orbit * m + time)
-                .find(|&slot| !filled[slot] && target_epochs[slot - orbit * m] == epoch)
-        }
-        .filter(|&slot| !filled[slot])
-        .ok_or_else(|| {
-            format!("propagated row {row} (orbit {orbit}) does not match a requested epoch")
-        })?;
+            (0..m).map(|time| orbit * m + time).collect()
+        };
+        let slot = candidates
+            .into_iter()
+            .filter(|&slot| !filled[slot] && offset(slot) <= EPOCH_MATCH_TOLERANCE_NS)
+            .min_by(|&a, &b| offset(a).total_cmp(&offset(b)).then(a.cmp(&b)))
+            .ok_or_else(|| {
+                format!("propagated row {row} (orbit {orbit}) does not match a requested epoch")
+            })?;
         filled[slot] = true;
         out_states[slot * 6..slot * 6 + 6].copy_from_slice(state);
         out_valid[slot] = u8::from(result.validity.is_valid(row));
@@ -706,8 +721,9 @@ mod tests {
     use crate::{CoordinateBatch, OrbitBatch, OrbitId, OriginArray, OriginId, TimeArray};
 
     /// Two-body dynamics that return their rows in reverse order (as a
-    /// backend sorting by id, or by anything else, may): the ABI must still
-    /// deliver rows in (orbit, time) order.
+    /// backend sorting by id, or by anything else, may) with output times
+    /// shifted by 30 microseconds (as ASSIST's float Julian-date times are):
+    /// the ABI must still deliver rows in (orbit, time) order.
     struct Reversed(TwoBodyPropagator);
 
     impl Propagator for Reversed {
@@ -732,6 +748,13 @@ mod tests {
         ) -> PropagationResultValue<crate::propagation::PropagationResult> {
             let result = self.0.propagate(request, provider)?;
             let rows: Vec<usize> = (0..result.orbits.orbit_id.len()).rev().collect();
+            let mut coordinates =
+                super::super::od::take_coordinate_batch(&result.orbits.coordinates, &rows)?;
+            if let Some(times) = coordinates.times.as_mut() {
+                for epoch in times.epochs.iter_mut() {
+                    *epoch = Epoch::new(epoch.days, epoch.nanos + 30_000);
+                }
+            }
             let orbits = OrbitBatch {
                 orbit_id: rows
                     .iter()
@@ -741,10 +764,7 @@ mod tests {
                     .iter()
                     .map(|&r| result.orbits.object_id[r].clone())
                     .collect(),
-                coordinates: super::super::od::take_coordinate_batch(
-                    &result.orbits.coordinates,
-                    &rows,
-                )?,
+                coordinates,
                 physical_parameters: result
                     .orbits
                     .physical_parameters
