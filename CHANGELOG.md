@@ -4,6 +4,23 @@ This file contains notable changes in adam-core
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-16
+
+### Fixed
+
+- Restored fresh Cargo resolution for Rust 1.87 consumers after all `zip`
+  releases compatible with that MSRV were yanked. Kernel-data wheel extraction
+  now uses `rawzip` with the existing pure-Rust `flate2` backend while
+  retaining Stored and Deflate support, Zip64 parsing, CRC/size verification,
+  and atomic cache publication.
+
+### Compatibility
+
+- No numerical algorithm, scientific model, covariance behavior, `SourceCatalog`
+  schema, OEM behavior, or public Python/Rust API changed. The Python package
+  and all six public Rust crates advance together to `0.6.1` so exact internal
+  crate requirements remain coherent.
+
 ## [0.6.0] - 2026-10-15
 
 ### Added
