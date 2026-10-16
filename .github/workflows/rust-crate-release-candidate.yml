@@ -18,8 +18,8 @@ permissions:
   contents: read
 
 env:
-  PYTHON_PREVIEW_VERSION: "0.6.0"
-  RUST_PREVIEW_VERSION: "0.6.0"
+  PYTHON_PREVIEW_VERSION: "0.6.1"
+  RUST_PREVIEW_VERSION: "0.6.1"
 
 jobs:
   package-and-test:
@@ -125,13 +125,22 @@ jobs:
               if package["name"] in expected
           }
           assert resolved == {name: "2.2.0" for name in expected}, resolved
-          zopfli = {
+          rawzip = {
               package["name"]: package["version"]
               for package in packages
-              if package["name"] == "zopfli"
+              if package["name"] == "rawzip"
           }
-          assert not zopfli, zopfli
-          print("clean Rust 1.87 consumer resolved ICU4X 2.2.0 exactly without zopfli")
+          assert rawzip == {"rawzip": "0.5.2"}, rawzip
+          forbidden = {
+              package["name"]: package["version"]
+              for package in packages
+              if package["name"] in {"zip", "zopfli"}
+          }
+          assert not forbidden, forbidden
+          print(
+              "clean Rust 1.87 consumer resolved ICU4X 2.2.0 and rawzip 0.5.2 "
+              "exactly without zip or zopfli"
+          )
           PY
       - name: Upload exact crate publication set
         uses: actions/upload-artifact@v4
