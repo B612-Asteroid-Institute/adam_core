@@ -664,6 +664,24 @@ mod tests {
     }
 
     #[test]
+    fn exact_member_path_rejects_case_near_miss_without_staging() {
+        let dir = tempfile::tempdir().unwrap();
+        let wheel = dir.path().join("near-miss.whl");
+        write_fake_wheel(&wheel, "pkg/Data.tls", b"KPL/LSK payload");
+
+        let destination = dir.path().join("near-miss.tls");
+        let result = extract_member_atomic(&wheel, "pkg/data.tls", &destination);
+        match result {
+            Err(KernelDataError::WheelMember { message, .. }) => {
+                assert!(message.contains("member not found"), "{message}");
+            }
+            other => panic!("unexpected extraction result: {other:?}"),
+        }
+        assert!(!destination.exists());
+        assert!(!destination.with_extension("partial").exists());
+    }
+
+    #[test]
     fn corrupt_wheel_member_fails_verification_and_cleans_staging() {
         let dir = tempfile::tempdir().unwrap();
         let wheel = dir.path().join("corrupt.whl");
@@ -684,6 +702,36 @@ mod tests {
         std::fs::write(&wheel, bytes).unwrap();
 
         let destination = dir.path().join("corrupt.tls");
+        let result = extract_member_atomic(&wheel, "pkg/data.tls", &destination);
+        assert!(matches!(result, Err(KernelDataError::WheelMember { .. })));
+        assert!(!destination.exists());
+        assert!(!destination.with_extension("partial").exists());
+    }
+
+    #[test]
+    fn corrupt_deflated_wheel_member_fails_without_publishing_or_staging() {
+        let dir = tempfile::tempdir().unwrap();
+        let wheel = dir.path().join("corrupt-deflated.whl");
+        let contents = (0_u8..=255).cycle().take(4096).collect::<Vec<_>>();
+        write_fake_wheel_with_method(
+            &wheel,
+            "pkg/data.tls",
+            &contents,
+            rawzip::CompressionMethod::DEFLATE,
+        );
+        let mut bytes = std::fs::read(&wheel).unwrap();
+        let archive = rawzip::ZipArchive::from_slice(&bytes).unwrap();
+        let header = archive.entries().next_entry().unwrap().unwrap();
+        let range = archive
+            .get_entry(header.wayfinder())
+            .unwrap()
+            .compressed_data_range();
+        assert!(range.1 > range.0);
+        let corrupt_at = range.0 + (range.1 - range.0) / 2;
+        bytes[corrupt_at as usize] ^= 0xff;
+        std::fs::write(&wheel, bytes).unwrap();
+
+        let destination = dir.path().join("corrupt-deflated.tls");
         let result = extract_member_atomic(&wheel, "pkg/data.tls", &destination);
         assert!(matches!(result, Err(KernelDataError::WheelMember { .. })));
         assert!(!destination.exists());
