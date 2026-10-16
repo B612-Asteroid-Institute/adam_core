@@ -10,7 +10,7 @@ on:
       expected_version:
         description: Exact stable PEP 440 version
         required: true
-        default: 0.5.8
+        default: 0.6.0
         type: string
       confirmation:
         description: Type "publish adam-core <version> from <sha> to pypi"
@@ -22,7 +22,7 @@ permissions:
   actions: read
 
 env:
-  RUST_PREVIEW_VERSION: "0.5.8"
+  RUST_PREVIEW_VERSION: "0.6.0"
 
 jobs:
   collect-tested-artifacts:
@@ -205,7 +205,7 @@ jobs:
             >> "$GITHUB_OUTPUT"
       - name: Upload only missing accepted wheels
         if: steps.publication-state.outputs.missing_count != '0'
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
         with:
           packages-dir: upload-dist/
       - name: Verify the complete public release matches accepted bytes

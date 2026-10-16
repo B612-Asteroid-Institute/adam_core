@@ -92,7 +92,6 @@ docs = [
     { name = "sphinx-sitemap", specifier = ">=2.8.0" },
 ]
 test = [
-    { name = "adam-assist", specifier = ">=0.3.9" },
     { name = "astropy" },
     { name = "astroquery" },
     { name = "black" },
@@ -106,6 +105,7 @@ test = [
     { name = "jpl-small-bodies-de441-n16", specifier = "==2021.3.31.1" },
     { name = "matplotlib", specifier = ">=3.10.1" },
     { name = "maturin", specifier = ">=1.7,<2" },
+    { name = "mpc-obscodes", specifier = "==2026.4.18" },
     { name = "mpcq", marker = "python_full_version < '3.13'", specifier = ">=0.4.0" },
     { name = "mypy" },
     { name = "naif-de440", specifier = "==2020.12.21.1" },

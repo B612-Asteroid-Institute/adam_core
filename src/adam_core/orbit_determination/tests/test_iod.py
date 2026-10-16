@@ -5,7 +5,6 @@ import numpy as np
 import pyarrow.compute as pc
 import pytest
 import quivr as qv
-from adam_assist import ASSISTPropagator
 
 from ...coordinates import CoordinateCovariances, SphericalCoordinates
 from ...coordinates.origin import Origin
@@ -14,6 +13,8 @@ from ...utils.helpers.observations import make_observations
 from ...utils.helpers.orbits import make_real_orbits
 from ..evaluate import OrbitDeterminationObservations
 from ..iod import initial_orbit_determination, iod
+
+ASSISTPropagator = pytest.importorskip("adam_assist").ASSISTPropagator
 
 
 class LinkageMembers(qv.Table):

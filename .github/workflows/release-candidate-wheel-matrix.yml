@@ -18,7 +18,7 @@ concurrency:
 env:
   ADAM_ASSIST_REF: ${{ inputs.adam_assist_ref }}
   PIP_ONLY_BINARY: ":all:"
-  PYTHON_PREVIEW_VERSION: "0.5.8"
+  PYTHON_PREVIEW_VERSION: "0.6.0"
 
 jobs:
   artifact-acceptance:
@@ -74,7 +74,6 @@ jobs:
           mkdir -p adam-assist/.cargo
           cat > adam-assist/.cargo/config.toml <<'EOF'
           [patch.crates-io]
-          adam_core = { path = "../rust/adam_core" }
           adam_core_rs_autodiff = { path = "../rust/adam_core_rs_autodiff" }
           adam_core_rs_coords = { path = "../rust/adam_core_rs_coords" }
           adam_core_rs_kernel_data = { path = "../rust/adam_core_rs_kernel_data" }
@@ -108,7 +107,7 @@ jobs:
 
       - name: Build adam-core manylinux wheel
         if: matrix.platform.family == 'manylinux'
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           command: build
           target: ${{ matrix.platform.target }}
@@ -118,7 +117,7 @@ jobs:
 
       - name: Build adam-assist manylinux wheel
         if: matrix.platform.family == 'manylinux'
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           command: build
           target: ${{ matrix.platform.target }}
@@ -128,7 +127,7 @@ jobs:
 
       - name: Build adam-core native wheel
         if: matrix.platform.family == 'native'
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           command: build
           working-directory: .
@@ -136,7 +135,7 @@ jobs:
 
       - name: Build adam-assist native wheel
         if: matrix.platform.family == 'native'
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           command: build
           working-directory: adam-assist
@@ -269,28 +268,6 @@ jobs:
     steps:
       - name: Checkout adam-core candidate
         uses: actions/checkout@v4
-      - name: Checkout exact adam-assist candidate
-        uses: actions/checkout@v4
-        with:
-          repository: B612-Asteroid-Institute/adam-assist
-          ref: ${{ env.ADAM_ASSIST_REF }}
-          path: .ci/adam-assist
-      - name: Verify exact ASSIST revision and patch unpublished Core crates
-        shell: bash
-        run: |
-          set -euo pipefail
-          [[ "$ADAM_ASSIST_REF" =~ ^[0-9a-f]{40}$ ]]
-          test "$(git -C .ci/adam-assist rev-parse HEAD)" = "$ADAM_ASSIST_REF"
-          mkdir -p .ci/adam-assist/.cargo
-          cat > .ci/adam-assist/.cargo/config.toml <<'EOF'
-          [patch.crates-io]
-          adam_core = { path = "../../rust/adam_core" }
-          adam_core_rs_autodiff = { path = "../../rust/adam_core_rs_autodiff" }
-          adam_core_rs_coords = { path = "../../rust/adam_core_rs_coords" }
-          adam_core_rs_kernel_data = { path = "../../rust/adam_core_rs_kernel_data" }
-          adam_core_rs_orbit_determination = { path = "../../rust/adam_core_rs_orbit_determination" }
-          adam_core_rs_spice = { path = "../../rust/adam_core_rs_spice" }
-          EOF
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -300,10 +277,8 @@ jobs:
       - uses: pdm-project/setup-pdm@v4
         with:
           python-version: "3.12"
-      - name: Install exact source pair and optional test providers
-        run: |
-          pdm install -G test
-          ADAM_ASSIST_RUST_REPO="$GITHUB_WORKSPACE/.ci/adam-assist" pdm run assist-rust-develop
+      - name: Install Core and optional test providers
+        run: pdm install -G test
       - name: Run live Rust kernel-data integrations
         run: cargo test -p adam_core_rs_kernel_data -- --ignored
       - name: Run slow scientific validation fixtures

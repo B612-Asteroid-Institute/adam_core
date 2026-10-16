@@ -129,16 +129,6 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install test dependencies
         run: pdm install -G test
-      - name: Checkout compatible adam-assist candidate
-        uses: actions/checkout@v4
-        with:
-          repository: B612-Asteroid-Institute/adam-assist
-          ref: ee7ca85f4cc2f15ff01513b3065fc2725cec7b44
-          path: .ci/adam-assist
-      - name: Build compatible downstream adam-assist
-        env:
-          ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/.ci/adam-assist
-        run: pdm run assist-rust-develop
       - name: Run tests (no coverage)
         if: matrix.python-version != '3.12'
         run: pdm run test
@@ -187,16 +177,6 @@ jobs:
           python-version: '3.12'
       - name: Install test dependencies
         run: pdm install -G test
-      - name: Checkout compatible adam-assist candidate
-        uses: actions/checkout@v4
-        with:
-          repository: B612-Asteroid-Institute/adam-assist
-          ref: ee7ca85f4cc2f15ff01513b3065fc2725cec7b44
-          path: .ci/adam-assist
-      - name: Build compatible downstream adam-assist
-        env:
-          ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/.ci/adam-assist
-        run: pdm run assist-rust-develop
       - name: PDM/CI script preflight
         run: pdm run script-preflight
       - name: Rust format check
