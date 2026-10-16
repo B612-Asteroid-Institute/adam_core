@@ -32,32 +32,48 @@ pub use external::{
     OwnedExternalPropagator, PropagateRequestV1, PropagateStmV1, EXTERNAL_PROPAGATOR_ABI_VERSION,
     EXTERNAL_PROPAGATOR_CAPSULE,
 };
+#[allow(deprecated)]
 pub use od::{
     candidate_orbit_batch, evaluate_orbit, evaluate_orbit_barycentric,
     fit_orbit_least_squares_barycentric, fit_orbit_least_squares_evaluated_barycentric, iod_fit,
-    iod_fit_barycentric, iod_fit_linkages_barycentric, od_fit_barycentric, run_iod,
+    iod_fit_barycentric, iod_fit_linkages_barycentric, od_fit_barycentric,
     vallado_least_squares_barycentric, CorrectionConfig, EvaluatedLeastSquaresFit, FitEvaluation,
     IodAcceptance, IodCandidate, IodConfig, IodOutput, IodResult, ObservationSelectionMethod,
-    OdConfig, OdMethod, OdOutput, OrbitGeometry, PrefitScope, PropagatorPredictor,
-    SpanSearchConfig, SphericalPredictor, ValladoConfig, ValladoIteration, ValladoResult,
-    ValladoStatus, VelocityMethod, INVALID_LIGHT_TIME_MESSAGE, IOD_DEFAULT_MU,
-    IOD_DEFAULT_SPEED_OF_LIGHT,
+    OdConfig, OdMethod, OdOutput, OrbitGeometry, PrefitScope, SpanSearchConfig, ValladoConfig,
+    ValladoIteration, ValladoResult, ValladoStatus, VelocityMethod, INVALID_LIGHT_TIME_MESSAGE,
+    IOD_DEFAULT_MU, IOD_DEFAULT_SPEED_OF_LIGHT,
 };
 pub use od_ranging::{
-    admissible_rho_dot_interval, attributable, ranging_state, systematic_ranging_with,
-    Attributable, RangingConfig, RangingResult, RangingSample, RANGING_EARTH_MU,
+    admissible_rho_dot_interval, attributable, ranging_state, Attributable, RangingConfig,
+    RangingResult, RangingSample, RANGING_EARTH_MU,
 };
 pub use od_refine::{
-    cmc2003_fit_barycentric, cmc2003_fit_with, fit_orbit_whitened_barycentric,
-    fit_orbit_whitened_with, full_od_barycentric, full_od_with, iterative_fit_barycentric,
-    iterative_fit_with, max_outliers, refine_barycentric, refine_with, run_iod_barycentric,
-    run_iod_corrected, run_iod_with, run_od_barycentric, run_od_with, symmetric_eigen_6x6,
-    validate_fit_covariance_with, AstrometrySnapshot, Cmc2003FitConfig, Cmc2003FitOutput,
-    CovarianceValidation, FullOdConfig, FullOdOutput, IterativeFitConfig, IterativeFitOutput,
-    JacobianMethod, RefinedOutput, RefinementConfig, RunOdOutput, WhitenedFitConfig,
-    WhitenedFitOutput, DELTA_CHI2_WINDOW,
+    cmc2003_fit_barycentric, fit_orbit_whitened_barycentric, full_od_barycentric,
+    iterative_fit_barycentric, max_outliers, refine_barycentric, run_iod_barycentric,
+    run_iod_linkages_barycentric, run_od_barycentric, symmetric_eigen_6x6, AstrometrySnapshot,
+    Cmc2003FitConfig, Cmc2003FitOutput, CovarianceValidation, FullOdConfig, FullOdOutput,
+    IterativeFitConfig, IterativeFitOutput, JacobianMethod, RefinedOutput, RefinementConfig,
+    RunOdOutput, WhitenedFitConfig, WhitenedFitOutput, DELTA_CHI2_WINDOW,
 };
 pub use pipeline::{OrbitRow, PropagationResult};
+
+/// The OD loops over a [`SphericalPredictor`](adapter::SphericalPredictor), the narrow prediction
+/// interface the stages are written against.
+///
+/// The supported stage contract is the `Propagator`-generic functions at the
+/// top of this module ([`run_iod_barycentric`], [`refine_barycentric`],
+/// [`run_od_barycentric`] and the fit and rejection loops' `*_barycentric`
+/// forms), which name the propagator each stage runs on. These adapter-level
+/// forms take an already-built predictor; they exist for language bindings
+/// that build the predictor themselves and are not a separate contract.
+pub mod adapter {
+    pub use super::od::{run_iod, PropagatorPredictor, SphericalPredictor};
+    pub use super::od_ranging::systematic_ranging_with;
+    pub use super::od_refine::{
+        cmc2003_fit_with, fit_orbit_whitened_with, full_od_with, iterative_fit_with, refine_with,
+        run_iod_corrected, run_iod_with, run_od_with, validate_fit_covariance_with,
+    };
+}
 pub use request::{
     CovariancePropagation, EpochOrder, EpochPolicy, PropagationInput, PropagationOptions,
     PropagationRequest,

@@ -330,7 +330,9 @@ in a later release.
      - ``refine(...)`` (``rejection="cmc2003"``, the default);
        ``cmc2003_fit_detailed`` remains for the loop diagnostics
    * - ``od.od``, ``od.differential_correction``, ``LeastSquares``
-     - ``refine`` (or ``run_od`` for the whole step)
+     - ``refine`` (or ``run_od`` for the whole step). They already delegate
+       to it (``rejection="worst_residual"`` for ``od``, ``"none"`` for
+       ``LeastSquares``); their finite-difference settings are ignored
    * - ``NativeOrbitFitter(PropagatorClass, propagator_kwargs)``
      - ``NativeOrbitFitter(PropagatorClass(**propagator_kwargs))``: the IOD
        propagator is an instance

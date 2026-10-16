@@ -2037,8 +2037,8 @@ pub(super) fn iod_observation_order(
 
 /// Map a result computed on the sorted view (`order[k]` = input row of
 /// sorted row `k`) back to the input order: every candidate's rows and the
-/// member arrays of its evaluation.
-fn restore_input_order(mut result: IodResult, order: &[usize]) -> IodResult {
+/// member arrays of its evaluation, and the ranging attributable's row.
+pub(super) fn restore_input_order(mut result: IodResult, order: &[usize]) -> IodResult {
     fn unpermute<T: Clone>(sorted: &[T], order: &[usize], width: usize) -> Vec<T> {
         if sorted.is_empty() {
             return Vec::new();
@@ -2063,6 +2063,9 @@ fn restore_input_order(mut result: IodResult, order: &[usize]) -> IodResult {
             evaluation.probability = unpermute(&evaluation.probability, order, 1);
             evaluation.outlier = unpermute(&evaluation.outlier, order, 1);
         }
+    }
+    if let Some(ranging) = result.ranging.as_mut() {
+        ranging.attributable.reference_row = order[ranging.attributable.reference_row];
     }
     result
 }
@@ -2430,9 +2433,14 @@ fn run_iod_sorted(
     .with_search_counters(&counters))
 }
 
-/// Batch the complete IOD work unit across linkage row selections without
-/// returning control to Python between linkages. `chunk_size` is a scheduling
-/// control owned by Rust; output order always matches `linkage_rows`.
+/// Batch the legacy IOD work unit ([`iod_fit_barycentric`]) across linkage
+/// row selections. `chunk_size` is a scheduling control owned by Rust;
+/// output order always matches `linkage_rows`.
+#[deprecated(
+    since = "0.6.0",
+    note = "the legacy IOD policy over linkages; use run_iod_linkages_barycentric \
+            (the run_iod stage, corrected acceptance by default)"
+)]
 #[allow(clippy::too_many_arguments)]
 pub fn iod_fit_linkages_barycentric<P, T>(
     propagator: &P,

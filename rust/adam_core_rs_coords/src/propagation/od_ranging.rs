@@ -16,9 +16,10 @@
 //! interval, and places each orbit at the reference epoch (the observed
 //! position advanced by the light time along the orbit's velocity).
 
+use super::od::SphericalPredictor;
 use super::od::{gauss_geometry, observed_times_mjd, OrbitGeometry, GAUSS_OBLIQUITY_RAD};
 use super::od_refine::{JacobianMethod, WhitenedFitConfig, WhitenedProblem};
-use super::{PropagationError, PropagationResultValue, SphericalPredictor};
+use super::{PropagationError, PropagationResultValue};
 use crate::translation::OriginTranslationProvider;
 use crate::types::time::TimeScaleProvider;
 use crate::types::Frame;

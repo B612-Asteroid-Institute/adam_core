@@ -2307,6 +2307,17 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
     provider: &dyn TimeScaleProvider,
     translation_provider: &T,
 ) -> PropagationResultValue<super::od::IodResult> {
+    if observers.len() != observed.len() {
+        return Err(PropagationError::InvalidRequest(
+            "observed and observers must have equal length".to_string(),
+        ));
+    }
+    // Search, corrections and ranging all run on the canonical (time-sorted)
+    // view, so the result is independent of the caller's row order down to
+    // the corrected states; rows are mapped back at the end.
+    let order = super::od::iod_observation_order(observed, observers)?;
+    let observed = &super::od::take_coordinate_batch(observed, &order)?;
+    let observers = &super::od::take_observer_batch(observers, &order)?;
     let mut result = super::od::iod_candidate_pool(iod_predictor, observed, observers, config)?;
     if !result.candidates.is_empty() {
         let pool: Vec<usize> = (0..result.candidates.len()).collect();
@@ -2334,7 +2345,7 @@ pub fn run_iod_corrected<T: OriginTranslationProvider>(
             &mut result,
         )?;
     }
-    Ok(result)
+    Ok(super::od::restore_input_order(result, &order))
 }
 
 /// Systematic ranging when Gauss found nothing: attach the sample, and on an
@@ -2733,6 +2744,49 @@ where
         provider,
         translation_provider,
     )
+}
+
+/// [`run_iod_barycentric`] over many linkages in one call: each entry of
+/// `linkage_rows` selects that linkage's observation rows, and the outputs
+/// are in `linkage_rows` order. A linkage whose search finds nothing yields
+/// an [`super::od::IodResult`] without an accepted candidate; only invalid
+/// input (a row out of bounds) or a configuration error fails the batch.
+#[allow(clippy::too_many_arguments)]
+pub fn run_iod_linkages_barycentric<I, T>(
+    iod_propagator: &I,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    linkage_rows: &[Vec<usize>],
+    config: &super::od::IodConfig,
+    fit: &WhitenedFitConfig,
+    options: &EphemerisOptions,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<Vec<super::od::IodResult>>
+where
+    I: Propagator,
+    T: OriginTranslationProvider,
+{
+    let mut outputs = Vec::with_capacity(linkage_rows.len());
+    for rows in linkage_rows {
+        if let Some(&row) = rows.iter().find(|&&row| row >= observed.len()) {
+            return Err(PropagationError::InvalidRequest(format!(
+                "linkage observation row {row} is out of bounds for {} observations",
+                observed.len()
+            )));
+        }
+        outputs.push(run_iod_barycentric(
+            iod_propagator,
+            &super::od::take_coordinate_batch(observed, rows)?,
+            &super::od::take_observer_batch(observers, rows)?,
+            config,
+            fit,
+            options,
+            provider,
+            translation_provider,
+        )?);
+    }
+    Ok(outputs)
 }
 
 /// The refinement stage over `propagator`: differential correction of
@@ -5012,6 +5066,81 @@ mod tests {
             ..corrected_iod_config(50.0)
         });
         assert!(!disabled.found() && disabled.ranging.is_none());
+    }
+
+    #[test]
+    fn linkage_batches_run_the_iod_stage_per_linkage_in_order() {
+        let (propagator, options) = two_body();
+        let observed = synthetic_observations(None);
+        let iod_config = super::super::od::IodConfig {
+            contamination_percentage: 20.0,
+            ..corrected_iod_config(50.0)
+        };
+        let fit = WhitenedFitConfig::default();
+        let all: Vec<usize> = (0..observed.len()).collect();
+        let reversed: Vec<usize> = all.iter().rev().copied().collect();
+        let too_few = vec![0, 1];
+        let linkages = vec![all.clone(), too_few, reversed];
+        let batch = run_iod_linkages_barycentric(
+            &propagator,
+            &observed,
+            &observers(),
+            &linkages,
+            &iod_config,
+            &fit,
+            &options,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        assert_eq!(batch.len(), 3);
+        let single = run_iod_barycentric(
+            &propagator,
+            &observed,
+            &observers(),
+            &iod_config,
+            &fit,
+            &options,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap();
+        let accepted = |result: &super::super::od::IodResult| {
+            result
+                .accepted_candidate()
+                .unwrap()
+                .corrected_state
+                .unwrap()
+        };
+        assert_eq!(accepted(&batch[0]), accepted(&single));
+        // A linkage the search cannot solve is a result without an accepted
+        // candidate, not a batch failure.
+        assert!(batch[1].accepted.is_none());
+        // The stage is invariant to the row order of a linkage.
+        assert_eq!(accepted(&batch[2]), accepted(&single));
+        assert_eq!(
+            batch[2]
+                .accepted_candidate()
+                .unwrap()
+                .triplet
+                .map(|row| linkages[2][row]),
+            single.accepted_candidate().unwrap().triplet
+        );
+        let out_of_bounds = run_iod_linkages_barycentric(
+            &propagator,
+            &observed,
+            &observers(),
+            &[vec![0, observed.len()]],
+            &iod_config,
+            &fit,
+            &options,
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        );
+        assert!(matches!(
+            out_of_bounds,
+            Err(PropagationError::InvalidRequest(_))
+        ));
     }
 
     #[test]

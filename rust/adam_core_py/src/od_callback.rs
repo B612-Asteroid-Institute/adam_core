@@ -13,10 +13,10 @@
 //! once the driver has unwound.
 
 use crate::coordinates::write_orbit_ipc;
+use adam_core_rs_coords::propagation::adapter::SphericalPredictor;
 use adam_core_rs_coords::propagation::BackendIdentity;
 use adam_core_rs_coords::propagation::{
     candidate_orbit_batch, OrbitGeometry, PropagationError, PropagationResultValue,
-    SphericalPredictor,
 };
 use adam_core_rs_coords::types::{Frame, SchemaError, SchemaResult};
 use adam_core_rs_coords::{

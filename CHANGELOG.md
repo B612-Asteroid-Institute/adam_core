@@ -232,8 +232,13 @@ This file contains notable changes in adam-core
   `iod`, `iod_worker`, `fit_least_squares`, `iterative_fit` and
   `cmc2003_fit` are deprecated aliases (same signature, a
   `DeprecationWarning` naming the replacement; internal code calls the
-  implementations); `od.od`, `od.differential_correction` and `LeastSquares`
-  were already deprecated. `cmc2003_fit_detailed` stays as the diagnostic
+  implementations). `od.od`, `od.differential_correction` and `LeastSquares`
+  (already deprecated) no longer run their own loops: they delegate to
+  `refine` (`rejection="worst_residual"` for `od`, `"none"` for
+  `LeastSquares`, which fits RA/Dec only as before), so they no longer
+  dispatch on an `od_fit` / `vallado_least_squares` method or fall back to
+  a Python/SciPy loop, and their finite-difference settings (`delta`,
+  `method`, perturbation fractions) are ignored. `cmc2003_fit_detailed` stays as the diagnostic
   form of `refine(rejection="cmc2003")`. `NativeOrbitFitter` takes the IOD
   propagator as an instance (`NativeOrbitFitter(ASSISTPropagator())`); the
   class-plus-kwargs form is deprecated. The use-case page has a migration
@@ -248,6 +253,17 @@ This file contains notable changes in adam-core
   propagator, rejection="cmc2003"|"worst_residual"|"none",
   rejection_settings=..., fit_settings=...)` refines a `run_iod` orbit
   (carrying its IOD provenance) with any of the three loops.
+- Rust API: the `SphericalPredictor`-level forms (`run_iod_with`,
+  `run_iod_corrected`, `refine_with`, `full_od_with`, `run_od_with`, the fit
+  and rejection loops' `*_with`, `systematic_ranging_with`, `run_iod`, and
+  `SphericalPredictor` / `PropagatorPredictor`) move to
+  `propagation::adapter`; the top-level contract is the `Propagator`-generic
+  `*_barycentric` stages. `run_iod_linkages_barycentric` runs the `run_iod`
+  stage over many linkages; `iod_fit_linkages_barycentric` (the legacy IOD
+  policy) is deprecated.
+- Corrected IOD runs its corrections and ranging on the time-sorted view as
+  well as its search, so shuffled input gives bit-identical corrected states
+  (previously equal to about 1e-10 au).
 - Refinement defaults live once, in Rust: `OD_DEFAULTS` (binding
   `od_defaults()`) exports `WhitenedFitConfig`, `IterativeFitConfig` and
   `Cmc2003FitConfig` defaults and the default refinement loop, and the
@@ -389,10 +405,8 @@ This file contains notable changes in adam-core
 ### Deprecated
 
 - `orbit_determination.od.od`, `orbit_determination.od.differential_correction`
-  and `orbit_determination.least_squares.LeastSquares`, the legacy
-  finite-difference loops (the former still solving with SciPy), warn with
-  `DeprecationWarning` on use; `fit_least_squares`, `iterative_fit`,
-  `cmc2003_fit_detailed` and `run_od` run the Rust solver.
+  and `orbit_determination.least_squares.LeastSquares` warn with
+  `DeprecationWarning` on use and delegate to `refine`.
 
 ### Fixed
 
