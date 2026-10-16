@@ -402,6 +402,12 @@ This file contains notable changes in adam-core
 
 ### Fixed
 
+- Corrected IOD enforces `min_obs` after rejection: the whole-arc CMC2003
+  rejection never leaves fewer than `min_obs` observations
+  (`Cmc2003FitConfig.min_kept`, default CMC2003's own floor of 4), and a
+  candidate whose fit keeps fewer is not accepted. Previously only arc
+  length and reduced chi2 were checked after rejection, so an orbit on
+  4 or 5 observations could be accepted with `min_obs = 6` or 7.
 - The solver reported `success=True` (`status_code=1`) when the Jacobian or
   gradient was non-finite, because the gradient norm ignored NaN; a
   non-finite derivative now ends the fit with `status_code=-2` and

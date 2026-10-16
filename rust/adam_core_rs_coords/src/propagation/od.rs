@@ -85,7 +85,8 @@
 //!   Chesley 2003) when above the threshold, rejecting at most
 //!   `contamination_percentage` of the arc (20 %; OrbFit's 50 % bound is for
 //!   refining a known orbit, and let a wrong root fit by discarding half of
-//!   2002 RV112's arc).
+//!   2002 RV112's arc) and never leaving fewer than `min_obs`; a fit that
+//!   keeps fewer than `min_obs` is not accepted.
 //! * **Ranking.** Lowest whole-arc score: every observation's chi2 clipped
 //!   at CMC2003's rejection threshold (8), over the whole arc's degrees of
 //!   freedom, so candidates that kept different observations are compared on

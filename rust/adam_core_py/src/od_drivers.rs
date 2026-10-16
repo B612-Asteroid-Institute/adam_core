@@ -427,6 +427,7 @@ fn parse_refinement(
                     defaults.apparition_gap_days,
                 )?,
                 psd_floor_frac: setting(settings, "psd_floor_frac", defaults.psd_floor_frac)?,
+                min_kept: defaults.min_kept,
                 fit,
             }))
         }
@@ -1197,6 +1198,7 @@ fn cmc2003_fit_ipc<'py>(
         max_rejected_fraction,
         apparition_gap_days,
         psd_floor_frac,
+        min_kept: Cmc2003FitConfig::default().min_kept,
         fit: settings.config,
     };
     let n = problem.observed.len();

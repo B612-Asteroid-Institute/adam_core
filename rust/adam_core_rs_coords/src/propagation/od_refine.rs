@@ -1730,6 +1730,10 @@ pub struct Cmc2003FitConfig {
     pub max_rejected_fraction: f64,
     pub apparition_gap_days: f64,
     pub psd_floor_frac: f64,
+    /// Fewest observations rejection may leave selected. The default is
+    /// CMC2003's own floor (`CMC2003_MIN_OBS + 1`); corrected IOD raises it
+    /// to its `min_obs`. Never below that default.
+    pub min_kept: usize,
     pub fit: WhitenedFitConfig,
 }
 
@@ -1743,6 +1747,7 @@ impl Default for Cmc2003FitConfig {
             max_rejected_fraction: crate::cmc2003::CMC2003_MAX_REJECTED_FRACTION,
             apparition_gap_days: crate::cmc2003::CMC2003_APPARITION_GAP_DAYS,
             psd_floor_frac: crate::cmc2003::CMC2003_PSD_FLOOR_FRAC,
+            min_kept: crate::cmc2003::CMC2003_MIN_OBS + 1,
             fit: WhitenedFitConfig::default(),
         }
     }
@@ -1927,7 +1932,8 @@ pub fn cmc2003_fit_with<T: OriginTranslationProvider>(
                 chi2_frac: config.chi2_frac,
                 max_rejected_fraction: config.max_rejected_fraction,
                 one_at_a_time,
-                min_obs: CMC2003_MIN_OBS,
+                // The selection keeps at least `min_obs + 1`.
+                min_obs: config.min_kept.saturating_sub(1).max(CMC2003_MIN_OBS),
             },
         )
         .map_err(PropagationError::InvalidRequest)?;
@@ -2586,6 +2592,8 @@ fn correct_candidates<T: OriginTranslationProvider>(
                         // (2002 RV112: 22 of 44 rejected).
                         max_rejected_fraction: (config.contamination_percentage / 100.0)
                             .clamp(0.0, 1.0),
+                        // Rejection never leaves fewer than the IOD's min_obs.
+                        min_kept: config.min_obs,
                         ..Cmc2003FitConfig::default()
                     },
                     provider,
@@ -2606,7 +2614,13 @@ fn correct_candidates<T: OriginTranslationProvider>(
                 }
             };
             let rchi2 = output.evaluation.reduced_chi2;
-            if output.evaluation.arc_length < config.min_arc_length {
+            if output.evaluation.num_obs < config.min_obs {
+                note = Some(format!(
+                    "stalled at stage {stages}: whole arc after rejection keeps {} \
+                     observations, fewer than min_obs = {}",
+                    output.evaluation.num_obs, config.min_obs
+                ));
+            } else if output.evaluation.arc_length < config.min_arc_length {
                 note = Some(format!(
                     "stalled at stage {stages}: whole arc after rejection spans {:.4} days, \
                      shorter than min_arc_length = {}",
@@ -3321,6 +3335,15 @@ mod tests {
         spacing_days: i64,
         outlier_row: Option<usize>,
     ) -> CoordinateBatch {
+        synthetic_observations_with_outliers(spacing_days, outlier_row.as_slice())
+    }
+
+    /// [`synthetic_observations_spaced`] with a 12-sigma outlier on every
+    /// row of `outlier_rows`.
+    fn synthetic_observations_with_outliers(
+        spacing_days: i64,
+        outlier_rows: &[usize],
+    ) -> CoordinateBatch {
         let result = generate_ephemeris_barycentric(
             &TwoBodyPropagator::default(),
             &orbit(TRUTH_STATE),
@@ -3343,7 +3366,7 @@ mod tests {
             let cos_lat = value[2].to_radians().cos();
             value[1] += noise() / cos_lat;
             value[2] += noise();
-            if Some(row) == outlier_row {
+            if outlier_rows.contains(&row) {
                 value[2] += 12.0 * SIGMA_DEG;
             }
             value[0] = f64::NAN;
@@ -4801,6 +4824,121 @@ mod tests {
         assert!(right < wrong);
         // Over the margin: the wrong root is not an equal alternative.
         assert!((wrong - right) * 82.0 > AMBIGUITY_DELTA_CHI2);
+    }
+
+    /// Corrected IOD over a subset of the fixture's rows with 12-sigma
+    /// outliers, 50 % contamination and the given `min_obs`.
+    fn corrected_iod_on_rows(
+        rows: &[usize],
+        outliers: &[usize],
+        min_obs: Option<usize>,
+    ) -> super::super::od::IodResult {
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let defaults = corrected_iod_config(3.0);
+        run_iod_with(
+            &predictor,
+            &super::super::od::take_coordinate_batch(
+                &synthetic_observations_with_outliers(4, outliers),
+                rows,
+            )
+            .unwrap(),
+            &super::super::od::take_observer_batch(&observers(), rows).unwrap(),
+            &super::super::od::IodConfig {
+                min_obs: min_obs.unwrap_or(defaults.min_obs),
+                contamination_percentage: 50.0,
+                ..defaults
+            },
+            &WhitenedFitConfig::default(),
+            &NoopProvider,
+            &ZeroTranslationProvider,
+        )
+        .unwrap()
+    }
+
+    fn kept(result: &super::super::od::IodResult) -> Option<usize> {
+        result
+            .accepted_candidate()
+            .and_then(|candidate| candidate.evaluation.as_ref())
+            .map(|evaluation| evaluation.num_obs)
+    }
+
+    #[test]
+    fn corrected_acceptance_keeps_the_default_min_obs_after_rejection() {
+        // Seven observations, two of them 12-sigma outliers, 50 % allowed.
+        let rows = [0, 2, 3, 5, 6, 9, 11];
+        let outliers = [3, 9];
+        // With min_obs 4 the whole-arc rejection removes two and keeps five.
+        let low = corrected_iod_on_rows(&rows, &outliers, Some(4));
+        assert_eq!(kept(&low), Some(5));
+        // The default min_obs (6) bounds that rejection: no orbit on five.
+        assert_eq!(super::super::od::IodConfig::default().min_obs, 6);
+        let default = corrected_iod_on_rows(&rows, &outliers, None);
+        assert!(!default.found(), "kept {:?}", kept(&default));
+        for candidate in &default.candidates {
+            if let Some(evaluation) = &candidate.evaluation {
+                assert!(evaluation.num_obs >= 6, "{}", evaluation.num_obs);
+            }
+        }
+    }
+
+    #[test]
+    fn corrected_acceptance_keeps_a_configured_min_obs_after_rejection() {
+        // Eight observations, three of them outliers: with min_obs 4 the
+        // rejection keeps four; with min_obs 5 to 7 no orbit is accepted on
+        // fewer observations than that.
+        let rows = [0, 1, 3, 4, 6, 8, 9, 11];
+        let outliers = [3, 6, 9];
+        assert_eq!(
+            kept(&corrected_iod_on_rows(&rows, &outliers, Some(4))),
+            Some(4)
+        );
+        for min_obs in [5, 6, 7] {
+            let result = corrected_iod_on_rows(&rows, &outliers, Some(min_obs));
+            assert!(
+                kept(&result).is_none_or(|kept| kept >= min_obs),
+                "min_obs {min_obs}: kept {:?}",
+                kept(&result)
+            );
+        }
+    }
+
+    #[test]
+    fn cmc2003_rejection_never_leaves_fewer_than_min_kept() {
+        let observed = synthetic_observations_with_outliers(4, &[2, 5, 8]);
+        let (propagator, options) = two_body();
+        let predictor = PropagatorPredictor {
+            propagator: &propagator,
+            options: &options,
+            provider: &NoopProvider,
+            translation_provider: &ZeroTranslationProvider,
+        };
+        let run = |min_kept: usize| {
+            cmc2003_fit_with(
+                &predictor,
+                &orbit(TRUTH_STATE),
+                &observed,
+                &observers(),
+                &Cmc2003FitConfig {
+                    min_kept,
+                    ..Cmc2003FitConfig::default()
+                },
+                &NoopProvider,
+                &ZeroTranslationProvider,
+            )
+            .unwrap()
+            .fit
+            .evaluation
+            .num_obs
+        };
+        // The default floor lets the three outliers go; 11 keeps all but one.
+        assert_eq!(run(Cmc2003FitConfig::default().min_kept), NUM_OBS - 3);
+        assert!(run(11) >= 11);
     }
 
     #[test]
