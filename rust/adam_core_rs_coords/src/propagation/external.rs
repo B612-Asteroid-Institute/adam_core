@@ -589,8 +589,11 @@ unsafe fn run_request<P: Propagator>(
         epochs(request.epoch_days, request.epoch_nanos, n),
     )
     .map_err(|e| e.to_string())?;
+    // Zero-padded ids keep input order for backends that sort by id; the
+    // rows are placed by id and epoch below whatever order they come in.
+    let width = n.to_string().len();
     let orbits = OrbitBatch::new(
-        (0..n).map(|i| OrbitId(i.to_string())).collect(),
+        (0..n).map(|i| OrbitId(format!("{i:0width$}"))).collect(),
         vec![None; n],
         CoordinateBatch::cartesian(
             states,
@@ -628,15 +631,47 @@ unsafe fn run_request<P: Propagator>(
         .values
         .cartesian()
         .ok_or("non-Cartesian output")?;
-    let rows = if request.pairwise != 0 { n } else { n * m };
+    let pairwise = request.pairwise != 0;
+    let rows = if pairwise { n } else { n * m };
     if out.len() != rows {
         return Err(format!("expected {rows} rows, got {}", out.len()));
     }
+    // The ABI's row order is (orbit, target time); a propagator may return
+    // its rows in another order (e.g. sorted by id), so each row is placed by
+    // its orbit id and epoch rather than by position.
+    let out_times = result
+        .orbits
+        .coordinates
+        .times
+        .as_ref()
+        .ok_or("propagated rows carry no times")?;
+    let target_epochs = &times.epochs;
+    let mut filled = vec![false; rows];
     let out_states = std::slice::from_raw_parts_mut(request.out_states, rows * 6);
     let out_valid = std::slice::from_raw_parts_mut(request.out_valid, rows);
     for (row, state) in out.iter().enumerate() {
-        out_states[row * 6..row * 6 + 6].copy_from_slice(state);
-        out_valid[row] = u8::from(result.validity.is_valid(row));
+        let id = &result.orbits.orbit_id[row].0;
+        let orbit = id
+            .parse::<usize>()
+            .ok()
+            .filter(|&orbit| orbit < n)
+            .ok_or_else(|| format!("propagated row {row} has unknown orbit id {id:?}"))?;
+        let epoch = out_times.epochs[row];
+        let slot = if pairwise {
+            (target_epochs[orbit] == epoch).then_some(orbit)
+        } else {
+            // The first unfilled matching target time (targets may repeat).
+            (0..m)
+                .map(|time| orbit * m + time)
+                .find(|&slot| !filled[slot] && target_epochs[slot - orbit * m] == epoch)
+        }
+        .filter(|&slot| !filled[slot])
+        .ok_or_else(|| {
+            format!("propagated row {row} (orbit {orbit}) does not match a requested epoch")
+        })?;
+        filled[slot] = true;
+        out_states[slot * 6..slot * 6 + 6].copy_from_slice(state);
+        out_valid[slot] = u8::from(result.validity.is_valid(row));
     }
     Ok(())
 }
@@ -661,5 +696,166 @@ pub mod two_body_reference {
             Box::leak(Box::new(new(propagator)));
         // SAFETY: `owned` is leaked, so its table lives for the process.
         unsafe { &*owned.table() }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::propagation::{PropagationOptions, TwoBodyPropagator};
+    use crate::{CoordinateBatch, OrbitBatch, OrbitId, OriginArray, OriginId, TimeArray};
+
+    /// Two-body dynamics that return their rows in reverse order (as a
+    /// backend sorting by id, or by anything else, may): the ABI must still
+    /// deliver rows in (orbit, time) order.
+    struct Reversed(TwoBodyPropagator);
+
+    impl Propagator for Reversed {
+        type Shard = <TwoBodyPropagator as Propagator>::Shard;
+
+        fn integration_time_scale(&self) -> TimeScale {
+            self.0.integration_time_scale()
+        }
+
+        fn supports(&self, mode: CovariancePropagation) -> bool {
+            self.0.supports(mode)
+        }
+
+        fn create_shard(&self) -> Self::Shard {
+            self.0.create_shard()
+        }
+
+        fn propagate(
+            &self,
+            request: &PropagationRequest<'_>,
+            provider: &dyn TimeScaleProvider,
+        ) -> PropagationResultValue<crate::propagation::PropagationResult> {
+            let result = self.0.propagate(request, provider)?;
+            let rows: Vec<usize> = (0..result.orbits.orbit_id.len()).rev().collect();
+            let orbits = OrbitBatch {
+                orbit_id: rows
+                    .iter()
+                    .map(|&r| result.orbits.orbit_id[r].clone())
+                    .collect(),
+                object_id: rows
+                    .iter()
+                    .map(|&r| result.orbits.object_id[r].clone())
+                    .collect(),
+                coordinates: super::super::od::take_coordinate_batch(
+                    &result.orbits.coordinates,
+                    &rows,
+                )?,
+                physical_parameters: result
+                    .orbits
+                    .physical_parameters
+                    .as_ref()
+                    .map(|batch| batch.take(&rows)),
+                non_gravitational_parameters: result
+                    .orbits
+                    .non_gravitational_parameters
+                    .as_ref()
+                    .map(|batch| batch.take(&rows)),
+            };
+            let validity: Vec<bool> = rows.iter().map(|&r| result.validity.is_valid(r)).collect();
+            Ok(crate::propagation::PropagationResult {
+                orbits,
+                validity: crate::types::Validity::from_bools(&validity),
+                ..result
+            })
+        }
+    }
+
+    fn propagate_both(
+        n: usize,
+        times_days: &[i64],
+        pairwise: bool,
+    ) -> (Vec<[f64; 6]>, Vec<[f64; 6]>) {
+        let base = [1.1, 0.2, 0.05, -0.003, 0.016, 0.0004];
+        let states: Vec<[f64; 6]> = (0..n)
+            .map(|i| {
+                std::array::from_fn(|axis| base[axis] * (1.0 + 1e-3 * (i * (axis + 1)) as f64))
+            })
+            .collect();
+        let orbits = OrbitBatch::new(
+            (0..n).map(|i| OrbitId(format!("orbit-{i}"))).collect(),
+            vec![None; n],
+            CoordinateBatch::cartesian(
+                states,
+                Frame::Ecliptic,
+                OriginArray::repeat(OriginId::from_code("SUN"), n),
+                Some(TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60000, 0); n]).unwrap()),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let times = TimeArray::new(
+            TimeScale::Tdb,
+            times_days.iter().map(|&d| Epoch::new(d, 0)).collect(),
+        )
+        .unwrap();
+        let options = PropagationOptions {
+            chunk_size: None,
+            thread_limit: None,
+            epoch_policy: if pairwise {
+                EpochPolicy::Pairwise
+            } else {
+                EpochPolicy::CrossProduct
+            },
+            covariance: CovariancePropagation::None,
+        };
+        let request = PropagationRequest::new(&orbits, &times, options).unwrap();
+        let owned: &'static OwnedExternalPropagator<Reversed> = Box::leak(Box::new(
+            OwnedExternalPropagator::new(Reversed(TwoBodyPropagator::default()), "reversed", "0"),
+        ));
+        // SAFETY: `owned` is leaked, so its table lives for the process.
+        let external = unsafe { ExternalPropagator::from_raw(owned.table()) }.unwrap();
+        let rows = |result: crate::propagation::PropagationResult| {
+            result
+                .orbits
+                .coordinates
+                .values
+                .cartesian()
+                .unwrap()
+                .to_vec()
+        };
+        (
+            rows(external.propagate(&request, &SameScale).unwrap()),
+            rows(
+                TwoBodyPropagator::default()
+                    .propagate(&request, &SameScale)
+                    .unwrap(),
+            ),
+        )
+    }
+
+    #[test]
+    fn rows_are_placed_by_orbit_and_time_whatever_order_the_backend_returns() {
+        // 12 orbits (the central-difference batch; ids "10" and "11" sort
+        // before "2" as text) across three target times.
+        let (external, direct) = propagate_both(12, &[60010, 60030, 60050], false);
+        assert_eq!(external.len(), 36);
+        assert_eq!(external, direct);
+        // A repeated target time: its two rows are interchangeable (equal to
+        // rounding), so they are compared to 1e-12.
+        let (external, direct) = propagate_both(12, &[60010, 60030, 60010], false);
+        for (a, b) in external.iter().zip(&direct) {
+            assert!(a.iter().zip(b).all(|(x, y)| (x - y).abs() < 1e-12));
+        }
+        let (external, direct) = propagate_both(
+            12,
+            &(0..12).map(|i| 60001 + 3 * i).collect::<Vec<_>>(),
+            true,
+        );
+        assert_eq!(external, direct);
+    }
+
+    #[test]
+    fn padded_ids_keep_input_order_under_text_sorting() {
+        let width = 12_usize.to_string().len();
+        let ids: Vec<String> = (0..12).map(|i| format!("{i:0width$}")).collect();
+        let mut sorted = ids.clone();
+        sorted.sort();
+        assert_eq!(sorted, ids);
     }
 }
