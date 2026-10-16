@@ -126,9 +126,7 @@ class LeastSquares(ABC):
             debug_info["iterations"] = refined.iterations[0].as_py()
             debug_info["reduced_chi2"] = refined.reduced_chi2[0].as_py()
             debug_info["success"] = success
-            debug_info["exit_message"] = (
-                f"refine(rejection='none') status {status}"
-            )
+            debug_info["exit_message"] = f"refine(rejection='none') status {status}"
         if failed:
             return None
         return refined.to_orbits()
