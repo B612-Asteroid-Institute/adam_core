@@ -449,43 +449,45 @@
         <article role="main" id="furo-main-content">
           <section id="module-adam_core.orbit_determination.least_squares">
 <span id="adam-core-orbit-determination-least-squares-module"></span><h1>adam_core.orbit_determination.least_squares module<a class="headerlink" href="#module-adam_core.orbit_determination.least_squares" title="Link to this heading">¶</a></h1>
+<p>Deprecated legacy least-squares entry point.</p>
+<p><cite>LeastSquares</cite> keeps its historical interface but no longer runs its own
+finite-difference (Vallado) loop: <cite>LeastSquares.least_squares</cite> refines the
+orbit with <cite>refine</cite> (<code class="docutils literal notranslate"><span class="pre">rejection=&quot;none&quot;</span></code>), the native refinement stage. It
+will be removed in a later release.</p>
 <dl class="py class">
 <dt class="sig sig-object py" id="adam_core.orbit_determination.least_squares.LeastSquares">
 <em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">adam_core.orbit_determination.least_squares.</span></span><span class="sig-name descname"><span class="pre">LeastSquares</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">use_central_difference</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#bool" title="(in Python v3.15)"><span class="pre">bool</span></a></span></em><span class="sig-paren">)</span><a class="reference internal" href="../../_modules/adam_core/orbit_determination/least_squares.html#LeastSquares"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbit_determination.least_squares.LeastSquares" title="Link to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.15)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
-<p>EXPERIMENTAL! Orbit refinement using least squares differential correction</p>
-<p>In general, assume we are only fitting ra and dec in the observations. Some methods
-may work for other observation sets as well.</p>
+<p>Deprecated: orbit refinement through <cite>refine</cite> (<code class="docutils literal notranslate"><span class="pre">rejection=&quot;none&quot;</span></code>).</p>
 <dl class="py method">
 <dt class="sig sig-object py" id="adam_core.orbit_determination.least_squares.LeastSquares.least_squares">
 <span class="sig-name descname"><span class="pre">least_squares</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">initial_orbit</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.fitted_orbits.html#adam_core.orbit_determination.fitted_orbits.FittedOrbits" title="adam_core.orbit_determination.fitted_orbits.FittedOrbits"><span class="pre">FittedOrbits</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">observations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.orbit_determination.evaluate.html#adam_core.orbit_determination.evaluate.OrbitDeterminationObservations" title="adam_core.orbit_determination.evaluate.OrbitDeterminationObservations"><span class="pre">OrbitDeterminationObservations</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">prop</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference internal" href="adam_core.propagator.propagator.html#adam_core.propagator.propagator.Propagator" title="adam_core.propagator.propagator.Propagator"><span class="pre">Propagator</span></a></span></em>, <em class="sig-param"><span class="n"><span class="pre">perturbation_initial_fraction</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">1e-06</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">perturbation_multiplier</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">rms_epsilon</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">0.001</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_iterations</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/builtins/functions.html#float" title="(in Python v3.15)"><span class="pre">float</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug_info</span></span><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="n"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.15)"><span class="pre">Dict</span></a><span class="p"><span class="pre">[</span></span><a class="reference external" href="https://docs.python.org/3/builtins/stdtypes.html#str" title="(in Python v3.15)"><span class="pre">str</span></a><span class="p"><span class="pre">,</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.15)"><span class="pre">Any</span></a><span class="p"><span class="pre">]</span></span><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span><span class="w"> </span><span class="o"><span class="pre">=</span></span><span class="w"> </span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span> <span class="sig-return"><span class="sig-return-icon">&#x2192;</span> <span class="sig-return-typehint"><a class="reference internal" href="adam_core.orbits.orbits.html#adam_core.orbits.orbits.Orbits" title="adam_core.orbits.orbits.Orbits"><span class="pre">Orbits</span></a><span class="w"> </span><span class="p"><span class="pre">|</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/builtins/constants.html#None" title="(in Python v3.15)"><span class="pre">None</span></a></span></span><a class="reference internal" href="../../_modules/adam_core/orbit_determination/least_squares.html#LeastSquares.least_squares"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#adam_core.orbit_determination.least_squares.LeastSquares.least_squares" title="Link to this definition">¶</a></dt>
-<dd><p>Run least squares to refine the initial orbit.
-Assumes observations and ephemeris are in Spherical coordinates and only have RA and DEC,
-and we have only one orbit. Follows Vallado.</p>
+<dd><p>Refine one orbit against the RA and Dec of every observation with
+<cite>refine</cite> (<code class="docutils literal notranslate"><span class="pre">rejection=&quot;none&quot;</span></code>) on <code class="docutils literal notranslate"><span class="pre">prop</span></code>, which must have a native
+backend. Other coordinate dimensions are ignored, as before.</p>
+<p><code class="docutils literal notranslate"><span class="pre">max_iterations</span></code> bounds the solver’s iterations. The legacy finite-
+difference settings (<code class="docutils literal notranslate"><span class="pre">perturbation_initial_fraction</span></code>,
+<code class="docutils literal notranslate"><span class="pre">perturbation_multiplier</span></code>, <code class="docutils literal notranslate"><span class="pre">rms_epsilon</span></code>) are ignored.</p>
 <section id="parameters">
 <h2>Parameters:<a class="headerlink" href="#parameters" title="Link to this heading">¶</a></h2>
 <dl class="simple">
 <dt>initial_orbit: FittedOrbits | Orbits (length 1)</dt><dd><p>the initial orbit to refine</p>
 </dd>
-<dt>observations: OrbitDeterminationObservations (length N)</dt><dd><p>observations to use for refinement, use RA and DEC only</p>
+<dt>observations: OrbitDeterminationObservations (length N)</dt><dd><p>observations to fit (RA and Dec)</p>
 </dd>
-<dt>prop: Propagator</dt><dd><p>propagator to use for ephemerides of perturbed orbits</p>
+<dt>prop: Propagator</dt><dd><p>propagator with a native backend</p>
 </dd>
-<dt>perturbation_initial_fraction: float, default 1e-6,</dt><dd><p>initial fraction of parameter value to use for perturbation when computing partial derivatives</p>
+<dt>max_iterations: float, default 20</dt><dd><p>maximum number of solver iterations</p>
 </dd>
-<dt>perturbation_multiplier: float, default 0.5,</dt><dd><p>multiplier of the perturbation fraction when RMS change overshoots</p>
-</dd>
-<dt>rms_epsilon: float, default 1e-3</dt><dd><p>limit for relative change of RMS between iteration to declare convergence</p>
-</dd>
-<dt>max_iterations: float, default 20</dt><dd><p>maximum number of iterations before giving up</p>
-</dd>
-<dt>debug_info: Dict[str, Any] | None</dt><dd><p>if provided, this dictionary is populated with debug information</p>
+<dt>debug_info: Dict[str, Any] | None</dt><dd><p>if provided, populated with <code class="docutils literal notranslate"><span class="pre">num_observations</span></code>, <code class="docutils literal notranslate"><span class="pre">iterations</span></code>,
+<code class="docutils literal notranslate"><span class="pre">reduced_chi2</span></code>, <code class="docutils literal notranslate"><span class="pre">success</span></code> and <code class="docutils literal notranslate"><span class="pre">exit_message</span></code></p>
 </dd>
 </dl>
 </section>
 <section id="returns">
 <h2>Returns:<a class="headerlink" href="#returns" title="Link to this heading">¶</a></h2>
-<p>Improved orbit (length 1) or None, if no improvement was found.</p>
+<p>The refined orbit (length 1), also when the iteration limit was
+reached, or None when the solve failed.</p>
 </section>
 </dd></dl>
 
@@ -528,7 +530,7 @@ and we have only one orbit. Follows Vallado.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-15</div>
+              Last updated on 2026-10-16</div>
           </div>
           <div class="right-details">
             

@@ -796,7 +796,9 @@ in a later release.</p>
 <code class="docutils literal notranslate"><span class="pre">cmc2003_fit_detailed</span></code> remains for the loop diagnostics</p></td>
 </tr>
 <tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">od.od</span></code>, <code class="docutils literal notranslate"><span class="pre">od.differential_correction</span></code>, <code class="docutils literal notranslate"><span class="pre">LeastSquares</span></code></p></td>
-<td><p><code class="docutils literal notranslate"><span class="pre">refine</span></code> (or <code class="docutils literal notranslate"><span class="pre">run_od</span></code> for the whole step)</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">refine</span></code> (or <code class="docutils literal notranslate"><span class="pre">run_od</span></code> for the whole step). They already delegate
+to it (<code class="docutils literal notranslate"><span class="pre">rejection=&quot;worst_residual&quot;</span></code> for <code class="docutils literal notranslate"><span class="pre">od</span></code>, <code class="docutils literal notranslate"><span class="pre">&quot;none&quot;</span></code> for
+<code class="docutils literal notranslate"><span class="pre">LeastSquares</span></code>); their finite-difference settings are ignored</p></td>
 </tr>
 <tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter(PropagatorClass,</span> <span class="pre">propagator_kwargs)</span></code></p></td>
 <td><p><code class="docutils literal notranslate"><span class="pre">NativeOrbitFitter(PropagatorClass(**propagator_kwargs))</span></code>: the IOD
@@ -946,7 +948,7 @@ cleanup of observation-to-orbit assignments.</p>
             
             <a href="https://github.com/pradyunsg/furo">Furo</a>
             <div class="last-updated">
-              Last updated on 2026-10-15</div>
+              Last updated on 2026-10-16</div>
           </div>
           <div class="right-details">
             
