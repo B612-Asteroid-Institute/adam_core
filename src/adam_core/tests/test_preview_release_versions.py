@@ -171,48 +171,60 @@ def test_downstream_assist_build_patches_only_current_core_crates(
     config.parent.rmdir()
 
 
-def _write_assist_lock(path: Path, core_version: str, *, marker: str) -> bytes:
-    packages = [
-        'version = 4',
-        '',
+def _package(name: str, version: str, *, source: str | None = None) -> dict[str, str]:
+    package = {"name": name, "version": version}
+    if source is not None:
+        package["source"] = source
+    return package
+
+
+def _core_packages(version: str) -> list[dict[str, str]]:
+    return [
+        _package(crate, version)
+        for crate in develop_downstream_adam_assist.PUBLIC_CORE_CRATES
     ]
-    for crate in develop_downstream_adam_assist.PUBLIC_CORE_CRATES:
-        packages.extend(
-            [
-                '[[package]]',
-                f'name = "{crate}"',
-                f'version = "{core_version}"',
-                '',
-            ]
-        )
-    packages.extend(
-        [
-            '[[package]]',
-            'name = "unrelated"',
-            'version = "1.0.0"',
-            f'marker = "{marker}"',
-            '',
-        ]
-    )
-    contents = "\n".join(packages).encode()
+
+
+def _write_assist_lock(path: Path, packages: list[dict[str, str]]) -> bytes:
+    lines = ["version = 4", ""]
+    for package in packages:
+        lines.append("[[package]]")
+        for key, value in package.items():
+            lines.append(f'{key} = "{value}"')
+        lines.append("")
+    contents = "\n".join(lines).encode()
     path.write_bytes(contents)
     return contents
 
 
-def test_downstream_core_lock_refresh_is_targeted(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def _write_assist_manifest(tmp_path: Path) -> tuple[Path, Path]:
     manifest = tmp_path / "rust" / "adam_assist_rs" / "Cargo.toml"
     manifest.parent.mkdir(parents=True)
     manifest.write_text('[package]\nname = "adam_assist"\nversion = "0.5.0"\n')
-    lock = manifest.with_name("Cargo.lock")
-    _write_assist_lock(lock, "0.6.0", marker="preserved")
+    return manifest, manifest.with_name("Cargo.lock")
+
+
+def test_downstream_core_lock_refresh_is_one_targeted_transaction(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    manifest, lock = _write_assist_manifest(tmp_path)
+    before = [
+        *_core_packages("0.6.0"),
+        _package("unrelated", "1.0.0"),
+        _package("zip", "2.4.2"),
+    ]
+    _write_assist_lock(lock, before)
 
     commands: list[list[str]] = []
 
     def fake_check_call(command: list[str], **_: object) -> None:
         commands.append(command)
-        _write_assist_lock(lock, "0.6.1", marker="preserved")
+        after = [
+            *_core_packages("0.6.1"),
+            _package("unrelated", "1.0.0"),
+            _package("rawzip", "0.5.2"),
+        ]
+        _write_assist_lock(lock, after)
 
     monkeypatch.setattr(
         develop_downstream_adam_assist.shutil, "which", lambda _: "/cargo"
@@ -226,37 +238,73 @@ def test_downstream_core_lock_refresh_is_targeted(
 
     develop_downstream_adam_assist._refresh_core_lock(tmp_path, {})
 
-    assert len(commands) == len(develop_downstream_adam_assist.PUBLIC_CORE_CRATES)
-    for command, crate in zip(
-        commands,
-        develop_downstream_adam_assist.PUBLIC_CORE_CRATES,
-        strict=True,
-    ):
-        assert command == [
-            "/cargo",
-            "update",
-            "--manifest-path",
-            str(manifest),
-            "--package",
-            crate,
-            "--precise",
-            "0.6.1",
-        ]
-    assert b'marker = "preserved"' in lock.read_bytes()
+    expected = ["/cargo", "update", "--manifest-path", str(manifest)]
+    for crate in develop_downstream_adam_assist.PUBLIC_CORE_CRATES:
+        expected.extend(["--package", crate])
+    assert commands == [expected]
+    assert "--precise" not in commands[0]
+
+
+def test_patched_core_lock_verification_requires_one_local_aligned_package() -> None:
+    valid = _core_packages("0.6.1")
+    develop_downstream_adam_assist._verify_patched_core_packages(valid, "0.6.1")
+
+    wrong_version = [dict(package) for package in valid]
+    wrong_version[0]["version"] = "0.6.0"
+    with pytest.raises(SystemExit, match="exactly one local-path Core 0.6.1"):
+        develop_downstream_adam_assist._verify_patched_core_packages(
+            wrong_version, "0.6.1"
+        )
+
+    registry_source = [dict(package) for package in valid]
+    registry_source[0][
+        "source"
+    ] = "registry+https://github.com/rust-lang/crates.io-index"
+    with pytest.raises(SystemExit, match="exactly one local-path Core 0.6.1"):
+        develop_downstream_adam_assist._verify_patched_core_packages(
+            registry_source, "0.6.1"
+        )
+
+    duplicate = [*valid, dict(valid[0])]
+    with pytest.raises(SystemExit, match="exactly one local-path Core 0.6.1"):
+        develop_downstream_adam_assist._verify_patched_core_packages(duplicate, "0.6.1")
+
+    missing = valid[1:]
+    with pytest.raises(SystemExit, match="exactly one local-path Core 0.6.1"):
+        develop_downstream_adam_assist._verify_patched_core_packages(missing, "0.6.1")
+
+
+def test_unrelated_lock_guard_allows_removals_but_rejects_added_versions() -> None:
+    before = [
+        *_core_packages("0.6.0"),
+        _package("retained", "1.0.0"),
+        _package("retained", "2.0.0"),
+        _package("removed", "1.0.0"),
+    ]
+    accepted = [
+        *_core_packages("0.6.1"),
+        _package("retained", "1.0.0"),
+        _package("rawzip", "0.5.2"),
+    ]
+    develop_downstream_adam_assist._reject_unrelated_version_additions(before, accepted)
+
+    added_version = [*accepted, _package("retained", "3.0.0")]
+    with pytest.raises(SystemExit, match="added unrelated package versions"):
+        develop_downstream_adam_assist._reject_unrelated_version_additions(
+            before, added_version
+        )
 
 
 def test_downstream_prepare_restores_lock_and_config_on_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    manifest = tmp_path / "rust" / "adam_assist_rs" / "Cargo.toml"
-    manifest.parent.mkdir(parents=True)
-    manifest.write_text('[package]\nname = "adam_assist"\nversion = "0.5.0"\n')
-    lock = manifest.with_name("Cargo.lock")
-    original = _write_assist_lock(lock, "0.6.0", marker="original")
+    _, lock = _write_assist_manifest(tmp_path)
+    original = _write_assist_lock(lock, _core_packages("0.6.0"))
 
-    def fake_refresh(repo: Path, env: dict[str, str]) -> None:
+    def fake_refresh(repo: Path, env: dict[str, str], paths: tuple[Path, Path]) -> None:
         assert repo == tmp_path
         assert env == {"TEST": "1"}
+        assert paths[1] == lock
         lock.write_bytes(b"temporary lock")
         raise RuntimeError("refresh failed")
 
@@ -274,15 +322,13 @@ def test_downstream_prepare_restores_lock_and_config_on_failure(
 def test_downstream_prepare_can_restore_successful_temporary_lock(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    manifest = tmp_path / "rust" / "adam_assist_rs" / "Cargo.toml"
-    manifest.parent.mkdir(parents=True)
-    manifest.write_text('[package]\nname = "adam_assist"\nversion = "0.5.0"\n')
-    lock = manifest.with_name("Cargo.lock")
-    original = _write_assist_lock(lock, "0.6.0", marker="original")
+    _, lock = _write_assist_manifest(tmp_path)
+    original = _write_assist_lock(lock, _core_packages("0.6.0"))
 
-    def fake_refresh(repo: Path, env: dict[str, str]) -> None:
+    def fake_refresh(repo: Path, env: dict[str, str], paths: tuple[Path, Path]) -> None:
         assert repo == tmp_path
         assert env == {}
+        assert paths[1] == lock
         lock.write_bytes(b"temporary lock")
 
     monkeypatch.setattr(
@@ -296,6 +342,83 @@ def test_downstream_prepare_can_restore_successful_temporary_lock(
     assert lock.read_bytes() == original
     assert not prepared.config.exists()
     assert not prepared.config.parent.exists()
+
+
+def test_develop_restores_lock_and_config_when_maturin_returns_nonzero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, lock = _write_assist_manifest(tmp_path)
+    original = _write_assist_lock(lock, _core_packages("0.6.0"))
+
+    def fake_refresh(repo: Path, env: dict[str, str], paths: tuple[Path, Path]) -> None:
+        assert repo == tmp_path
+        assert "CARGO_NET_GIT_FETCH_WITH_CLI" in env
+        assert paths[1] == lock
+        lock.write_bytes(b"temporary lock")
+
+    class PipCheck:
+        returncode = 0
+
+    monkeypatch.setenv("ADAM_ASSIST_RUST_REPO", str(tmp_path))
+    monkeypatch.setattr(
+        develop_downstream_adam_assist, "_refresh_core_lock", fake_refresh
+    )
+    monkeypatch.setattr(
+        develop_downstream_adam_assist.shutil, "which", lambda _: "/maturin"
+    )
+    monkeypatch.setattr(
+        develop_downstream_adam_assist.subprocess,
+        "run",
+        lambda *args, **kwargs: PipCheck(),
+    )
+    monkeypatch.setattr(
+        develop_downstream_adam_assist.subprocess,
+        "call",
+        lambda *args, **kwargs: 17,
+    )
+
+    assert develop_downstream_adam_assist.main([]) == 17
+    assert lock.read_bytes() == original
+    assert not (tmp_path / ".cargo" / "config.toml").exists()
+    assert not (tmp_path / ".cargo").exists()
+
+
+def test_prepare_only_cli_dispatches_without_maturin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _write_assist_manifest(tmp_path)[1].write_text("version = 4\n")
+    calls: list[tuple[Path, dict[str, str]]] = []
+
+    def fake_prepare(
+        repo: Path,
+        env: dict[str, str],
+        paths: tuple[Path, Path],
+    ) -> develop_downstream_adam_assist.PreparedDownstream:
+        assert paths[0].name == "Cargo.toml"
+        assert paths[1].name == "Cargo.lock"
+        calls.append((repo, env))
+        return develop_downstream_adam_assist.PreparedDownstream(
+            tmp_path / ".cargo/config.toml", True, tmp_path / "Cargo.lock", b""
+        )
+
+    def unexpected_maturin_lookup(_: str) -> str:
+        raise AssertionError("prepare-only must not look up maturin")
+
+    monkeypatch.setenv("ADAM_ASSIST_RUST_REPO", str(tmp_path))
+    monkeypatch.setenv("CARGO_NET_GIT_FETCH_WITH_CLI", "preserved")
+    monkeypatch.setattr(
+        develop_downstream_adam_assist, "_prepare_downstream", fake_prepare
+    )
+    monkeypatch.setattr(
+        develop_downstream_adam_assist.shutil,
+        "which",
+        unexpected_maturin_lookup,
+    )
+
+    assert develop_downstream_adam_assist.main(["--prepare-only"]) == 0
+    assert len(calls) == 1
+    assert calls[0][0] == tmp_path
+    assert calls[0][1]["CARGO_NET_GIT_FETCH_WITH_CLI"] == "preserved"
 
 
 def test_rust_develop_refreshes_version_and_explains_stale_extensions() -> None:
@@ -341,11 +464,18 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
     assert "python -m pip install --no-deps -e dependent" in tier1
     assert "jpl-small-bodies-de441-n16==2021.3.31.1" in tier1
     builder_name = "Build reference propagator in the Core test environment"
-    patcher_name = "Patch unpublished Core crates into the dependent"
+    preparer_name = "Prepare compatible ASSIST lock for dependent install"
+    installer_name = "Install dependent and adam_core wheel"
     assert builder_name in tier1
-    assert tier1.index(builder_name) < tier1.index(patcher_name)
+    assert tier1.index(builder_name) < tier1.index(preparer_name)
+    assert tier1.index(preparer_name) < tier1.index(installer_name)
     assert "ADAM_ASSIST_RUST_REPO: ${{ github.workspace }}/dependent" in tier1
     assert "run: pdm run assist-rust-develop" in tier1
+    helper_command = (
+        "python migration/scripts/develop_downstream_adam_assist.py --prepare-only"
+    )
+    assert tier1.count(helper_command) == 1
+    assert "_write_core_patch" not in tier1
     assert "Verify Core test environment candidate installations" in tier1
     assert 'test_python="$(pdm info --python)"' in tier1
     assert (
@@ -386,18 +516,19 @@ def test_rust_ci_is_reproducible_and_downstream_sources_are_exact() -> None:
         assert crate in downstream_builder
     assert "refusing to replace downstream Cargo config" in downstream_builder
     assert '"--prepare-only"' in downstream_builder
-    assert '"--precise"' in downstream_builder
+    assert '"--precise"' not in downstream_builder
+    assert 'command.extend(["--package", crate])' in downstream_builder
     assert "original_lock" in downstream_builder
     assert "_restore_downstream(prepared)" in downstream_builder
     assert "Prepare compatible ASSIST lock for Core candidate" in release_matrix
-    assert (
-        "python migration/scripts/develop_downstream_adam_assist.py --prepare-only"
-        in release_matrix
-    )
+    assert release_matrix.count(helper_command) == 1
     assert "[patch.crates-io]" not in release_matrix
-    assert release_matrix.index("Set up Rust") < release_matrix.index(
+    matrix_preparer = release_matrix.index(
         "Prepare compatible ASSIST lock for Core candidate"
-    ) < release_matrix.index("Build adam-assist manylinux wheel")
+    )
+    assert release_matrix.index("Set up Rust") < matrix_preparer
+    assert matrix_preparer < release_matrix.index("Build adam-assist manylinux wheel")
+    assert matrix_preparer < release_matrix.index("Build adam-assist native wheel")
     assert 'version("adam-core") == adam_core.__version__ == "0.6.1"' in tier1
     assert 'version("adam-assist") == assist_version == "0.5.0"' in tier1
 

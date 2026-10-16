@@ -18,8 +18,10 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REPO = PROJECT_ROOT.parent / "adam-assist"
@@ -40,15 +42,23 @@ class PreparedDownstream:
     original_lock: bytes
 
 
+def _downstream_paths(repo: Path) -> tuple[Path, Path]:
+    manifest = repo / "rust" / "adam_assist_rs" / "Cargo.toml"
+    lock = manifest.with_name("Cargo.lock")
+    if not manifest.is_file():
+        raise SystemExit(f"downstream Rust adam-assist manifest is missing: {manifest}")
+    if not lock.is_file():
+        raise SystemExit(f"downstream Rust adam-assist lock is missing: {lock}")
+    return manifest, lock
+
+
 def _write_core_patch(repo: Path) -> tuple[Path, bool]:
     cargo_dir = repo / ".cargo"
     config = cargo_dir / "config.toml"
     if config.exists():
         raise SystemExit(f"refusing to replace downstream Cargo config: {config}")
 
-    paths = {
-        crate: PROJECT_ROOT / "rust" / crate for crate in PUBLIC_CORE_CRATES
-    }
+    paths = {crate: PROJECT_ROOT / "rust" / crate for crate in PUBLIC_CORE_CRATES}
     missing = [str(path) for path in paths.values() if not path.is_dir()]
     if missing:
         raise SystemExit(f"adam-core crate paths are missing: {missing}")
@@ -76,81 +86,98 @@ def _current_core_version() -> str:
     return unique.pop()
 
 
-def _locked_versions(lock: Path) -> dict[str, set[str]]:
+def _locked_packages(lock: Path) -> list[dict[str, Any]]:
     with lock.open("rb") as source:
         packages = tomllib.load(source).get("package", [])
+    if not isinstance(packages, list):
+        raise SystemExit(f"downstream Cargo lock has invalid package data: {lock}")
+    return packages
+
+
+def _locked_versions(packages: list[dict[str, Any]]) -> dict[str, set[str]]:
     result: dict[str, set[str]] = {}
     for package in packages:
         result.setdefault(package["name"], set()).add(package["version"])
     return result
 
 
-def _refresh_core_lock(repo: Path, env: dict[str, str]) -> None:
+def _verify_patched_core_packages(packages: list[dict[str, Any]], version: str) -> None:
+    invalid: dict[str, list[dict[str, Any]]] = {}
+    for crate in PUBLIC_CORE_CRATES:
+        selected = [package for package in packages if package.get("name") == crate]
+        if (
+            len(selected) != 1
+            or selected[0].get("version") != version
+            or "source" in selected[0]
+        ):
+            invalid[crate] = selected
+    if invalid:
+        raise SystemExit(
+            "temporary downstream lock did not select exactly one local-path "
+            f"Core {version} package per crate: {invalid}"
+        )
+
+
+def _reject_unrelated_version_additions(
+    before: list[dict[str, Any]], after: list[dict[str, Any]]
+) -> None:
+    before_versions = _locked_versions(before)
+    after_versions = _locked_versions(after)
+    retained_non_core = (before_versions.keys() & after_versions.keys()) - set(
+        PUBLIC_CORE_CRATES
+    )
+    additions = {
+        name: sorted(after_versions[name] - before_versions[name])
+        for name in retained_non_core
+        if after_versions[name] - before_versions[name]
+    }
+    if additions:
+        raise SystemExit(
+            "temporary Core lock refresh added unrelated package versions: "
+            f"{additions}"
+        )
+
+
+def _refresh_core_lock(
+    repo: Path,
+    env: dict[str, str],
+    paths: tuple[Path, Path] | None = None,
+) -> None:
     cargo = shutil.which("cargo")
     if cargo is None:
         raise SystemExit("cargo is not installed in the active environment")
-    manifest = repo / "rust" / "adam_assist_rs" / "Cargo.toml"
-    lock = manifest.with_name("Cargo.lock")
-    if not manifest.is_file():
-        raise SystemExit(f"downstream Rust adam-assist manifest is missing: {manifest}")
-    if not lock.is_file():
-        raise SystemExit(f"downstream Rust adam-assist lock is missing: {lock}")
+    manifest, lock = paths or _downstream_paths(repo)
 
     version = _current_core_version()
-    before = _locked_versions(lock)
+    before = _locked_packages(lock)
+    command = [cargo, "update", "--manifest-path", str(manifest)]
     for crate in PUBLIC_CORE_CRATES:
-        subprocess.check_call(
-            [
-                cargo,
-                "update",
-                "--manifest-path",
-                str(manifest),
-                "--package",
-                crate,
-                "--precise",
-                version,
-            ],
-            cwd=repo,
-            env=env,
-        )
+        command.extend(["--package", crate])
+    subprocess.check_call(command, cwd=repo, env=env)
 
-    after = _locked_versions(lock)
-    selected = {crate: after.get(crate, set()) for crate in PUBLIC_CORE_CRATES}
-    expected = {version}
-    invalid = {
-        crate: values for crate, values in selected.items() if values != expected
-    }
-    if invalid:
-        raise SystemExit(
-            f"temporary downstream lock did not select Core {version}: {invalid}"
-        )
+    after = _locked_packages(lock)
+    _verify_patched_core_packages(after, version)
 
-    # Targeted `cargo update --package` calls may add/remove dependencies required
-    # by a patched Core crate, but they must not change a package version that is
-    # otherwise present on both sides of the dependent lock.
-    core_names = set(PUBLIC_CORE_CRATES)
-    unrelated_changes = {
-        name: (before[name], after[name])
-        for name in (before.keys() & after.keys()) - core_names
-        if before[name] != after[name]
-    }
-    if unrelated_changes:
-        raise SystemExit(
-            "temporary Core lock refresh changed unrelated package versions: "
-            f"{unrelated_changes}"
-        )
+    # One Cargo transaction unlocks all five mutually exact-pinned Core crates.
+    # It may remove obsolete dependency versions or introduce new dependency
+    # names required by Core (for example rawzip), but it may not add a version
+    # for any non-Core package name retained from the preliminary lock.
+    _reject_unrelated_version_additions(before, after)
     print(f"prepared downstream Cargo.lock for Core {version}")
 
 
-def _prepare_downstream(repo: Path, env: dict[str, str]) -> PreparedDownstream:
-    lock = repo / "rust" / "adam_assist_rs" / "Cargo.lock"
-    if not lock.is_file():
-        raise SystemExit(f"downstream Rust adam-assist lock is missing: {lock}")
+def _prepare_downstream(
+    repo: Path,
+    env: dict[str, str],
+    paths: tuple[Path, Path] | None = None,
+) -> PreparedDownstream:
+    checked_paths = paths or _downstream_paths(repo)
+    _, lock = checked_paths
     original_lock = lock.read_bytes()
     config, remove_cargo_dir = _write_core_patch(repo)
     prepared = PreparedDownstream(config, remove_cargo_dir, lock, original_lock)
     try:
-        _refresh_core_lock(repo, env)
+        _refresh_core_lock(repo, env, checked_paths)
     except BaseException:
         _restore_downstream(prepared)
         raise
@@ -166,30 +193,25 @@ def _restore_downstream(prepared: PreparedDownstream) -> None:
         prepared.config.parent.rmdir()
 
 
-def _parse_args() -> argparse.Namespace:
+def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--prepare-only",
         action="store_true",
         help="leave the temporary patch and refreshed lock for a later locked build",
     )
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
 
-def main() -> int:
-    args = _parse_args()
+def main(argv: Sequence[str] | None = None) -> int:
+    args = _parse_args(argv)
     repo = Path(os.environ.get("ADAM_ASSIST_RUST_REPO", DEFAULT_REPO)).resolve()
-    manifest = repo / "rust" / "adam_assist_rs" / "Cargo.toml"
-    if not manifest.is_file():
-        raise SystemExit(
-            "downstream Rust adam-assist checkout not found; set "
-            f"ADAM_ASSIST_RUST_REPO (looked for {manifest})"
-        )
+    paths = _downstream_paths(repo)
     env = dict(os.environ)
     env.setdefault("CARGO_NET_GIT_FETCH_WITH_CLI", "true")
 
     if args.prepare_only:
-        _prepare_downstream(repo, env)
+        _prepare_downstream(repo, env, paths)
         return 0
 
     maturin = shutil.which("maturin")
@@ -204,7 +226,7 @@ def main() -> int:
     if pip_check.returncode:
         subprocess.check_call([sys.executable, "-m", "ensurepip", "--upgrade"])
 
-    prepared = _prepare_downstream(repo, env)
+    prepared = _prepare_downstream(repo, env, paths)
     try:
         return subprocess.call(
             [
