@@ -275,10 +275,10 @@ class LambertSolutions(qv.Table):
                 b"adam_core_arrival_time_scale": self.arrival_time.scale.encode(),
             }
         )
+        from .._rust.arrow import contiguous_record_batch
+
         table = self.table.combine_chunks().replace_schema_metadata(metadata)
-        return pa.RecordBatch.from_arrays(
-            [column.chunk(0) for column in table.columns], schema=table.schema
-        )
+        return contiguous_record_batch(table)
 
     def _orbit_accessor(self, accessor: str) -> Orbits:
         """One Arrow crossing for the four orbit-producing accessors."""
