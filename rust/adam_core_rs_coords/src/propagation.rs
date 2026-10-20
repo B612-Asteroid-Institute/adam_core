@@ -29,8 +29,12 @@ pub use ephemeris::{
 };
 pub use external::{
     two_body_reference, ExternalContext, ExternalPropagator, ExternalPropagatorV1,
-    OwnedExternalPropagator, PropagateRequestV1, PropagateStmV1, EXTERNAL_PROPAGATOR_ABI_VERSION,
-    EXTERNAL_PROPAGATOR_CAPSULE,
+    OwnedExternalPropagator, PropagateRequestV1, PropagateStmV1, EXTERNAL_NON_GRAVITATIONAL_WIDTH,
+    EXTERNAL_PROPAGATOR_ABI_VERSION, EXTERNAL_PROPAGATOR_CAPSULE,
+    EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL, EXTERNAL_PROPAGATOR_CAP_STM,
+    EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE, EXTERNAL_PROPAGATOR_KNOWN_CAPABILITIES,
+    EXTERNAL_PROPAGATOR_STATUS_ERROR, EXTERNAL_PROPAGATOR_STATUS_INVALID,
+    EXTERNAL_PROPAGATOR_STATUS_OK, EXTERNAL_PROPAGATOR_STATUS_PANIC,
 };
 #[allow(deprecated)]
 pub use od::{
@@ -71,7 +75,8 @@ pub mod adapter {
     pub use super::od_ranging::systematic_ranging_with;
     pub use super::od_refine::{
         cmc2003_fit_with, fit_orbit_whitened_with, full_od_with, iterative_fit_with, refine_with,
-        run_iod_corrected, run_iod_with, run_od_with, validate_fit_covariance_with,
+        run_iod_corrected, run_iod_linkages_with, run_iod_with, run_od_with,
+        validate_fit_covariance_with,
     };
 }
 pub use request::{
@@ -165,11 +170,20 @@ pub trait Propagator: Sync {
         false
     }
 
+    /// Whether propagation accepts per-orbit non-gravitational parameters
+    /// (A1/A2/A3 and their Marsden-law metadata) without dropping them.
+    fn supports_non_gravitational_parameters(&self) -> bool {
+        false
+    }
+
     /// One heliocentric (SUN) ecliptic state at `epoch_tdb`, propagated to
-    /// each of `times_tdb` (TDB) with its state-transition matrix.
+    /// each of `times_tdb` (TDB) with its state-transition matrix. Optional
+    /// non-gravitational parameters are held fixed while differentiating the
+    /// six Cartesian state components.
     fn propagate_stm(
         &self,
         _state: [f64; 6],
+        _non_gravitational_parameters: Option<crate::NonGravitationalParametersRow>,
         _epoch_tdb: crate::Epoch,
         _times_tdb: &[crate::Epoch],
     ) -> PropagationResultValue<Vec<StmRow>> {

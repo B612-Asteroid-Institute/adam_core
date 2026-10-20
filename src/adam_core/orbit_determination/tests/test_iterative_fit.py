@@ -103,9 +103,8 @@ def test_iterative_fit_no_propagator_needed_for_unit(pure_iod_orbit):
     assert "min_arc_length" in sig.parameters
 
 
-def test_iterative_fit_rejects_a_gross_outlier_through_the_callback_route():
-    """The Rust loop drives a plain Python propagator (no native work units):
-    the gross outlier is removed and the fit converges on the rest."""
+def test_iterative_fit_rejects_a_gross_outlier_through_the_capsule_route():
+    """The Rust loop uses batched native propagation and rejects the outlier."""
     from .test_differential_correction import (
         TwoBodyPropagator,
         make_initial_guess,

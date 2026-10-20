@@ -924,83 +924,34 @@ class TestFusedRunOd:
                     atol=1e-15,
                 )
 
-    def test_fused_route_runs_iod_on_the_configured_propagator(
+    def test_native_route_runs_iod_on_the_configured_propagator(
         self, two_body_observations
     ) -> None:
-        """The IOD propagator is explicit on the fused route: when the
-        refining propagator is the fitter's configured IOD propagator the
-        work unit scores candidates on it; otherwise it receives the
-        fitter's IOD propagator instance explicitly, as the composition
-        uses, and the fused route is still taken."""
-
         class OtherTwoBodyPropagator(TwoBodyPropagator):
-            ephemeris_calls = 0
+            pass
 
-            def generate_ephemeris(self, orbits, observers, **kwargs):
-                type(self).ephemeris_calls += 1
-                return super().generate_ephemeris(orbits, observers, **kwargs)
-
-        class CountingNativePropagator(NativeTwoBodyPropagator):
-            native_backend = NativeTwoBodyPropagator.native_backend
-
-            def __init__(self) -> None:
-                super().__init__()
-                self.fused_run_od_calls = 0
-                self.fused_full_od_calls = 0
-                self.iod_propagators: list = []
-
-            def run_od(self, *args, **kwargs):
-                self.fused_run_od_calls += 1
-                self.iod_propagators.append(kwargs.get("iod_propagator"))
-                return super().run_od(*args, **kwargs)
-
-            def full_od(self, *args, **kwargs):
-                self.fused_full_od_calls += 1
-                self.iod_propagators.append(kwargs.get("iod_propagator"))
-                return super().full_od(*args, **kwargs)
-
-        propagator = CountingNativePropagator()
-        # The fitter's IOD propagator is an instance: the refining propagator
-        # matches only when it is that instance.
+        propagator = NativeTwoBodyPropagator()
         matching = NativeOrbitFitter(propagator, iod_rchi2_threshold=1e6)
         iod_instance = OtherTwoBodyPropagator()
-        other_class = NativeOrbitFitter(iod_instance, iod_rchi2_threshold=1e6)
-        with pytest.warns(DeprecationWarning, match="pass a propagator instance"):
-            with_kwargs = NativeOrbitFitter(
-                TwoBodyPropagator,
-                propagator_kwargs={"chunk_size": 1},
-                iod_rchi2_threshold=1e6,
-            )
+        other_fitter = NativeOrbitFitter(iod_instance, iod_rchi2_threshold=1e6)
+
         assert matching.fused_propagator_matches(propagator)
         assert matching.iod_propagator_for(propagator) is None
-        assert not other_class.fused_propagator_matches(propagator)
-        assert other_class.iod_propagator_for(propagator) is iod_instance
-        assert not with_kwargs.fused_propagator_matches(propagator)
+        assert not other_fitter.fused_propagator_matches(propagator)
+        assert other_fitter.iod_propagator_for(propagator) is iod_instance
 
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
-            fused, _ = run_od(
+            same, _ = run_od(
                 two_body_observations, matching, None, propagator=propagator
             )
-            assert propagator.fused_run_od_calls == 1
-            assert propagator.iod_propagators == [None]
-            assert OtherTwoBodyPropagator.ephemeris_calls == 0
-            other, _ = run_od(
-                two_body_observations, other_class, None, propagator=propagator
+            distinct, _ = run_od(
+                two_body_observations, other_fitter, None, propagator=propagator
             )
-            assert propagator.fused_run_od_calls == 2
-            assert isinstance(propagator.iod_propagators[1], OtherTwoBodyPropagator)
-            assert OtherTwoBodyPropagator.ephemeris_calls > 0
-            calls_after_run_od = OtherTwoBodyPropagator.ephemeris_calls
-            direct, _ = other_class.full_od("x", two_body_observations, propagator)
-            assert propagator.fused_full_od_calls == 1
-            assert OtherTwoBodyPropagator.ephemeris_calls > calls_after_run_od
-            composed, _ = other_class.initial_fit("x", two_body_observations)
-        assert len(fused) == len(other) == len(direct) == len(composed) == 1
-        assert other.success.to_pylist() == [True]
-        # Same two-body dynamics on every route: the same orbit comes back.
+            direct, _ = other_fitter.full_od("x", two_body_observations, propagator)
+        assert len(same) == len(distinct) == len(direct) == 1
         npt.assert_allclose(
-            other.coordinates.values, fused.coordinates.values, rtol=0, atol=1e-12
+            distinct.coordinates.values, same.coordinates.values, rtol=0, atol=1e-12
         )
 
     def test_object_id_none_is_null_on_both_routes(self, two_body_observations) -> None:
@@ -1046,8 +997,8 @@ class TestFusedRunOd:
             members.original_astrometry.lon.to_pylist()
         )
 
-    def test_python_model_keeps_the_python_composition(
-        self, two_body_observations, monkeypatch
+    def test_python_model_keeps_the_core_stage_composition(
+        self, two_body_observations
     ) -> None:
         class ScaleSigmas(ObservationUncertaintyModel):
             def apply(self, observations):
@@ -1058,11 +1009,6 @@ class TestFusedRunOd:
                 )
 
         propagator = NativeTwoBodyPropagator()
-        calls = []
-        original = propagator.run_od
-        monkeypatch.setattr(
-            propagator, "run_od", lambda *a, **k: calls.append(k) or original(*a, **k)
-        )
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", RuntimeWarning)
             fitted, members = run_od(
@@ -1072,7 +1018,6 @@ class TestFusedRunOd:
                 propagator=propagator,
                 object_id="python-model",
             )
-        assert calls == []
         assert len(fitted) == 1
         npt.assert_allclose(
             members.used_astrometry.sigma_lon.to_numpy(zero_copy_only=False),

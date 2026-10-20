@@ -111,21 +111,28 @@ class EphemerisMixin(ABC):
 @dataclass(frozen=True)
 class NativeBackend:
     """
-    A propagator class's declaration that it provides compiled orbit
-    determination work units running its own dynamics.
+    A propagator class's declaration of its compiled propagation provider.
 
-    ``name`` and ``version`` identify the backend (recorded in OD
-    provenance); ``work_units`` names the methods that run natively
-    (``run_iod``, ``full_od``, ``run_od``, ``iterative_fit``,
-    ``cmc2003_fit``, ``fit_least_squares_whitened``,
-    ``fit_least_squares_evaluated``, ``fit_least_squares``,
-    ``initial_orbit_determination``). OD dispatches to a work unit only when
-    it is declared here: having a method of that name is not enough.
+    ``name`` and ``version`` identify the backend and must match the identity
+    embedded in its native capsule. ``work_units`` may contain only
+    ``"propagator_capsule"``: adam-core owns OD/IOD/fitting/rejection and the
+    provider contributes propagation, derivative and dynamics capabilities
+    through that capsule.
     """
 
     name: str
     version: str
     work_units: frozenset = field(default_factory=frozenset)
+
+    def __post_init__(self) -> None:
+        unsupported = self.work_units - {"propagator_capsule"}
+        if unsupported:
+            raise ValueError(
+                "NativeBackend providers are propagation-only; unsupported "
+                f"work units: {sorted(unsupported)!r}"
+            )
+        if not self.name or not self.version:
+            raise ValueError("NativeBackend name and version must be non-empty")
 
 
 class Propagator(EphemerisMixin):
@@ -146,9 +153,9 @@ class Propagator(EphemerisMixin):
     #: the propagator itself instead.
     two_body_dynamics: ClassVar[bool] = False
 
-    #: The compiled OD work units this class provides (`NativeBackend`), or
-    #: None. The declaration covers the class's own propagation and
-    #: work-unit methods: a subclass that overrides any of them is not
+    #: The compiled propagation provider this class exposes (`NativeBackend`),
+    #: or None. The declaration covers the class's own propagation and
+    #: capsule methods: a subclass that overrides any of them is not
     #: covered (it runs the composed path) unless it declares again.
     native_backend: ClassVar[Optional[NativeBackend]] = None
 

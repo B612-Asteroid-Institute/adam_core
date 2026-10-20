@@ -25,21 +25,12 @@ from adam_core.orbit_determination.tests.test_differential_correction import (
 )
 
 
-class CountingPropagator(TwoBodyPropagator):
-    def __init__(self):
-        self.batches = []
-
-    def generate_ephemeris(self, orbits, observers, **kwargs):
-        self.batches.append(len(orbits))
-        return super().generate_ephemeris(orbits, observers, **kwargs)
-
-
 @pytest.fixture
 def observations():
     return make_synthetic_observations()
 
 
-@pytest.mark.parametrize("backend", [CountingPropagator, NativeTwoBodyPropagator])
+@pytest.mark.parametrize("backend", [TwoBodyPropagator, NativeTwoBodyPropagator])
 @pytest.mark.parametrize(
     "jacobian, jacobian_evals", [("analytic", 0), ("2-point", 6), ("central", 12)]
 )
@@ -74,16 +65,9 @@ def test_evaluation_budget_caps_solver_work(
         npt.assert_array_equal(fitted.coordinates.values, initial.coordinates.values)
     elif jacobian_evals:
         assert 1 <= jacobians <= budget - 1
-    if isinstance(propagator, CountingPropagator):
-        # Final covariance Jacobian and evaluation are separate diagnostics.
-        assert sum(propagator.batches) == nfev + jacobian_evals + 1
-        solver_trials = sum(1 for size in propagator.batches if size == 1) - 1
-        assert solver_trials == budget
-        if jacobian_evals:
-            assert propagator.batches.count(jacobian_evals) == jacobians + 1
 
 
-@pytest.mark.parametrize("backend", [CountingPropagator, NativeTwoBodyPropagator])
+@pytest.mark.parametrize("backend", [TwoBodyPropagator, NativeTwoBodyPropagator])
 @pytest.mark.parametrize(
     "jacobian, expected_nfev", [("analytic", 2), ("2-point", 8), ("central", 14)]
 )
@@ -108,14 +92,14 @@ def test_iteration_budget_is_separate(
     assert fitted.success.to_pylist() == [False]
 
 
-@pytest.mark.parametrize("backend", [CountingPropagator, NativeTwoBodyPropagator])
+@pytest.mark.parametrize("backend", [TwoBodyPropagator, NativeTwoBodyPropagator])
 @pytest.mark.parametrize("limit", ["max_nfev", "max_iterations"])
 def test_zero_solver_budget_is_rejected(observations, backend, limit):
     with pytest.raises(ValueError, match=limit):
         fit_least_squares(make_initial_guess(), observations, backend(), **{limit: 0})
 
 
-@pytest.mark.parametrize("backend", [CountingPropagator, NativeTwoBodyPropagator])
+@pytest.mark.parametrize("backend", [TwoBodyPropagator, NativeTwoBodyPropagator])
 @pytest.mark.parametrize("algorithm", ["worst_residual", "cmc2003"])
 def test_rejection_loops_forward_the_evaluation_budget(
     observations, backend, algorithm

@@ -20,6 +20,7 @@
 //! context must stay alive as long as the capsule.
 
 use std::ffi::{c_char, c_void, CStr, CString};
+use std::mem::size_of;
 
 use super::pipeline::{assemble_result, OrbitBlock};
 use super::{
@@ -34,15 +35,42 @@ use crate::types::{Epoch, Frame, TimeScale};
 pub const EXTERNAL_PROPAGATOR_CAPSULE: &str = "adam_core.propagator.v1";
 /// The ABI version these definitions describe.
 pub const EXTERNAL_PROPAGATOR_ABI_VERSION: u32 = 1;
+/// The provider promises its callbacks may be called concurrently.
+pub const EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE: u64 = 1 << 0;
+/// The optional state-transition-matrix request is implemented.
+pub const EXTERNAL_PROPAGATOR_CAP_STM: u64 = 1 << 1;
+/// Per-orbit A1/A2/A3 and Marsden-law parameters are accepted by propagate.
+pub const EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL: u64 = 1 << 2;
+/// Capabilities understood by this ABI revision.
+pub const EXTERNAL_PROPAGATOR_KNOWN_CAPABILITIES: u64 = EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE
+    | EXTERNAL_PROPAGATOR_CAP_STM
+    | EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL;
+/// A1, A2, A3, ALN, NK, NM, NN, R0; NaN denotes a null field.
+pub const EXTERNAL_NON_GRAVITATIONAL_WIDTH: usize = 8;
+/// Callback completed the request; individual failed rows use `out_valid=0`.
+pub const EXTERNAL_PROPAGATOR_STATUS_OK: i32 = 0;
+/// Provider rejected or failed the request and wrote an error message.
+pub const EXTERNAL_PROPAGATOR_STATUS_ERROR: i32 = 1;
+/// Provider caught a panic/exception before it crossed the ABI.
+pub const EXTERNAL_PROPAGATOR_STATUS_PANIC: i32 = 2;
+/// A null context/request or another boundary-level contract violation.
+pub const EXTERNAL_PROPAGATOR_STATUS_INVALID: i32 = 3;
 
 /// One propagation request across the C boundary. Strings are
 /// NUL-terminated: the time scales and frame as adam-core spells them
 /// (`"tdb"`, `"ecliptic"`, ...), the origin as its code (`"SUN"`).
 #[repr(C)]
 pub struct PropagateRequestV1 {
+    pub abi_version: u32,
+    /// `size_of::<PropagateRequestV1>()`; consumers reject a shorter request
+    /// and ignore a longer one, allowing fields to be appended compatibly.
+    pub struct_size: usize,
     pub n_orbits: usize,
     /// `n_orbits * 6` Cartesian states (au, au/day).
     pub states: *const f64,
+    /// Null, or `n_orbits * EXTERNAL_NON_GRAVITATIONAL_WIDTH` values in
+    /// A1/A2/A3/ALN/NK/NM/NN/R0 order. NaN represents a null optional field.
+    pub non_gravitational_parameters: *const f64,
     pub epoch_days: *const i64,
     pub epoch_nanos: *const i64,
     pub orbit_time_scale: *const c_char,
@@ -61,10 +89,35 @@ pub struct PropagateRequestV1 {
     pub error_len: usize,
 }
 
+/// One state-plus-STM request. Non-gravitational parameters are held fixed
+/// while differentiating the six Cartesian state components.
+#[repr(C)]
+pub struct PropagateStmRequestV1 {
+    pub abi_version: u32,
+    pub struct_size: usize,
+    pub state: *const f64,
+    pub non_gravitational_parameters: *const f64,
+    pub epoch_days: i64,
+    pub epoch_nanos: i64,
+    pub n_times: usize,
+    pub time_days: *const i64,
+    pub time_nanos: *const i64,
+    pub out_states: *mut f64,
+    pub out_stm: *mut f64,
+    pub out_valid: *mut u8,
+    pub error: *mut c_char,
+    pub error_len: usize,
+}
+
 /// An external propagator: identity and the `propagate` entry point.
 #[repr(C)]
 pub struct ExternalPropagatorV1 {
     pub abi_version: u32,
+    /// `size_of::<ExternalPropagatorV1>()`; future revisions may append
+    /// fields without changing the capsule name or ABI major version.
+    pub struct_size: usize,
+    /// Bitwise `EXTERNAL_PROPAGATOR_CAP_*` declarations.
+    pub capabilities: u64,
     /// Integration time scale (`"tdb"`).
     pub integration_time_scale: *const c_char,
     /// 1 when the backend integrates exactly the Kepler two-body problem.
@@ -72,8 +125,9 @@ pub struct ExternalPropagatorV1 {
     pub name: *const c_char,
     pub version: *const c_char,
     pub context: *const c_void,
-    pub propagate:
+    pub propagate: Option<
         unsafe extern "C" fn(context: *const c_void, request: *const PropagateRequestV1) -> i32,
+    >,
     /// Optional (null when absent): one heliocentric ecliptic state at an
     /// epoch (TDB days, nanoseconds) propagated to `n_times` TDB times with
     /// state-transition matrices. Writes `n_times * 6` states, `n_times *
@@ -83,20 +137,8 @@ pub struct ExternalPropagatorV1 {
 }
 
 /// Signature of [`ExternalPropagatorV1::propagate_stm`].
-pub type PropagateStmV1 = unsafe extern "C" fn(
-    context: *const c_void,
-    state: *const f64,
-    epoch_days: i64,
-    epoch_nanos: i64,
-    n_times: usize,
-    time_days: *const i64,
-    time_nanos: *const i64,
-    out_states: *mut f64,
-    out_stm: *mut f64,
-    out_valid: *mut u8,
-    error: *mut c_char,
-    error_len: usize,
-) -> i32;
+pub type PropagateStmV1 =
+    unsafe extern "C" fn(context: *const c_void, request: *const PropagateStmRequestV1) -> i32;
 
 fn c_string(pointer: *const c_char, field: &str) -> PropagationResultValue<String> {
     if pointer.is_null() {
@@ -106,18 +148,24 @@ fn c_string(pointer: *const c_char, field: &str) -> PropagationResultValue<Strin
     }
     // SAFETY: the ABI requires NUL-terminated strings valid for the
     // capsule's lifetime.
-    Ok(unsafe { CStr::from_ptr(pointer) }
-        .to_string_lossy()
-        .into_owned())
+    unsafe { CStr::from_ptr(pointer) }
+        .to_str()
+        .map(str::to_owned)
+        .map_err(|err| {
+            PropagationError::BackendProtocol(format!(
+                "external propagator: {field} is not UTF-8: {err}"
+            ))
+        })
 }
 
-/// An [`ExternalPropagatorV1`] as a [`Propagator`]. State-only (no
-/// covariance, no non-gravitational parameters); orbits must share one
-/// origin.
+/// An [`ExternalPropagatorV1`] as a [`Propagator`]. Covariance propagation is
+/// not part of the ABI; non-gravitational inputs are capability-gated and
+/// orbits in one request must share an origin.
 pub struct ExternalPropagator {
     raw: *const ExternalPropagatorV1,
     identity: BackendIdentity,
     integration_scale: TimeScale,
+    capabilities: u64,
 }
 
 // SAFETY: the ABI requires `propagate` to be callable from any thread and
@@ -144,20 +192,66 @@ impl ExternalPropagator {
                 table.abi_version, EXTERNAL_PROPAGATOR_ABI_VERSION
             )));
         }
+        if table.struct_size < size_of::<ExternalPropagatorV1>() {
+            return Err(PropagationError::BackendProtocol(format!(
+                "external propagator table has {} bytes; ABI v{} requires at least {}",
+                table.struct_size,
+                EXTERNAL_PROPAGATOR_ABI_VERSION,
+                size_of::<ExternalPropagatorV1>()
+            )));
+        }
+        if table.context.is_null() {
+            return Err(PropagationError::BackendProtocol(
+                "external propagator context is null".to_string(),
+            ));
+        }
+        if table.two_body_dynamics > 1 {
+            return Err(PropagationError::BackendProtocol(format!(
+                "external propagator two_body_dynamics must be 0 or 1, got {}",
+                table.two_body_dynamics
+            )));
+        }
+        if table.capabilities & EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE == 0 {
+            return Err(PropagationError::BackendProtocol(
+                "external propagator must declare thread-safe callbacks".to_string(),
+            ));
+        }
+        if table.propagate.is_none() {
+            return Err(PropagationError::BackendProtocol(
+                "external propagator has no propagation callback".to_string(),
+            ));
+        }
+        if table.capabilities & EXTERNAL_PROPAGATOR_CAP_STM != 0 && table.propagate_stm.is_none() {
+            return Err(PropagationError::BackendProtocol(
+                "external propagator declares STM support without an STM callback".to_string(),
+            ));
+        }
         let integration_scale = TimeScale::parse(&c_string(
             table.integration_time_scale,
             "integration_time_scale",
         )?)
         .map_err(|err| PropagationError::BackendProtocol(err.to_string()))?;
+        let identity = BackendIdentity {
+            name: c_string(table.name, "name")?,
+            version: c_string(table.version, "version")?,
+            two_body_dynamics: table.two_body_dynamics != 0,
+        };
+        if identity.name.is_empty() || identity.version.is_empty() {
+            return Err(PropagationError::BackendProtocol(
+                "external propagator identity must have non-empty name and version".to_string(),
+            ));
+        }
         Ok(Self {
             raw,
-            identity: BackendIdentity {
-                name: c_string(table.name, "name")?,
-                version: c_string(table.version, "version")?,
-                two_body_dynamics: table.two_body_dynamics != 0,
-            },
+            identity,
             integration_scale,
+            capabilities: table.capabilities,
         })
+    }
+
+    /// Identity read from the immutable external table.
+    pub fn identity(&self) -> &BackendIdentity {
+        &self.identity
     }
 }
 
@@ -188,13 +282,17 @@ impl Propagator for ExternalPropagator {
     }
 
     fn supports_stm(&self) -> bool {
-        // SAFETY: the table outlives `self`.
-        unsafe { (*self.raw).propagate_stm.is_some() }
+        self.capabilities & EXTERNAL_PROPAGATOR_CAP_STM != 0
+    }
+
+    fn supports_non_gravitational_parameters(&self) -> bool {
+        self.capabilities & EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL != 0
     }
 
     fn propagate_stm(
         &self,
         state: [f64; 6],
+        non_gravitational_parameters: Option<crate::NonGravitationalParametersRow>,
         epoch_tdb: Epoch,
         times_tdb: &[Epoch],
     ) -> PropagationResultValue<Vec<super::StmRow>> {
@@ -205,6 +303,25 @@ impl Propagator for ExternalPropagator {
                 self.identity.name
             )));
         };
+        if non_gravitational_parameters.is_some() && !self.supports_non_gravitational_parameters() {
+            return Err(PropagationError::InvalidRequest(format!(
+                "{} does not accept non-gravitational parameters",
+                self.identity.name
+            )));
+        }
+        let non_gravitational_values = non_gravitational_parameters.map(|parameters| {
+            [
+                parameters.a1,
+                parameters.a2,
+                parameters.a3,
+                parameters.aln,
+                parameters.nk,
+                parameters.nm,
+                parameters.nn,
+                parameters.r0,
+            ]
+            .map(|value| value.unwrap_or(f64::NAN))
+        });
         let n = times_tdb.len();
         let days: Vec<i64> = times_tdb.iter().map(|e| e.days).collect();
         let nanos: Vec<i64> = times_tdb.iter().map(|e| e.nanos).collect();
@@ -212,23 +329,26 @@ impl Propagator for ExternalPropagator {
         let mut stms = vec![f64::NAN; n * 36];
         let mut valid = vec![0_u8; n];
         let mut error = vec![0 as c_char; 1024];
-        // SAFETY: every pointer is valid and sized as the ABI states.
-        let status = unsafe {
-            function(
-                (*self.raw).context,
-                state.as_ptr(),
-                epoch_tdb.days,
-                epoch_tdb.nanos,
-                n,
-                days.as_ptr(),
-                nanos.as_ptr(),
-                states.as_mut_ptr(),
-                stms.as_mut_ptr(),
-                valid.as_mut_ptr(),
-                error.as_mut_ptr(),
-                error.len(),
-            )
+        let request = PropagateStmRequestV1 {
+            abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION,
+            struct_size: size_of::<PropagateStmRequestV1>(),
+            state: state.as_ptr(),
+            non_gravitational_parameters: non_gravitational_values
+                .as_ref()
+                .map_or(std::ptr::null(), |values| values.as_ptr()),
+            epoch_days: epoch_tdb.days,
+            epoch_nanos: epoch_tdb.nanos,
+            n_times: n,
+            time_days: days.as_ptr(),
+            time_nanos: nanos.as_ptr(),
+            out_states: states.as_mut_ptr(),
+            out_stm: stms.as_mut_ptr(),
+            out_valid: valid.as_mut_ptr(),
+            error: error.as_mut_ptr(),
+            error_len: error.len(),
         };
+        // SAFETY: every pointer is valid and sized as the ABI states.
+        let status = unsafe { function((*self.raw).context, &request) };
         if status != 0 {
             *error.last_mut().expect("non-empty") = 0;
             // SAFETY: NUL-terminated by the line above.
@@ -242,7 +362,13 @@ impl Propagator for ExternalPropagator {
             .map(|i| super::StmRow {
                 state: std::array::from_fn(|k| states[i * 6 + k]),
                 stm: std::array::from_fn(|k| stms[i * 36 + k]),
-                valid: valid[i] != 0,
+                valid: valid[i] != 0
+                    && states[i * 6..i * 6 + 6]
+                        .iter()
+                        .all(|value| value.is_finite())
+                    && stms[i * 36..i * 36 + 36]
+                        .iter()
+                        .all(|value| value.is_finite()),
             })
             .collect())
     }
@@ -317,8 +443,46 @@ impl Propagator for ExternalPropagator {
         };
         let n_times = target_times.len();
         let rows_per_orbit = if pairwise { 1 } else { n_times };
-        let rows = n_orbits * rows_per_orbit;
+        let rows = n_orbits.checked_mul(rows_per_orbit).ok_or_else(|| {
+            PropagationError::InvalidRequest("external propagation row count overflows".to_string())
+        })?;
+        let state_values = rows.checked_mul(6).ok_or_else(|| {
+            PropagationError::InvalidRequest(
+                "external propagation state output length overflows".to_string(),
+            )
+        })?;
         let flat: Vec<f64> = states.iter().flatten().copied().collect();
+        let non_gravitational_parameters = request
+            .input
+            .non_gravitational_parameters()
+            .filter(|parameters| !parameters.is_all_null())
+            .map(|parameters| {
+                if !self.supports_non_gravitational_parameters() {
+                    return Err(PropagationError::InvalidRequest(format!(
+                        "{} does not accept non-gravitational parameters",
+                        self.identity.name
+                    )));
+                }
+                let mut values = Vec::with_capacity(n_orbits * EXTERNAL_NON_GRAVITATIONAL_WIDTH);
+                for row in 0..n_orbits {
+                    let parameters = parameters.row(row);
+                    values.extend(
+                        [
+                            parameters.a1,
+                            parameters.a2,
+                            parameters.a3,
+                            parameters.aln,
+                            parameters.nk,
+                            parameters.nm,
+                            parameters.nn,
+                            parameters.r0,
+                        ]
+                        .map(|value| value.unwrap_or(f64::NAN)),
+                    );
+                }
+                Ok(values)
+            })
+            .transpose()?;
         let epoch_days: Vec<i64> = orbit_times.epochs.iter().map(|e| e.days).collect();
         let epoch_nanos: Vec<i64> = orbit_times.epochs.iter().map(|e| e.nanos).collect();
         let time_days: Vec<i64> = target_times.epochs.iter().map(|e| e.days).collect();
@@ -327,12 +491,17 @@ impl Propagator for ExternalPropagator {
         let frame = CString::new(coordinates.frame.as_str()).expect("no NUL");
         let origin = CString::new(origin)
             .map_err(|err| PropagationError::InvalidRequest(format!("origin code: {err}")))?;
-        let mut out_states = vec![f64::NAN; rows * 6];
+        let mut out_states = vec![f64::NAN; state_values];
         let mut out_valid = vec![0_u8; rows];
         let mut error = vec![0 as c_char; 1024];
         let c_request = PropagateRequestV1 {
+            abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION,
+            struct_size: size_of::<PropagateRequestV1>(),
             n_orbits,
             states: flat.as_ptr(),
+            non_gravitational_parameters: non_gravitational_parameters
+                .as_ref()
+                .map_or(std::ptr::null(), |values| values.as_ptr()),
             epoch_days: epoch_days.as_ptr(),
             epoch_nanos: epoch_nanos.as_ptr(),
             orbit_time_scale: scale.as_ptr(),
@@ -350,7 +519,9 @@ impl Propagator for ExternalPropagator {
         };
         // SAFETY: the table outlives `self`; every pointer in the request is
         // valid for the call and sized as the ABI states.
-        let status = unsafe { ((*self.raw).propagate)((*self.raw).context, &c_request) };
+        // `from_raw` validated this required callback.
+        let function = unsafe { (*self.raw).propagate }.expect("validated propagation callback");
+        let status = unsafe { function((*self.raw).context, &c_request) };
         if status != 0 {
             *error.last_mut().expect("non-empty") = 0;
             // SAFETY: NUL-terminated by the line above.
@@ -447,14 +618,23 @@ impl<P: Propagator + Send + 'static> OwnedExternalPropagator<P> {
             version: CString::new(version).expect("no NUL in version"),
             propagator,
         });
+        let mut capabilities = EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE;
+        if context.propagator.supports_stm() {
+            capabilities |= EXTERNAL_PROPAGATOR_CAP_STM;
+        }
+        if context.propagator.supports_non_gravitational_parameters() {
+            capabilities |= EXTERNAL_PROPAGATOR_CAP_NON_GRAVITATIONAL;
+        }
         let table = ExternalPropagatorV1 {
             abi_version: EXTERNAL_PROPAGATOR_ABI_VERSION,
+            struct_size: size_of::<ExternalPropagatorV1>(),
+            capabilities,
             integration_time_scale: context.scale.as_ptr(),
             two_body_dynamics: u8::from(identity.two_body_dynamics),
             name: context.name.as_ptr(),
             version: context.version.as_ptr(),
             context: &*context as *const ExternalContext<P> as *const c_void,
-            propagate: propagate_with::<P>,
+            propagate: Some(propagate_with::<P>),
             propagate_stm: context
                 .propagator
                 .supports_stm()
@@ -485,19 +665,22 @@ unsafe extern "C" fn propagate_with<P: Propagator>(
     context: *const c_void,
     request: *const PropagateRequestV1,
 ) -> i32 {
+    if context.is_null() || request.is_null() {
+        return EXTERNAL_PROPAGATOR_STATUS_INVALID;
+    }
     let context = &*(context as *const ExternalContext<P>);
     let request = &*request;
     match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         run_request(&context.propagator, request)
     })) {
-        Ok(Ok(())) => 0,
+        Ok(Ok(())) => EXTERNAL_PROPAGATOR_STATUS_OK,
         Ok(Err(message)) => {
             write_error(request, &message);
-            1
+            EXTERNAL_PROPAGATOR_STATUS_ERROR
         }
         Err(_) => {
             write_error(request, "external propagator panicked");
-            2
+            EXTERNAL_PROPAGATOR_STATUS_PANIC
         }
     }
 }
@@ -505,59 +688,108 @@ unsafe extern "C" fn propagate_with<P: Propagator>(
 #[allow(clippy::too_many_arguments)]
 unsafe extern "C" fn propagate_stm_with<P: Propagator>(
     context: *const c_void,
-    state: *const f64,
-    epoch_days: i64,
-    epoch_nanos: i64,
-    n_times: usize,
-    time_days: *const i64,
-    time_nanos: *const i64,
-    out_states: *mut f64,
-    out_stm: *mut f64,
-    out_valid: *mut u8,
-    error: *mut c_char,
-    error_len: usize,
+    request: *const PropagateStmRequestV1,
 ) -> i32 {
-    let context = &*(context as *const ExternalContext<P>);
-    let state: [f64; 6] = std::array::from_fn(|i| *state.add(i));
-    let times: Vec<Epoch> = (0..n_times)
-        .map(|i| Epoch::new(*time_days.add(i), *time_nanos.add(i)))
-        .collect();
+    if context.is_null() || request.is_null() {
+        return EXTERNAL_PROPAGATOR_STATUS_INVALID;
+    }
+    let request = &*request;
     let report = |message: &str| {
-        if !error.is_null() && error_len > 0 {
+        if !request.error.is_null() && request.error_len > 0 {
             let bytes = message.as_bytes();
-            let n = bytes.len().min(error_len - 1);
-            std::ptr::copy_nonoverlapping(bytes.as_ptr() as *const c_char, error, n);
-            *error.add(n) = 0;
+            let n = bytes.len().min(request.error_len - 1);
+            std::ptr::copy_nonoverlapping(bytes.as_ptr() as *const c_char, request.error, n);
+            *request.error.add(n) = 0;
         }
     };
+    if request.abi_version != EXTERNAL_PROPAGATOR_ABI_VERSION {
+        report(&format!(
+            "STM request ABI version {} (provider supports {})",
+            request.abi_version, EXTERNAL_PROPAGATOR_ABI_VERSION
+        ));
+        return EXTERNAL_PROPAGATOR_STATUS_ERROR;
+    }
+    if request.struct_size < size_of::<PropagateStmRequestV1>() {
+        report(&format!(
+            "STM request has {} bytes; ABI v{} requires at least {}",
+            request.struct_size,
+            EXTERNAL_PROPAGATOR_ABI_VERSION,
+            size_of::<PropagateStmRequestV1>()
+        ));
+        return EXTERNAL_PROPAGATOR_STATUS_ERROR;
+    }
+    let required_for_rows_are_null = request.n_times > 0
+        && (request.time_days.is_null()
+            || request.time_nanos.is_null()
+            || request.out_states.is_null()
+            || request.out_stm.is_null()
+            || request.out_valid.is_null());
+    if request.state.is_null() || required_for_rows_are_null {
+        report("STM request has a null required pointer");
+        return EXTERNAL_PROPAGATOR_STATUS_INVALID;
+    }
+    let context = &*(context as *const ExternalContext<P>);
+    let state: [f64; 6] = std::array::from_fn(|i| *request.state.add(i));
+    let non_gravitational_parameters = if request.non_gravitational_parameters.is_null() {
+        None
+    } else {
+        let values = std::slice::from_raw_parts(
+            request.non_gravitational_parameters,
+            EXTERNAL_NON_GRAVITATIONAL_WIDTH,
+        );
+        let field = |index: usize| (!values[index].is_nan()).then_some(values[index]);
+        Some(crate::NonGravitationalParametersRow {
+            a1: field(0),
+            a2: field(1),
+            a3: field(2),
+            aln: field(3),
+            nk: field(4),
+            nm: field(5),
+            nn: field(6),
+            r0: field(7),
+        })
+    };
+    let times: Vec<Epoch> = (0..request.n_times)
+        .map(|i| Epoch::new(*request.time_days.add(i), *request.time_nanos.add(i)))
+        .collect();
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        context
-            .propagator
-            .propagate_stm(state, Epoch::new(epoch_days, epoch_nanos), &times)
+        context.propagator.propagate_stm(
+            state,
+            non_gravitational_parameters,
+            Epoch::new(request.epoch_days, request.epoch_nanos),
+            &times,
+        )
     }));
     match result {
-        Ok(Ok(rows)) if rows.len() == n_times => {
-            let states = std::slice::from_raw_parts_mut(out_states, n_times * 6);
-            let stms = std::slice::from_raw_parts_mut(out_stm, n_times * 36);
-            let valid = std::slice::from_raw_parts_mut(out_valid, n_times);
+        Ok(Ok(rows)) if rows.len() == request.n_times => {
+            if request.n_times == 0 {
+                return EXTERNAL_PROPAGATOR_STATUS_OK;
+            }
+            let states = std::slice::from_raw_parts_mut(request.out_states, request.n_times * 6);
+            let stms = std::slice::from_raw_parts_mut(request.out_stm, request.n_times * 36);
+            let valid = std::slice::from_raw_parts_mut(request.out_valid, request.n_times);
             for (i, row) in rows.iter().enumerate() {
                 states[i * 6..i * 6 + 6].copy_from_slice(&row.state);
                 stms[i * 36..i * 36 + 36].copy_from_slice(&row.stm);
                 valid[i] = u8::from(row.valid);
             }
-            0
+            EXTERNAL_PROPAGATOR_STATUS_OK
         }
         Ok(Ok(rows)) => {
-            report(&format!("expected {n_times} STM rows, got {}", rows.len()));
-            1
+            report(&format!(
+                "expected {} STM rows, got {}",
+                request.n_times,
+                rows.len()
+            ));
+            EXTERNAL_PROPAGATOR_STATUS_ERROR
         }
         Ok(Err(err)) => {
             report(&err.to_string());
-            1
+            EXTERNAL_PROPAGATOR_STATUS_ERROR
         }
         Err(_) => {
             report("external propagator panicked");
-            2
+            EXTERNAL_PROPAGATOR_STATUS_PANIC
         }
     }
 }
@@ -573,10 +805,72 @@ unsafe fn run_request<P: Propagator>(
     request: &PropagateRequestV1,
 ) -> Result<(), String> {
     use crate::propagation::PropagationOptions;
-    use crate::{CoordinateBatch, OrbitBatch, OrbitId, OriginArray, OriginId, TimeArray};
+    use crate::{
+        CoordinateBatch, NonGravitationalParametersBatch, OrbitBatch, OrbitId, OriginArray,
+        OriginId, TimeArray,
+    };
+    if request.abi_version != EXTERNAL_PROPAGATOR_ABI_VERSION {
+        return Err(format!(
+            "propagation request ABI version {} (provider supports {})",
+            request.abi_version, EXTERNAL_PROPAGATOR_ABI_VERSION
+        ));
+    }
+    if request.struct_size < size_of::<PropagateRequestV1>() {
+        return Err(format!(
+            "propagation request has {} bytes; ABI v{} requires at least {}",
+            request.struct_size,
+            EXTERNAL_PROPAGATOR_ABI_VERSION,
+            size_of::<PropagateRequestV1>()
+        ));
+    }
     let n = request.n_orbits;
     let m = request.n_times;
-    let flat = std::slice::from_raw_parts(request.states, n * 6);
+    if request.pairwise > 1 {
+        return Err(format!("pairwise must be 0 or 1, got {}", request.pairwise));
+    }
+    let pairwise = request.pairwise == 1;
+    if pairwise && n != m {
+        return Err(format!(
+            "pairwise propagation requires n_orbits == n_times ({n} != {m})"
+        ));
+    }
+    let checked_product = |left: usize, right: usize, field: &str| {
+        left.checked_mul(right)
+            .ok_or_else(|| format!("{field} length overflows usize"))
+    };
+    let state_values = checked_product(n, 6, "states")?;
+    let non_gravitational_values = checked_product(
+        n,
+        EXTERNAL_NON_GRAVITATIONAL_WIDTH,
+        "non_gravitational_parameters",
+    )?;
+    let rows = if pairwise {
+        n
+    } else {
+        checked_product(n, m, "output rows")?
+    };
+    let output_values = checked_product(rows, 6, "out_states")?;
+    let required = [
+        (request.states.is_null() && state_values > 0, "states"),
+        (request.epoch_days.is_null() && n > 0, "epoch_days"),
+        (request.epoch_nanos.is_null() && n > 0, "epoch_nanos"),
+        (request.time_days.is_null() && m > 0, "time_days"),
+        (request.time_nanos.is_null() && m > 0, "time_nanos"),
+        (request.out_states.is_null() && rows > 0, "out_states"),
+        (request.out_valid.is_null() && rows > 0, "out_valid"),
+        (request.orbit_time_scale.is_null(), "orbit_time_scale"),
+        (request.time_scale.is_null(), "time_scale"),
+        (request.frame.is_null(), "frame"),
+        (request.origin.is_null(), "origin"),
+    ];
+    if let Some((_, field)) = required.into_iter().find(|(missing, _)| *missing) {
+        return Err(format!("propagation request field {field} is null"));
+    }
+    let flat: &[f64] = if state_values == 0 {
+        &[]
+    } else {
+        std::slice::from_raw_parts(request.states, state_values)
+    };
     let states: Vec<[f64; 6]> = flat
         .chunks_exact(6)
         .map(|c| std::array::from_fn(|i| c[i]))
@@ -584,6 +878,9 @@ unsafe fn run_request<P: Propagator>(
     let text = |p: *const c_char| CStr::from_ptr(p).to_string_lossy().into_owned();
     let scale = |p: *const c_char| TimeScale::parse(&text(p)).map_err(|e| e.to_string());
     let epochs = |days: *const i64, nanos: *const i64, k: usize| -> Vec<Epoch> {
+        if k == 0 {
+            return Vec::new();
+        }
         let d = std::slice::from_raw_parts(days, k);
         let ns = std::slice::from_raw_parts(nanos, k);
         d.iter().zip(ns).map(|(&a, &b)| Epoch::new(a, b)).collect()
@@ -598,7 +895,7 @@ unsafe fn run_request<P: Propagator>(
     // Zero-padded ids keep input order for backends that sort by id; the
     // rows are placed by id and epoch below whatever order they come in.
     let width = n.to_string().len();
-    let orbits = OrbitBatch::new(
+    let mut orbits = OrbitBatch::new(
         (0..n).map(|i| OrbitId(format!("{i:0width$}"))).collect(),
         vec![None; n],
         CoordinateBatch::cartesian(
@@ -611,6 +908,33 @@ unsafe fn run_request<P: Propagator>(
         .map_err(|e| e.to_string())?,
     )
     .map_err(|e| e.to_string())?;
+    if !request.non_gravitational_parameters.is_null() {
+        if !propagator.supports_non_gravitational_parameters() {
+            return Err("provider received unsupported non-gravitational parameters".to_string());
+        }
+        let values = std::slice::from_raw_parts(
+            request.non_gravitational_parameters,
+            non_gravitational_values,
+        );
+        let field = |row: usize, axis: usize| {
+            let value = values[row * EXTERNAL_NON_GRAVITATIONAL_WIDTH + axis];
+            (!value.is_nan()).then_some(value)
+        };
+        let column = |axis: usize| (0..n).map(|row| field(row, axis)).collect();
+        orbits = orbits
+            .with_non_gravitational_parameters(NonGravitationalParametersBatch {
+                source: vec![None; n],
+                a1: column(0),
+                a2: column(1),
+                a3: column(2),
+                aln: column(3),
+                nk: column(4),
+                nm: column(5),
+                nn: column(6),
+                r0: column(7),
+            })
+            .map_err(|e| e.to_string())?;
+    }
     let times = TimeArray::new(
         scale(request.time_scale)?,
         epochs(request.time_days, request.time_nanos, m),
@@ -619,7 +943,7 @@ unsafe fn run_request<P: Propagator>(
     let options = PropagationOptions {
         chunk_size: None,
         thread_limit: None,
-        epoch_policy: if request.pairwise != 0 {
+        epoch_policy: if pairwise {
             EpochPolicy::Pairwise
         } else {
             EpochPolicy::CrossProduct
@@ -637,8 +961,6 @@ unsafe fn run_request<P: Propagator>(
         .values
         .cartesian()
         .ok_or("non-Cartesian output")?;
-    let pairwise = request.pairwise != 0;
-    let rows = if pairwise { n } else { n * m };
     if out.len() != rows {
         return Err(format!("expected {rows} rows, got {}", out.len()));
     }
@@ -653,8 +975,16 @@ unsafe fn run_request<P: Propagator>(
         .ok_or("propagated rows carry no times")?;
     let target_epochs = &times.epochs;
     let mut filled = vec![false; rows];
-    let out_states = std::slice::from_raw_parts_mut(request.out_states, rows * 6);
-    let out_valid = std::slice::from_raw_parts_mut(request.out_valid, rows);
+    let out_states: &mut [f64] = if output_values == 0 {
+        &mut []
+    } else {
+        std::slice::from_raw_parts_mut(request.out_states, output_values)
+    };
+    let out_valid: &mut [u8] = if rows == 0 {
+        &mut []
+    } else {
+        std::slice::from_raw_parts_mut(request.out_valid, rows)
+    };
     for (row, state) in out.iter().enumerate() {
         let id = &result.orbits.orbit_id[row].0;
         let orbit = id
@@ -717,8 +1047,11 @@ pub mod two_body_reference {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::propagation::{PropagationOptions, TwoBodyPropagator};
-    use crate::{CoordinateBatch, OrbitBatch, OrbitId, OriginArray, OriginId, TimeArray};
+    use crate::propagation::{PropagationInput, PropagationOptions, TwoBodyPropagator};
+    use crate::{
+        CoordinateBatch, NonGravitationalParametersBatch, OrbitBatch, OrbitId, OriginArray,
+        OriginId, TimeArray,
+    };
 
     /// Two-body dynamics that return their rows in reverse order (as a
     /// backend sorting by id, or by anything else, may) with output times
@@ -782,6 +1115,83 @@ mod tests {
                 validity: crate::types::Validity::from_bools(&validity),
                 ..result
             })
+        }
+    }
+
+    /// Test provider that proves all non-gravitational fields crossed the ABI,
+    /// then strips them before delegating to the two-body test dynamics.
+    struct NonGravAware(TwoBodyPropagator);
+
+    impl Propagator for NonGravAware {
+        type Shard = <TwoBodyPropagator as Propagator>::Shard;
+
+        fn integration_time_scale(&self) -> TimeScale {
+            self.0.integration_time_scale()
+        }
+
+        fn supports_non_gravitational_parameters(&self) -> bool {
+            true
+        }
+
+        fn supports_stm(&self) -> bool {
+            true
+        }
+
+        fn propagate_stm(
+            &self,
+            state: [f64; 6],
+            parameters: Option<crate::NonGravitationalParametersRow>,
+            epoch_tdb: Epoch,
+            times_tdb: &[Epoch],
+        ) -> PropagationResultValue<Vec<crate::propagation::StmRow>> {
+            let parameters = parameters.expect("fixed non-grav parameters must cross STM ABI");
+            assert_eq!(parameters.a1, Some(1e-10));
+            assert_eq!(parameters.a2, Some(-2e-11));
+            assert_eq!(parameters.a3, Some(3e-12));
+            assert_eq!(parameters.aln, Some(0.1112620426));
+            assert_eq!(parameters.nk, Some(4.6142));
+            assert_eq!(parameters.nm, Some(2.15));
+            assert_eq!(parameters.nn, Some(5.093));
+            assert_eq!(parameters.r0, Some(2.808));
+            self.0.propagate_stm(state, None, epoch_tdb, times_tdb)
+        }
+
+        fn supports(&self, mode: CovariancePropagation) -> bool {
+            self.0.supports(mode)
+        }
+
+        fn create_shard(&self) -> Self::Shard {
+            self.0.create_shard()
+        }
+
+        fn propagate(
+            &self,
+            request: &PropagationRequest<'_>,
+            provider: &dyn TimeScaleProvider,
+        ) -> PropagationResultValue<crate::propagation::PropagationResult> {
+            let PropagationInput::Orbits(input) = request.input else {
+                return Err(PropagationError::InvalidRequest(
+                    "test provider requires orbits".to_string(),
+                ));
+            };
+            let parameters = input
+                .non_gravitational_parameters
+                .as_ref()
+                .ok_or_else(|| PropagationError::InvalidRequest("missing non-grav".to_string()))?;
+            let row = parameters.row(0);
+            assert_eq!(row.a1, Some(1e-10));
+            assert_eq!(row.a2, Some(-2e-11));
+            assert_eq!(row.a3, Some(3e-12));
+            assert_eq!(row.aln, Some(0.1112620426));
+            assert_eq!(row.nk, Some(4.6142));
+            assert_eq!(row.nm, Some(2.15));
+            assert_eq!(row.nn, Some(5.093));
+            assert_eq!(row.r0, Some(2.808));
+            let mut stripped = input.clone();
+            stripped.non_gravitational_parameters = None;
+            let delegated =
+                PropagationRequest::new(&stripped, request.times, request.options.clone())?;
+            self.0.propagate(&delegated, provider)
         }
     }
 
@@ -868,6 +1278,119 @@ mod tests {
             true,
         );
         assert_eq!(external, direct);
+    }
+
+    #[test]
+    fn rejects_short_or_non_thread_safe_tables() {
+        let mut owned = two_body_reference::new(TwoBodyPropagator::default());
+        owned.table.struct_size = size_of::<ExternalPropagatorV1>() - 1;
+        let error = unsafe { ExternalPropagator::from_raw(owned.table()) }
+            .err()
+            .expect("short table must fail");
+        assert!(error.to_string().contains("requires at least"));
+
+        owned.table.struct_size = size_of::<ExternalPropagatorV1>();
+        owned.table.capabilities &= !EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE;
+        let error = unsafe { ExternalPropagator::from_raw(owned.table()) }
+            .err()
+            .expect("non-thread-safe table must fail");
+        assert!(error.to_string().contains("thread-safe"));
+
+        owned.table.capabilities =
+            EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE | EXTERNAL_PROPAGATOR_CAP_STM | (1_u64 << 63);
+        owned.table.propagate_stm = None;
+        let error = unsafe { ExternalPropagator::from_raw(owned.table()) }
+            .err()
+            .expect("declared STM capability needs its callback");
+        assert!(error.to_string().contains("STM support"));
+
+        owned.table.capabilities = EXTERNAL_PROPAGATOR_CAP_THREAD_SAFE | (1_u64 << 63);
+        let external = unsafe { ExternalPropagator::from_raw(owned.table()) }
+            .expect("unknown future capabilities are ignored");
+        assert!(!external.supports_stm());
+    }
+
+    #[test]
+    fn non_gravitational_parameters_cross_the_external_boundary_or_fail_closed() {
+        let parameters = NonGravitationalParametersBatch {
+            source: vec![Some("test".to_string())],
+            a1: vec![Some(1e-10)],
+            a2: vec![Some(-2e-11)],
+            a3: vec![Some(3e-12)],
+            aln: vec![Some(0.1112620426)],
+            nk: vec![Some(4.6142)],
+            nm: vec![Some(2.15)],
+            nn: vec![Some(5.093)],
+            r0: vec![Some(2.808)],
+        };
+        let parameter_row = parameters.row(0);
+        let orbits = OrbitBatch::new(
+            vec![OrbitId("orbit".to_string())],
+            vec![None],
+            CoordinateBatch::cartesian(
+                vec![[1.1, 0.2, 0.05, -0.003, 0.016, 0.0004]],
+                Frame::Ecliptic,
+                OriginArray::repeat(OriginId::from_code("SUN"), 1),
+                Some(TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60000, 0)]).unwrap()),
+                None,
+            )
+            .unwrap(),
+        )
+        .unwrap()
+        .with_non_gravitational_parameters(parameters)
+        .unwrap();
+        let times = TimeArray::new(TimeScale::Tdb, vec![Epoch::new(60001, 0)]).unwrap();
+        let request = PropagationRequest::new(
+            &orbits,
+            &times,
+            PropagationOptions {
+                chunk_size: None,
+                thread_limit: None,
+                epoch_policy: EpochPolicy::CrossProduct,
+                covariance: CovariancePropagation::None,
+            },
+        )
+        .unwrap();
+
+        let aware = Box::leak(Box::new(OwnedExternalPropagator::new(
+            NonGravAware(TwoBodyPropagator::default()),
+            "nongrav-aware",
+            "0",
+        )));
+        let external = unsafe { ExternalPropagator::from_raw(aware.table()) }.unwrap();
+        external.propagate(&request, &SameScale).unwrap();
+        let geometry = super::super::od::OrbitGeometry::from_orbit(&orbits).unwrap();
+        let candidates = super::super::od::candidate_orbit_batch(
+            &[orbits.coordinates.values.cartesian().unwrap()[0]],
+            &geometry,
+        )
+        .unwrap();
+        assert_eq!(
+            candidates
+                .non_gravitational_parameters
+                .as_ref()
+                .unwrap()
+                .row(0)
+                .r0,
+            Some(2.808)
+        );
+        external
+            .propagate_stm(
+                orbits.coordinates.values.cartesian().unwrap()[0],
+                Some(parameter_row),
+                Epoch::new(60000, 0),
+                &[Epoch::new(60001, 0)],
+            )
+            .unwrap();
+
+        let gravity_only = Box::leak(Box::new(two_body_reference::new(
+            TwoBodyPropagator::default(),
+        )));
+        let external = unsafe { ExternalPropagator::from_raw(gravity_only.table()) }.unwrap();
+        let error = external.propagate(&request, &SameScale).unwrap_err();
+        assert!(error
+            .to_string()
+            .contains("does not accept non-gravitational"));
     }
 
     #[test]

@@ -427,7 +427,12 @@ impl<'a> WhitenedProblem<'a> {
                     .iter()
                     .map(|&t| super::od::mjd_epoch(t))
                     .collect();
-                let rows = self.predictor.propagate_stm(*state, epoch, &times)?;
+                let rows = self.predictor.propagate_stm(
+                    *state,
+                    self.geometry.non_gravitational_parameters,
+                    epoch,
+                    &times,
+                )?;
                 if rows.len() != times.len() || rows.iter().any(|row| !row.valid) {
                     // A failed row: non-finite, so the solver's non-finite
                     // handling (central-difference continuation) applies.
@@ -1519,8 +1524,11 @@ fn orbit_with_state(orbit: &OrbitBatch, state: [f64; 6]) -> PropagationResultVal
         orbit.coordinates.times.clone(),
         None,
     )?;
-    OrbitBatch::new(orbit.orbit_id.clone(), orbit.object_id.clone(), coordinates)
-        .map_err(Into::into)
+    let mut updated =
+        OrbitBatch::new(orbit.orbit_id.clone(), orbit.object_id.clone(), coordinates)?;
+    updated.physical_parameters = orbit.physical_parameters.clone();
+    updated.non_gravitational_parameters = orbit.non_gravitational_parameters.clone();
+    Ok(updated)
 }
 
 /// `calculate_max_outliers`: `floor(num_obs * contamination / 100)` capped at
@@ -2760,6 +2768,39 @@ where
     )
 }
 
+/// [`run_iod_with`] over many linkage row selections in one workflow.
+#[allow(clippy::too_many_arguments)]
+pub fn run_iod_linkages_with<T: OriginTranslationProvider>(
+    predictor: &dyn SphericalPredictor,
+    observed: &CoordinateBatch,
+    observers: &ObserverBatch,
+    linkage_rows: &[Vec<usize>],
+    config: &super::od::IodConfig,
+    fit: &WhitenedFitConfig,
+    provider: &dyn TimeScaleProvider,
+    translation_provider: &T,
+) -> PropagationResultValue<Vec<super::od::IodResult>> {
+    let mut outputs = Vec::with_capacity(linkage_rows.len());
+    for rows in linkage_rows {
+        if let Some(&row) = rows.iter().find(|&&row| row >= observed.len()) {
+            return Err(PropagationError::InvalidRequest(format!(
+                "linkage observation row {row} is out of bounds for {} observations",
+                observed.len()
+            )));
+        }
+        outputs.push(run_iod_with(
+            predictor,
+            &super::od::take_coordinate_batch(observed, rows)?,
+            &super::od::take_observer_batch(observers, rows)?,
+            config,
+            fit,
+            provider,
+            translation_provider,
+        )?);
+    }
+    Ok(outputs)
+}
+
 /// [`run_iod_barycentric`] over many linkages in one call: each entry of
 /// `linkage_rows` selects that linkage's observation rows, and the outputs
 /// are in `linkage_rows` order. A linkage whose search finds nothing yields
@@ -2781,26 +2822,22 @@ where
     I: Propagator,
     T: OriginTranslationProvider,
 {
-    let mut outputs = Vec::with_capacity(linkage_rows.len());
-    for rows in linkage_rows {
-        if let Some(&row) = rows.iter().find(|&&row| row >= observed.len()) {
-            return Err(PropagationError::InvalidRequest(format!(
-                "linkage observation row {row} is out of bounds for {} observations",
-                observed.len()
-            )));
-        }
-        outputs.push(run_iod_barycentric(
-            iod_propagator,
-            &super::od::take_coordinate_batch(observed, rows)?,
-            &super::od::take_observer_batch(observers, rows)?,
-            config,
-            fit,
-            options,
-            provider,
-            translation_provider,
-        )?);
-    }
-    Ok(outputs)
+    let predictor = PropagatorPredictor {
+        propagator: iod_propagator,
+        options,
+        provider,
+        translation_provider,
+    };
+    run_iod_linkages_with(
+        &predictor,
+        observed,
+        observers,
+        linkage_rows,
+        config,
+        fit,
+        provider,
+        translation_provider,
+    )
 }
 
 /// The refinement stage over `propagator`: differential correction of
@@ -5366,10 +5403,12 @@ mod tests {
         fn propagate_stm(
             &self,
             state: [f64; 6],
+            non_gravitational_parameters: Option<crate::NonGravitationalParametersRow>,
             epoch_tdb: crate::Epoch,
             times_tdb: &[crate::Epoch],
         ) -> PropagationResultValue<Vec<super::super::StmRow>> {
-            self.inner.propagate_stm(state, epoch_tdb, times_tdb)
+            self.inner
+                .propagate_stm(state, non_gravitational_parameters, epoch_tdb, times_tdb)
         }
     }
 
@@ -5456,9 +5495,11 @@ mod tests {
         assert!(external.supports_stm());
         let epoch = super::super::od::mjd_epoch(60_000.0);
         let times = [super::super::od::mjd_epoch(60_010.0)];
-        let via_abi = external.propagate_stm(TRUTH_STATE, epoch, &times).unwrap();
+        let via_abi = external
+            .propagate_stm(TRUTH_STATE, None, epoch, &times)
+            .unwrap();
         let direct = propagator
-            .propagate_stm(TRUTH_STATE, epoch, &times)
+            .propagate_stm(TRUTH_STATE, None, epoch, &times)
             .unwrap();
         assert_eq!(via_abi, direct);
     }

@@ -2,7 +2,7 @@
 The IOD stage is explicit about its propagator (bead od_experiments_setup-a6w.2):
 `run_iod` takes the instance that scores candidates, and the fused full-OD work
 units take an ``iod_propagator`` distinct from the refining one, on the
-callback route as well as on the two-body route.
+through explicit native propagation capsules for both stages.
 """
 
 import numpy as np
@@ -16,15 +16,6 @@ from ..iod import IodReport, _placeholder_orbit, iod, run_iod
 from ..native_orbit_fitter import NativeOrbitFitter
 from .test_differential_correction import NativeTwoBodyPropagator, TwoBodyPropagator
 from .test_run_od_null_covariance import two_body_arc  # noqa: F401
-
-
-class CountingPropagator(TwoBodyPropagator):
-    def __init__(self) -> None:
-        self.calls = 0
-
-    def generate_ephemeris(self, orbits, observers, **kwargs):
-        self.calls += 1
-        return super().generate_ephemeris(orbits, observers, **kwargs)
 
 
 def test_iod_is_the_accepted_orbit_of_run_iod(two_body_arc) -> None:  # noqa: F811
@@ -52,24 +43,20 @@ def test_iod_is_the_accepted_orbit_of_run_iod(two_body_arc) -> None:  # noqa: F8
     )
 
 
-def test_run_iod_prefers_the_fused_work_unit(two_body_arc) -> None:  # noqa: F811
-    callback = CountingPropagator()
-    _, _, via_callback = run_iod(two_body_arc, callback, min_obs=6, rchi2_threshold=1e4)
-    assert (
-        callback.calls
-        > via_callback.candidates_evaluated + via_callback.candidates_failed
-    ), "scoring calls plus the correction stages"
-    assert via_callback.corrections_run >= 1
-    _, _, fused = run_iod(
+def test_run_iod_capsule_route_is_deterministic(two_body_arc) -> None:  # noqa: F811
+    _, _, first = run_iod(
+        two_body_arc, TwoBodyPropagator(), min_obs=6, rchi2_threshold=1e4
+    )
+    _, _, second = run_iod(
         two_body_arc, NativeTwoBodyPropagator(), min_obs=6, rchi2_threshold=1e4
     )
-    assert fused.accepted == via_callback.accepted
-    assert [c.state for c in fused.candidates] == [
-        c.state for c in via_callback.candidates
+    assert second.accepted == first.accepted
+    assert [candidate.state for candidate in second.candidates] == [
+        candidate.state for candidate in first.candidates
     ]
     npt.assert_allclose(
-        fused.accepted_candidate.corrected_state,
-        via_callback.accepted_candidate.corrected_state,
+        second.accepted_candidate.corrected_state,
+        first.accepted_candidate.corrected_state,
         rtol=0,
         atol=1e-12,
     )
@@ -91,13 +78,13 @@ def two_body_arc_empty():
 
 
 @pytest.mark.parametrize("entry", ["full_od_ipc", "run_od_ipc"])
-def test_callback_route_honours_a_distinct_iod_propagator(
+def test_native_driver_accepts_a_distinct_iod_capsule(
     two_body_arc, entry: str  # noqa: F811
 ) -> None:
-    """Two Python propagators: IOD candidates are scored on ``iod_propagator``
-    only, and refinement predictions go to ``propagator`` only."""
-    iod_propagator = CountingPropagator()
-    refine_propagator = CountingPropagator()
+    from .._native_dispatch import native_propagator
+
+    iod_propagator = native_propagator(TwoBodyPropagator())
+    refine_propagator = native_propagator(NativeTwoBodyPropagator())
     _, observed_ipc, observers_ipc = _native_problem(
         _placeholder_orbit(two_body_arc), two_body_arc
     )
@@ -123,17 +110,9 @@ def test_callback_route_honours_a_distinct_iod_propagator(
             fit_settings={"validate_covariance": False},
             iod_propagator=iod_propagator,
         )
-    assert output["found"]
-    report = output["iod"]
-    assert (
-        iod_propagator.calls
-        > report["candidates_evaluated"] + report["candidates_failed"]
-    ), "candidate scoring and correction stages run on the IOD propagator"
-    assert report["corrections_run"] >= 1
-    assert refine_propagator.calls > 0
-    # Same dynamics on both: the same answer as a single propagator.
+    assert output["found"] and output["iod"]["corrections_run"] >= 1
     single = _rust_native.full_od_ipc(
-        CountingPropagator(),
+        refine_propagator,
         observed_ipc,
         observers_ipc,
         iod_settings=iod_settings,
@@ -150,17 +129,16 @@ def test_callback_route_honours_a_distinct_iod_propagator(
 def test_fitter_initial_fit_runs_iod_on_the_configured_class(
     two_body_arc,  # noqa: F811
 ) -> None:
-    class Configured(CountingPropagator):
+    class Configured(TwoBodyPropagator):
         instances: list = []
 
         def __init__(self) -> None:
-            super().__init__()
             type(self).instances.append(self)
 
     fitter = NativeOrbitFitter(Configured(), iod_rchi2_threshold=1e4)
     orbit, members = fitter.initial_fit("x", two_body_arc)
     assert len(orbit) == 1 and len(members) == len(two_body_arc)
-    assert len(Configured.instances) == 1 and Configured.instances[0].calls > 0
+    assert len(Configured.instances) == 1
 
 
 @pytest.mark.parametrize("velocity_method", ["gibbs", "herrick+gibbs", "auto"])

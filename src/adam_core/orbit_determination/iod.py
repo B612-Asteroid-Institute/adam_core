@@ -18,8 +18,7 @@ from ..orbits.orbits import Orbits
 from ..orbits.variants import VariantOrbits
 from ..propagator import Propagator
 from ..time import Timestamp
-from ..utils.iter import _iterate_chunks
-from ._native_dispatch import deprecated, native_propagator, native_work_unit
+from ._native_dispatch import deprecated, native_propagator
 from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits, drop_duplicate_orbits
 from .gauss import MU, C
@@ -187,39 +186,6 @@ def _tables_from_native_iod(output: dict) -> Tuple[FittedOrbits, FittedOrbitMemb
         outlier=output["outlier"],
     )
     return orbits, members
-
-
-def _native_initial_orbit_determination(
-    prop: Propagator,
-    observations: OrbitDeterminationObservations,
-    linkage_ids: list[str],
-    member_linkage_ids: list[str],
-    member_obs_ids: list[str],
-    *,
-    min_obs: int,
-    min_arc_length: float,
-    contamination_percentage: float,
-    rchi2_threshold: float,
-    observation_selection_method: str,
-    light_time: bool,
-    chunk_size: int,
-) -> Tuple[FittedOrbits, FittedOrbitMembers]:
-    output = prop.initial_orbit_determination(
-        observations,
-        linkage_ids,
-        member_linkage_ids,
-        member_obs_ids,
-        min_obs=min_obs,
-        min_arc_length=min_arc_length,
-        contamination_percentage=contamination_percentage,
-        rchi2_threshold=rchi2_threshold,
-        observation_selection_method=observation_selection_method,
-        light_time=light_time,
-        chunk_size=chunk_size,
-        mu=MU,
-        speed_of_light=C,
-    )
-    return _tables_from_native_iod(output)
 
 
 def _iod_worker(
@@ -681,26 +647,20 @@ def run_iod(
         **(ranging_settings or {}),
     }
     orbit_id = uuid.uuid4().hex
-    fused = native_work_unit(propagator, "run_iod")
-    if fused is not None:
-        output = fused(
-            observations, iod_settings=iod_settings, fit_settings=fit_settings
-        )
-    else:
-        from adam_core import _rust_native
+    from adam_core import _rust_native
 
-        from .differential_correction import _native_problem
+    from .differential_correction import _native_problem
 
-        _, observed_ipc, observers_ipc = _native_problem(
-            _placeholder_orbit(observations), observations
-        )
-        output = _rust_native.run_iod_ipc(
-            native_propagator(propagator),
-            observed_ipc,
-            observers_ipc,
-            iod_settings=iod_settings,
-            fit_settings=fit_settings,
-        )
+    _, observed_ipc, observers_ipc = _native_problem(
+        _placeholder_orbit(observations), observations
+    )
+    output = _rust_native.run_iod_ipc(
+        native_propagator(propagator),
+        observed_ipc,
+        observers_ipc,
+        iod_settings=iod_settings,
+        fit_settings=fit_settings,
+    )
     orbit, members = tables_from_iod_output(orbit_id, observations, output)
     return orbit, members, report_from_iod_output(output)
 
@@ -929,10 +889,9 @@ def initial_orbit_determination(
     (``IOD_DEFAULTS``: span-bounded triplets, corrected acceptance); see
     `run_iod` for the settings. The legacy linkage behavior (first raw Gauss
     orbit under the threshold) is ``acceptance="prefit",
-    observation_selection_method="combinations", rchi2_threshold=1000``; with
-    ``acceptance="prefit"`` a propagator's compiled
-    ``initial_orbit_determination`` work unit runs every linkage in one
-    crossing.
+    observation_selection_method="combinations", rchi2_threshold=1000``.
+    Linkage policy and iteration remain adam-core-owned; each linkage uses the
+    same capsule-backed native ``run_iod`` stage.
 
     If `observatory_bias_model` is provided it is applied to the observations
     once at this entry point (e.g. inflating per-station sigmas from an
@@ -945,74 +904,79 @@ def initial_orbit_determination(
     if observatory_bias_model is not None:
         observations = observatory_bias_model.apply(observations)
 
-    # The supported native provider owns the entire multi-linkage workflow in
-    # one crossing; chunk_size is consumed by Rust and max_processes is kept
-    # only for signature compatibility (native execution replaces Ray).
-    native_prop = propagator(**propagator_kwargs)
-    # The compiled batch work unit implements the legacy prefit policy only.
-    if acceptance == "prefit" and native_work_unit(
-        native_prop, "initial_orbit_determination"
-    ):
-        if len(observations) == 0 or len(linkage_members) == 0:
-            return FittedOrbits.empty(), FittedOrbitMembers.empty()
+    # Linkage orchestration and all IOD policy remain adam-core-owned. The
+    # full linkage batch enters adam-core Rust once; the provider contributes
+    # only its retained propagation capsule.
+    if len(observations) == 0 or len(linkage_members) == 0:
+        iod_orbits = FittedOrbits.empty()
+        iod_orbit_members = FittedOrbitMembers.empty()
+    else:
+        from adam_core import _rust_native
+        from .differential_correction import _native_problem
+
+        native_prop = propagator(**propagator_kwargs)
         linkage_ids = linkage_members.column(linkage_id_col).unique().to_pylist()
-        return _native_initial_orbit_determination(
-            native_prop,
-            observations,
-            linkage_ids,
-            linkage_members.column(linkage_id_col).to_pylist(),
-            linkage_members.obs_id.to_pylist(),
-            min_obs=min_obs,
-            min_arc_length=min_arc_length,
-            contamination_percentage=contamination_percentage,
-            rchi2_threshold=rchi2_threshold,
-            observation_selection_method=observation_selection_method,
-            light_time=light_time,
-            chunk_size=chunk_size,
+        member_linkage_ids = linkage_members.column(linkage_id_col).to_pylist()
+        member_obs_ids = linkage_members.obs_id.to_pylist()
+        rows_by_linkage: dict = {linkage_id: [] for linkage_id in linkage_ids}
+        observation_rows = {
+            obs_id: row for row, obs_id in enumerate(observations.id.to_pylist())
+        }
+        for linkage_id, obs_id in zip(member_linkage_ids, member_obs_ids):
+            row = observation_rows.get(obs_id)
+            if row is not None and linkage_id in rows_by_linkage:
+                rows_by_linkage[linkage_id].append(row)
+
+        days = observations.coordinates.time.days.to_pylist()
+        nanos = observations.coordinates.time.nanos.to_pylist()
+        codes = observations.coordinates.origin.code.to_pylist()
+        linkage_rows = []
+        for linkage_id in linkage_ids:
+            rows = rows_by_linkage[linkage_id]
+            rows.sort(key=lambda row: (days[row], nanos[row], codes[row], row))
+            linkage_rows.append(rows)
+
+        iod_settings = {
+            "min_obs": min_obs,
+            "min_arc_length": min_arc_length,
+            "contamination_percentage": contamination_percentage,
+            "rchi2_threshold": rchi2_threshold,
+            "observation_selection_method": observation_selection_method,
+            "light_time": light_time,
+            "mu": MU,
+            "speed_of_light": C,
+            "max_triplets": IOD_DEFAULTS["max_triplets"],
+            "velocity_method": velocity_method,
+            "acceptance": acceptance,
+            **(span_settings or {}),
+            **(correction_settings or {}),
+        }
+        _, observed_ipc, observers_ipc = _native_problem(
+            _placeholder_orbit(observations), observations
         )
-
-    iod_orbits_chunks: list[FittedOrbits] = []
-    iod_orbit_members_chunks: list[FittedOrbitMembers] = []
-    if len(observations) > 0 and len(linkage_members) > 0:
-        # Extract linkage IDs
-        linkage_ids = linkage_members.column(linkage_id_col).unique()
-
-        # `max_processes` remains accepted for signature compatibility.
-        # Native providers returned above; non-native providers use the
-        # deterministic serial fallback instead of Python/Ray distribution.
-        del max_processes
-        for linkage_id_chunk in _iterate_chunks(linkage_ids, chunk_size):
-            iod_orbits_chunk, iod_orbit_members_chunk = _iod_worker(
-                linkage_id_chunk,
-                observations,
-                linkage_members,
-                min_obs=min_obs,
-                min_arc_length=min_arc_length,
-                contamination_percentage=contamination_percentage,
-                rchi2_threshold=rchi2_threshold,
-                observation_selection_method=observation_selection_method,
-                iterate=iterate,
-                light_time=light_time,
-                linkage_id_col=linkage_id_col,
-                propagator=propagator,
-                propagator_kwargs=propagator_kwargs,
-                velocity_method=velocity_method,
-                acceptance=acceptance,
-                span_settings=span_settings,
-                correction_settings=correction_settings,
-                fit_settings=fit_settings,
+        outputs = _rust_native.run_iod_linkages_ipc(
+            native_propagator(native_prop),
+            observed_ipc,
+            observers_ipc,
+            linkage_rows,
+            iod_settings=iod_settings,
+            fit_settings=fit_settings,
+        )
+        orbit_tables: list[FittedOrbits] = []
+        member_tables: list[FittedOrbitMembers] = []
+        for linkage_id, rows, output in zip(linkage_ids, linkage_rows, outputs):
+            linkage_observations = observations.take(rows)
+            orbit, members = tables_from_iod_output(
+                linkage_id, linkage_observations, output
             )
-            iod_orbits_chunks.append(iod_orbits_chunk)
-            iod_orbit_members_chunks.append(iod_orbit_members_chunk)
-
+            orbit_tables.append(orbit)
+            member_tables.append(members)
         iod_orbits = (
-            qv.concatenate(iod_orbits_chunks)
-            if iod_orbits_chunks
-            else FittedOrbits.empty()
+            qv.concatenate(orbit_tables) if orbit_tables else FittedOrbits.empty()
         )
         iod_orbit_members = (
-            qv.concatenate(iod_orbit_members_chunks)
-            if iod_orbit_members_chunks
+            qv.concatenate(member_tables)
+            if member_tables
             else FittedOrbitMembers.empty()
         )
 
@@ -1036,19 +1000,15 @@ def initial_orbit_determination(
         )
         time_end_drop = time.time()
         logger.info(f"Removed {num_orbits - len(iod_orbits)} duplicate clusters.")
-        time_end_drop = time.time()
         logger.info(
-            f"Inital orbit deduplication completed in {time_end_drop - time_start_drop:.3f} seconds."
+            "Inital orbit deduplication completed in "
+            f"{time_end_drop - time_start_drop:.3f} seconds."
         )
-
-        # Sort initial orbits by orbit ID and observation time
         iod_orbits, iod_orbit_members = sort_by_id_and_time(
             iod_orbits, iod_orbit_members, observations, "orbit_id"
         )
 
-    else:
-        iod_orbits = FittedOrbits.empty()
-        iod_orbit_members = FittedOrbitMembers.empty()
+    del iterate, chunk_size, max_processes
 
     time_end = time.perf_counter()
     logger.info(f"Found {len(iod_orbits)} initial orbits.")

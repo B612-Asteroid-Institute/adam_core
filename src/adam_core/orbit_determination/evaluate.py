@@ -286,6 +286,8 @@ def evaluate_orbits(
         orbit_id=orbits.orbit_id,
         object_id=orbits.object_id,
         coordinates=orbits.coordinates,
+        physical_parameters=orbits.physical_parameters,
+        non_gravitational_parameters=orbits.non_gravitational_parameters,
         arc_length=arc_length,
         num_obs=num_obs,
         chi2=chi2,

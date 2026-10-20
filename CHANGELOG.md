@@ -4,6 +4,21 @@ This file contains notable changes in adam-core
 
 ## [Unreleased]
 
+### Changed
+
+- Orbit determination now owns every IOD, least-squares, rejection, linkage
+  and ``run_od`` loop in adam-core. Separately built propagators contribute
+  only a private batched ``adam_core.propagator.v1`` capsule; Python prediction
+  callbacks and provider-owned OD work units are no longer supported. The v1
+  table and requests now negotiate structure size and capabilities, verify
+  backend identity, retain the capsule context for each native workflow,
+  require thread-safe no-unwind callbacks, fail closed on unsupported
+  non-gravitational parameters, preserve those fixed parameters through OD
+  candidates/results, and carry optional dynamics-consistent backend STMs. Python-only
+  propagators now raise ``TypeError`` with migration guidance. Rust users keep
+  composing the generic adam-core algorithms directly with concrete
+  ``Propagator`` implementations. See `docs/source/reference/native_propagator_abi.rst`.
+
 ### Added
 
 - Fit-time observation handling for orbit determination, reimplemented in Rust
@@ -35,23 +50,16 @@ This file contains notable changes in adam-core
   drivers over the `Propagator` trait (`adam_core_rs_coords::propagation::
   {fit_orbit_whitened_barycentric, iterative_fit_barycentric,
   cmc2003_fit_barycentric, full_od_barycentric, run_od_barycentric}`). A
-  Rust-backed propagator exposes them as one-crossing methods
-  (`fit_least_squares_whitened`, `iterative_fit`, `cmc2003_fit`, `full_od`,
-  `run_od`) that `fit_least_squares`, `iterative_fit`, `cmc2003_fit_detailed`,
-  `NativeOrbitFitter.full_od` and `run_od` dispatch to, wrapping the returned
-  dicts into tables; the in-tree two-body implementations are the
-  `_rust_native.*_2body_ipc` functions. Every other propagator (ASSIST until
-  adam-assist adds the methods, PYOORB, user classes, duck-typed test
-  doubles) runs the same Rust loops through the callback route: the driver
-  calls the propagator's own `generate_ephemeris` whenever it needs
-  predictions (`adam_core.orbit_determination._native_callback`), so no
-  orbit-determination loop remains in Python. `fit_least_squares` no longer
-  forwards keyword arguments to `scipy.optimize.least_squares` (only `xtol`,
-  `ftol`, `gtol`, `max_nfev` are accepted; others raise `ValueError`) and
-  `iod` runs the Rust decision loop for every propagator (`iterate` is
-  accepted and ignored). A Python propagator's exception is re-raised
-  unchanged; driver errors are `ValueError` / `RuntimeError`. Observation
-  models provide `_native_specs()` so a model stack crosses once.
+  Python bindings call these adam-core drivers directly. A separately built
+  propagator contributes only its batched native propagation capsule; the
+  in-tree two-body implementations are the `_rust_native.*_2body_ipc`
+  functions. Unsupported Python-only propagators fail instead of receiving
+  per-prediction callbacks. `fit_least_squares` no longer forwards keyword
+  arguments to `scipy.optimize.least_squares` (only `xtol`, `ftol`, `gtol`,
+  `max_nfev` are accepted; others raise `ValueError`) and `iod` runs the Rust
+  decision loop (`iterate` is accepted and ignored). Driver errors are
+  `ValueError` / `RuntimeError`. Observation models provide `_native_specs()`
+  so a model stack crosses once.
 
 - Fixed: a sliced quivr table (`orbits[i:i+1]`, Arrow offset > 0) handed to
   the typed Rust record-batch crossings (`propagate_2body`,
@@ -115,8 +123,9 @@ This file contains notable changes in adam-core
   `run_od_with` and their barycentric drivers take an IOD predictor and a
   refinement predictor; the `full_od` / `run_od` bindings (and their
   `_2body` twins) accept `iod_propagator`; `NativeOrbitFitter.iod_propagator_for`
-  hands fused work units the configured `propagator_class(**propagator_kwargs)`
-  when it differs from the refining propagator, so the fused route now runs
+  hands adam-core's fused driver the configured
+  `propagator_class(**propagator_kwargs)` capsule when it differs from the
+  refining propagator, so the native route now runs
   for every configuration and matches the composition on IOD backend.
 
 ### Changed

@@ -10,7 +10,9 @@ from typing_extensions import Self
 from ..coordinates.cartesian import CartesianCoordinates
 from ..coordinates.residuals import Residuals
 from ..coordinates.spherical import SphericalCoordinates
+from ..orbits.non_gravitational_parameters import NonGravitationalParameters
 from ..orbits.orbits import Orbits
+from ..orbits.physical_parameters import PhysicalParameters
 
 
 def assign_duplicate_observations(
@@ -148,6 +150,8 @@ class FittedOrbits(qv.Table):
     orbit_id = qv.LargeStringColumn(default=lambda: uuid.uuid4().hex)
     object_id = qv.LargeStringColumn(nullable=True)
     coordinates = CartesianCoordinates.as_column()
+    physical_parameters = PhysicalParameters.as_column(nullable=True)
+    non_gravitational_parameters = NonGravitationalParameters.as_column(nullable=True)
     arc_length = qv.Float64Column()
     num_obs = qv.Int64Column()
     chi2 = qv.Float64Column()
@@ -172,6 +176,8 @@ class FittedOrbits(qv.Table):
             orbit_id=self.orbit_id,
             object_id=self.object_id,
             coordinates=self.coordinates,
+            physical_parameters=self.physical_parameters,
+            non_gravitational_parameters=self.non_gravitational_parameters,
         )
 
 

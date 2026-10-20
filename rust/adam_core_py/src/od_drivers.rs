@@ -1,33 +1,30 @@
 //! PyO3 surface of the backend-generic Rust OD drivers: the one-crossing
 //! work units (`fit_least_squares`, `iterative_fit`, `cmc2003_fit`, `iod`,
-//! `full_od`, `run_od`, the covariance probe) over either
-//!
-//! * a Python propagator, wrapped as a callback [`SphericalPredictor`]
-//!   (`od_callback`): the Rust loop drives the propagator's own
-//!   `generate_ephemeris`, so the Python facade needs no loop of its own; or
-//! * adam_core's Rust two-body propagator (``propagator=None``): the fused
-//!   in-tree route, the same contract a Rust-backed plugin (adam-assist)
-//!   exposes as methods.
+//! `full_od`, `run_od`, the covariance probe) over a capsule-backed native
+//! propagator, or adam-core's Rust two-body propagator (`propagator=None`).
+//! Python objects are never called for predictions: a separately built
+//! backend supplies only the propagation ABI and adam-core owns every OD
+//! loop and public operation.
 //!
 //! Inputs cross as nested Arrow IPC (the `arrow_bridge` helpers) plus dicts of
 //! settings (`fit_settings`, `iod_settings`, `refinement`) and the models'
 //! `_native_specs()` dicts; outputs are plain dicts of scalars, lists and
 //! NumPy arrays that the facade wraps into `FittedOrbits` /
 //! `FittedOrbitMembers` without further computation. Driver errors map to
-//! `ValueError` (invalid input) or `RuntimeError` (backend failure); an
-//! exception raised by a Python propagator is re-raised unchanged.
+//! `ValueError` (invalid input) or `RuntimeError` (backend failure).
 
 use crate::coordinates::{read_orbit_ipc, ErfaTimeProvider};
 use crate::observation_uncertainty::{bias_table, efcc18_table, veres_lookup};
-use crate::od_callback::{od_error, LockingSpiceTranslation, PyEphemerisPredictor};
+use crate::od_support::{od_error, LockingSpiceTranslation};
 use adam_core_rs_coords::observation_uncertainty::{
     Efcc18DebiasModel, EmpiricalCovarianceMode, EmpiricalCovarianceModel, IdentityModel,
     NightBatchDeweightingModel, ObservationUncertaintyModel, PerformanceWeightedModel,
     SigmaFloorModel,
 };
 use adam_core_rs_coords::propagation::adapter::{
-    cmc2003_fit_with, fit_orbit_whitened_with, full_od_with, iterative_fit_with, run_iod_with,
-    run_od_with, validate_fit_covariance_with, PropagatorPredictor, SphericalPredictor,
+    cmc2003_fit_with, fit_orbit_whitened_with, full_od_with, iterative_fit_with,
+    run_iod_linkages_with, run_iod_with, run_od_with, validate_fit_covariance_with,
+    PropagatorPredictor, SphericalPredictor,
 };
 use adam_core_rs_coords::propagation::{
     AstrometrySnapshot, Cmc2003FitConfig, CorrectionConfig, CovariancePropagation,
@@ -49,7 +46,7 @@ use adam_core_rs_coords::{
 use numpy::{IntoPyArray, PyReadonlyArray1, PyReadonlyArray2, PyReadonlyArray3};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
-use pyo3::types::{PyBytes, PyCapsule, PyDict, PyList};
+use pyo3::types::{PyBytes, PyCapsule, PyDict, PyList, PyTuple};
 use std::sync::Arc;
 
 fn value_error(message: impl Into<String>) -> PyErr {
@@ -561,49 +558,77 @@ fn covariance_36(covariance: &PyReadonlyArray2<'_, f64>) -> PyResult<[f64; 36]> 
 // Running a driver over the chosen backend
 // ---------------------------------------------------------------------------
 
-/// A propagator handed to a driver: an external native propagator (a
-/// capsule named `EXTERNAL_PROPAGATOR_CAPSULE`, e.g. ASSIST's), run as a
-/// Rust `Propagator` with no Python per prediction; or a Python propagator
-/// wrapped as a callback predictor.
-enum PySource {
-    External {
-        propagator: ExternalPropagator,
-        // Keeps the capsule (and the backend's context) alive.
-        _capsule: Py<PyAny>,
-    },
-    Callback(PyEphemerisPredictor),
+/// A capsule-backed native propagator handed to a driver.  The retained
+/// Python object owns the table and its context for the whole native call.
+struct PySource {
+    propagator: ExternalPropagator,
+    _capsule: Py<PyAny>,
 }
 
 impl PySource {
-    fn new(py: Python<'_>, object: &Bound<'_, PyAny>) -> PyResult<Self> {
-        if let Ok(capsule) = object.downcast::<PyCapsule>() {
-            let name = capsule
-                .name()?
-                .map(|name| name.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            if name != EXTERNAL_PROPAGATOR_CAPSULE {
+    fn new(object: &Bound<'_, PyAny>) -> PyResult<Self> {
+        let (capsule_object, expected_identity) =
+            if let Ok(descriptor) = object.downcast::<PyTuple>() {
+                if descriptor.len() != 4 {
+                    return Err(PyValueError::new_err(
+                        "native propagator descriptor must be (capsule, name, version, two_body)",
+                    ));
+                }
+                (
+                    descriptor.get_item(0)?,
+                    Some((
+                        descriptor.get_item(1)?.extract::<String>()?,
+                        descriptor.get_item(2)?.extract::<String>()?,
+                        descriptor.get_item(3)?.extract::<bool>()?,
+                    )),
+                )
+            } else {
+                // The raw capsule form remains available to the private low-level
+                // bindings; adam-core's Python dispatch always supplies identity.
+                (object.clone(), None)
+            };
+        let capsule = capsule_object.downcast::<PyCapsule>().map_err(|_| {
+            PyValueError::new_err(format!(
+                "orbit determination requires a native {EXTERNAL_PROPAGATOR_CAPSULE:?} capsule"
+            ))
+        })?;
+        let name = capsule
+            .name()?
+            .map(|name| name.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        if name != EXTERNAL_PROPAGATOR_CAPSULE {
+            return Err(PyValueError::new_err(format!(
+                "expected a {EXTERNAL_PROPAGATOR_CAPSULE:?} capsule, got {name:?}"
+            )));
+        }
+        let raw = capsule.pointer() as *const ExternalPropagatorV1;
+        // SAFETY: a capsule of this name holds an `ExternalPropagatorV1`
+        // whose context lives as long as the capsule, retained by `_capsule`.
+        let propagator = unsafe { ExternalPropagator::from_raw(raw) }.map_err(od_error)?;
+        if let Some((expected_name, expected_version, expected_two_body)) = expected_identity {
+            let actual = propagator.identity();
+            if actual.name != expected_name
+                || actual.version != expected_version
+                || actual.two_body_dynamics != expected_two_body
+            {
                 return Err(PyValueError::new_err(format!(
-                    "expected a {EXTERNAL_PROPAGATOR_CAPSULE:?} capsule, got {name:?}"
+                    concat!(
+                        "native propagator identity mismatch: declaration is {} {} ",
+                        "(two_body={}), capsule is {} {} (two_body={})"
+                    ),
+                    expected_name,
+                    expected_version,
+                    expected_two_body,
+                    actual.name,
+                    actual.version,
+                    actual.two_body_dynamics
                 )));
             }
-            let raw = capsule.pointer() as *const ExternalPropagatorV1;
-            // SAFETY: a capsule of this name holds an `ExternalPropagatorV1`
-            // whose context lives as long as the capsule, kept alive here.
-            let propagator =
-                unsafe { ExternalPropagator::from_raw(raw) }.map_err(|err| od_error(err, None))?;
-            return Ok(Self::External {
-                propagator,
-                _capsule: object.clone().unbind(),
-            });
         }
-        Ok(Self::Callback(PyEphemerisPredictor::new(py, object)?))
-    }
-
-    fn callback(&self) -> Option<&PyEphemerisPredictor> {
-        match self {
-            Self::Callback(callback) => Some(callback),
-            Self::External { .. } => None,
-        }
+        Ok(Self {
+            propagator,
+            _capsule: object.clone().unbind(),
+        })
     }
 }
 
@@ -621,47 +646,34 @@ fn external_predictor<'a>(
     }
 }
 
-/// Run `driver` with the GIL released, over an external native propagator
-/// (capsule), a Python propagator wrapped as a callback predictor, or
-/// adam_core's two-body propagator (`None`). Errors map to Python
-/// exceptions; an exception raised inside the callback is re-raised
-/// unchanged.
+/// Run `driver` with the GIL released over a capsule-backed native
+/// propagator, or adam-core's two-body propagator when `None`.
 fn run_with_predictor<R: Send>(
     py: Python<'_>,
     propagator: Option<&Bound<'_, PyAny>>,
     settings: &FitSettings,
     driver: impl for<'p> FnOnce(&'p dyn SphericalPredictor) -> PropagationResultValue<R> + Send,
 ) -> PyResult<R> {
-    match propagator {
-        Some(object) => match PySource::new(py, object)? {
-            PySource::External {
-                propagator,
-                _capsule,
-            } => py
-                .allow_threads(|| driver(&external_predictor(&propagator, settings)))
-                .map_err(|err| od_error(err, None)),
-            PySource::Callback(predictor) => py
-                .allow_threads(|| driver(&predictor))
-                .map_err(|err| od_error(err, Some(&predictor))),
-        },
-        None => py
-            .allow_threads(|| {
-                let predictor = PropagatorPredictor {
-                    propagator: &settings.propagator,
-                    options: &settings.options,
-                    provider: &ErfaTimeProvider,
-                    translation_provider: &LockingSpiceTranslation,
-                };
-                driver(&predictor)
-            })
-            .map_err(|err| od_error(err, None)),
-    }
+    let source = propagator.map(PySource::new).transpose()?;
+    py.allow_threads(|| {
+        if let Some(source) = &source {
+            driver(&external_predictor(&source.propagator, settings))
+        } else {
+            let predictor = PropagatorPredictor {
+                propagator: &settings.propagator,
+                options: &settings.options,
+                provider: &ErfaTimeProvider,
+                translation_provider: &LockingSpiceTranslation,
+            };
+            driver(&predictor)
+        }
+    })
+    .map_err(od_error)
 }
 
-/// [`run_with_predictor`] for a two-stage driver: `iod_propagator` scores the
-/// IOD candidates and `propagator` refines (each `None` = adam_core's two-body
-/// propagator; `iod_propagator=None` alone = the refinement propagator). A
-/// Python exception raised by either propagator is re-raised unchanged.
+/// Two-stage native driver.  `iod_propagator` and `propagator` are capsules;
+/// either `None` selects adam-core's two-body propagator, and an omitted IOD
+/// capsule alone reuses the refinement backend.
 fn run_with_predictors<R: Send>(
     py: Python<'_>,
     iod_propagator: Option<&Bound<'_, PyAny>>,
@@ -673,53 +685,28 @@ fn run_with_predictors<R: Send>(
         ) -> PropagationResultValue<R>
         + Send,
 ) -> PyResult<R> {
-    let iod_source = iod_propagator
-        .map(|object| PySource::new(py, object))
-        .transpose()?;
-    let refine_source = propagator
-        .map(|object| PySource::new(py, object))
-        .transpose()?;
-    let result = py.allow_threads(|| {
+    let iod_source = iod_propagator.map(PySource::new).transpose()?;
+    let refine_source = propagator.map(PySource::new).transpose()?;
+    py.allow_threads(|| {
         let two_body = PropagatorPredictor {
             propagator: &settings.propagator,
             options: &settings.options,
             provider: &ErfaTimeProvider,
             translation_provider: &LockingSpiceTranslation,
         };
-        let refine_external = match &refine_source {
-            Some(PySource::External { propagator, .. }) => {
-                Some(external_predictor(propagator, settings))
-            }
-            _ => None,
-        };
-        let iod_external = match &iod_source {
-            Some(PySource::External { propagator, .. }) => {
-                Some(external_predictor(propagator, settings))
-            }
-            _ => None,
-        };
-        let refine: &dyn SphericalPredictor = match (&refine_source, &refine_external) {
-            (_, Some(external)) => external,
-            (Some(PySource::Callback(callback)), _) => callback,
-            _ => &two_body,
-        };
-        let iod: &dyn SphericalPredictor = match (&iod_source, &iod_external) {
-            (_, Some(external)) => external,
-            (Some(PySource::Callback(callback)), _) => callback,
-            _ => refine,
-        };
-        driver(iod, refine)
-    });
-    result.map_err(|err| {
-        if let Some(py_err) = iod_source
+        let refine_external = refine_source
             .as_ref()
-            .and_then(PySource::callback)
-            .and_then(PyEphemerisPredictor::take_error)
-        {
-            return py_err;
-        }
-        od_error(err, refine_source.as_ref().and_then(PySource::callback))
+            .map(|source| external_predictor(&source.propagator, settings));
+        let iod_external = iod_source
+            .as_ref()
+            .map(|source| external_predictor(&source.propagator, settings));
+        let refine: &dyn SphericalPredictor = refine_external
+            .as_ref()
+            .map_or(&two_body as &dyn SphericalPredictor, |value| value);
+        let iod: &dyn SphericalPredictor = iod_external.as_ref().map_or(refine, |value| value);
+        driver(iod, refine)
     })
+    .map_err(od_error)
 }
 
 // ---------------------------------------------------------------------------
@@ -1293,6 +1280,41 @@ fn run_iod_ipc<'py>(
     )
 }
 
+/// One-crossing IOD stage over multiple adam-core-owned linkage selections.
+#[pyfunction]
+#[pyo3(signature = (iod_propagator, observed_ipc, observers_ipc, linkage_rows, iod_settings=None, fit_settings=None))]
+fn run_iod_linkages_ipc<'py>(
+    py: Python<'py>,
+    iod_propagator: Option<&Bound<'py, PyAny>>,
+    observed_ipc: &Bound<'py, PyBytes>,
+    observers_ipc: &Bound<'py, PyBytes>,
+    linkage_rows: Vec<Vec<usize>>,
+    iod_settings: Option<&Bound<'py, PyDict>>,
+    fit_settings: Option<&Bound<'py, PyDict>>,
+) -> PyResult<Bound<'py, PyList>> {
+    let problem = decode_observations(observed_ipc, observers_ipc)?;
+    let config = parse_iod_settings(iod_settings)?;
+    let settings = parse_fit_settings(fit_settings)?;
+    let row_counts: Vec<usize> = linkage_rows.iter().map(Vec::len).collect();
+    let results = run_with_predictor(py, iod_propagator, &settings, |predictor| {
+        run_iod_linkages_with(
+            predictor,
+            &problem.observed,
+            &problem.observers,
+            &linkage_rows,
+            &config,
+            &settings.config,
+            &ErfaTimeProvider,
+            &LockingSpiceTranslation,
+        )
+    })?;
+    let output = PyList::empty(py);
+    for (result, row_count) in results.into_iter().zip(row_counts) {
+        output.append(iod_dict(py, result, row_count)?)?;
+    }
+    Ok(output)
+}
+
 fn run_iod_impl<'py>(
     py: Python<'py>,
     iod_propagator: Option<&Bound<'py, PyAny>>,
@@ -1567,6 +1589,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cmc2003_fit_2body_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(iod_fit_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(run_iod_ipc, m)?)?;
+    m.add_function(wrap_pyfunction!(run_iod_linkages_ipc, m)?)?;
     m.add_function(wrap_pyfunction!(iod_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(od_defaults, m)?)?;
     m.add_function(wrap_pyfunction!(run_iod_2body_ipc, m)?)?;

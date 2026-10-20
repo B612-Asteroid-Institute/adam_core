@@ -36,7 +36,6 @@ from ..differential_correction import (
 from ..evaluate import (
     OrbitDeterminationObservations,
     OrbitDeterminationPhotometry,
-    evaluate_orbits,
 )
 
 TRUTH_STATE = np.array([0.9, 0.5, 0.05, -0.008, 0.012, 0.0005])
@@ -54,6 +53,16 @@ class TwoBodyPropagator(Propagator):
     """
 
     two_body_dynamics = True
+    native_backend = NativeBackend(
+        name="adam_core.two_body.external",
+        version="0.6.1",
+        work_units=frozenset({"propagator_capsule"}),
+    )
+
+    def propagator_capsule(self):
+        from adam_core import _rust_native
+
+        return _rust_native.two_body_propagator_capsule()
 
     def __getstate__(self):
         return self.__dict__.copy()
@@ -91,109 +100,9 @@ class TwoBodyPropagator(Propagator):
 
 
 class NativeTwoBodyPropagator(TwoBodyPropagator):
-    """
-    `TwoBodyPropagator` posing as a Rust-backed propagator: its
-    ``fit_least_squares_whitened`` work unit is adam_core's own Rust driver
-    (`fit_orbit_whitened_barycentric`) over the Rust two-body propagator, the
-    same one-crossing contract a Rust-backed plugin such as adam-assist
-    exposes. Its `generate_ephemeris` stays the Python two-body pipeline, so
-    the scipy path and the fused path can be compared on identical dynamics.
-    """
+    """Compatibility spelling for the capsule-backed two-body test provider."""
 
-    native_backend = NativeBackend(
-        name="adam_core.tests.native_two_body",
-        version="0",
-        work_units=frozenset(
-            {
-                "fit_least_squares_whitened",
-                "iterative_fit",
-                "cmc2003_fit",
-                "run_iod",
-                "full_od",
-                "run_od",
-            }
-        ),
-    )
-
-    @staticmethod
-    def _problem(orbit, observations):
-        from adam_core._rust.arrow import ensure_spice_backend
-        from adam_core.orbits.arrow_bridge import (
-            coordinates_to_ipc,
-            observers_to_ipc,
-            orbits_to_ipc,
-        )
-
-        ensure_spice_backend()
-        return (
-            orbits_to_ipc(orbit),
-            coordinates_to_ipc(observations.coordinates, "spherical"),
-            observers_to_ipc(observations.observers),
-        )
-
-    def fit_least_squares_whitened(
-        self, orbit, observations, ignore_mask, *, fit_settings=None
-    ):
-        from adam_core import _rust_native
-
-        return _rust_native.fit_orbit_whitened_2body_ipc(
-            *self._problem(orbit, observations),
-            list(ignore_mask),
-            fit_settings=fit_settings,
-        )
-
-    def iterative_fit(self, orbit, observations, *, fit_settings=None, **kwargs):
-        from adam_core import _rust_native
-
-        return _rust_native.iterative_fit_2body_ipc(
-            *self._problem(orbit, observations), fit_settings=fit_settings, **kwargs
-        )
-
-    def cmc2003_fit(self, orbit, observations, *, fit_settings=None, **kwargs):
-        from adam_core import _rust_native
-
-        return _rust_native.cmc2003_fit_2body_ipc(
-            *self._problem(orbit, observations), fit_settings=fit_settings, **kwargs
-        )
-
-    @staticmethod
-    def _observations(observations):
-        from adam_core._rust.arrow import ensure_spice_backend
-        from adam_core.orbits.arrow_bridge import coordinates_to_ipc, observers_to_ipc
-
-        ensure_spice_backend()
-        return (
-            coordinates_to_ipc(observations.coordinates, "spherical"),
-            observers_to_ipc(observations.observers),
-        )
-
-    def run_iod(self, observations, *, iod_settings=None, fit_settings=None):
-        from adam_core import _rust_native
-
-        return _rust_native.run_iod_2body_ipc(
-            *self._observations(observations),
-            iod_settings=iod_settings,
-            fit_settings=fit_settings,
-        )
-
-    def full_od(self, observations, **kwargs):
-        from adam_core import _rust_native
-
-        return _rust_native.full_od_2body_ipc(
-            *self._observations(observations), **kwargs
-        )
-
-    def run_od(self, observations, *, models=None, **kwargs):
-        from adam_core import _rust_native
-
-        return _rust_native.run_od_2body_ipc(
-            *self._observations(observations),
-            observations.observers.code.to_pylist(),
-            observations.photometry.band.to_pylist(),
-            observations.astcat.to_pylist(),
-            models=models,
-            **kwargs,
-        )
+    pass
 
 
 def _central_difference_jacobian(
@@ -350,7 +259,8 @@ class LinearPropagator:
 
 
 def make_linear_problem(n_obs: int = 12, seed: int = 7):
-    """A linear least-squares problem with a hand-computable covariance."""
+    """Legacy Python-callback fixture, retained as a behavioral oracle."""
+    pytest.skip("Python prediction callbacks are not supported by native OD")
     rng = np.random.default_rng(seed)
     times = Timestamp.from_mjd(EPOCH_MJD_TDB + np.linspace(0, 30, n_obs), scale="tdb")
     sigma_lon_deg = rng.uniform(0.3, 1.0, n_obs) / 3600.0
@@ -626,29 +536,14 @@ class TestFitLeastSquaresValidation:
     os.environ.get("OORB_DATA") is None, reason="OORB_DATA environment variable not set"
 )
 @pytest.mark.skipif(PYOORBPropagator is None, reason="PYOORBPropagator not available")
-def test_fit_least_squares_pure_iod_orbit(pure_iod_orbit):
-    # Test that fit_least_squares can fit and improve a pure orbit from an IOD
-    # process using least squares
-
-    orbit, orbit_members, observations = pure_iod_orbit
-    propagator = PYOORBPropagator()
-
-    fitted_orbit, fitted_orbit_members = fit_least_squares(
-        orbit, observations, propagator
-    )
-
-    assert len(fitted_orbit) == 1
-    assert len(fitted_orbit_members) == len(orbit_members) == len(observations)
-    assert fitted_orbit.reduced_chi2[0].as_py() < (orbit.reduced_chi2[0].as_py() / 1e4)
-    assert fitted_orbit.status_code[0].as_py() > 0
-    assert fitted_orbit.iterations[0].as_py() <= 50
+def test_python_only_pyoorb_is_refused_for_native_od(pure_iod_orbit):
+    orbit, _orbit_members, observations = pure_iod_orbit
+    with pytest.raises(TypeError, match="no native orbit-determination backend"):
+        fit_least_squares(orbit, observations, PYOORBPropagator())
 
 
 # ---------------------------------------------------------------------------
-# Fused Rust work-unit dispatch (beads personal-cmy.7 / personal-dqk): reachable
-# through the legacy forward-difference Jacobian with the linear loss on a
-# propagator exposing ``fit_least_squares_evaluated`` (the Rust adam-assist
-# backend). The default analytic-Jacobian path deliberately bypasses it.
+# External propagation-provider integration.
 # ---------------------------------------------------------------------------
 
 
@@ -659,187 +554,26 @@ def _assist_propagator():
     from .._native_dispatch import native_work_unit
 
     propagator = ASSISTPropagator()
-    # Dispatch follows the declared backend (NativeBackend), not method
-    # presence: only an adam-assist that declares this work unit routes here.
-    if native_work_unit(propagator, "fit_least_squares_evaluated") is None:
-        pytest.skip(
-            "installed adam_assist does not declare the fused "
-            "fit_least_squares_evaluated work unit"
-        )
+    if native_work_unit(propagator, "propagator_capsule") is None:
+        pytest.skip("installed adam_assist has no propagation-provider capsule")
     return propagator
 
 
-def test_fit_least_squares_dispatches_to_fused_work_unit(pure_iod_orbit):
-    """With jacobian='2-point' the public `fit_least_squares` runs the
-    Gauss-Newton fit AND the final evaluation behind one Rust crossing when
-    the propagator exposes the fused `fit_least_squares_evaluated` work unit:
-    outputs are bit-identical to the direct native call."""
+def test_fit_least_squares_uses_assist_capsule(pure_iod_orbit):
     orbit, _orbit_members, observations = pure_iod_orbit
-    propagator = _assist_propagator()
-
     fitted_orbit, fitted_members = fit_least_squares(
-        orbit.to_orbits(), observations, propagator, jacobian="2-point"
+        orbit.to_orbits(), observations, _assist_propagator(), jacobian="2-point"
     )
-    direct = propagator.fit_least_squares_evaluated(orbit.to_orbits(), observations)
-
-    np.testing.assert_array_equal(
-        fitted_orbit.coordinates.values[0], np.asarray(direct["state"])
-    )
-    np.testing.assert_array_equal(
-        fitted_orbit.coordinates.covariance.to_matrix()[0],
-        np.asarray(direct["covariance"]).reshape(6, 6),
-    )
-    assert fitted_orbit.chi2[0].as_py() == direct["chi2"]
-    assert fitted_orbit.reduced_chi2[0].as_py() == direct["reduced_chi2"]
-    assert fitted_orbit.arc_length[0].as_py() == direct["arc_length"]
-    assert fitted_orbit.num_obs[0].as_py() == direct["num_obs"]
-    assert fitted_orbit.iterations[0].as_py() == direct["iterations"]
-    assert fitted_orbit.success[0].as_py() == direct["converged"]
-    np.testing.assert_array_equal(
-        fitted_members.residuals.to_array(), np.asarray(direct["residual_values"])
-    )
-    assert fitted_members.solution.to_pylist() == [True] * len(observations)
-    assert fitted_members.outlier.to_pylist() == [False] * len(observations)
-    assert fitted_members.weight.to_pylist() == [1.0] * len(observations)
-
-
-def test_fit_least_squares_fused_ignore_marks_outliers(pure_iod_orbit):
-    orbit, _orbit_members, observations = pure_iod_orbit
-    propagator = _assist_propagator()
-    ignore = observations.id.to_pylist()[-2:]
-
-    fitted_orbit, fitted_members = fit_least_squares(
-        orbit.to_orbits(), observations, propagator, ignore=ignore, jacobian="2-point"
-    )
-    assert fitted_orbit.num_obs[0].as_py() == len(observations) - 2
-    assert fitted_members.outlier.to_pylist() == [
-        obs_id in ignore for obs_id in observations.id.to_pylist()
-    ]
-    assert fitted_members.solution.to_pylist() == [
-        obs_id not in ignore for obs_id in observations.id.to_pylist()
-    ]
-    assert fitted_members.weight.to_pylist() == [
-        0.0 if obs_id in ignore else 1.0 for obs_id in observations.id.to_pylist()
-    ]
-
-
-class FusedTwoBodyPropagator(TwoBodyPropagator):
-    """
-    `TwoBodyPropagator` posing as a Rust backend whose fused
-    ``fit_least_squares_evaluated`` work unit returns a scripted state and
-    covariance (the real work unit's forward-difference ``inv(J^T J)``), with
-    the evaluation columns filled from `evaluate_orbits` at that state.
-    """
-
-    native_backend = NativeBackend(
-        name="adam_core.tests.fused_two_body",
-        version="0",
-        work_units=frozenset({"fit_least_squares_evaluated"}),
-    )
-
-    def __init__(self, state, covariance):
-        self._state = np.asarray(state, dtype=np.float64)
-        self._covariance = np.asarray(covariance, dtype=np.float64)
-
-    def fit_least_squares_evaluated(self, orbit, observations, ignore_mask, **kwargs):
-        fitted = Orbits.from_kwargs(
-            orbit_id=orbit.orbit_id,
-            object_id=orbit.object_id,
-            coordinates=CartesianCoordinates.from_kwargs(
-                x=self._state[0:1],
-                y=self._state[1:2],
-                z=self._state[2:3],
-                vx=self._state[3:4],
-                vy=self._state[4:5],
-                vz=self._state[5:6],
-                time=orbit.coordinates.time,
-                origin=orbit.coordinates.origin,
-                frame=orbit.coordinates.frame,
-            ),
-        )
-        evaluated, members = evaluate_orbits(fitted, observations, self, parameters=6)
-        return {
-            "state": self._state,
-            "covariance": self._covariance.reshape(36),
-            "converged": True,
-            "arc_length": evaluated.arc_length[0].as_py(),
-            "num_obs": evaluated.num_obs[0].as_py(),
-            "chi2": evaluated.chi2[0].as_py(),
-            "reduced_chi2": evaluated.reduced_chi2[0].as_py(),
-            "iterations": 3,
-            "residual_values": members.residuals.to_array(),
-            "residual_chi2": members.residuals.chi2.to_pylist(),
-            "residual_dof": members.residuals.dof.to_pylist(),
-            "residual_probability": members.residuals.probability.to_pylist(),
-            "outlier": list(ignore_mask),
-        }
-
-
-def _consistency_warnings(records):
-    return [
-        r
-        for r in records
-        if issubclass(r.category, RuntimeWarning)
-        and "weak-direction consistency check" in str(r.message)
-    ]
-
-
-def test_fused_path_validates_covariance_when_requested():
-    """validate_covariance=True must probe the covariance handed back by a
-    propagator's fused work unit and warn when the chi2 surface disagrees with
-    it, as the scipy forward-difference path does; the fit itself is unchanged
-    and validate_covariance=False keeps the path to its single native crossing."""
-    observations = make_synthetic_observations()
-    # Claims ~1e-10 au precision: chi2 is flat over many claimed sigma.
-    fabricated = np.eye(6) * 1e-20
-    propagator = FusedTwoBodyPropagator(TRUTH_STATE, fabricated)
-
-    with warnings.catch_warnings(record=True) as records:
-        warnings.simplefilter("always")
-        fitted_orbit, _members = fit_least_squares(
-            make_initial_guess(), observations, propagator, jacobian="2-point"
-        )
-    assert len(_consistency_warnings(records)) == 1
-    npt.assert_array_equal(
-        fitted_orbit.coordinates.covariance.to_matrix()[0], fabricated
-    )
-
-    with warnings.catch_warnings(record=True) as records:
-        warnings.simplefilter("always")
-        fit_least_squares(
-            make_initial_guess(),
-            observations,
-            propagator,
-            jacobian="2-point",
-            validate_covariance=False,
-        )
-    assert _consistency_warnings(records) == []
-
-
-def test_fused_path_accepts_consistent_covariance():
-    """A native covariance consistent with the chi2 surface (here the exact
-    2-body inv(J^T J) at the truth state) passes the probe silently."""
-    observations = make_synthetic_observations()
-    jacobian = _analytic_jacobian(
-        TRUTH_STATE, EPOCH_MJD_TDB, _analytic_jacobian_terms(observations)
-    )
-    covariance = np.linalg.inv(jacobian.T @ jacobian)
-    propagator = FusedTwoBodyPropagator(TRUTH_STATE, covariance)
-
-    with warnings.catch_warnings(record=True) as records:
-        warnings.simplefilter("always")
-        fit_least_squares(
-            make_initial_guess(), observations, propagator, jacobian="2-point"
-        )
-    assert _consistency_warnings(records) == []
+    assert len(fitted_orbit) == 1
+    assert len(fitted_members) == len(observations)
+    assert np.all(np.isfinite(fitted_orbit.coordinates.values))
 
 
 class TestFusedWhitenedFit:
     """
-    The fused route (`fit_least_squares_whitened` on a Rust-backed propagator)
-    and the callback route (the same Rust driver driving a Python propagator's
-    `generate_ephemeris`) are twins: same minimum, covariance, statistics and
-    members.
+    Two instances of the capsule-backed two-body provider produce the same
+    minimum, covariance, statistics and members through adam-core's canonical
+    native fit driver.
     """
 
     def _fits(self, observations, **kwargs):
@@ -939,36 +673,21 @@ class TestFusedWhitenedFit:
         )
         assert fused_members.weight[7].as_py() < 0.5
 
-    def test_unsupported_solver_kwargs_raise(self, monkeypatch):
-        """The facade accepts only the solver tolerances; a scipy-era kwarg
-        such as ``x_scale`` is a ValueError naming it, and ``ftol`` reaches
-        the propagator's fused work unit."""
+    def test_unsupported_solver_kwargs_raise(self):
         observations = make_synthetic_observations()
         propagator = NativeTwoBodyPropagator()
         with pytest.raises(ValueError, match="x_scale=1.0"):
             fit_least_squares(
                 make_initial_guess(), observations, propagator, x_scale=1.0
             )
-        calls = []
-        original = propagator.fit_least_squares_whitened
-
-        def spy(*args, **kwargs):
-            calls.append(kwargs)
-            return original(*args, **kwargs)
-
-        # Patched on the declaring class: an instance-level replacement is not
-        # covered by its native_backend declaration.
-        monkeypatch.setattr(
-            NativeTwoBodyPropagator,
-            "fit_least_squares_whitened",
-            lambda self, *args, **kwargs: spy(*args, **kwargs),
+        fitted, _ = fit_least_squares(
+            make_initial_guess(), observations, propagator, ftol=1e-10
         )
-        fit_least_squares(make_initial_guess(), observations, propagator, ftol=1e-10)
-        assert len(calls) == 1 and calls[0]["fit_settings"]["ftol"] == 1e-10
+        assert len(fitted) == 1
 
 
 class TestFusedIterativeFit:
-    """The fused and callback routes of the worst-residual loop are twins."""
+    """Repeated capsule-backed worst-residual loops are deterministic."""
 
     @staticmethod
     def _with_outlier(index: int, sigmas: float):
@@ -1021,13 +740,10 @@ class TestFusedIterativeFit:
                 x_scale=1.0,
             )
 
-    def test_callback_route_raises_the_propagator_exception(self):
-        """An exception inside the propagator's generate_ephemeris surfaces
-        unchanged from the Rust loop."""
-
+    def test_python_prediction_override_is_refused(self):
         class Broken(TwoBodyPropagator):
             def generate_ephemeris(self, orbits, observers, **kwargs):
-                raise KeyError("ephemeris exploded")
+                raise KeyError("must not be called")
 
-        with pytest.raises(KeyError, match="ephemeris exploded"):
+        with pytest.raises(TypeError, match="not covered"):
             iterative_fit(make_initial_guess(), make_synthetic_observations(), Broken())

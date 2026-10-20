@@ -133,12 +133,10 @@ Current Migrated APIs
     NumPy arrays out. The complete work unit (solver, Jacobian, loss,
     covariance probe, final evaluation) runs in Rust; Python converts tables
     and re-emits the driver's diagnostics as ``RuntimeWarning``. The supplied
-    ``Propagator`` is driven from Rust: through its own fused work unit when it
-    declares one, otherwise through its external-propagator capsule
-    (``propagator_capsule``); a propagator with neither raises ``TypeError``
-    (the callback adapter calling ``generate_ephemeris``,
-    ``adam_core.orbit_determination._native_callback``, is private to the test
-    suite).
+    ``Propagator`` contributes only its external-propagator capsule
+    (``propagator_capsule``). The solver and evaluation remain adam-core code;
+    a propagator without a capsule raises ``TypeError`` and is never called
+    back from Rust.
   - Rust entrypoints: ``adam_core._rust_native.observation_whitening_matrices_numpy``
     (``(N, 6, 6)`` covariance + ``(N,)`` latitude -> ``(N, 2, 2)`` inverse Cholesky
     factors), ``whiten_residual_pairs_numpy``, ``whitened_2body_jacobian_numpy``
@@ -149,26 +147,15 @@ Current Migrated APIs
   - Error behavior: raises ``ValueError`` naming the observation whose
     (lon, lat) covariance block is non-finite or not positive definite, on shape
     mismatch, and on an unknown loss or non-positive ``f_scale``.
-  - Dispatch: a Rust-backed propagator exposing ``fit_least_squares_whitened
-    (orbit, observations, ignore_mask, fit_settings=...)`` runs the complete
-    work unit natively in one crossing for every Jacobian and loss option
-    (``adam_core_rs_coords::fit_orbit_whitened_barycentric``: whitened
-    residuals through the barycentric ephemeris workflow, analytic / central /
-    2-point Jacobian, IRLS Huber, Levenberg-Marquardt with scipy's stopping
-    rules, ``inv(JᵀJ)`` with the weak-direction probe and central-difference
-    fallback, the fused final evaluation; diagnostics return as strings the
-    veneer re-emits as ``RuntimeWarning``). The in-tree implementation over the
-    two-body backend is ``adam_core._rust_native.fit_orbit_whitened_2body_ipc``.
-    Every other native propagator runs the same driver with its external
-    propagator capsule (``adam_core._rust_native.fit_orbit_whitened_ipc``;
-    ``propagator=None`` selects the two-body backend). Only the
-    solver settings ``xtol``, ``ftol``, ``gtol`` and ``max_nfev`` are
-    accepted; any other keyword raises ``ValueError`` (there is no scipy
-    path). ``jacobian="2-point"`` with ``loss="linear"`` on a propagator
-    exposing only the older ``fit_least_squares_evaluated`` /
-    ``fit_least_squares`` work units still routes there (forward-difference
-    Gauss-Newton), with its covariance probed by
-    ``validate_fit_covariance_ipc``.
+  - Dispatch: ``fit_least_squares`` always invokes adam-core's
+    ``fit_orbit_whitened_ipc`` driver with the selected capsule
+    (``propagator=None`` selects the in-tree two-body backend). The generic
+    Rust implementation is
+    ``adam_core_rs_coords::fit_orbit_whitened_barycentric`` and remains the
+    single definition of whitening, robust loss, Jacobian policy, covariance
+    and final evaluation. Providers do not implement least-squares work
+    units. Only ``xtol``, ``ftol``, ``gtol`` and ``max_nfev`` are accepted;
+    any other solver keyword raises ``ValueError`` (there is no scipy path).
 
 - ``orbit_determination.iterative_fit`` / ``NativeOrbitFitter.full_od`` /
   ``run_od`` (native orchestration)
@@ -186,39 +173,29 @@ Current Migrated APIs
     ``run_od_2body_ipc`` (observation models in order, full OD on the used
     observations, original / used astrometry snapshots for the members).
   - External native propagators: a backend compiled in another extension
-    (adam-assist) exposes its propagation as a C-ABI table
-    (``ExternalPropagatorV1``: ABI version, identity, integration time
-    scale, two-body flag, and a thread-safe ``propagate`` over flat arrays
-    of states, epochs, frame, origin and target times, cross-product or
-    pairwise) in a capsule named ``adam_core.propagator.v1``, declared with
-    the ``propagator_capsule`` work unit of its ``NativeBackend``. The OD
-    entry points then hand the capsule to Rust, which runs every stage
-    (``run_iod``, the refinement loops, the fits) natively with that
-    backend's dynamics, with the GIL released and no Python call per
-    prediction. ``_rust_native.two_body_propagator_capsule()`` is the
-    reference implementation.
-  - Dispatch: ``iterative_fit``, ``cmc2003_fit_detailed`` and ``run_iod``
-    (and ``iod``, which wraps it) route to a propagator's ``iterative_fit`` /
-    ``cmc2003_fit`` / ``run_iod`` work units when its ``native_backend``
-    (``NativeBackend``) declares them, and the declaration still covers the
-    instance (no propagation method or work unit overridden below the
-    declaring class); a method of that name alone is not enough. Otherwise
-    they
-    (test suite only) run the same Rust loop through the private callback
-    adapter; outside the test suite a propagator without a native backend
-    raises ``TypeError``
-    (``iterative_fit_ipc`` / ``cmc2003_fit_ipc`` / ``run_iod_ipc`` with the
-    propagator object); ``initial_orbit_determination`` runs ``run_iod`` per
-    linkage, and a propagator's batch ``initial_orbit_determination`` work
-    unit only with ``acceptance="prefit"`` (the legacy policy it implements); ``NativeOrbitFitter.full_od`` routes to ``full_od``
-    when its ``rejection_kwargs`` are all fit or loop settings and otherwise
-    chains ``initial_fit`` and ``refine_fit`` (two native crossings);
-    ``run_od`` routes to ``run_od`` for a ``NativeOrbitFitter`` when every
-    model provides a native spec, otherwise it composes model application
-    (Rust kernels), ``fitter.full_od`` and the provenance join. No orbit
-    determination loop remains in Python: Python owns ids, the
-    ``OrbitFitter`` plugin boundary, table loading and table assembly.
-    Settings that only the scipy solver understood raise ``ValueError``.
+    (adam-assist) exposes a propagation-only C-ABI table in a capsule named
+    ``adam_core.propagator.v1``. The v1 table and request carry ABI version,
+    structure size, identity and capability bits. The mandatory callback is
+    thread-safe batched propagation over flat state, exact epoch, frame,
+    origin, target-time and optional A1/A2/A3/Marsden-parameter arrays.
+    Optional capability-gated STMs are derivatives of the provider's own
+    dynamics. Adam-core retains the capsule through the workflow, validates
+    its declared identity, releases the GIL and performs no Python call per
+    prediction. The complete lifetime, threading, error and no-unwind
+    contract is in :doc:`native_propagator_abi`.
+  - Dispatch: ``iterative_fit``, ``cmc2003_fit_detailed``, ``run_iod``,
+    ``NativeOrbitFitter.full_od`` and the native ``run_od`` route call the
+    adam-core PyO3 drivers directly, passing only refinement and (when
+    distinct) IOD propagation capsules. ``initial_orbit_determination`` uses
+    adam-core's linkage-batch driver, which applies the same ``run_iod`` stage
+    to all linkage row selections in one Python-to-Rust workflow call.
+    ``run_od`` uses its one-crossing native driver when the fitter keeps the
+    canonical hooks and every observation model has a native spec; otherwise
+    it exactly composes model application, ``fitter.full_od`` and provenance.
+    Providers never select or replace an OD algorithm. Python owns coarse API
+    composition, ids, table loading and table assembly, while all numeric
+    loops stay in Rust. Unsupported Python-only propagators raise
+    ``TypeError``.
   - Error behavior: driver errors raise ``ValueError`` for invalid inputs and
     ``RuntimeError`` for backend failures; a propagator without a native
     backend raises ``TypeError``.
@@ -231,9 +208,9 @@ Current Migrated APIs
     heuristic combination without calibrated rejection statistics.
 
 - ``orbit_determination.cmc2003_fit`` / ``cmc2003_fit_detailed``
-  - Boundary: the whole loop is the ``cmc2003_fit`` work unit above (fused
-    or callback route); the decision kernels below remain callable on their
-    own for diagnostics.
+  - Boundary: the whole loop is the adam-core ``cmc2003_fit_ipc`` driver
+    above over the selected propagation capsule; the decision kernels below
+    remain callable on their own for diagnostics.
   - Rust entrypoints: ``adam_core._rust_native.cmc2003_apparitions_numpy``,
     ``cmc2003_expected_residual_chi2_numpy`` (``(N, 2)`` whitened residuals,
     ``(2N, 6)`` Jacobian, optional ``(6, 6)`` covariance, selection mask),

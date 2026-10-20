@@ -21,9 +21,8 @@ from ._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
     deprecated,
     native_propagator,
-    native_work_unit,
 )
-from .evaluate import OrbitDeterminationObservations, evaluate_orbits
+from .evaluate import OrbitDeterminationObservations
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
 from .observation_uncertainty import ObservationUncertaintyModel
 
@@ -56,15 +55,14 @@ OD_DEFAULTS = MappingProxyType(
     }
 )
 
-# Fused native fitter kwargs (bead personal-cmy.7 / personal-dqk): the Rust
-# Gauss-Newton work units accept only these tuning parameters.
+# Legacy native fitter kwargs retained in the canonical core driver's
+# validation: the Rust Gauss-Newton solver accepts only these parameters.
 _NATIVE_FIT_KWARGS = {"xtol", "ftol", "max_iterations"}
 
-# Solver settings understood by a propagator's fused whitened work unit
-# (``fit_least_squares_whitened``).
+# Solver settings understood by adam-core's native whitened-fit driver.
 _FUSED_WHITENED_KWARGS = {"xtol", "ftol", "gtol", "max_nfev", "max_iterations"}
 # Keyword arguments the rejection loops forward to `fit_least_squares` that
-# their fused work units (``iterative_fit`` / ``cmc2003_fit``) understand.
+# adam-core's native drivers understand.
 _FUSED_LOOP_KWARGS = _FUSED_WHITENED_KWARGS | {"jacobian", "validate_covariance"}
 
 
@@ -76,7 +74,7 @@ def _fit_settings(
     kwargs: dict,
 ) -> dict:
     """
-    The ``fit_settings`` dict of a propagator's fused whitened work units:
+    The ``fit_settings`` dict for adam-core's native whitened-fit driver:
     the `fit_least_squares` options, tolerances, and independent iteration and
     residual-evaluation budgets. None leaves the evaluation count uncapped.
     """
@@ -412,8 +410,7 @@ def _probe_covariance(
     loss: str,
     f_scale: float,
 ) -> dict:
-    """Run the Rust covariance probe over ``propagator`` (its own Rust work
-    unit, or the callback route) and return its dict."""
+    """Run adam-core's Rust covariance probe over the provider capsule."""
     from adam_core import _rust_native
 
     method = "2-point" if jacobian_method == "solver" else jacobian_method
@@ -522,7 +519,7 @@ def _fitted_tables_from_native_output(
     weights: npt.NDArray[np.float64],
 ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
     """
-    Wrap the dict a propagator's fused Rust fit work unit returns (state,
+    Wrap the dict adam-core's native Rust fit driver returns (state,
     covariance, solver diagnostics and the evaluation over the full
     observation set) into `FittedOrbits` / `FittedOrbitMembers` without
     further computation. ``weights`` are the members' effective weights in
@@ -534,6 +531,8 @@ def _fitted_tables_from_native_output(
     fitted_orbit = FittedOrbits.from_kwargs(
         orbit_id=orbit.orbit_id,
         object_id=orbit.object_id,
+        physical_parameters=orbit.physical_parameters,
+        non_gravitational_parameters=orbit.non_gravitational_parameters,
         coordinates=CartesianCoordinates.from_kwargs(
             x=state[0:1],
             y=state[1:2],
@@ -572,136 +571,6 @@ def _fitted_tables_from_native_output(
         weight=np.asarray(weights, dtype=np.float64),
     )
     return fitted_orbit, fitted_orbit_members
-
-
-def _fused_whitened_fit(
-    orbit: Orbits,
-    observations: OrbitDeterminationObservations,
-    propagator: Propagator,
-    mask: Optional[pa.Array],
-    jacobian: str,
-    validate_covariance: bool,
-    loss: str,
-    f_scale: float,
-    kwargs: dict,
-) -> Optional[Tuple[FittedOrbits, FittedOrbitMembers]]:
-    """
-    The complete whitened fit as one crossing of a Rust-backed propagator's
-    ``fit_least_squares_whitened`` work unit: solver, Jacobian (analytic /
-    central / 2-point), robust loss, validated covariance and the final
-    evaluation over the full observation set all run natively; the veneer
-    only marshals tables and re-emits the work unit's diagnostics as
-    `RuntimeWarning`s. Returns None when the propagator exposes no such work
-    unit.
-    """
-    fused = native_work_unit(propagator, "fit_least_squares_whitened")
-    if fused is None:
-        return None
-    ignore_mask = (
-        [False] * len(observations) if mask is None else pc.invert(mask).to_pylist()
-    )
-    output = fused(
-        orbit,
-        observations,
-        ignore_mask,
-        fit_settings=_fit_settings(
-            loss, f_scale, jacobian, validate_covariance, kwargs
-        ),
-    )
-    _emit_native_warnings(output)
-    return _fitted_tables_from_native_output(
-        orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)
-    )
-
-
-def _native_fit_least_squares(
-    orbit: Orbits,
-    observations: OrbitDeterminationObservations,
-    observations_to_include: OrbitDeterminationObservations,
-    propagator: Propagator,
-    ignore: Optional[List[str]],
-    mask: Optional[pa.Array],
-    kwargs: dict,
-) -> Optional[Tuple[FittedOrbits, FittedOrbitMembers]]:
-    """
-    Rust-backed Gauss-Newton fit behind a propagator's fused
-    ``fit_least_squares_evaluated`` (one crossing) or composed
-    ``fit_least_squares`` (fit + `evaluate_orbits`) work units (beads
-    personal-cmy.7 / personal-dqk). Returns None when the propagator exposes
-    neither. Only reachable for the legacy forward-difference Jacobian with
-    the linear loss; see `fit_least_squares`.
-    """
-    fused_fit = native_work_unit(propagator, "fit_least_squares_evaluated")
-    if fused_fit is not None:
-        ignore_mask = (
-            pc.is_in(observations.id, pa.array(ignore)).to_pylist()
-            if ignore is not None
-            else [False] * len(observations)
-        )
-        output = fused_fit(orbit, observations, ignore_mask, **kwargs)
-        outlier = np.asarray(output["outlier"], dtype=bool)
-        return _fitted_tables_from_native_output(
-            orbit, observations, output, (~outlier).astype(np.float64)
-        )
-
-    native_fit = native_work_unit(propagator, "fit_least_squares")
-    if native_fit is not None:
-        fitted, _chi2, iterations, converged = native_fit(
-            orbit, observations_to_include, **kwargs
-        )
-        fitted_orbit, fitted_orbit_members = evaluate_orbits(
-            fitted,
-            observations,
-            propagator,
-            parameters=6,
-            ignore=ignore,
-        )
-        fitted_orbit = (
-            fitted_orbit.set_column("iterations", [iterations])
-            .set_column("success", [converged])
-            .set_column("status_code", [1 if converged else 0])
-        )
-        fitted_orbit_members = fitted_orbit_members.set_column(
-            "solution", pc.invert(fitted_orbit_members.outlier)
-        ).set_column(
-            "weight",
-            _member_weights(observations, mask, np.ones(len(observations_to_include))),
-        )
-        return fitted_orbit, fitted_orbit_members
-
-    return None
-
-
-def _validate_native_covariance(
-    fitted_orbit: FittedOrbits,
-    observations_to_include: OrbitDeterminationObservations,
-    propagator: Propagator,
-) -> None:
-    """
-    Run the weak-direction consistency check on the covariance returned by a
-    propagator's legacy fused ``fit_least_squares_evaluated`` work unit (the
-    forward-difference ``inv(J^T J)`` of its Gauss-Newton fitter). The fit is
-    left unchanged: a failed check emits a `RuntimeWarning` instead of
-    replacing the covariance.
-    """
-    covariance_matrix = fitted_orbit.coordinates.covariance.to_matrix()[0]
-    if not np.all(np.isfinite(covariance_matrix)):
-        return
-    state_vector = fitted_orbit.coordinates.values[0]
-    mjd_tdb = float(
-        fitted_orbit.coordinates.time.rescale("tdb")
-        .mjd()
-        .to_numpy(zero_copy_only=False)[0]
-    )
-    _validated_covariance(
-        covariance_matrix,
-        "2-point",
-        state_vector,
-        mjd_tdb,
-        observations_to_include,
-        propagator,
-        0.0,
-    )
 
 
 def _fit_least_squares(
@@ -768,11 +637,9 @@ def _fit_least_squares(
           encounter).
         - ``"2-point"``: legacy behavior; the covariance is taken from the
           solver's forward-difference Jacobian. Retained for comparison; its
-          covariance is untrustworthy in weakly constrained directions. With
-          ``loss="linear"`` and no scipy-specific ``**kwargs`` this is also the
-          only path that dispatches to a propagator's fused Rust
-          ``fit_least_squares_evaluated`` / ``fit_least_squares`` work units
-          (the Gauss-Newton fitter of the Rust adam-assist backend).
+          covariance is untrustworthy in weakly constrained directions. The
+          canonical adam-core Rust solver implements this path over the same
+          selected propagation capsule as every other Jacobian mode.
 
         Passing an explicit ``jac`` in ``**kwargs`` overrides this parameter
         and computes the covariance from the solver-reported Jacobian.
@@ -783,10 +650,8 @@ def _fit_least_squares(
         path falls back to the central-difference covariance; other paths
         emit a `RuntimeWarning`. This also serves as the guard against
         planetary encounters inside the arc invalidating the 2-body state
-        transition matrix. On the fused Rust path (``jacobian="2-point"``
-        with a Rust-backed propagator) the check adds three residual
-        evaluations to the single native crossing and warns on failure; pass
-        ``False`` to keep that path to one crossing.
+        transition matrix. The check remains inside the single adam-core
+        native workflow call; pass ``False`` to omit the extra predictions.
     loss : {"linear", "huber"}, optional
         Loss applied to the whitened residual components.
 
@@ -879,12 +744,11 @@ def _fit_least_squares(
 
     # TODO: Investigate whether we want to add fitting for the epoch as well
     # Set up least squares problem
-    if ignore is not None:
-        mask = pc.invert(pc.is_in(observations.id, pa.array(ignore)))
-        observations_to_include = observations.apply_mask(mask)
-    else:
-        mask = None
-        observations_to_include = observations
+    mask = (
+        pc.invert(pc.is_in(observations.id, pa.array(ignore)))
+        if ignore is not None
+        else None
+    )
 
     unsupported = set(kwargs) - _FUSED_WHITENED_KWARGS - _NATIVE_FIT_KWARGS
     if unsupported:
@@ -896,48 +760,8 @@ def _fit_least_squares(
 
     _warn_if_analytic_jacobian_mismatches(propagator, jacobian)
 
-    # Rust-backed propagators expose the complete whitened fit as one native
-    # crossing (``fit_least_squares_whitened``): every Jacobian option, both
-    # losses, the validated covariance and the final evaluation.
-    fused = _fused_whitened_fit(
-        orbit,
-        observations,
-        propagator,
-        mask,
-        jacobian,
-        validate_covariance,
-        loss,
-        f_scale,
-        kwargs,
-    )
-    if fused is not None:
-        return fused
-
-    # Legacy forward-difference path on a Rust-backed propagator that exposes
-    # only the older ``fit_least_squares_evaluated`` / ``fit_least_squares``
-    # work units (beads personal-cmy.7 / personal-dqk). The default
-    # analytic-Jacobian and robust-loss paths deliberately bypass it: those
-    # work units use the same forward-difference Jacobian whose covariance the
-    # analytic path exists to correct.
-    if jacobian == "2-point" and loss == "linear" and set(kwargs) <= _NATIVE_FIT_KWARGS:
-        native = _native_fit_least_squares(
-            orbit,
-            observations,
-            observations_to_include,
-            propagator,
-            ignore,
-            mask,
-            kwargs,
-        )
-        if native is not None:
-            if validate_covariance:
-                _validate_native_covariance(
-                    native[0], observations_to_include, propagator
-                )
-            return native
-
-    # Every other propagator: the same Rust driver, driving the propagator's
-    # own ``generate_ephemeris`` through the callback route.
+    # adam-core owns the complete native fit.  The backend contributes only
+    # its capsule-backed propagation and optional derivative capabilities.
     from adam_core import _rust_native
 
     ignore_mask = (
@@ -1062,21 +886,14 @@ def _iterative_fit(
         contamination_percentage=contamination_percentage,
     )
 
-    # Rust-backed propagators run the whole rejection loop in one crossing
-    # (``iterative_fit`` work unit); every other propagator runs the same Rust
-    # loop through the callback route. The facade only wraps the selected pass.
-    fused = native_work_unit(propagator, "iterative_fit")
-    if fused is not None:
-        output = fused(orbit, observations, fit_settings=fit_settings, **loop_settings)
-    else:
-        from adam_core import _rust_native
+    from adam_core import _rust_native
 
-        output = _rust_native.iterative_fit_ipc(
-            native_propagator(propagator),
-            *_native_problem(orbit, observations),
-            fit_settings=fit_settings,
-            **loop_settings,
-        )
+    output = _rust_native.iterative_fit_ipc(
+        native_propagator(propagator),
+        *_native_problem(orbit, observations),
+        fit_settings=fit_settings,
+        **loop_settings,
+    )
     _emit_native_warnings(output)
     return _fitted_tables_from_native_output(
         orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)

@@ -2919,6 +2919,8 @@ pub struct OrbitGeometry {
     pub scale: crate::TimeScale,
     pub frame: Frame,
     pub origin: crate::OriginId,
+    pub non_gravitational_source: Option<String>,
+    pub non_gravitational_parameters: Option<crate::NonGravitationalParametersRow>,
 }
 
 impl OrbitGeometry {
@@ -2938,12 +2940,20 @@ impl OrbitGeometry {
                 "orbit determination requires an orbit epoch".to_string(),
             )
         })?;
+        let non_gravitational_parameters = orbit
+            .non_gravitational_parameters
+            .as_ref()
+            .filter(|parameters| !parameters.is_all_null());
         Ok(Self {
             state,
             epoch: times.epochs[0],
             scale: times.scale,
             frame: orbit.coordinates.frame,
             origin: orbit.coordinates.origins.origins[0].clone(),
+            non_gravitational_source: non_gravitational_parameters
+                .and_then(|parameters| parameters.source[0].clone()),
+            non_gravitational_parameters: non_gravitational_parameters
+                .map(|parameters| parameters.row(0)),
         })
     }
 }
@@ -3080,7 +3090,7 @@ pub fn candidate_orbit_batch(
         )?),
         None,
     )?;
-    OrbitBatch::new(
+    let mut candidates = OrbitBatch::new(
         // Zero-padded ids: backends honoring the public sorted-output
         // contract (the ASSIST propagator sorts blocks lexicographically by
         // orbit id) must return candidate blocks in input order, otherwise
@@ -3091,8 +3101,24 @@ pub fn candidate_orbit_batch(
             .collect(),
         vec![None::<ObjectId>; states.len()],
         coordinates,
-    )
-    .map_err(Into::into)
+    )?;
+    if let Some(parameters) = geometry.non_gravitational_parameters {
+        let repeat = |value: Option<f64>| vec![value; states.len()];
+        candidates = candidates.with_non_gravitational_parameters(
+            crate::NonGravitationalParametersBatch {
+                source: vec![geometry.non_gravitational_source.clone(); states.len()],
+                a1: repeat(parameters.a1),
+                a2: repeat(parameters.a2),
+                a3: repeat(parameters.a3),
+                aln: repeat(parameters.aln),
+                nk: repeat(parameters.nk),
+                nm: repeat(parameters.nm),
+                nn: repeat(parameters.nn),
+                r0: repeat(parameters.r0),
+            },
+        )?;
+    }
+    Ok(candidates)
 }
 
 /// Source of predicted topocentric spherical coordinates for candidate
@@ -3123,6 +3149,7 @@ pub trait SphericalPredictor {
     fn propagate_stm(
         &self,
         _state: [f64; 6],
+        _non_gravitational_parameters: Option<crate::NonGravitationalParametersRow>,
         _epoch_tdb: crate::Epoch,
         _times_tdb: &[crate::Epoch],
     ) -> PropagationResultValue<Vec<super::StmRow>> {
@@ -3167,10 +3194,12 @@ where
     fn propagate_stm(
         &self,
         state: [f64; 6],
+        non_gravitational_parameters: Option<crate::NonGravitationalParametersRow>,
         epoch_tdb: crate::Epoch,
         times_tdb: &[crate::Epoch],
     ) -> PropagationResultValue<Vec<super::StmRow>> {
-        self.propagator.propagate_stm(state, epoch_tdb, times_tdb)
+        self.propagator
+            .propagate_stm(state, non_gravitational_parameters, epoch_tdb, times_tdb)
     }
 
     fn predict_spherical(

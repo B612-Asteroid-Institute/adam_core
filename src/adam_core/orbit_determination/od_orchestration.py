@@ -46,7 +46,6 @@ from ..propagator.propagator import Propagator
 from ._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
     native_propagator,
-    native_work_unit,
 )
 from .differential_correction import OD_DEFAULTS
 from .evaluate import OrbitDeterminationObservations
@@ -264,15 +263,14 @@ def _fused_run_od(
     object_id: str | None,
 ) -> tuple[FittedOrbits, FittedOrbitMembers] | None:
     """
-    `run_od` as one crossing of a Rust-backed propagator's ``run_od`` work
-    unit, for a `NativeOrbitFitter` whose hooks and settings the work unit
-    represents and models that all provide compatible native specs. Returns
+    Core-owned `run_od` as one native crossing for a `NativeOrbitFitter`
+    whose hooks retain the canonical behavior and observation models that
+    provide native specs. The propagators contribute capsules only. Returns
     None otherwise, so Python overrides run through the composition.
     """
     from .native_orbit_fitter import NativeOrbitFitter, tables_from_native_full_od
 
-    fused = native_work_unit(propagator, "run_od")
-    if fused is None or not isinstance(fitter, NativeOrbitFitter):
+    if not isinstance(fitter, NativeOrbitFitter):
         return None
     if not fitter.supports_native_full_od():
         return None
@@ -284,13 +282,24 @@ def _fused_run_od(
     iod_settings, refinement, fit_settings = fitter.native_settings()
     _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
     backend_object_id = object_id if object_id is not None else uuid.uuid4().hex
-    output = fused(
-        observations,
+    from adam_core import _rust_native
+    from .differential_correction import _native_problem
+    from .iod import _placeholder_orbit
+
+    _, observed_ipc, observers_ipc = _native_problem(
+        _placeholder_orbit(observations), observations
+    )
+    output = _rust_native.run_od_ipc(
+        native_propagator(propagator),
+        observed_ipc,
+        observers_ipc,
+        observations.observers.code.to_pylist(),
+        observations.photometry.band.to_pylist(),
+        observations.astcat.to_pylist(),
         models=specs,
         iod_settings=iod_settings,
         refinement=refinement,
         fit_settings=fit_settings,
-        # The configured IOD propagator, explicit when it is not `propagator`.
         iod_propagator=native_propagator(fitter.iod_propagator_for(propagator)),
     )
     fitted_orbits, members = tables_from_native_full_od(
@@ -466,8 +475,9 @@ def run_od(
             )
         models = _default_models()
 
-    # Rust-backed propagators run the whole step in one crossing (``run_od``
-    # work unit): models, IOD, refinement and the provenance snapshots. The
+    # adam-core runs the whole step in one native crossing: models, IOD,
+    # refinement and the provenance snapshots. The propagator supplies only
+    # its capsule; the
     # veneer keeps id validation, object ids and table assembly.
     fused = _fused_run_od(observations, fitter, models, propagator, object_id)
     if fused is not None:

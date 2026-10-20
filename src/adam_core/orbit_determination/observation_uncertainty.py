@@ -308,8 +308,8 @@ def native_model_specs(
 ) -> Optional[list[dict]]:
     """
     The ``_native_specs()`` dicts of ``models`` (composites flattened, in
-    application order) for a Rust-backed propagator's fused ``run_od`` work
-    unit, or None when any model has no native spec (a user-defined Python
+    application order) for adam-core's native ``run_od`` driver, or None
+    when any model has no native spec (a user-defined Python
     model), in which case the models are applied in Python. A subclass that
     overrides ``apply`` must also define ``_native_specs`` to explicitly
     describe its new behavior; an inherited specification is insufficient.

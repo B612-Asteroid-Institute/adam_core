@@ -79,7 +79,6 @@ from ._native_dispatch import (
     _warn_if_analytic_jacobian_mismatches,
     deprecated,
     native_propagator,
-    native_work_unit,
 )
 from .differential_correction import (
     _FUSED_LOOP_KWARGS,
@@ -381,21 +380,14 @@ def cmc2003_fit_detailed(
         psd_floor_frac=psd_floor_frac,
     )
 
-    # Rust-backed propagators run the whole CMC2003 loop in one crossing
-    # (``cmc2003_fit`` work unit); every other propagator runs the same Rust
-    # loop through the callback route. The facade only wraps the final pass.
-    fused = native_work_unit(propagator, "cmc2003_fit")
-    if fused is not None:
-        output = fused(orbit, observations, fit_settings=fit_settings, **loop_settings)
-    else:
-        from adam_core import _rust_native
+    from adam_core import _rust_native
 
-        output = _rust_native.cmc2003_fit_ipc(
-            native_propagator(propagator),
-            *_native_problem(orbit, observations),
-            fit_settings=fit_settings,
-            **loop_settings,
-        )
+    output = _rust_native.cmc2003_fit_ipc(
+        native_propagator(propagator),
+        *_native_problem(orbit, observations),
+        fit_settings=fit_settings,
+        **loop_settings,
+    )
     _emit_native_warnings(output)
     fitted_orbit, fitted_orbit_members = _fitted_tables_from_native_output(
         orbit, observations, output, np.asarray(output["weights"], dtype=np.float64)

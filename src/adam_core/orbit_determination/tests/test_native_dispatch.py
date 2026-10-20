@@ -22,21 +22,13 @@ from adam_core.orbit_determination.tests.test_observation_uncertainty import (
 
 
 class RecordingNativePropagator(NativeTwoBodyPropagator):
-    # Overriding work units voids the inherited declaration; recording calls
-    # leaves the dynamics unchanged, so it is declared again.
-    native_backend = NativeTwoBodyPropagator.native_backend
+    """Capsule provider with forbidden OD-shaped methods that must be ignored."""
 
-    def __init__(self):
-        self.run_calls = 0
-        self.full_calls = 0
+    def run_od(self, *args, **kwargs):  # pragma: no cover - must not run
+        raise AssertionError("provider-owned run_od was dispatched")
 
-    def run_od(self, *args, **kwargs):
-        self.run_calls += 1
-        return super().run_od(*args, **kwargs)
-
-    def full_od(self, *args, **kwargs):
-        self.full_calls += 1
-        return super().full_od(*args, **kwargs)
+    def full_od(self, *args, **kwargs):  # pragma: no cover - must not run
+        raise AssertionError("provider-owned full_od was dispatched")
 
 
 class ScaleSigmas(IdentityModel):
@@ -118,10 +110,6 @@ def test_overridden_model_changes_used_uncertainties(observations, backend, form
         )
     if form != "composite":
         assert model.calls == 1
-    if isinstance(propagator, RecordingNativePropagator):
-        assert propagator.run_calls == 0
-        # Only custom model application falls back; built-in fitting stays fused.
-        assert propagator.full_calls == 1
 
 
 @pytest.mark.parametrize(
@@ -131,7 +119,6 @@ def test_compatible_models_keep_fused_run_od(observations, model_class):
     model = model_class()
     propagator = RecordingNativePropagator()
     fitted, members = run_od(observations, make_fitter(), model, propagator=propagator)
-    assert propagator.run_calls == 1
     assert fitted.success.to_pylist() == [True]
     npt.assert_allclose(
         members.used_astrometry.sigma_lon.to_numpy(),
@@ -146,7 +133,6 @@ def test_further_model_override_needs_new_spec(observations):
     _, members = run_od(
         observations, make_fitter(), ChangedNativeScaleSigmas(), propagator=propagator
     )
-    assert propagator.run_calls == 0
     npt.assert_allclose(
         members.used_astrometry.sigma_lon.to_numpy(),
         4.0 * members.original_astrometry.sigma_lon.to_numpy(),
@@ -182,8 +168,6 @@ def test_custom_fitter_hooks_are_called(
             run_od(observations, fitter, None, propagator=propagator)
         else:
             fitter.full_od("custom", observations, propagator)
-    assert propagator.run_calls == 0
-    assert propagator.full_calls == 0
 
 
 @pytest.mark.parametrize(
@@ -195,10 +179,8 @@ def test_compatible_fitters_keep_fused_paths(observations, fitter_class, entrypo
     propagator = RecordingNativePropagator()
     if entrypoint == "run_od":
         fitted, _ = run_od(observations, fitter, None, propagator=propagator)
-        assert propagator.run_calls == 1
     else:
         fitted, _ = fitter.full_od("compatible", observations, propagator)
-        assert propagator.full_calls == 1
     assert fitted.success.to_pylist() == [True]
 
 
@@ -217,7 +199,6 @@ def test_instance_model_override_is_honored(observations, monkeypatch):
     monkeypatch.setattr(model, "apply", ScaleSigmas().apply)
     propagator = RecordingNativePropagator()
     _, members = run_od(observations, make_fitter(), model, propagator=propagator)
-    assert propagator.run_calls == 0
     npt.assert_allclose(
         members.used_astrometry.sigma_lon.to_numpy(),
         2.0 * members.original_astrometry.sigma_lon.to_numpy(),
@@ -235,6 +216,8 @@ class ChangedDynamics(NativeTwoBodyPropagator):
 class UndeclaredMethods(TwoBodyPropagator):
     """Has a ``run_od`` method but declares no native backend."""
 
+    native_backend = None
+
     def run_od(self, *args, **kwargs):  # pragma: no cover - must not run
         raise AssertionError("an undeclared work unit was dispatched")
 
@@ -242,29 +225,32 @@ class UndeclaredMethods(TwoBodyPropagator):
 def test_dispatch_requires_a_declared_backend():
     from adam_core.orbit_determination._native_dispatch import (
         native_backend,
+        native_propagator,
         native_work_unit,
     )
 
     base = NativeTwoBodyPropagator()
     assert native_backend(base) is NativeTwoBodyPropagator.native_backend
-    assert native_work_unit(base, "run_od") is not None
-    # Not declared: a method of that name is not enough.
-    assert native_work_unit(base, "fit_least_squares_evaluated") is None
+    assert native_work_unit(base, "propagator_capsule") is not None
+    assert native_work_unit(base, "run_od") is None
     assert native_work_unit(UndeclaredMethods(), "run_od") is None
-    # Overridden dynamics void the inherited declaration ...
     assert native_backend(ChangedDynamics()) is None
-    assert native_work_unit(ChangedDynamics(), "run_od") is None
-    # ... and so does an instance-level replacement of a work unit.
     patched = NativeTwoBodyPropagator()
-    patched.run_od = lambda *args, **kwargs: None
+    patched.propagator_capsule = lambda: None
     assert native_backend(patched) is None
-    # A subclass that declares again is covered.
-    assert native_work_unit(RecordingNativePropagator(), "run_od") is not None
+    descriptor = native_propagator(base)
+    assert descriptor[1:] == ("adam_core.two_body.external", "0.6.1", True)
 
 
-def test_overridden_dynamics_run_the_composed_path():
-    """run_od on a subclass with its own dynamics never enters the parent's
-    compiled work unit, and still returns an orbit."""
+def test_native_backend_rejects_algorithm_work_units():
+    from adam_core.propagator import NativeBackend
+
+    with pytest.raises(ValueError, match="propagation-only"):
+        NativeBackend("provider", "1", frozenset({"run_od"}))
+
+
+def test_overridden_dynamics_fail_without_a_native_capsule():
+    """A subclass with undeclared dynamics cannot fall back to Python calls."""
     observations = make_synthetic_observations()
     calls = []
 
@@ -278,11 +264,9 @@ def test_overridden_dynamics_run_the_composed_path():
             return super().full_od(*args, **kwargs)
 
     propagator = Spy()
-    orbits, _ = run_od(
-        observations, NativeOrbitFitter(Spy()), None, propagator=propagator
-    )
+    with pytest.raises(TypeError, match="has no native orbit-determination backend"):
+        run_od(observations, NativeOrbitFitter(Spy()), None, propagator=propagator)
     assert calls == []
-    assert len(orbits) == 1
 
 
 @pytest.mark.parametrize(
@@ -334,7 +318,7 @@ class CapsuleTwoBody(TwoBodyPropagator):
 
     native_backend = _NativeBackend(
         name="adam_core.two_body.external",
-        version="test",
+        version="0.6.1",
         work_units=frozenset({"propagator_capsule"}),
     )
     ephemeris_calls = 0
@@ -378,6 +362,22 @@ def test_external_propagator_capsule_runs_od_natively():
         .as_py()
         .startswith("adam_core.two_body.external")
     )
+
+    # A valid capsule cannot spoof the identity declared for provenance.
+    class MismatchedIdentity(CapsuleTwoBody):
+        from adam_core.propagator import NativeBackend as _NativeBackend
+
+        native_backend = _NativeBackend(
+            name="not-the-table",
+            version="0",
+            work_units=frozenset({"propagator_capsule"}),
+        )
+
+    from adam_core.orbit_determination import run_iod
+
+    with pytest.raises(ValueError, match="identity mismatch"):
+        run_iod(observations, MismatchedIdentity(), rchi2_threshold=1e6)
+
     # A capsule of another name is refused.
     with pytest.raises(ValueError, match="capsule"):
         _check_bad_capsule()
@@ -422,14 +422,18 @@ def test_python_propagators_are_refused():
     from adam_core.orbit_determination import refine, run_iod
 
     observations = make_synthetic_observations()
+
+    class PythonOnly(TwoBodyPropagator):
+        native_backend = None
+
     with pytest.raises(TypeError, match="no native orbit-determination backend"):
-        run_iod(observations, TwoBodyPropagator())
+        run_iod(observations, PythonOnly())
     with pytest.raises(TypeError, match="no native orbit-determination backend"):
         run_od(
             observations,
-            NativeOrbitFitter(TwoBodyPropagator(), iod_rchi2_threshold=1e6),
+            NativeOrbitFitter(PythonOnly(), iod_rchi2_threshold=1e6),
             None,
-            propagator=TwoBodyPropagator(),
+            propagator=PythonOnly(),
         )
     # A declared capsule runs natively, and a subclass that changes the
     # dynamics is not covered by it.

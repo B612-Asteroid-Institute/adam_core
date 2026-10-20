@@ -16,7 +16,6 @@ from ._native_dispatch import (
     _has_compatible_native_spec,
     _warn_if_analytic_jacobian_mismatches,
     native_propagator,
-    native_work_unit,
 )
 from .differential_correction import (
     _FUSED_LOOP_KWARGS,
@@ -30,7 +29,7 @@ from .differential_correction import (
 )
 from .evaluate import OrbitDeterminationObservations, evaluate_orbits
 from .fitted_orbits import FittedOrbitMembers, FittedOrbits
-from .iod import IOD_DEFAULTS, run_iod
+from .iod import IOD_DEFAULTS, _placeholder_orbit, run_iod
 from .orbit_fitter import OrbitFitter
 from .provenance import with_iod_provenance
 from .rejection import _cmc2003_fit
@@ -238,16 +237,17 @@ class NativeOrbitFitter(OrbitFitter):
     def native_settings(self) -> tuple[dict, dict, dict]:
         """
         ``(iod_settings, refinement, fit_settings)`` dicts describing this
-        fitter's configuration for a Rust-backed propagator's fused
-        ``full_od`` / ``run_od`` work units: the IOD decision-loop settings,
+        fitter's configuration for adam-core's native ``full_od`` / ``run_od``
+        drivers: the IOD decision-loop settings,
         the outlier-rejection loop and its constants, and the whitened-fit
         options (`fit_least_squares` defaults unless overridden through
         ``rejection_kwargs``).
 
         A subclass overriding ``full_od``, ``initial_fit`` or ``refine_fit``
-        uses the Python composition by default. Defining ``native_settings``
-        on that subclass explicitly opts into fusion and promises these dicts
-        describe its complete fitting behavior, including the overridden hooks.
+        uses the stage composition by default. Defining ``native_settings``
+        on that subclass explicitly opts into the one-crossing core driver and
+        promises these dicts describe its complete fitting behavior, including
+        the overridden hooks.
         """
         from .gauss import MU, C
 
@@ -299,7 +299,7 @@ class NativeOrbitFitter(OrbitFitter):
         return iod_settings, refinement, fit_settings
 
     def supports_native_full_od(self) -> bool:
-        """Whether the fitting hooks and settings can use the fused work units.
+        """Whether the fitting hooks fit adam-core's one-crossing driver.
 
         Inherited settings cannot represent overridden fitting hooks. Check
         that compatibility before parsing settings for the built-in drivers.
@@ -333,9 +333,9 @@ class NativeOrbitFitter(OrbitFitter):
         Whether ``propagator`` is the IOD propagator this fitter is
         configured for: the configured instance itself, or (deprecated class
         form) an instance of ``propagator_class`` built without extra keyword
-        arguments. When it is, a fused work unit scores the IOD candidates on
-        ``propagator`` itself; otherwise `iod_propagator_for` hands the fused
-        work unit the configured IOD propagator explicitly.
+        arguments. When it is, the core driver scores IOD candidates on
+        ``propagator`` itself; otherwise `iod_propagator_for` supplies the
+        configured IOD propagation capsule explicitly.
         """
         if self._iod_instance is not None:
             return propagator is self._iod_instance
@@ -345,7 +345,7 @@ class NativeOrbitFitter(OrbitFitter):
 
     def iod_propagator_for(self, propagator: Propagator) -> Optional[Propagator]:
         """
-        The explicit IOD propagator for a fused work unit refining on
+        The explicit IOD propagator for a core driver refining on
         ``propagator``: None when ``propagator`` already is the configured
         IOD propagator (`fused_propagator_matches`), else a fresh
         ``propagator_class(**propagator_kwargs)``.
@@ -361,28 +361,35 @@ class NativeOrbitFitter(OrbitFitter):
         propagator: Propagator,
     ) -> Tuple[FittedOrbits, FittedOrbitMembers]:
         """
-        IOD followed by refinement. On a Rust-backed propagator exposing the
-        fused ``full_od`` work unit the whole pipeline (Gauss IOD decision
-        loop, differential correction, outlier rejection) runs natively in
-        one crossing when ``supports_native_full_od`` confirms compatibility;
-        the IOD stage runs on the configured IOD propagator (`iod_propagator_for`),
-        which the work unit receives explicitly when it is not ``propagator``
-        itself. Otherwise `initial_fit` and `refine_fit` are chained,
+        IOD followed by refinement. The adam-core native driver owns the whole
+        pipeline (Gauss IOD decision loop, differential correction and
+        outlier rejection) in one crossing when ``supports_native_full_od``
+        confirms that this fitter's hooks retain the canonical behavior;
+        the IOD stage runs on the configured IOD propagator
+        (`iod_propagator_for`), which the driver receives explicitly when it is
+        not ``propagator`` itself. Otherwise `initial_fit` and `refine_fit` are chained,
         honoring subclass overrides.
         """
-        fused = native_work_unit(propagator, "full_od")
-        if fused is not None and self.supports_native_full_od():
-            iod_settings, refinement, fit_settings = self.native_settings()
-            _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
-            output = fused(
-                observations,
-                iod_settings=iod_settings,
-                refinement=refinement,
-                fit_settings=fit_settings,
-                iod_propagator=native_propagator(self.iod_propagator_for(propagator)),
-            )
-            return tables_from_native_full_od(object_id, observations, output)
-        return super().full_od(object_id, observations, propagator)
+        if not self.supports_native_full_od():
+            return super().full_od(object_id, observations, propagator)
+        from adam_core import _rust_native
+        from .differential_correction import _native_problem
+
+        iod_settings, refinement, fit_settings = self.native_settings()
+        _warn_if_analytic_jacobian_mismatches(propagator, fit_settings["jacobian"])
+        _, observed_ipc, observers_ipc = _native_problem(
+            _placeholder_orbit(observations), observations
+        )
+        output = _rust_native.full_od_ipc(
+            native_propagator(propagator),
+            observed_ipc,
+            observers_ipc,
+            iod_settings=iod_settings,
+            refinement=refinement,
+            fit_settings=fit_settings,
+            iod_propagator=native_propagator(self.iod_propagator_for(propagator)),
+        )
+        return tables_from_native_full_od(object_id, observations, output)
 
     def __getstate__(self) -> dict:
         return self.__dict__.copy()
