@@ -446,39 +446,107 @@ fn extract_member_atomic(
     };
     let wheel_file = std::fs::File::open(wheel_path)
         .map_err(io_error(format!("failed to open {}", wheel_path.display())))?;
-    let mut archive =
-        zip::ZipArchive::new(wheel_file).map_err(|err| wheel_error(err.to_string()))?;
-    let mut entry = archive
-        .by_name(member)
+    let mut buffer = vec![0_u8; rawzip::RECOMMENDED_BUFFER_SIZE];
+    let archive = rawzip::ZipArchive::from_file(wheel_file, &mut buffer)
+        .map_err(|err| wheel_error(err.to_string()))?;
+    let selected = {
+        let mut entries = archive.entries(&mut buffer);
+        let mut selected = None;
+        while let Some(entry) = entries
+            .next_entry()
+            .map_err(|err| wheel_error(err.to_string()))?
+        {
+            if entry.file_path().as_ref() == member.as_bytes() {
+                selected = Some((entry.wayfinder(), entry.compression_method()));
+                break;
+            }
+        }
+        selected
+    }
+    .ok_or_else(|| wheel_error("member not found".to_string()))?;
+    let entry = archive
+        .get_entry(selected.0)
         .map_err(|err| wheel_error(err.to_string()))?;
 
     let staged = destination.with_extension("partial");
-    let mut staged_file = std::fs::File::create(&staged)
-        .map_err(io_error(format!("failed to create {}", staged.display())))?;
-    std::io::copy(&mut entry, &mut staged_file).map_err(|err| wheel_error(err.to_string()))?;
-    staged_file
-        .flush()
-        .map_err(io_error(format!("failed flushing {}", staged.display())))?;
-    drop(staged_file);
-    std::fs::rename(&staged, destination).map_err(io_error(format!(
-        "failed to publish {}",
-        destination.display()
-    )))?;
-    Ok(())
+    let result = (|| {
+        let mut staged_file = std::fs::File::create(&staged)
+            .map_err(io_error(format!("failed to create {}", staged.display())))?;
+        match selected.1 {
+            rawzip::CompressionMethod::STORE => {
+                let reader = entry.reader();
+                let mut verified = entry.verifying_reader(reader);
+                std::io::copy(&mut verified, &mut staged_file)
+                    .map_err(|err| wheel_error(err.to_string()))?;
+            }
+            rawzip::CompressionMethod::DEFLATE => {
+                let decoder = flate2::read::DeflateDecoder::new(entry.reader());
+                let mut verified = entry.verifying_reader(decoder);
+                std::io::copy(&mut verified, &mut staged_file)
+                    .map_err(|err| wheel_error(err.to_string()))?;
+            }
+            method => {
+                return Err(wheel_error(format!(
+                    "unsupported compression method {}",
+                    method.as_u16()
+                )));
+            }
+        }
+        staged_file
+            .flush()
+            .map_err(io_error(format!("failed flushing {}", staged.display())))?;
+        drop(staged_file);
+        std::fs::rename(&staged, destination).map_err(io_error(format!(
+            "failed to publish {}",
+            destination.display()
+        )))?;
+        Ok(())
+    })();
+    if result.is_err() {
+        let _ = std::fs::remove_file(&staged);
+    }
+    result
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn write_fake_wheel(path: &Path, member: &str, contents: &[u8]) {
+    fn write_fake_wheel_with_method(
+        path: &Path,
+        member: &str,
+        contents: &[u8],
+        method: rawzip::CompressionMethod,
+    ) {
         let file = std::fs::File::create(path).unwrap();
-        let mut wheel = zip::ZipWriter::new(file);
-        let options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
-        wheel.start_file(member, options).unwrap();
-        wheel.write_all(contents).unwrap();
+        let mut wheel = rawzip::ZipArchiveWriter::new(file);
+        let (mut entry, config) = wheel
+            .new_file(member)
+            .compression_method(method)
+            .start()
+            .unwrap();
+        match method {
+            rawzip::CompressionMethod::DEFLATE => {
+                let encoder =
+                    flate2::write::DeflateEncoder::new(&mut entry, flate2::Compression::default());
+                let mut writer = config.wrap(encoder);
+                writer.write_all(contents).unwrap();
+                let (encoder, descriptor) = writer.finish().unwrap();
+                encoder.finish().unwrap();
+                entry.finish(descriptor).unwrap();
+            }
+            _ => {
+                let mut writer = config.wrap(&mut entry);
+                writer.write_all(contents).unwrap();
+                let (_, descriptor) = writer.finish().unwrap();
+                entry.finish(descriptor).unwrap();
+            }
+        }
         wheel.finish().unwrap();
+    }
+
+    fn write_fake_wheel(path: &Path, member: &str, contents: &[u8]) {
+        write_fake_wheel_with_method(path, member, contents, rawzip::CompressionMethod::DEFLATE);
     }
 
     #[test]
@@ -574,6 +642,144 @@ mod tests {
 
         let missing = extract_member_atomic(&wheel, "pkg/absent.tls", &dir.path().join("never"));
         assert!(matches!(missing, Err(KernelDataError::WheelMember { .. })));
+    }
+
+    #[test]
+    fn stored_wheel_member_extraction_is_atomic_and_correct() {
+        let dir = tempfile::tempdir().unwrap();
+        let wheel = dir.path().join("stored.whl");
+        write_fake_wheel_with_method(
+            &wheel,
+            "pkg/data.tls",
+            b"KPL/LSK stored payload",
+            rawzip::CompressionMethod::STORE,
+        );
+        let destination = dir.path().join("stored.tls");
+        extract_member_atomic(&wheel, "pkg/data.tls", &destination).unwrap();
+        assert_eq!(
+            std::fs::read(&destination).unwrap(),
+            b"KPL/LSK stored payload"
+        );
+        assert!(!destination.with_extension("partial").exists());
+    }
+
+    #[test]
+    fn exact_member_path_rejects_case_near_miss_without_staging() {
+        let dir = tempfile::tempdir().unwrap();
+        let wheel = dir.path().join("near-miss.whl");
+        write_fake_wheel(&wheel, "pkg/Data.tls", b"KPL/LSK payload");
+
+        let destination = dir.path().join("near-miss.tls");
+        let result = extract_member_atomic(&wheel, "pkg/data.tls", &destination);
+        match result {
+            Err(KernelDataError::WheelMember { message, .. }) => {
+                assert!(message.contains("member not found"), "{message}");
+            }
+            other => panic!("unexpected extraction result: {other:?}"),
+        }
+        assert!(!destination.exists());
+        assert!(!destination.with_extension("partial").exists());
+    }
+
+    #[test]
+    fn corrupt_wheel_member_fails_verification_and_cleans_staging() {
+        let dir = tempfile::tempdir().unwrap();
+        let wheel = dir.path().join("corrupt.whl");
+        write_fake_wheel_with_method(
+            &wheel,
+            "pkg/data.tls",
+            b"KPL/LSK stored payload",
+            rawzip::CompressionMethod::STORE,
+        );
+        let mut bytes = std::fs::read(&wheel).unwrap();
+        let archive = rawzip::ZipArchive::from_slice(&bytes).unwrap();
+        let header = archive.entries().next_entry().unwrap().unwrap();
+        let range = archive
+            .get_entry(header.wayfinder())
+            .unwrap()
+            .compressed_data_range();
+        bytes[range.0 as usize] ^= 0xff;
+        std::fs::write(&wheel, bytes).unwrap();
+
+        let destination = dir.path().join("corrupt.tls");
+        let result = extract_member_atomic(&wheel, "pkg/data.tls", &destination);
+        assert!(matches!(result, Err(KernelDataError::WheelMember { .. })));
+        assert!(!destination.exists());
+        assert!(!destination.with_extension("partial").exists());
+    }
+
+    #[test]
+    fn corrupt_deflated_wheel_member_fails_without_publishing_or_staging() {
+        let dir = tempfile::tempdir().unwrap();
+        let wheel = dir.path().join("corrupt-deflated.whl");
+        let contents = (0_u8..=255).cycle().take(4096).collect::<Vec<_>>();
+        write_fake_wheel_with_method(
+            &wheel,
+            "pkg/data.tls",
+            &contents,
+            rawzip::CompressionMethod::DEFLATE,
+        );
+        let mut bytes = std::fs::read(&wheel).unwrap();
+        let archive = rawzip::ZipArchive::from_slice(&bytes).unwrap();
+        let header = archive.entries().next_entry().unwrap().unwrap();
+        let range = archive
+            .get_entry(header.wayfinder())
+            .unwrap()
+            .compressed_data_range();
+        assert!(range.1 > range.0);
+        let corrupt_at = range.0 + (range.1 - range.0) / 2;
+        bytes[corrupt_at as usize] ^= 0xff;
+        std::fs::write(&wheel, bytes).unwrap();
+
+        let destination = dir.path().join("corrupt-deflated.tls");
+        let result = extract_member_atomic(&wheel, "pkg/data.tls", &destination);
+        assert!(matches!(result, Err(KernelDataError::WheelMember { .. })));
+        assert!(!destination.exists());
+        assert!(!destination.with_extension("partial").exists());
+    }
+
+    #[test]
+    fn truncated_wheel_fails_without_publishing() {
+        let dir = tempfile::tempdir().unwrap();
+        let wheel = dir.path().join("truncated.whl");
+        write_fake_wheel(&wheel, "pkg/data.tls", b"KPL/LSK payload");
+        let file = std::fs::OpenOptions::new()
+            .write(true)
+            .open(&wheel)
+            .unwrap();
+        let len = file.metadata().unwrap().len();
+        file.set_len(len - 10).unwrap();
+
+        let destination = dir.path().join("truncated.tls");
+        let result = extract_member_atomic(&wheel, "pkg/data.tls", &destination);
+        assert!(matches!(result, Err(KernelDataError::WheelMember { .. })));
+        assert!(!destination.exists());
+        assert!(!destination.with_extension("partial").exists());
+    }
+
+    #[test]
+    fn unsupported_wheel_compression_fails_loudly() {
+        let dir = tempfile::tempdir().unwrap();
+        let wheel = dir.path().join("unsupported.whl");
+        write_fake_wheel_with_method(
+            &wheel,
+            "pkg/data.tls",
+            b"not actually bzip2",
+            rawzip::CompressionMethod::BZIP2,
+        );
+        let destination = dir.path().join("unsupported.tls");
+        let result = extract_member_atomic(&wheel, "pkg/data.tls", &destination);
+        match result {
+            Err(KernelDataError::WheelMember { message, .. }) => {
+                assert!(
+                    message.contains("unsupported compression method 12"),
+                    "{message}"
+                );
+            }
+            other => panic!("unexpected extraction result: {other:?}"),
+        }
+        assert!(!destination.exists());
+        assert!(!destination.with_extension("partial").exists());
     }
 
     #[test]
